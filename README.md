@@ -3,9 +3,23 @@
 Web app for hosting virtual career fairs where students and employers can connect.
 
 ## Quick start (frontend)
+```bash
 cd frontend
 npm install
 npm run dev
+```
+
+## Quick start (backend)
+```bash
+cd backend
+npm install
+node server.js
+```
+
+The backend server will start at http://localhost:5000
+
+### API Endpoints
+- `GET /` - Health check endpoint, returns "Backend is running!"
 
 ## Branching
 - `dev` — active development
