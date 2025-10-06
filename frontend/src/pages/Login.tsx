@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Box, TextField, Button, Typography, Alert } from "@mui/material"
+import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import BusinessCenterIcon from "@mui/icons-material/BusinessCenter"
 import GroupsIcon from "@mui/icons-material/Groups"
@@ -127,30 +127,55 @@ export default function Login() {
           alignItems: "center",
           justifyContent: "center",
           p: 4,
-          bgcolor: "#f5f5f5",
+          background: "linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)",
         }}
       >
-        <Box sx={{ width: "100%", maxWidth: "450px" }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 3, sm: 5 },
+            borderRadius: 3,
+            background: "rgba(255, 255, 255, 0.98)",
+            width: "100%",
+            maxWidth: "450px",
+          }}
+        >
+          {/* Icon circle at top */}
+          <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
+            <Box
+              sx={{
+                width: 60,
+                height: 60,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <LoginIcon sx={{ fontSize: 32, color: "white" }} />
+            </Box>
+          </Box>
+
           <Box sx={{ mb: 4 }}>
             <Typography
               variant="h4"
+              align="center"
               sx={{
                 fontWeight: 700,
                 mb: 1,
-                background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
+                color: "#1a1a1a",
               }}
             >
               Sign In
             </Typography>
-            <Typography variant="body1" color="text.secondary">
+            <Typography variant="body1" color="text.secondary" align="center">
               Access your virtual career fair account
             </Typography>
           </Box>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
+            <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
               {error}
             </Alert>
           )}
@@ -168,12 +193,16 @@ export default function Login() {
                 mb: 2,
                 "& .MuiOutlinedInput-root": {
                   bgcolor: "white",
+                  borderRadius: 2,
                   "&:hover fieldset": {
                     borderColor: "#b03a6c",
                   },
                   "&.Mui-focused fieldset": {
                     borderColor: "#b03a6c",
                   },
+                },
+                "& .MuiInputLabel-root.Mui-focused": {
+                  color: "#b03a6c",
                 },
               }}
             />
@@ -189,12 +218,16 @@ export default function Login() {
                 mb: 3,
                 "& .MuiOutlinedInput-root": {
                   bgcolor: "white",
+                  borderRadius: 2,
                   "&:hover fieldset": {
                     borderColor: "#b03a6c",
                   },
                   "&.Mui-focused fieldset": {
                     borderColor: "#b03a6c",
                   },
+                },
+                "& .MuiInputLabel-root.Mui-focused": {
+                  color: "#b03a6c",
                 },
               }}
             />
@@ -206,33 +239,40 @@ export default function Login() {
               startIcon={<LoginIcon />}
               sx={{
                 py: 1.5,
-                background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #8b2d56 0%, #2d6b4d 100%)",
-                },
+                borderRadius: 2,
+                background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                fontSize: "1.1rem",
                 fontWeight: 600,
-                fontSize: "1rem",
+                textTransform: "none",
+                boxShadow: "0 4px 12px rgba(176, 58, 108, 0.3)",
+                "&:hover": {
+                  background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                  boxShadow: "0 6px 16px rgba(176, 58, 108, 0.4)",
+                },
               }}
             >
               Sign In
             </Button>
           </form>
 
-          <Typography variant="body2" align="center" sx={{ mt: 3 }}>
-            Don't have an account?{" "}
-            <Link
-              to="/register"
-              style={{
-                color: "#388560",
-                textDecoration: "none",
-                fontWeight: 600,
-              }}
-            >
-              Register here
-            </Link>
-          </Typography>
-        </Box>
+          <Box sx={{ textAlign: "center", mt: 3 }}>
+            <Typography variant="body2" color="text.secondary">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                style={{
+                  color: "#388560",
+                  textDecoration: "none",
+                  fontWeight: 600,
+                }}
+              >
+                Register here
+              </Link>
+            </Typography>
+          </Box>
+        </Paper>
       </Box>
     </Box>
   )
 }
+
