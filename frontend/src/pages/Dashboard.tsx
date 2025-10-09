@@ -8,6 +8,7 @@ import LogoutIcon from "@mui/icons-material/Logout"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
+import { Link } from "react-router-dom";
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -60,6 +61,17 @@ export default function Dashboard() {
           </Box>
         </Container>
       </Box>
+      {/* Button to navigate to Profile Page */}
+      <Box sx={{ mt: 2 }}>
+  <Button
+    component={Link}
+    to="/profile"
+    variant="contained"
+    color="primary"
+  >
+    Edit Profile
+  </Button>
+</Box>
 
       <Container maxWidth="lg">
         <Box sx={{ py: 6 }}>
