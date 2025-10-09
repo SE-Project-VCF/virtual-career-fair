@@ -1,19 +1,24 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
-const { db } = require('./firebase'); // import Firebase Admin setup
-const admin = require('firebase-admin'); // needed for timestamps
-const bcrypt = require('bcrypt'); // for password hashing
+const { db } = require('./firebase'); // Firebase Admin setup
+const admin = require('firebase-admin');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// --------------------
 // Middleware
+// --------------------
 app.use(cors());
 app.use(express.json());
 
+// --------------------
 // Test route
+// --------------------
 app.get('/', (req, res) => {
-    res.send('Backend is running!');
+  res.send('Backend is running!');
 });
 
 // --------------------
@@ -251,6 +256,9 @@ app.post('/login-employer', async (req, res) => {
     }
 });
 
+// --------------------
+// Start Server
+// --------------------
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
