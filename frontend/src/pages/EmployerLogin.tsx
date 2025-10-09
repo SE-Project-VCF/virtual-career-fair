@@ -9,6 +9,7 @@ import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
 import LoginIcon from "@mui/icons-material/Login"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import { Badge } from "@mui/icons-material"
 
 export default function EmployerLogin() {
   const navigate = useNavigate()
@@ -16,17 +17,17 @@ export default function EmployerLogin() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError("")
-
+  
     if (!email || !password) {
       setError("All fields are required.")
       return
     }
-
-    const result = authUtils.login(email, password)
-
+  
+    const result = await authUtils.loginEmployer(email, password);
+  
     if (result.success) {
       navigate("/dashboard")
     } else {
@@ -150,7 +151,7 @@ export default function EmployerLogin() {
                 justifyContent: "center",
               }}
             >
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
+              <Badge sx={{ fontSize: 32, color: "white" }} />
             </Box>
           </Box>
 

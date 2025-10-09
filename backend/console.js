@@ -1,6 +1,6 @@
 const admin = require("firebase-admin");
 const readline = require("readline");
-const serviceAccount = require("./careerfairdb-48105-firebase-adminsdk-fbsvc-9dc17b40da.json");
+const serviceAccount = require("./API HERE"); // Make sure path is correct
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),

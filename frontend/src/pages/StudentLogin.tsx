@@ -16,17 +16,17 @@ export default function StudentLogin() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError("")
-
+  
     if (!email || !password) {
       setError("All fields are required.")
       return
     }
-
-    const result = authUtils.login(email, password)
-
+  
+    const result = await authUtils.loginStudent(email, password);
+  
     if (result.success) {
       navigate("/dashboard")
     } else {

@@ -1,12 +1,10 @@
 "use client"
 
-import { useNavigate } from "react-router-dom"
-import { Box, Container, Typography, Paper, Button } from "@mui/material"
-import SchoolIcon from "@mui/icons-material/School"
-import BusinessIcon from "@mui/icons-material/Business"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import Badge from "@mui/icons-material/Badge"
-import { BadgeOutlined } from "@mui/icons-material"
+import SchoolIcon from "@mui/icons-material/School"
+import { Box, Button, Container, Paper, Typography } from "@mui/material"
+import { useNavigate } from "react-router-dom"
 
 export default function RoleSelection() {
   const navigate = useNavigate()

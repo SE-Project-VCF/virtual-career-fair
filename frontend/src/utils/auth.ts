@@ -1,69 +1,143 @@
+const API_BASE_URL = 'http://localhost:5000'; // Adjust if your backend runs on different port
+
 export interface User {
-  email: string
-  password: string
-  role?: "student" | "employer"
-  registeredAt: string
+  id: string;
+  email: string;
+  role: "student" | "employer";
+  registeredAt: string;
+  // Add other fields based on your Firestore schema
+  [key: string]: any;
 }
 
 export const authUtils = {
-  // Register a new user
+  // Register a new student
+  registerStudent: async (email: string, password: string, additionalData?: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/add-student`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          ...additionalData
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Auto-login after successful registration
+        return await authUtils.loginStudent(email, password);
+      } else {
+        return { success: false, error: result.error || 'Registration failed' };
+      }
+    } catch (error) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  // Register a new employer
+  registerEmployer: async (email: string, password: string, additionalData?: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/add-employer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          ...additionalData
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Auto-login after successful registration
+        return await authUtils.loginEmployer(email, password);
+      } else {
+        return { success: false, error: result.error || 'Registration failed' };
+      }
+    } catch (error) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  // Login student
+  loginStudent: async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/login-student`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        localStorage.setItem("currentUser", JSON.stringify(result.user));
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || 'Login failed' };
+      }
+    } catch (error) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  // Login employer
+  loginEmployer: async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/login-employer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        localStorage.setItem("currentUser", JSON.stringify(result.user));
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || 'Login failed' };
+      }
+    } catch (error) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  // Keep existing methods for compatibility
   register: (email: string, password: string, role: "student" | "employer"): { success: boolean; error?: string } => {
-    const users = authUtils.getUsers()
-
-    // Check if email already exists
-    if (users.some((user) => user.email === email)) {
-      return { success: false, error: "Email already in use." }
-    }
-
-    // Create new user
-    const newUser: User = {
-      email,
-      password, // In production, this should be hashed on the backend
-      role,
-      registeredAt: new Date().toISOString(),
-    }
-
-    users.push(newUser)
-    localStorage.setItem("users", JSON.stringify(users))
-
-    // Auto-login after registration
-    authUtils.login(email, password)
-
-    return { success: true }
+    // This is now deprecated - use registerStudent or registerEmployer instead
+    console.warn('authUtils.register is deprecated. Use registerStudent or registerEmployer instead.');
+    return { success: false, error: 'Please use the new registration methods' };
   },
 
-  // Login user
   login: (email: string, password: string): { success: boolean; error?: string } => {
-    const users = authUtils.getUsers()
-    const user = users.find((u) => u.email === email && u.password === password)
-
-    if (!user) {
-      return { success: false, error: "Invalid email or password." }
-    }
-
-    localStorage.setItem("currentUser", JSON.stringify(user))
-    return { success: true }
+    // This is now deprecated - use loginStudent or loginEmployer instead
+    console.warn('authUtils.login is deprecated. Use loginStudent or loginEmployer instead.');
+    return { success: false, error: 'Please use the new login methods' };
   },
 
-  // Logout user
+  // Keep existing utility methods
   logout: () => {
-    localStorage.removeItem("currentUser")
+    localStorage.removeItem("currentUser");
   },
 
-  // Get current logged-in user
   getCurrentUser: (): User | null => {
-    const userStr = localStorage.getItem("currentUser")
-    return userStr ? JSON.parse(userStr) : null
+    const userStr = localStorage.getItem("currentUser");
+    return userStr ? JSON.parse(userStr) : null;
   },
 
-  // Get all users
-  getUsers: (): User[] => {
-    const usersStr = localStorage.getItem("users")
-    return usersStr ? JSON.parse(usersStr) : []
-  },
-
-  // Check if user is authenticated
   isAuthenticated: (): boolean => {
-    return authUtils.getCurrentUser() !== null
+    return authUtils.getCurrentUser() !== null;
   },
-}
+};

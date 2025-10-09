@@ -8,6 +8,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import { Badge, BadgeOutlined } from "@mui/icons-material"
 
 export default function EmployerRegister() {
   const navigate = useNavigate()
@@ -15,34 +16,46 @@ export default function EmployerRegister() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
+  const [companyName, setCompanyName] = useState("")
+const [industry, setIndustry] = useState("")
+const [companySize, setCompanySize] = useState("")
+const [website, setWebsite] = useState("")
+const [description, setDescription] = useState("")
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    setError("")
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault()
+  setError("")
 
-    if (!email || !password || !confirmPassword) {
-      setError("All fields are required.")
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.")
-      return
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.")
-      return
-    }
-
-    const result = authUtils.register(email, password, "employer")
-
-    if (result.success) {
-      navigate("/dashboard")
-    } else {
-      setError(result.error || "Registration failed.")
-    }
+  if (!email || !password || !confirmPassword || !companyName) {
+    setError("Email, password, confirm password, and company name are required.")
+    return
   }
+
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.")
+    return
+  }
+
+  if (password.length < 6) {
+    setError("Password must be at least 6 characters long.")
+    return
+  }
+
+  // Use the new backend registration with all company data
+  const result = await authUtils.registerEmployer(email, password, {
+    companyName,
+    industry,
+    companySize,
+    website,
+    description
+  })
+
+  if (result.success) {
+    navigate("/dashboard")
+  } else {
+    setError(result.error || "Registration failed.")
+  }
+}
 
   return (
     <Box
@@ -165,7 +178,7 @@ export default function EmployerRegister() {
                   justifyContent: "center",
                 }}
               >
-                <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
+                <Badge sx={{ fontSize: 32, color: "white" }} />
               </Box>
             </Box>
 
@@ -253,6 +266,104 @@ export default function EmployerRegister() {
                   },
                 }}
               />
+              <TextField
+  fullWidth
+  label="Company Name"
+  value={companyName}
+  onChange={(e) => setCompanyName(e.target.value)}
+  margin="normal"
+  required
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
+{/* <TextField
+  fullWidth
+  label="Industry"
+  value={industry}
+  onChange={(e) => setIndustry(e.target.value)}
+  margin="normal"
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
+<TextField
+  fullWidth
+  label="Company Size"
+  value={companySize}
+  onChange={(e) => setCompanySize(e.target.value)}
+  margin="normal"
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
+<TextField
+  fullWidth
+  label="Website"
+  value={website}
+  onChange={(e) => setWebsite(e.target.value)}
+  margin="normal"
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
+<TextField
+  fullWidth
+  label="Company Description"
+  value={description}
+  onChange={(e) => setDescription(e.target.value)}
+  margin="normal"
+  multiline
+  rows={3}
+  sx={{
+    mb: 3,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/> */}
               <Button
                 type="submit"
                 fullWidth
