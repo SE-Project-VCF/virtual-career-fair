@@ -17,13 +17,6 @@ export default function StudentRegister() {
   const [error, setError] = useState("")
   const [firstName, setFirstName] = useState("")
 const [lastName, setLastName] = useState("")
-// const [cityZip, setCityZip] = useState("")
-// const [major, setMajor] = useState("")
-// const [labels, setLabels] = useState("")
-// const [school, setSchool] = useState("")
-// const [phone, setPhone] = useState("")
-// const [picture, setPicture] = useState("")
-// const [username, setUsername] = useState("")
 
 const handleSubmit = async (e: FormEvent) => {
   e.preventDefault()
@@ -48,13 +41,6 @@ const handleSubmit = async (e: FormEvent) => {
   const result = await authUtils.registerStudent(email, password, {
     firstName,
     lastName,
-    // cityZip,
-    // major,
-    // labels,
-    // school,
-    // phone,
-    // picture,
-    // username
   })
 
   if (result.success) {
@@ -312,140 +298,6 @@ const handleSubmit = async (e: FormEvent) => {
     },
   }}
 />
-{/* <TextField
-  fullWidth
-  label="Username"
-  value={username}
-  onChange={(e) => setUsername(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="School"
-  value={school}
-  onChange={(e) => setSchool(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Major"
-  value={major}
-  onChange={(e) => setMajor(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="City/ZIP"
-  value={cityZip}
-  onChange={(e) => setCityZip(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Phone (Optional)"
-  value={phone}
-  onChange={(e) => setPhone(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Skills/Labels (comma-separated)"
-  value={labels}
-  onChange={(e) => setLabels(e.target.value)}
-  margin="normal"
-  helperText="e.g., JavaScript, React, Python"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Profile Picture URL (Optional)"
-  value={picture}
-  onChange={(e) => setPicture(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 3,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/> */}
               <Button
                 type="submit"
                 fullWidth
