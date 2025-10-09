@@ -13,7 +13,7 @@ export const authUtils = {
   // Register a new student
   registerStudent: async (email: string, password: string, additionalData?: any): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/add-student`, {
+      const response = await fetch(`${API_BASE_URL}/register-student`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -41,7 +41,7 @@ export const authUtils = {
   // Register a new employer
   registerEmployer: async (email: string, password: string, additionalData?: any): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/add-employer`, {
+      const response = await fetch(`${API_BASE_URL}/register-employer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
