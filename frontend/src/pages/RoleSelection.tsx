@@ -5,6 +5,8 @@ import { Box, Container, Typography, Paper, Button } from "@mui/material"
 import SchoolIcon from "@mui/icons-material/School"
 import BusinessIcon from "@mui/icons-material/Business"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
+import Badge from "@mui/icons-material/Badge"
+import { BadgeOutlined } from "@mui/icons-material"
 
 export default function RoleSelection() {
   const navigate = useNavigate()
@@ -188,7 +190,7 @@ export default function RoleSelection() {
                 mb: 3,
               }}
             >
-              <BusinessIcon sx={{ fontSize: 48, color: "white" }} />
+              <Badge sx={{ fontSize: 48, color: "white" }} />
             </Box>
 
             <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2, color: "#1a1a1a" }}>
