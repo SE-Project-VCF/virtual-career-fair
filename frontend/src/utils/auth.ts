@@ -114,19 +114,6 @@ export const authUtils = {
     }
   },
 
-  // Keep existing methods for compatibility
-  register: (email: string, password: string, role: "student" | "employer"): { success: boolean; error?: string } => {
-    // This is now deprecated - use registerStudent or registerEmployer instead
-    console.warn('authUtils.register is deprecated. Use registerStudent or registerEmployer instead.');
-    return { success: false, error: 'Please use the new registration methods' };
-  },
-
-  login: (email: string, password: string): { success: boolean; error?: string } => {
-    // This is now deprecated - use loginStudent or loginEmployer instead
-    console.warn('authUtils.login is deprecated. Use loginStudent or loginEmployer instead.');
-    return { success: false, error: 'Please use the new login methods' };
-  },
-
   // Keep existing utility methods
   logout: () => {
     localStorage.removeItem("currentUser");
