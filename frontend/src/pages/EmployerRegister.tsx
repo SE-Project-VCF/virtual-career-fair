@@ -4,11 +4,10 @@ import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Container, Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
-import { Badge, BadgeOutlined } from "@mui/icons-material"
+import { Badge } from "@mui/icons-material"
 
 export default function EmployerRegister() {
   const navigate = useNavigate()
@@ -17,10 +16,6 @@ export default function EmployerRegister() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [companyName, setCompanyName] = useState("")
-const [industry, setIndustry] = useState("")
-const [companySize, setCompanySize] = useState("")
-const [website, setWebsite] = useState("")
-const [description, setDescription] = useState("")
 
 const handleSubmit = async (e: FormEvent) => {
   e.preventDefault()
@@ -44,10 +39,6 @@ const handleSubmit = async (e: FormEvent) => {
   // Use the new backend registration with all company data
   const result = await authUtils.registerEmployer(email, password, {
     companyName,
-    industry,
-    companySize,
-    website,
-    description
   })
 
   if (result.success) {
@@ -286,84 +277,6 @@ const handleSubmit = async (e: FormEvent) => {
     },
   }}
 />
-{/* <TextField
-  fullWidth
-  label="Industry"
-  value={industry}
-  onChange={(e) => setIndustry(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Company Size"
-  value={companySize}
-  onChange={(e) => setCompanySize(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Website"
-  value={website}
-  onChange={(e) => setWebsite(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Company Description"
-  value={description}
-  onChange={(e) => setDescription(e.target.value)}
-  margin="normal"
-  multiline
-  rows={3}
-  sx={{
-    mb: 3,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/> */}
               <Button
                 type="submit"
                 fullWidth

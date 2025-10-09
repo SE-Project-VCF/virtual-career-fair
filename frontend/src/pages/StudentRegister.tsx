@@ -17,13 +17,13 @@ export default function StudentRegister() {
   const [error, setError] = useState("")
   const [firstName, setFirstName] = useState("")
 const [lastName, setLastName] = useState("")
-const [cityZip, setCityZip] = useState("")
-const [major, setMajor] = useState("")
-const [labels, setLabels] = useState("")
-const [school, setSchool] = useState("")
-const [phone, setPhone] = useState("")
-const [picture, setPicture] = useState("")
-const [username, setUsername] = useState("")
+// const [cityZip, setCityZip] = useState("")
+// const [major, setMajor] = useState("")
+// const [labels, setLabels] = useState("")
+// const [school, setSchool] = useState("")
+// const [phone, setPhone] = useState("")
+// const [picture, setPicture] = useState("")
+// const [username, setUsername] = useState("")
 
 const handleSubmit = async (e: FormEvent) => {
   e.preventDefault()
@@ -48,13 +48,13 @@ const handleSubmit = async (e: FormEvent) => {
   const result = await authUtils.registerStudent(email, password, {
     firstName,
     lastName,
-    cityZip,
-    major,
-    labels,
-    school,
-    phone,
-    picture,
-    username
+    // cityZip,
+    // major,
+    // labels,
+    // school,
+    // phone,
+    // picture,
+    // username
   })
 
   if (result.success) {
