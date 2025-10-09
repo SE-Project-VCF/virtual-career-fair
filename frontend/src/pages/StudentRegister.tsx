@@ -1,128 +1,15 @@
-
-// import { useState, type FormEvent } from "react"
-// import { useNavigate, Link } from "react-router-dom"
-// import { Container, Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
-// import { authUtils } from "../utils/auth"
-
-// export default function Register() {
-//   const navigate = useNavigate()
-//   const [email, setEmail] = useState("")
-//   const [password, setPassword] = useState("")
-//   const [confirmPassword, setConfirmPassword] = useState("")
-//   const [error, setError] = useState("")
-
-//   const handleSubmit = (e: FormEvent) => {
-//     e.preventDefault()
-//     setError("")
-
-//     // Validation
-//     if (!email || !password || !confirmPassword) {
-//       setError("All fields are required.")
-//       return
-//     }
-
-//     if (password !== confirmPassword) {
-//       setError("Passwords do not match.")
-//       return
-//     }
-
-//     if (password.length < 6) {
-//       setError("Password must be at least 6 characters long.")
-//       return
-//     }
-
-//     // Attempt registration
-//     const result = authUtils.register(email, password)
-
-//     if (result.success) {
-//       navigate("/dashboard")
-//     } else {
-//       setError(result.error || "Registration failed.")
-//     }
-//   }
-
-//   return (
-//     <Container maxWidth="sm">
-//       <Box
-//         sx={{
-//           minHeight: "100vh",
-//           display: "flex",
-//           alignItems: "center",
-//           justifyContent: "center",
-//         }}
-//       >
-//         <Paper elevation={3} sx={{ p: 4, width: "100%" }}>
-//           <Typography variant="h4" component="h1" gutterBottom align="center">
-//             Create Your Account
-//           </Typography>
-//           <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
-//             Join the virtual career fair platform
-//           </Typography>
-
-//           {error && (
-//             <Alert severity="error" sx={{ mb: 2 }}>
-//               {error}
-//             </Alert>
-//           )}
-
-//           <form onSubmit={handleSubmit}>
-//             <TextField
-//               fullWidth
-//               label="Email"
-//               type="email"
-//               value={email}
-//               onChange={(e) => setEmail(e.target.value)}
-//               margin="normal"
-//               required
-//             />
-//             <TextField
-//               fullWidth
-//               label="Password"
-//               type="password"
-//               value={password}
-//               onChange={(e) => setPassword(e.target.value)}
-//               margin="normal"
-//               required
-//             />
-//             <TextField
-//               fullWidth
-//               label="Confirm Password"
-//               type="password"
-//               value={confirmPassword}
-//               onChange={(e) => setConfirmPassword(e.target.value)}
-//               margin="normal"
-//               required
-//             />
-//             <Button type="submit" fullWidth variant="contained" size="large" sx={{ mt: 3, mb: 2 }}>
-//               Register
-//             </Button>
-//           </form>
-
-//           <Typography variant="body2" align="center">
-//             Already have an account?{" "}
-//             <Link to="/login" style={{ color: "#646cff", textDecoration: "none" }}>
-//               Sign in
-//             </Link>
-//           </Typography>
-//         </Paper>
-//       </Box>
-//     </Container>
-//   )
-// }
-
-
 "use client"
 
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Container, Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import PersonAddIcon from "@mui/icons-material/PersonAdd"
+import SchoolIcon from "@mui/icons-material/School"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 
-export default function Register() {
+export default function StudentRegister() {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -133,7 +20,6 @@ export default function Register() {
     e.preventDefault()
     setError("")
 
-    // Validation
     if (!email || !password || !confirmPassword) {
       setError("All fields are required.")
       return
@@ -149,8 +35,6 @@ export default function Register() {
       return
     }
 
-    // Attempt registration
-    //always register as student for now
     const result = authUtils.register(email, password, "student")
 
     if (result.success) {
@@ -168,7 +52,6 @@ export default function Register() {
         background: "linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)",
       }}
     >
-      {/* Left side panel with branding and features */}
       <Box
         sx={{
           flex: 1,
@@ -183,7 +66,6 @@ export default function Register() {
           overflow: "hidden",
         }}
       >
-        {/* Decorative circles */}
         <Box
           sx={{
             position: "absolute",
@@ -209,10 +91,10 @@ export default function Register() {
 
         <Box sx={{ zIndex: 1, maxWidth: "400px" }}>
           <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-            Welcome to Your Future
+            Start Your Career Journey
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Connect with top employers and discover career opportunities
+            Connect with top employers and discover opportunities
           </Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -283,7 +165,7 @@ export default function Register() {
                   justifyContent: "center",
                 }}
               >
-                <PersonAddIcon sx={{ fontSize: 32, color: "white" }} />
+                <SchoolIcon sx={{ fontSize: 32, color: "white" }} />
               </Box>
             </Box>
 
@@ -294,10 +176,10 @@ export default function Register() {
               align="center"
               sx={{ fontWeight: 700, color: "#1a1a1a" }}
             >
-              Create Your Account
+              Student Registration
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
-              Start your journey to career success
+              Create your account to access career opportunities
             </Typography>
 
             {error && (
@@ -392,7 +274,7 @@ export default function Register() {
                   },
                 }}
               >
-                Create Account
+                Create Student Account
               </Button>
             </form>
 
@@ -400,7 +282,7 @@ export default function Register() {
               <Typography variant="body2" color="text.secondary">
                 Already have an account?{" "}
                 <Link
-                  to="/login"
+                  to="/student/login"
                   style={{
                     color: "#388560",
                     textDecoration: "none",
@@ -408,6 +290,17 @@ export default function Register() {
                   }}
                 >
                   Sign in here
+                </Link>
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                <Link
+                  to="/"
+                  style={{
+                    color: "#666",
+                    textDecoration: "none",
+                  }}
+                >
+                  ← Back to role selection
                 </Link>
               </Typography>
             </Box>
