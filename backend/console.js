@@ -1,6 +1,7 @@
 const admin = require("firebase-admin");
 const readline = require("readline");
-const serviceAccount = require("./API HERE"); // Make sure path is correct
+const bcrypt = require("bcrypt");
+const serviceAccount = require("./privateKey.json"); // Ensure path is correct
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -93,8 +94,15 @@ async function addDocument(collection, data) {
     console.log(error);
     return;
   }
+
+  // 🔒 Encrypt password if provided
+  if (data.password) {
+    const hashed = await bcrypt.hash(data.password, 10);
+    data.password = hashed;
+  }
+
   const docRef = await db.collection(collection).add(data);
-  console.log(`\nAdded document with ID: ${docRef.id}\n`);
+  console.log(`\n✅ Added document with ID: ${docRef.id}\n`);
 }
 
 async function updateDocument(collection, id, data) {
@@ -103,14 +111,22 @@ async function updateDocument(collection, id, data) {
     console.log(error);
     return;
   }
+
   const docRef = db.collection(collection).doc(id);
   const doc = await docRef.get();
   if (!doc.exists) {
     console.log(`❌ Cannot update. Document with ID '${id}' does not exist in '${collection}'`);
     return;
   }
+
+  // 🔒 Encrypt password if updated
+  if (data.password) {
+    const hashed = await bcrypt.hash(data.password, 10);
+    data.password = hashed;
+  }
+
   await docRef.update(data);
-  console.log(`\nUpdated document with ID: ${id}\n`);
+  console.log(`\n✅ Updated document with ID: ${id}\n`);
 }
 
 async function deleteDocument(collection, id) {
@@ -121,7 +137,7 @@ async function deleteDocument(collection, id) {
     return;
   }
   await docRef.delete();
-  console.log(`\nDeleted document with ID: ${id}\n`);
+  console.log(`\n🗑️ Deleted document with ID: ${id}\n`);
 }
 
 // ------------------ Multi-line JSON Input ------------------
@@ -151,7 +167,6 @@ function startConsole() {
     const [command, collection, ...rest] = input.split(" ");
     const args = rest.join(" ");
 
-    // Collection whitelist check
     if (collection && !ALLOWED_COLLECTIONS.includes(collection)) {
       console.log(`❌ Invalid collection name. Allowed: ${ALLOWED_COLLECTIONS.join(", ")}`);
       return startConsole();
@@ -162,11 +177,11 @@ function startConsole() {
         case "help":
           console.log(`
 Commands:
-- list <collection>                  : List all documents in a collection
+- list <collection>                  : List all documents
 - query <collection> <field> <value> : Query documents by field=value
-- add <collection>                    : Add a new document (multi-line JSON)
-- update <collection> <id>            : Update a document by ID (multi-line JSON)
-- delete <collection> <id>           : Delete a document by ID
+- add <collection>                   : Add a new document (multi-line JSON)
+- update <collection> <id>           : Update document by ID (multi-line JSON)
+- delete <collection> <id>           : Delete document by ID
 - exit                               : Quit console
 Collections: ${ALLOWED_COLLECTIONS.join(", ")}
           `);
@@ -187,7 +202,7 @@ Collections: ${ALLOWED_COLLECTIONS.join(", ")}
           break;
         }
 
-        case "add": {
+        case "add":
           readJSON(`Enter JSON for new document in '${collection}'`, async (err, data) => {
             if (err) {
               console.log("❌ Invalid JSON. Try again.");
@@ -197,7 +212,6 @@ Collections: ${ALLOWED_COLLECTIONS.join(", ")}
             startConsole();
           });
           return;
-        }
 
         case "update": {
           const [id] = rest;
@@ -228,7 +242,7 @@ Collections: ${ALLOWED_COLLECTIONS.join(", ")}
         }
 
         case "exit":
-          console.log("Exiting console...");
+          console.log("👋 Exiting console...");
           return rl.close();
 
         default:
