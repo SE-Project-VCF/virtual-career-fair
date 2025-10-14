@@ -62,12 +62,22 @@ export default function Dashboard() {
         </Container>
       </Box>
       {/* Button to navigate to Profile Page */}
-      <Box sx={{ mt: 2 }}>
+<Box sx={{ mt: 2, ml: 3 }}>
   <Button
     component={Link}
     to="/profile"
     variant="contained"
-    color="primary"
+    sx={{
+      backgroundColor: "black",
+      color: "white",
+      textTransform: "none",
+      fontWeight: 600,
+      px: 3,
+      py: 1,
+      "&:hover": {
+        backgroundColor: "#333",
+      },
+    }}
   >
     Edit Profile
   </Button>
