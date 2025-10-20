@@ -1,5 +1,5 @@
 const admin = require("firebase-admin");
-const serviceAccount = require("./API HERE"); // Make sure path is correct
+const serviceAccount = require("./privateKey.json"); // Make sure path is correct
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
