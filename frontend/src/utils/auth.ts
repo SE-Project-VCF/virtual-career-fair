@@ -1,122 +1,117 @@
-const API_BASE_URL = 'http://localhost:5000'; // Adjust if your backend runs on different port
+import { auth } from "../firebase";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 
 export interface User {
-  id: string;
+  uid: string;
   email: string;
-  role: "student" | "employer";
-  registeredAt: string;
-  // Add other fields based on your Firestore schema
+  role: "student" | "employer" | "representative";
   [key: string]: any;
 }
 
 export const authUtils = {
-  // Register a new student
-  registerStudent: async (email: string, password: string, additionalData?: any): Promise<{ success: boolean; error?: string }> => {
+  registerStudent: async (
+    email: string,
+    password: string,
+    additionalData?: any
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/register-student`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          ...additionalData
-        }),
-      });
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      const result = await response.json();
-      
-      if (result.success) {
-        // Auto-login after successful registration
-        return await authUtils.loginStudent(email, password);
-      } else {
-        return { success: false, error: result.error || 'Registration failed' };
-      }
-    } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
+      // Optionally store additional data in localStorage
+      const currentUser: User = { uid: user.uid, email: user.email!, role: "student", ...additionalData };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
     }
   },
 
-  // Register a new employer
-  registerEmployer: async (email: string, password: string, additionalData?: any): Promise<{ success: boolean; error?: string }> => {
+  registerEmployer: async (
+    email: string,
+    password: string,
+    additionalData?: any
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/register-employer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          ...additionalData
-        }),
-      });
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      const result = await response.json();
-      
-      if (result.success) {
-        // Auto-login after successful registration
-        return await authUtils.loginEmployer(email, password);
-      } else {
-        return { success: false, error: result.error || 'Registration failed' };
-      }
-    } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
+      const currentUser: User = { uid: user.uid, email: user.email!, role: "employer", ...additionalData };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
     }
   },
 
-  // Login student
-  loginStudent: async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  registerRepresentative: async (
+    email: string,
+    password: string,
+    additionalData?: any
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/login-student`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      const result = await response.json();
-      
-      if (result.success) {
-        localStorage.setItem("currentUser", JSON.stringify(result.user));
-        return { success: true };
-      } else {
-        return { success: false, error: result.error || 'Login failed' };
-      }
-    } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
+      const currentUser: User = { uid: user.uid, email: user.email!, role: "representative", ...additionalData };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
     }
   },
 
-  // Login employer
-  loginEmployer: async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  loginStudent: async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/login-employer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        localStorage.setItem("currentUser", JSON.stringify(result.user));
-        return { success: true };
-      } else {
-        return { success: false, error: result.error || 'Login failed' };
-      }
-    } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      const currentUser: User = { uid: user.uid, email: user.email!, role: "student" };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
     }
   },
 
-  // Keep existing utility methods
+  loginEmployer: async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      const currentUser: User = { uid: user.uid, email: user.email!, role: "employer" };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  loginRepresentative: async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      const currentUser: User = { uid: user.uid, email: user.email!, role: "representative" };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
   logout: () => {
     localStorage.removeItem("currentUser");
+    auth.signOut();
   },
 
   getCurrentUser: (): User | null => {
