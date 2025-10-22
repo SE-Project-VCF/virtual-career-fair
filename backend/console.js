@@ -1,7 +1,7 @@
+// console.js
 const admin = require("firebase-admin");
 const readline = require("readline");
-const bcrypt = require("bcrypt");
-const serviceAccount = require("./privateKey.json"); // Ensure path is correct
+const serviceAccount = require("./privateKey.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -20,31 +20,26 @@ const ALLOWED_COLLECTIONS = ["students", "employers", "representatives", "jobs",
 const COLLECTION_FIELDS = {
   students: {
     firstName: true, lastName: true, email: true, cityZip: true, major: true,
-    labels: true, school: true, phone: true, picture: true, username: true, password: true
+    labels: true, school: true, phone: true, picture: true, username: true, createdAt: true
   },
   employers: {
     companyName: true, primaryLocation: true, secondaryLocations: true,
-    jobFields: true, description: true, boothId: true, pictureFile: true, username: true, password: true
+    jobFields: true, description: true, boothId: true, pictureFile: true, username: true, email: true, createdAt: true
   },
   representatives: {
     firstName: true, lastName: true, company: true, email: true, phone: true,
-    pictureFile: true, username: true, password: true
+    pictureFile: true, username: true, createdAt: true
   },
   jobs: {
     name: true, description: true, applicationLink: true, majorsAssociated: true, employer: true
   },
   booths: {
     employer: true,
-    boothTable: {
-      boothName: true,
-      location: true,
-      description: true,
-      representatives: true
-    }
+    boothTable: { boothName: true, location: true, description: true, representatives: true }
   }
 };
 
-// ------------------ Recursive Field Validation ------------------
+// ------------------ Field Validation ------------------
 
 function validateFieldsRecursive(schema, data, path = "") {
   for (const key of Object.keys(data)) {
@@ -64,83 +59,40 @@ function validateFields(collection, data) {
   return validateFieldsRecursive(schema, data);
 }
 
-// ------------------ Utility Functions ------------------
+// ------------------ CRUD Functions ------------------
 
 async function listAll(collection) {
   const snapshot = await db.collection(collection).get();
-  if (snapshot.empty) {
-    console.log(`\nNo documents found in '${collection}'`);
-  } else {
-    console.log(`\nAll documents in '${collection}':`);
-    snapshot.forEach(doc => console.log(`${doc.id}:`, doc.data()));
-  }
-  console.log("\n----------------------------------\n");
-}
-
-async function queryCollection(collection, field, value) {
-  const snapshot = await db.collection(collection).where(field, "==", value).get();
-  if (snapshot.empty) {
-    console.log(`\nNo documents found in '${collection}' where ${field} = ${value}`);
-  } else {
-    console.log(`\nQuery results in '${collection}' where ${field} = ${value}:`);
-    snapshot.forEach(doc => console.log(`${doc.id}:`, doc.data()));
-  }
-  console.log("\n----------------------------------\n");
+  if (snapshot.empty) return console.log(`No documents found in '${collection}'`);
+  snapshot.forEach(doc => console.log(`${doc.id}:`, doc.data()));
 }
 
 async function addDocument(collection, data) {
   const error = validateFields(collection, data);
-  if (error) {
-    console.log(error);
-    return;
-  }
-
-  // 🔒 Encrypt password if provided
-  if (data.password) {
-    const hashed = await bcrypt.hash(data.password, 10);
-    data.password = hashed;
-  }
-
+  if (error) return console.log(error);
   const docRef = await db.collection(collection).add(data);
-  console.log(`\n✅ Added document with ID: ${docRef.id}\n`);
+  console.log(`✅ Added document with ID: ${docRef.id}`);
 }
 
 async function updateDocument(collection, id, data) {
   const error = validateFields(collection, data);
-  if (error) {
-    console.log(error);
-    return;
-  }
-
+  if (error) return console.log(error);
   const docRef = db.collection(collection).doc(id);
   const doc = await docRef.get();
-  if (!doc.exists) {
-    console.log(`❌ Cannot update. Document with ID '${id}' does not exist in '${collection}'`);
-    return;
-  }
-
-  // 🔒 Encrypt password if updated
-  if (data.password) {
-    const hashed = await bcrypt.hash(data.password, 10);
-    data.password = hashed;
-  }
-
+  if (!doc.exists) return console.log(`❌ Document '${id}' not found`);
   await docRef.update(data);
-  console.log(`\n✅ Updated document with ID: ${id}\n`);
+  console.log(`✅ Updated document with ID: ${id}`);
 }
 
 async function deleteDocument(collection, id) {
   const docRef = db.collection(collection).doc(id);
   const doc = await docRef.get();
-  if (!doc.exists) {
-    console.log(`❌ Cannot delete. Document with ID '${id}' does not exist in '${collection}'`);
-    return;
-  }
+  if (!doc.exists) return console.log(`❌ Document '${id}' not found`);
   await docRef.delete();
-  console.log(`\n🗑️ Deleted document with ID: ${id}\n`);
+  console.log(`🗑️ Deleted document with ID: ${id}`);
 }
 
-// ------------------ Multi-line JSON Input ------------------
+// ------------------ Input and Command Loop ------------------
 
 function readJSON(promptText, callback) {
   console.log(`${promptText} (Press Enter twice when done)`);
@@ -160,15 +112,13 @@ function readJSON(promptText, callback) {
   });
 }
 
-// ------------------ Interactive Console ------------------
-
 function startConsole() {
-  rl.question("Enter command (type 'help' for instructions): ", async (input) => {
+  rl.question("Enter command (help for list): ", async (input) => {
     const [command, collection, ...rest] = input.split(" ");
     const args = rest.join(" ");
 
     if (collection && !ALLOWED_COLLECTIONS.includes(collection)) {
-      console.log(`❌ Invalid collection name. Allowed: ${ALLOWED_COLLECTIONS.join(", ")}`);
+      console.log(`❌ Invalid collection. Allowed: ${ALLOWED_COLLECTIONS.join(", ")}`);
       return startConsole();
     }
 
@@ -177,13 +127,11 @@ function startConsole() {
         case "help":
           console.log(`
 Commands:
-- list <collection>                  : List all documents
-- query <collection> <field> <value> : Query documents by field=value
-- add <collection>                   : Add a new document (multi-line JSON)
-- update <collection> <id>           : Update document by ID (multi-line JSON)
-- delete <collection> <id>           : Delete document by ID
-- exit                               : Quit console
-Collections: ${ALLOWED_COLLECTIONS.join(", ")}
+- list <collection>
+- add <collection>
+- update <collection> <id>
+- delete <collection> <id>
+- exit
           `);
           break;
 
@@ -191,62 +139,35 @@ Collections: ${ALLOWED_COLLECTIONS.join(", ")}
           await listAll(collection);
           break;
 
-        case "query": {
-          const [field, ...valueParts] = rest;
-          const value = valueParts.join(" ");
-          if (!field || !value) {
-            console.log("❌ Invalid query format. Example: query students major Computer Science");
-          } else {
-            await queryCollection(collection, field, value);
-          }
-          break;
-        }
-
         case "add":
           readJSON(`Enter JSON for new document in '${collection}'`, async (err, data) => {
-            if (err) {
-              console.log("❌ Invalid JSON. Try again.");
-            } else {
-              await addDocument(collection, data);
-            }
+            if (err) console.log("❌ Invalid JSON");
+            else await addDocument(collection, data);
             startConsole();
           });
           return;
 
-        case "update": {
+        case "update":
           const [id] = rest;
-          if (!id) {
-            console.log("❌ Invalid update format. Example: update students <id>");
-          } else {
-            readJSON(`Enter JSON to update document '${id}' in '${collection}'`, async (err, data) => {
-              if (err) {
-                console.log("❌ Invalid JSON. Try again.");
-              } else {
-                await updateDocument(collection, id, data);
-              }
-              startConsole();
-            });
-            return;
-          }
-          break;
-        }
+          if (!id) return console.log("❌ Must provide document ID");
+          readJSON(`Enter JSON to update document '${id}'`, async (err, data) => {
+            if (err) console.log("❌ Invalid JSON");
+            else await updateDocument(collection, id, data);
+            startConsole();
+          });
+          return;
 
-        case "delete": {
-          const [id] = rest;
-          if (!id) {
-            console.log("❌ Invalid delete format. Example: delete students <id>");
-          } else {
-            await deleteDocument(collection, id);
-          }
+        case "delete":
+          await deleteDocument(collection, args);
           break;
-        }
 
         case "exit":
-          console.log("👋 Exiting console...");
-          return rl.close();
+          console.log("Goodbye!");
+          rl.close();
+          return;
 
         default:
-          console.log("❌ Unknown command. Type 'help' for instructions.");
+          console.log("❌ Unknown command");
       }
     } catch (err) {
       console.log("❌ Error:", err.message);
@@ -256,6 +177,5 @@ Collections: ${ALLOWED_COLLECTIONS.join(", ")}
   });
 }
 
-console.log("🔥 Firebase Interactive Console Ready!");
-console.log("Type 'help' to see all commands.\n");
+console.log("🔥 Firebase Admin Console Ready");
 startConsole();
