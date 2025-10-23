@@ -1,163 +1,52 @@
-
-// import { useState, type FormEvent } from "react"
-// import { useNavigate, Link } from "react-router-dom"
-// import { Container, Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
-// import { authUtils } from "../utils/auth"
-
-// export default function Register() {
-//   const navigate = useNavigate()
-//   const [email, setEmail] = useState("")
-//   const [password, setPassword] = useState("")
-//   const [confirmPassword, setConfirmPassword] = useState("")
-//   const [error, setError] = useState("")
-
-//   const handleSubmit = (e: FormEvent) => {
-//     e.preventDefault()
-//     setError("")
-
-//     // Validation
-//     if (!email || !password || !confirmPassword) {
-//       setError("All fields are required.")
-//       return
-//     }
-
-//     if (password !== confirmPassword) {
-//       setError("Passwords do not match.")
-//       return
-//     }
-
-//     if (password.length < 6) {
-//       setError("Password must be at least 6 characters long.")
-//       return
-//     }
-
-//     // Attempt registration
-//     const result = authUtils.register(email, password)
-
-//     if (result.success) {
-//       navigate("/dashboard")
-//     } else {
-//       setError(result.error || "Registration failed.")
-//     }
-//   }
-
-//   return (
-//     <Container maxWidth="sm">
-//       <Box
-//         sx={{
-//           minHeight: "100vh",
-//           display: "flex",
-//           alignItems: "center",
-//           justifyContent: "center",
-//         }}
-//       >
-//         <Paper elevation={3} sx={{ p: 4, width: "100%" }}>
-//           <Typography variant="h4" component="h1" gutterBottom align="center">
-//             Create Your Account
-//           </Typography>
-//           <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
-//             Join the virtual career fair platform
-//           </Typography>
-
-//           {error && (
-//             <Alert severity="error" sx={{ mb: 2 }}>
-//               {error}
-//             </Alert>
-//           )}
-
-//           <form onSubmit={handleSubmit}>
-//             <TextField
-//               fullWidth
-//               label="Email"
-//               type="email"
-//               value={email}
-//               onChange={(e) => setEmail(e.target.value)}
-//               margin="normal"
-//               required
-//             />
-//             <TextField
-//               fullWidth
-//               label="Password"
-//               type="password"
-//               value={password}
-//               onChange={(e) => setPassword(e.target.value)}
-//               margin="normal"
-//               required
-//             />
-//             <TextField
-//               fullWidth
-//               label="Confirm Password"
-//               type="password"
-//               value={confirmPassword}
-//               onChange={(e) => setConfirmPassword(e.target.value)}
-//               margin="normal"
-//               required
-//             />
-//             <Button type="submit" fullWidth variant="contained" size="large" sx={{ mt: 3, mb: 2 }}>
-//               Register
-//             </Button>
-//           </form>
-
-//           <Typography variant="body2" align="center">
-//             Already have an account?{" "}
-//             <Link to="/login" style={{ color: "#646cff", textDecoration: "none" }}>
-//               Sign in
-//             </Link>
-//           </Typography>
-//         </Paper>
-//       </Box>
-//     </Container>
-//   )
-// }
-
-
 "use client"
 
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Container, Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import PersonAddIcon from "@mui/icons-material/PersonAdd"
-import WorkIcon from "@mui/icons-material/Work"
-import GroupsIcon from "@mui/icons-material/Groups"
+import PeopleIcon from "@mui/icons-material/People"
+import EventIcon from "@mui/icons-material/Event"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import { Badge } from "@mui/icons-material"
 
-export default function Register() {
+export default function EmployerRegister() {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
+  const [companyName, setCompanyName] = useState("")
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    setError("")
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault()
+  setError("")
 
-    // Validation
-    if (!email || !password || !confirmPassword) {
-      setError("All fields are required.")
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.")
-      return
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.")
-      return
-    }
-
-    // Attempt registration
-    const result = authUtils.register(email, password)
-
-    if (result.success) {
-      navigate("/dashboard")
-    } else {
-      setError(result.error || "Registration failed.")
-    }
+  if (!email || !password || !confirmPassword || !companyName) {
+    setError("Email, password, confirm password, and company name are required.")
+    return
   }
+
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.")
+    return
+  }
+
+  if (password.length < 6) {
+    setError("Password must be at least 6 characters long.")
+    return
+  }
+
+  // Use the new backend registration with all company data
+  const result = await authUtils.registerEmployer(email, password, {
+    companyName,
+  })
+
+  if (result.success) {
+    navigate("/dashboard")
+  } else {
+    setError(result.error || "Registration failed.")
+  }
+}
 
   return (
     <Box
@@ -167,7 +56,6 @@ export default function Register() {
         background: "linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)",
       }}
     >
-      {/* Left side panel with branding and features */}
       <Box
         sx={{
           flex: 1,
@@ -175,14 +63,13 @@ export default function Register() {
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
           color: "white",
           p: 6,
           position: "relative",
           overflow: "hidden",
         }}
       >
-        {/* Decorative circles */}
         <Box
           sx={{
             position: "absolute",
@@ -208,32 +95,32 @@ export default function Register() {
 
         <Box sx={{ zIndex: 1, maxWidth: "400px" }}>
           <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-            Welcome to Your Future
+            Find Top Talent
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Connect with top employers and discover career opportunities
+            Connect with qualified candidates and build your team
           </Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <WorkIcon sx={{ fontSize: 40 }} />
+              <PeopleIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  100+ Companies
+                  Qualified Candidates
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Top employers waiting to meet you
+                  Access thousands of talented students
                 </Typography>
               </Box>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <GroupsIcon sx={{ fontSize: 40 }} />
+              <EventIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Virtual Networking
+                  Virtual Events
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Connect from anywhere, anytime
+                  Host information sessions and interviews
                 </Typography>
               </Box>
             </Box>
@@ -241,10 +128,10 @@ export default function Register() {
               <TrendingUpIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Career Growth
+                  Grow Your Team
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Find opportunities that match your goals
+                  Find the perfect fit for your company
                 </Typography>
               </Box>
             </Box>
@@ -276,13 +163,13 @@ export default function Register() {
                   width: 60,
                   height: 60,
                   borderRadius: "50%",
-                  background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <PersonAddIcon sx={{ fontSize: 32, color: "white" }} />
+                <Badge sx={{ fontSize: 32, color: "white" }} />
               </Box>
             </Box>
 
@@ -293,10 +180,10 @@ export default function Register() {
               align="center"
               sx={{ fontWeight: 700, color: "#1a1a1a" }}
             >
-              Create Your Account
+              Employer Registration
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
-              Start your journey to career success
+              Create your account to find top talent
             </Typography>
 
             {error && (
@@ -308,7 +195,7 @@ export default function Register() {
             <form onSubmit={handleSubmit}>
               <TextField
                 fullWidth
-                label="Email Address"
+                label="Company Email Address"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -319,11 +206,11 @@ export default function Register() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: "#388560",
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: "#388560",
                   },
                 }}
               />
@@ -341,11 +228,11 @@ export default function Register() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: "#388560",
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: "#388560",
                   },
                 }}
               />
@@ -362,14 +249,34 @@ export default function Register() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: "#388560",
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: "#388560",
                   },
                 }}
               />
+              <TextField
+  fullWidth
+  label="Company Name"
+  value={companyName}
+  onChange={(e) => setCompanyName(e.target.value)}
+  margin="normal"
+  required
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
               <Button
                 type="submit"
                 fullWidth
@@ -380,18 +287,18 @@ export default function Register() {
                   mb: 3,
                   py: 1.5,
                   borderRadius: 2,
-                  background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
                   fontSize: "1.1rem",
                   fontWeight: 600,
                   textTransform: "none",
-                  boxShadow: "0 4px 12px rgba(176, 58, 108, 0.3)",
+                  boxShadow: "0 4px 12px rgba(56, 133, 96, 0.3)",
                   "&:hover": {
-                    background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                    boxShadow: "0 6px 16px rgba(176, 58, 108, 0.4)",
+                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                    boxShadow: "0 6px 16px rgba(56, 133, 96, 0.4)",
                   },
                 }}
               >
-                Create Account
+                Create Employer Account
               </Button>
             </form>
 
@@ -399,14 +306,25 @@ export default function Register() {
               <Typography variant="body2" color="text.secondary">
                 Already have an account?{" "}
                 <Link
-                  to="/login"
+                  to="/employer/login"
                   style={{
-                    color: "#388560",
+                    color: "#b03a6c",
                     textDecoration: "none",
                     fontWeight: 600,
                   }}
                 >
                   Sign in here
+                </Link>
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                <Link
+                  to="/"
+                  style={{
+                    color: "#666",
+                    textDecoration: "none",
+                  }}
+                >
+                  ← Back to role selection
                 </Link>
               </Typography>
             </Box>

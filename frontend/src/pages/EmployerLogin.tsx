@@ -4,28 +4,29 @@ import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import BusinessCenterIcon from "@mui/icons-material/BusinessCenter"
-import GroupsIcon from "@mui/icons-material/Groups"
-import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import PeopleIcon from "@mui/icons-material/People"
+import EventIcon from "@mui/icons-material/Event"
 import LoginIcon from "@mui/icons-material/Login"
+import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import { Badge } from "@mui/icons-material"
 
-export default function Login() {
+export default function EmployerLogin() {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError("")
-
+  
     if (!email || !password) {
       setError("All fields are required.")
       return
     }
-
-    const result = authUtils.login(email, password)
-
+  
+    const result = await authUtils.loginEmployer(email, password);
+  
     if (result.success) {
       navigate("/dashboard")
     } else {
@@ -35,11 +36,10 @@ export default function Login() {
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      {/* Left Panel - Branding */}
       <Box
         sx={{
           flex: 1,
-          background: "linear-gradient(135deg, #b03a6c 0%, #8b2d56 100%)",
+          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
           color: "white",
           p: 6,
           display: { xs: "none", md: "flex" },
@@ -49,7 +49,6 @@ export default function Login() {
           overflow: "hidden",
         }}
       >
-        {/* Decorative circles */}
         <Box
           sx={{
             position: "absolute",
@@ -75,32 +74,32 @@ export default function Login() {
 
         <Box sx={{ position: "relative", zIndex: 1 }}>
           <Typography variant="h3" sx={{ fontWeight: 700, mb: 3 }}>
-            Welcome Back!
+            Welcome Back, Employer!
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Continue your journey to career success
+            Continue building your team with top talent
           </Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <BusinessCenterIcon sx={{ fontSize: 40 }} />
+              <PeopleIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Career Opportunities
+                  Find Candidates
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Access exclusive job openings
+                  Browse qualified student profiles
                 </Typography>
               </Box>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <GroupsIcon sx={{ fontSize: 40 }} />
+              <EventIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Network with Employers
+                  Host Events
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Connect with top companies
+                  Organize virtual sessions
                 </Typography>
               </Box>
             </Box>
@@ -108,10 +107,10 @@ export default function Login() {
               <TrendingUpIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Grow Your Career
+                  Grow Your Team
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Attend workshops and sessions
+                  Post jobs and internships
                 </Typography>
               </Box>
             </Box>
@@ -119,7 +118,6 @@ export default function Login() {
         </Box>
       </Box>
 
-      {/* Right Panel - Login Form */}
       <Box
         sx={{
           flex: 1,
@@ -127,7 +125,7 @@ export default function Login() {
           alignItems: "center",
           justifyContent: "center",
           p: 4,
-          background: "linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)",
+          bgcolor: "#f5f5f5",
         }}
       >
         <Paper
@@ -140,20 +138,19 @@ export default function Login() {
             maxWidth: "450px",
           }}
         >
-          {/* Icon circle at top */}
           <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
             <Box
               sx={{
                 width: 60,
                 height: 60,
                 borderRadius: "50%",
-                background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+                background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <LoginIcon sx={{ fontSize: 32, color: "white" }} />
+              <Badge sx={{ fontSize: 32, color: "white" }} />
             </Box>
           </Box>
 
@@ -167,10 +164,10 @@ export default function Login() {
                 color: "#1a1a1a",
               }}
             >
-              Sign In
+              Employer Sign In
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center">
-              Access your virtual career fair account
+              Access your employer dashboard
             </Typography>
           </Box>
 
@@ -195,14 +192,14 @@ export default function Login() {
                   bgcolor: "white",
                   borderRadius: 2,
                   "&:hover fieldset": {
-                    borderColor: "#b03a6c",
+                    borderColor: "#388560",
                   },
                   "&.Mui-focused fieldset": {
-                    borderColor: "#b03a6c",
+                    borderColor: "#388560",
                   },
                 },
                 "& .MuiInputLabel-root.Mui-focused": {
-                  color: "#b03a6c",
+                  color: "#388560",
                 },
               }}
             />
@@ -220,14 +217,14 @@ export default function Login() {
                   bgcolor: "white",
                   borderRadius: 2,
                   "&:hover fieldset": {
-                    borderColor: "#b03a6c",
+                    borderColor: "#388560",
                   },
                   "&.Mui-focused fieldset": {
-                    borderColor: "#b03a6c",
+                    borderColor: "#388560",
                   },
                 },
                 "& .MuiInputLabel-root.Mui-focused": {
-                  color: "#b03a6c",
+                  color: "#388560",
                 },
               }}
             />
@@ -240,14 +237,14 @@ export default function Login() {
               sx={{
                 py: 1.5,
                 borderRadius: 2,
-                background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
                 fontSize: "1.1rem",
                 fontWeight: 600,
                 textTransform: "none",
-                boxShadow: "0 4px 12px rgba(176, 58, 108, 0.3)",
+                boxShadow: "0 4px 12px rgba(56, 133, 96, 0.3)",
                 "&:hover": {
-                  background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                  boxShadow: "0 6px 16px rgba(176, 58, 108, 0.4)",
+                  background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                  boxShadow: "0 6px 16px rgba(56, 133, 96, 0.4)",
                 },
               }}
             >
@@ -259,14 +256,25 @@ export default function Login() {
             <Typography variant="body2" color="text.secondary">
               Don't have an account?{" "}
               <Link
-                to="/register"
+                to="/employer/register"
                 style={{
-                  color: "#388560",
+                  color: "#b03a6c",
                   textDecoration: "none",
                   fontWeight: 600,
                 }}
               >
                 Register here
+              </Link>
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              <Link
+                to="/"
+                style={{
+                  color: "#666",
+                  textDecoration: "none",
+                }}
+              >
+                ← Back to role selection
               </Link>
             </Typography>
           </Box>
@@ -275,4 +283,3 @@ export default function Login() {
     </Box>
   )
 }
-

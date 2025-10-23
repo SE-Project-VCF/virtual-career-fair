@@ -22,7 +22,7 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     authUtils.logout()
-    navigate("/login")
+    navigate("/")
   }
 
   if (!user) return null
