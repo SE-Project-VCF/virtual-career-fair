@@ -8,6 +8,8 @@ import LogoutIcon from "@mui/icons-material/Logout"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
+import ShareIcon from "@mui/icons-material/Share"
+import PeopleIcon from "@mui/icons-material/People"
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -15,8 +17,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
-      navigate("/login")
+      navigate("/")
+      return
     }
+    
+    // Additional role validation could be added here if needed
+    // For now, the login functions handle role validation
   }, [navigate])
 
   const handleLogout = () => {
@@ -25,6 +31,10 @@ export default function Dashboard() {
   }
 
   if (!user) return null
+
+  // Debug: Log user data to console
+  console.log("Dashboard - Current user:", user);
+  console.log("Dashboard - User role:", user.role);
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
@@ -88,7 +98,92 @@ export default function Dashboard() {
             <Typography variant="body1" color="text.secondary">
               You're all set to explore career opportunities at our virtual fair.
             </Typography>
+            
+            {/* Debug info - remove this in production */}
+            <Box sx={{ mt: 2, p: 2, bgcolor: "rgba(0,0,0,0.05)", borderRadius: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Debug Info:</strong> Role: {user.role || "undefined"} | 
+                UID: {user.uid} | 
+                Email: {user.email}
+              </Typography>
+            </Box>
           </Box>
+
+          {/* Employer-specific section */}
+          {user && user.role === "employer" && (
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+                Company Management
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(56, 133, 96, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <ShareIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Invite Representatives
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Generate and manage invite codes for your company representatives.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/invite-code")}
+                        sx={{
+                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                          },
+                        }}
+                      >
+                        Manage Invite Codes
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(176, 58, 108, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <PeopleIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Team Members
+                        </Typography>
+                      </Box>
+                      <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
+                        0
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Representatives registered
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
 
           {/* Stats Cards */}
           <Grid container spacing={3}>

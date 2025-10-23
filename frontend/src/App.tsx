@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard"
 import EmployerRoleSelection from "./pages/EmployerRoleSelection"
 import RepresentativeLogin from "./pages/RepresentativeLogin"
 import RepresentativeRegister from "./pages/RepresentativeRegister"
+import InviteCodeManager from "./pages/InviteCodeManager"
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         <Route path="/representative/login" element={<RepresentativeLogin />} />
 
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/invite-code" element={<InviteCodeManager />} />
       </Routes>
     </BrowserRouter>
   )

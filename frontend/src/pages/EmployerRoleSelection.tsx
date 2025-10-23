@@ -294,7 +294,7 @@ export default function EmployerRoleSelection() {
           <Typography
             variant="body2"
             color="text.secondary"
-            sx={{ mt: 1, cursor: "pointer", textDecoration: "underline" }}
+            sx={{ mt: 1, cursor: "pointer" }}
             onClick={() => navigate("/")}
           >
             ← Back to role selection
