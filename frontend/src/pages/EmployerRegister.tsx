@@ -16,8 +16,6 @@ export default function EmployerRegister() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [companyName, setCompanyName] = useState("")
-  const [primaryLocation, setPrimaryLocation] = useState("")
-  const [description, setDescription] = useState("")
   const [username, setUsername] = useState("")
 
 const handleSubmit = async (e: FormEvent) => {
@@ -42,8 +40,6 @@ const handleSubmit = async (e: FormEvent) => {
   // Use the new backend registration with all company data
   const result = await authUtils.registerEmployer(email, password, {
     companyName,
-    primaryLocation,
-    description,
     username,
   })
 
@@ -302,48 +298,7 @@ const handleSubmit = async (e: FormEvent) => {
     },
   }}
 />
-              <TextField
-  fullWidth
-  label="Primary Location (Optional)"
-  value={primaryLocation}
-  onChange={(e) => setPrimaryLocation(e.target.value)}
-  margin="normal"
-  placeholder="e.g., New York, NY"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
-              <TextField
-  fullWidth
-  label="Company Description (Optional)"
-  value={description}
-  onChange={(e) => setDescription(e.target.value)}
-  margin="normal"
-  multiline
-  rows={3}
-  placeholder="Brief description of your company..."
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
+           
               <Button
                 type="submit"
                 fullWidth
