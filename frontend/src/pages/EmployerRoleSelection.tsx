@@ -2,11 +2,12 @@
 
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import Badge from "@mui/icons-material/Badge"
-import SchoolIcon from "@mui/icons-material/School"
+import BusinessIcon from "@mui/icons-material/Business"
+import PersonIcon from "@mui/icons-material/Person"
 import { Box, Button, Container, Paper, Typography } from "@mui/material"
 import { useNavigate } from "react-router-dom"
 
-export default function RoleSelection() {
+export default function EmployerRoleSelection() {
   const navigate = useNavigate()
 
   return (
@@ -32,13 +33,13 @@ export default function RoleSelection() {
               WebkitTextFillColor: "transparent",
             }}
           >
-            Virtual Career Fair
+            Employer Portal
           </Typography>
           <Typography variant="h5" color="text.secondary" sx={{ mb: 1 }}>
-            Welcome! Please select your role to continue
+            Choose your role to continue
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Choose how you'd like to participate in the career fair
+            Select whether you're the company owner or a representative
           </Typography>
         </Box>
 
@@ -51,113 +52,7 @@ export default function RoleSelection() {
             mx: "auto",
           }}
         >
-          {/* Student Card */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: 5,
-              borderRadius: 3,
-              background: "white",
-              border: "2px solid transparent",
-              transition: "all 0.3s ease",
-              cursor: "pointer",
-              "&:hover": {
-                borderColor: "#b03a6c",
-                transform: "translateY(-8px)",
-                boxShadow: "0 12px 24px rgba(176, 58, 108, 0.2)",
-              },
-            }}
-            onClick={() => navigate("/student/register")}
-          >
-            <Box
-              sx={{
-                width: 80,
-                height: 80,
-                borderRadius: "50%",
-                background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                mx: "auto",
-                mb: 3,
-              }}
-            >
-              <SchoolIcon sx={{ fontSize: 48, color: "white" }} />
-            </Box>
-
-            <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2, color: "#1a1a1a" }}>
-              I'm a Student
-            </Typography>
-
-            <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4, lineHeight: 1.7 }}>
-              Explore career opportunities, connect with employers, and discover your next internship or full-time
-              position
-            </Typography>
-
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 4 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Box
-                  sx={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    bgcolor: "#b03a6c",
-                  }}
-                />
-                <Typography variant="body2" color="text.secondary">
-                  Browse job and internship opportunities
-                </Typography>
-              </Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Box
-                  sx={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    bgcolor: "#b03a6c",
-                  }}
-                />
-                <Typography variant="body2" color="text.secondary">
-                  Connect with recruiters and employers
-                </Typography>
-              </Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Box
-                  sx={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    bgcolor: "#b03a6c",
-                  }}
-                />
-                <Typography variant="body2" color="text.secondary">
-                  Attend virtual workshops and sessions
-                </Typography>
-              </Box>
-            </Box>
-
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              endIcon={<ArrowForwardIcon />}
-              sx={{
-                py: 1.5,
-                borderRadius: 2,
-                background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
-                fontSize: "1rem",
-                fontWeight: 600,
-                textTransform: "none",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                },
-              }}
-            >
-              Continue as Student
-            </Button>
-          </Paper>
-
-          {/* Employer Card */}
+          {/* Company Owner Card */}
           <Paper
             elevation={0}
             sx={{
@@ -173,7 +68,7 @@ export default function RoleSelection() {
                 boxShadow: "0 12px 24px rgba(56, 133, 96, 0.2)",
               },
             }}
-            onClick={() => navigate("/employer/role-selection")}
+            onClick={() => navigate("/employer/register")}
           >
             <Box
               sx={{
@@ -188,15 +83,15 @@ export default function RoleSelection() {
                 mb: 3,
               }}
             >
-              <Badge sx={{ fontSize: 48, color: "white" }} />
+              <BusinessIcon sx={{ fontSize: 48, color: "white" }} />
             </Box>
 
             <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2, color: "#1a1a1a" }}>
-              I'm an Employer
+              Company Owner
             </Typography>
 
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4, lineHeight: 1.7 }}>
-              Find talented candidates, showcase your company, and build your team with top students and graduates
+              Create and manage your company account, invite representatives, and oversee all recruitment activities
             </Typography>
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 4 }}>
@@ -210,7 +105,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Post job openings and internships
+                  Create company profile and manage settings
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -223,7 +118,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Connect with qualified candidates
+                  Invite and manage team representatives
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -236,7 +131,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Host virtual information sessions
+                  Full access to all company features
                 </Typography>
               </Box>
             </Box>
@@ -258,11 +153,156 @@ export default function RoleSelection() {
                 },
               }}
             >
-              Continue as Employer
+              Continue as Company Owner
             </Button>
           </Paper>
+
+          {/* Representative Card */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: 5,
+              borderRadius: 3,
+              background: "white",
+              border: "2px solid transparent",
+              transition: "all 0.3s ease",
+              cursor: "pointer",
+              "&:hover": {
+                borderColor: "#b03a6c",
+                transform: "translateY(-8px)",
+                boxShadow: "0 12px 24px rgba(176, 58, 108, 0.2)",
+              },
+            }}
+            onClick={() => navigate("/representative/register")}
+          >
+            <Box
+              sx={{
+                width: 80,
+                height: 80,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                mx: "auto",
+                mb: 3,
+              }}
+            >
+              <PersonIcon sx={{ fontSize: 48, color: "white" }} />
+            </Box>
+
+            <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2, color: "#1a1a1a" }}>
+              Company Representative
+            </Typography>
+
+            <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4, lineHeight: 1.7 }}>
+              Join your company's recruitment team as a representative to help find and connect with talented candidates
+            </Typography>
+
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 4 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    bgcolor: "#b03a6c",
+                  }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Connect with students and candidates
+                </Typography>
+              </Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    bgcolor: "#b03a6c",
+                  }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Participate in virtual events and sessions
+                </Typography>
+              </Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    bgcolor: "#b03a6c",
+                  }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Help with recruitment activities
+                </Typography>
+              </Box>
+            </Box>
+
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              endIcon={<ArrowForwardIcon />}
+              sx={{
+                py: 1.5,
+                borderRadius: 2,
+                background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                fontSize: "1rem",
+                fontWeight: 600,
+                textTransform: "none",
+                "&:hover": {
+                  background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                },
+              }}
+            >
+              Continue as Representative
+            </Button>
+          </Paper>
+        </Box>
+
+        <Box sx={{ textAlign: "center", mt: 4 }}>
+          <Typography variant="body2" color="text.secondary">
+            Already have an account?{" "}
+            <Typography
+              component="span"
+              sx={{
+                color: "#388560",
+                cursor: "pointer",
+                fontWeight: 600,
+                textDecoration: "underline",
+              }}
+              onClick={() => navigate("/employer/login")}
+            >
+              Sign in as Employer
+            </Typography>
+            {" or "}
+            <Typography
+              component="span"
+              sx={{
+                color: "#b03a6c",
+                cursor: "pointer",
+                fontWeight: 600,
+                textDecoration: "underline",
+              }}
+              onClick={() => navigate("/representative/login")}
+            >
+              Sign in as Representative
+            </Typography>
+          </Typography>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 1, cursor: "pointer", textDecoration: "underline" }}
+            onClick={() => navigate("/")}
+          >
+            ← Back to role selection
+          </Typography>
         </Box>
       </Container>
     </Box>
   )
 }
+

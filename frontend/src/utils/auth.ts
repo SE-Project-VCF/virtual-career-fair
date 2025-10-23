@@ -3,7 +3,7 @@ const API_BASE_URL = 'http://localhost:5000'; // Adjust if your backend runs on 
 export interface User {
   id: string;
   email: string;
-  role: "student" | "employer";
+  role: "student" | "employer" | "representative";
   registeredAt: string;
   // Add other fields based on your Firestore schema
   [key: string]: any;
@@ -94,6 +94,58 @@ export const authUtils = {
   loginEmployer: async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const response = await fetch(`${API_BASE_URL}/login-employer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        localStorage.setItem("currentUser", JSON.stringify(result.user));
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || 'Login failed' };
+      }
+    } catch (error) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  // Register a new representative
+  registerRepresentative: async (email: string, password: string, additionalData?: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/register-representative`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          ...additionalData
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Auto-login after successful registration
+        return await authUtils.loginRepresentative(email, password);
+      } else {
+        return { success: false, error: result.error || 'Registration failed' };
+      }
+    } catch (error) {
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  },
+
+  // Login representative
+  loginRepresentative: async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/login-representative`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
