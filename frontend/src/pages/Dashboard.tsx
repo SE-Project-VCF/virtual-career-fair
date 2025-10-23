@@ -9,6 +9,8 @@ import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import { Link } from "react-router-dom";
+import ProfileMenu from "./ProfileMenu";
+
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -43,46 +45,10 @@ export default function Dashboard() {
             <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
               Virtual Career Fair
             </Typography>
-            <Button
-              variant="outlined"
-              onClick={handleLogout}
-              startIcon={<LogoutIcon />}
-              sx={{
-                color: "white",
-                borderColor: "white",
-                "&:hover": {
-                  borderColor: "white",
-                  bgcolor: "rgba(255,255,255,0.1)",
-                },
-              }}
-            >
-              Logout
-            </Button>
+            <ProfileMenu />
           </Box>
         </Container>
       </Box>
-      {/* Button to navigate to Profile Page */}
-<Box sx={{ mt: 2, ml: 3 }}>
-  <Button
-    component={Link}
-    to="/profile"
-    variant="contained"
-    sx={{
-      backgroundColor: "black",
-      color: "white",
-      textTransform: "none",
-      fontWeight: 600,
-      px: 3,
-      py: 1,
-      "&:hover": {
-        backgroundColor: "#333",
-      },
-    }}
-  >
-    Edit Profile
-  </Button>
-</Box>
-
       <Container maxWidth="lg">
         <Box sx={{ py: 6 }}>
           {/* Welcome Section */}
