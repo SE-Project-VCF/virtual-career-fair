@@ -32,7 +32,7 @@ export default function RoleSelection() {
               WebkitTextFillColor: "transparent",
             }}
           >
-            Virtual Career Fair
+            Job Goblin - Virtual Career Fair
           </Typography>
           <Typography variant="h5" color="text.secondary" sx={{ mb: 1 }}>
             Welcome! Please select your role to continue

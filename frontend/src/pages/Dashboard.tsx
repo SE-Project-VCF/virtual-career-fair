@@ -46,7 +46,7 @@ export default function Dashboard() {
         <Container maxWidth="lg">
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-              Virtual Career Fair
+              Job Goblin - Virtual Career Fair
             </Typography>
             <Button
               variant="outlined"
