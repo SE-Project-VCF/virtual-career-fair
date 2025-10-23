@@ -30,7 +30,11 @@ export default function StudentLogin() {
     if (result.success) {
       navigate("/dashboard")
     } else {
-      setError(result.error || "Login failed.")
+      if (result.needsVerification) {
+        setError("Please verify your email before logging in. Check your inbox for a verification link.")
+      } else {
+        setError(result.error || "Login failed.")
+      }
     }
   }
 

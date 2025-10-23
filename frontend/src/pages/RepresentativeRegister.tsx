@@ -15,14 +15,13 @@ export default function RepresentativeRegister() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
-  const [companyName, setCompanyName] = useState("")
   const [inviteCode, setInviteCode] = useState("")
 
 const handleSubmit = async (e: FormEvent) => {
   e.preventDefault()
   setError("")
 
-  if (!email || !password || !confirmPassword || !companyName || !inviteCode) {
+  if (!email || !password || !confirmPassword || !inviteCode) {
     setError("All fields are required.")
     return
   }
@@ -37,14 +36,17 @@ const handleSubmit = async (e: FormEvent) => {
     return
   }
 
-  // Use the new backend registration with all representative data
+  // Use the new backend registration with invite code (company name comes from validation)
   const result = await authUtils.registerRepresentative(email, password, {
-    companyName,
     inviteCode,
   })
 
   if (result.success) {
-    navigate("/dashboard")
+    if (result.needsVerification) {
+      navigate("/verification-pending", { state: { email } })
+    } else {
+      navigate("/dashboard")
+    }
   } else {
     setError(result.error || "Registration failed.")
   }
@@ -261,32 +263,12 @@ const handleSubmit = async (e: FormEvent) => {
               />
               <TextField
                 fullWidth
-                label="Company Name"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                margin="normal"
-                required
-                sx={{
-                  mb: 2,
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: 2,
-                    "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
-                    },
-                  },
-                  "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
-                  },
-                }}
-              />
-              <TextField
-                fullWidth
                 label="Invite Code"
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value)}
                 margin="normal"
                 required
-                helperText="Get this from your company owner"
+                helperText="Your company name will be automatically linked based on this invite code"
                 sx={{
                   mb: 3,
                   "& .MuiOutlinedInput-root": {
