@@ -17,10 +17,10 @@ import {
   Divider
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { doc, getDoc, updateDoc } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
-import RefreshIcon from "@mui/icons-material/Refresh"
+//import RefreshIcon from "@mui/icons-material/Refresh"
 import BusinessIcon from "@mui/icons-material/Business"
 import ShareIcon from "@mui/icons-material/Share"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
@@ -30,7 +30,7 @@ export default function InviteCodeManager() {
   const user = authUtils.getCurrentUser()
   const [inviteCode, setInviteCode] = useState("")
   const [companyName, setCompanyName] = useState("")
-  const [loading, setLoading] = useState(true)
+  //const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
@@ -51,7 +51,7 @@ export default function InviteCodeManager() {
 
   const fetchInviteCode = async () => {
     try {
-      setLoading(true)
+      //setLoading(true)
       const employerDoc = await getDoc(doc(db, "employers", user?.uid ?? ""))
       
       if (employerDoc.exists()) {
@@ -65,7 +65,7 @@ export default function InviteCodeManager() {
       console.error("Error fetching invite code:", err)
       setError("Failed to load invite code")
     } finally {
-      setLoading(false)
+      //setLoading(false)
     }
   }
 
@@ -81,44 +81,44 @@ export default function InviteCodeManager() {
     }
   }
 
-  const generateNewCode = async () => {
-    try {
-      setLoading(true)
-      setError("")
+  // const generateNewCode = async () => {
+  //   try {
+  //     //setLoading(true)
+  //     setError("")
       
-      // Generate new invite code
-      const newCode = generateInviteCode()
+  //     // Generate new invite code
+  //     const newCode = generateInviteCode()
       
-      // Update in Firestore
-      await updateDoc(doc(db, "employers", user?.uid ?? ""), {
-        inviteCode: newCode,
-        updatedAt: new Date().toISOString()
-      })
+  //     // Update in Firestore
+  //     await updateDoc(doc(db, "employers", user?.uid ?? ""), {
+  //       inviteCode: newCode,
+  //       updatedAt: new Date().toISOString()
+  //     })
       
-      setInviteCode(newCode)
-      setSuccess("New invite code generated successfully!")
-      setTimeout(() => setSuccess(""), 3000)
-    } catch (err) {
-      console.error("Error generating new code:", err)
-      setError("Failed to generate new invite code")
-    } finally {
-      setLoading(false)
-    }
-  }
+  //     setInviteCode(newCode)
+  //     setSuccess("New invite code generated successfully!")
+  //     setTimeout(() => setSuccess(""), 3000)
+  //   } catch (err) {
+  //     console.error("Error generating new code:", err)
+  //     setError("Failed to generate new invite code")
+  //   } finally {
+  //     setLoading(false)
+  //   }
+  // }
 
-  const generateInviteCode = (): string => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    let result = ''
+  // const generateInviteCode = (): string => {
+  //   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  //   let result = ''
     
-    const array = new Uint8Array(8)
-    crypto.getRandomValues(array)
+  //   const array = new Uint8Array(8)
+  //   crypto.getRandomValues(array)
     
-    for (let i = 0; i < 8; i++) {
-      result += chars[array[i] % chars.length]
-    }
+  //   for (let i = 0; i < 8; i++) {
+  //     result += chars[array[i] % chars.length]
+  //   }
     
-    return result
-  }
+  //   return result
+  // }
 
   const shareInstructions = `Share this invite code with your company representatives:
 

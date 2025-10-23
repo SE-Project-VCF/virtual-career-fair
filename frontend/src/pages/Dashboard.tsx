@@ -93,20 +93,41 @@ export default function Dashboard() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              Welcome back, {user.role === "employer" ? user.companyName :  user.firstName ?? user.email}!
+              Welcome back, {user.role === "employer" ? user.companyName : user.role === "representative" ? user.email : user.firstName ?? user.email}!
             </Typography>
+            
+            {/* Company name display for representatives */}
+            {user.role === "representative" && user.companyName && (
+              <Box sx={{ 
+                display: "inline-flex", 
+                alignItems: "center", 
+                gap: 1, 
+                mb: 2,
+                px: 2,
+                py: 1,
+                bgcolor: "rgba(56, 133, 96, 0.1)",
+                borderRadius: 2,
+                border: "1px solid rgba(56, 133, 96, 0.2)"
+              }}>
+                <BusinessIcon sx={{ fontSize: 20, color: "#388560" }} />
+                <Typography variant="body1" sx={{ fontWeight: 500, color: "#388560" }}>
+                  Representing {user.companyName}
+                </Typography>
+              </Box>
+            )}
+            
             <Typography variant="body1" color="text.secondary">
               You're all set to explore career opportunities at our virtual fair.
             </Typography>
             
             {/* Debug info - remove this in production */}
-            <Box sx={{ mt: 2, p: 2, bgcolor: "rgba(0,0,0,0.05)", borderRadius: 1 }}>
+            {/* <Box sx={{ mt: 2, p: 2, bgcolor: "rgba(0,0,0,0.05)", borderRadius: 1 }}>
               <Typography variant="body2" color="text.secondary">
                 <strong>Debug Info:</strong> Role: {user.role || "undefined"} | 
                 UID: {user.uid} | 
                 Email: {user.email}
               </Typography>
-            </Box>
+            </Box> */}
           </Box>
 
           {/* Employer-specific section */}

@@ -176,6 +176,8 @@ export const authUtils = {
         uid: user.uid,
         email: user.email!,
         role: "representative",
+        companyName: inviteValidation.companyName,
+        companyId: inviteValidation.employerId,
         ...additionalData,
       };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
