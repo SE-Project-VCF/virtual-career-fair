@@ -83,7 +83,7 @@ export default function Dashboard() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              Welcome back, {user.email}!
+              Welcome back, {user.role === "employer" ? user.companyName :  user.firstName ?? user.email}!
             </Typography>
             <Typography variant="body1" color="text.secondary">
               You're all set to explore career opportunities at our virtual fair.
