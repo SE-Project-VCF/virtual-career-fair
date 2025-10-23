@@ -32,10 +32,6 @@ export default function Dashboard() {
 
   if (!user) return null
 
-  // Debug: Log user data to console
-  console.log("Dashboard - Current user:", user);
-  console.log("Dashboard - User role:", user.role);
-
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
       {/* Header */}
@@ -119,15 +115,6 @@ export default function Dashboard() {
             <Typography variant="body1" color="text.secondary">
               You're all set to explore career opportunities at our virtual fair.
             </Typography>
-            
-            {/* Debug info - remove this in production */}
-            {/* <Box sx={{ mt: 2, p: 2, bgcolor: "rgba(0,0,0,0.05)", borderRadius: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Debug Info:</strong> Role: {user.role || "undefined"} | 
-                UID: {user.uid} | 
-                Email: {user.email}
-              </Typography>
-            </Box> */}
           </Box>
 
           {/* Employer-specific section */}
