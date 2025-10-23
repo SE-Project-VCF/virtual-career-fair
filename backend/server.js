@@ -52,10 +52,11 @@ app.post('/register-student', async (req, res) => {
   // --------------------
   app.post('/register-employer', async (req, res) => {
     try {
-      const { companyName, primaryLocation, description, username, password } = req.body;
+      const { email, companyName, primaryLocation, description, username, password } = req.body;
       const hashedPassword = await bcrypt.hash(password, 10);
   
       const docRef = await db.collection('employers').add({
+        email,
         companyName,
         primaryLocation,
         description,

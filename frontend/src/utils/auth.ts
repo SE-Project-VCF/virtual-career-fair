@@ -28,8 +28,8 @@ export const authUtils = {
       const result = await response.json();
       
       if (result.success) {
-        // Auto-login after successful registration
-        return await authUtils.loginStudent(email, password);
+        // Registration successful - return success without auto-login
+        return { success: true };
       } else {
         return { success: false, error: result.error || 'Registration failed' };
       }
@@ -56,8 +56,8 @@ export const authUtils = {
       const result = await response.json();
       
       if (result.success) {
-        // Auto-login after successful registration
-        return await authUtils.loginEmployer(email, password);
+        // Registration successful - return success without auto-login
+        return { success: true };
       } else {
         return { success: false, error: result.error || 'Registration failed' };
       }

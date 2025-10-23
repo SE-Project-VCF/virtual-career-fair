@@ -16,13 +16,16 @@ export default function EmployerRegister() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [companyName, setCompanyName] = useState("")
+  const [primaryLocation, setPrimaryLocation] = useState("")
+  const [description, setDescription] = useState("")
+  const [username, setUsername] = useState("")
 
 const handleSubmit = async (e: FormEvent) => {
   e.preventDefault()
   setError("")
 
-  if (!email || !password || !confirmPassword || !companyName) {
-    setError("Email, password, confirm password, and company name are required.")
+  if (!email || !password || !confirmPassword || !companyName || !primaryLocation || !description || !username) {
+    setError("All fields are required.")
     return
   }
 
@@ -39,10 +42,13 @@ const handleSubmit = async (e: FormEvent) => {
   // Use the new backend registration with all company data
   const result = await authUtils.registerEmployer(email, password, {
     companyName,
+    primaryLocation,
+    description,
+    username,
   })
 
   if (result.success) {
-    navigate("/dashboard")
+    navigate("/employer/login")
   } else {
     setError(result.error || "Registration failed.")
   }
@@ -264,6 +270,70 @@ const handleSubmit = async (e: FormEvent) => {
   onChange={(e) => setCompanyName(e.target.value)}
   margin="normal"
   required
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
+              <TextField
+  fullWidth
+  label="Username"
+  value={username}
+  onChange={(e) => setUsername(e.target.value)}
+  margin="normal"
+  required
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
+              <TextField
+  fullWidth
+  label="Primary Location"
+  value={primaryLocation}
+  onChange={(e) => setPrimaryLocation(e.target.value)}
+  margin="normal"
+  required
+  placeholder="e.g., New York, NY"
+  sx={{
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+      "&.Mui-focused fieldset": {
+        borderColor: "#388560",
+      },
+    },
+    "& .MuiInputLabel-root.Mui-focused": {
+      color: "#388560",
+    },
+  }}
+/>
+              <TextField
+  fullWidth
+  label="Company Description"
+  value={description}
+  onChange={(e) => setDescription(e.target.value)}
+  margin="normal"
+  required
+  multiline
+  rows={3}
+  placeholder="Brief description of your company..."
   sx={{
     mb: 2,
     "& .MuiOutlinedInput-root": {

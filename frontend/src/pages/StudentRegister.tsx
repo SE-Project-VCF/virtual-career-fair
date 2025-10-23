@@ -44,7 +44,7 @@ const handleSubmit = async (e: FormEvent) => {
   })
 
   if (result.success) {
-    navigate("/dashboard")
+    navigate("/student/login")
   } else {
     setError(result.error || "Registration failed.")
   }
