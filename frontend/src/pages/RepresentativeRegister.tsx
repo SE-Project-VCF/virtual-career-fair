@@ -42,7 +42,11 @@ const handleSubmit = async (e: FormEvent) => {
   })
 
   if (result.success) {
-    navigate("/dashboard")
+    if (result.needsVerification) {
+      navigate("/verification-pending", { state: { email } })
+    } else {
+      navigate("/dashboard")
+    }
   } else {
     setError(result.error || "Registration failed.")
   }

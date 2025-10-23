@@ -2,6 +2,7 @@ import { auth, db } from "../firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendEmailVerification,
 } from "firebase/auth";
 import { doc, setDoc, getDoc, query, collection, getDocs, where } from "firebase/firestore";
 
@@ -62,7 +63,7 @@ export const authUtils = {
     email: string,
     password: string,
     additionalData?: any
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -71,25 +72,21 @@ export const authUtils = {
       );
       const user = userCredential.user;
 
+      // Send verification email
+      await sendEmailVerification(user);
+
       // ✅ Add user to Firestore collection "students"
       await setDoc(doc(db, "students", user.uid), {
         uid: user.uid,
         email,
         role: "student",
+        emailVerified: false,
         createdAt: new Date().toISOString(),
         ...additionalData,
       });
 
-      // Save current user locally
-      const currentUser: User = {
-        uid: user.uid,
-        email: user.email!,
-        role: "student",
-        ...additionalData,
-      };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
-      return { success: true };
+      // Don't save to localStorage yet - user needs to verify email first
+      return { success: true, needsVerification: true };
     } catch (err: any) {
       console.error("Error registering student:", err);
       return { success: false, error: err.message };
@@ -103,7 +100,7 @@ export const authUtils = {
     email: string,
     password: string,
     additionalData?: any
-  ): Promise<{ success: boolean; inviteCode?: string; error?: string }> => {
+  ): Promise<{ success: boolean; inviteCode?: string; error?: string; needsVerification?: boolean }> => {
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -114,25 +111,22 @@ export const authUtils = {
 
       const inviteCode = generateInviteCode();
 
+      // Send verification email
+      await sendEmailVerification(user);
+
       // ✅ Add to Firestore collection "employers"
       await setDoc(doc(db, "employers", user.uid), {
         uid: user.uid,
         email,
         role: "employer",
         inviteCode,
+        emailVerified: false,
         createdAt: new Date().toISOString(),
         ...additionalData,
       });
 
-      const currentUser: User = {
-        uid: user.uid,
-        email: user.email!,
-        role: "employer",
-        ...additionalData,
-      };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
-      return { success: true, inviteCode };
+      // Don't save to localStorage yet - user needs to verify email first
+      return { success: true, needsVerification: true, inviteCode };
     } catch (err: any) {
       console.error("Error registering employer:", err);
       return { success: false, error: err.message };
@@ -146,7 +140,7 @@ export const authUtils = {
     email: string,
     password: string,
     additionalData?: any
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
       const inviteValidation = await validateInviteCode(additionalData.inviteCode);
       if (!inviteValidation.valid) {
@@ -160,6 +154,9 @@ export const authUtils = {
       );
       const user = userCredential.user;
 
+      // Send verification email
+      await sendEmailVerification(user);
+
       // ✅ Add to Firestore collection "representatives"
       await setDoc(doc(db, "representatives", user.uid), {
         uid: user.uid,
@@ -168,21 +165,13 @@ export const authUtils = {
         companyId: inviteValidation.employerId, // Link to employer
         companyName: inviteValidation.companyName,
         inviteCode: additionalData.inviteCode,
+        emailVerified: false,
         createdAt: new Date().toISOString(),
         ...additionalData,
       });
 
-      const currentUser: User = {
-        uid: user.uid,
-        email: user.email!,
-        role: "representative",
-        companyName: inviteValidation.companyName,
-        companyId: inviteValidation.employerId,
-        ...additionalData,
-      };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
-      return { success: true };
+      // Don't save to localStorage yet - user needs to verify email first
+      return { success: true, needsVerification: true };
     } catch (err: any) {
       console.error("Error registering representative:", err);
       return { success: false, error: err.message };
@@ -192,7 +181,7 @@ export const authUtils = {
   // ------------------------------
   // Logins
   // ------------------------------
-  loginStudent: async (email: string, password: string) => {
+  loginStudent: async (email: string, password: string): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -214,6 +203,16 @@ export const authUtils = {
         return { success: false, error: "Invalid account type. Please use the correct login portal." };
       }
       
+      // Check if email is verified
+      if (!user.emailVerified) {
+        await auth.signOut();
+        return { 
+          success: false, 
+          error: "Please verify your email before logging in. Check your inbox for a verification link.",
+          needsVerification: true 
+        };
+      }
+      
       const currentUser: User = { 
         uid: user.uid, 
         email: user.email!, 
@@ -228,7 +227,7 @@ export const authUtils = {
     }
   },
 
-  loginEmployer: async (email: string, password: string) => {
+  loginEmployer: async (email: string, password: string): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -250,6 +249,16 @@ export const authUtils = {
         return { success: false, error: "Invalid account type. Please use the correct login portal." };
       }
       
+      // Check if email is verified
+      if (!user.emailVerified) {
+        await auth.signOut();
+        return { 
+          success: false, 
+          error: "Please verify your email before logging in. Check your inbox for a verification link.",
+          needsVerification: true 
+        };
+      }
+      
       const currentUser: User = { 
         uid: user.uid, 
         email: user.email!, 
@@ -264,7 +273,7 @@ export const authUtils = {
     }
   },
 
-  loginRepresentative: async (email: string, password: string) => {
+  loginRepresentative: async (email: string, password: string): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -284,6 +293,16 @@ export const authUtils = {
       if (userData.role !== "representative") {
         await auth.signOut();
         return { success: false, error: "Invalid account type. Please use the correct login portal." };
+      }
+      
+      // Check if email is verified
+      if (!user.emailVerified) {
+        await auth.signOut();
+        return { 
+          success: false, 
+          error: "Please verify your email before logging in. Check your inbox for a verification link.",
+          needsVerification: true 
+        };
       }
       
       const currentUser: User = { 
