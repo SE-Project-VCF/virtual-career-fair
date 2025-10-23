@@ -1,7 +1,6 @@
 "use client"
 
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import Badge from "@mui/icons-material/Badge"
 import BusinessIcon from "@mui/icons-material/Business"
 import PersonIcon from "@mui/icons-material/Person"
 import { Box, Button, Container, Paper, Typography } from "@mui/material"
