@@ -1,9 +1,11 @@
 const admin = require("firebase-admin");
-const serviceAccount = require("./privateKey.json"); // Make sure path is correct
+const serviceAccount = require("./privateKey.json"); // your downloaded key
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
 
-const db = admin.firestore();   // ✅ This creates the Firestore instance
-module.exports = { db };
+const db = admin.firestore();
+const auth = admin.auth();
+
+module.exports = { db, auth };
