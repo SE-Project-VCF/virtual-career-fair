@@ -24,8 +24,8 @@ const handleSubmit = async (e: FormEvent) => {
   e.preventDefault()
   setError("")
 
-  if (!email || !password || !confirmPassword || !companyName || !primaryLocation || !description || !username) {
-    setError("All fields are required.")
+  if (!email || !password || !confirmPassword || !companyName) {
+    setError("Email, password, confirm password, and company name are required.")
     return
   }
 
@@ -285,11 +285,10 @@ const handleSubmit = async (e: FormEvent) => {
 />
               <TextField
   fullWidth
-  label="Username"
+  label="Username (Optional)"
   value={username}
   onChange={(e) => setUsername(e.target.value)}
   margin="normal"
-  required
   sx={{
     mb: 2,
     "& .MuiOutlinedInput-root": {
@@ -305,11 +304,10 @@ const handleSubmit = async (e: FormEvent) => {
 />
               <TextField
   fullWidth
-  label="Primary Location"
+  label="Primary Location (Optional)"
   value={primaryLocation}
   onChange={(e) => setPrimaryLocation(e.target.value)}
   margin="normal"
-  required
   placeholder="e.g., New York, NY"
   sx={{
     mb: 2,
@@ -326,11 +324,10 @@ const handleSubmit = async (e: FormEvent) => {
 />
               <TextField
   fullWidth
-  label="Company Description"
+  label="Company Description (Optional)"
   value={description}
   onChange={(e) => setDescription(e.target.value)}
   margin="normal"
-  required
   multiline
   rows={3}
   placeholder="Brief description of your company..."
