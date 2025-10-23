@@ -7,23 +7,23 @@ import { authUtils } from "../utils/auth"
 import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
-import { Badge } from "@mui/icons-material"
+import PersonIcon from "@mui/icons-material/Person"
 
-export default function EmployerRegister() {
+export default function RepresentativeRegister() {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [companyName, setCompanyName] = useState("")
-  const [username, setUsername] = useState("")
+  const [inviteCode, setInviteCode] = useState("")
 
 const handleSubmit = async (e: FormEvent) => {
   e.preventDefault()
   setError("")
 
-  if (!email || !password || !confirmPassword || !companyName) {
-    setError("Email, password, confirm password, and company name are required.")
+  if (!email || !password || !confirmPassword || !companyName || !inviteCode) {
+    setError("All fields are required.")
     return
   }
 
@@ -37,14 +37,14 @@ const handleSubmit = async (e: FormEvent) => {
     return
   }
 
-  // Use the new backend registration with all company data
-  const result = await authUtils.registerEmployer(email, password, {
+  // Use the new backend registration with all representative data
+  const result = await authUtils.registerRepresentative(email, password, {
     companyName,
-    username,
+    inviteCode,
   })
 
   if (result.success) {
-    navigate("/employer/login")
+    navigate("/dashboard")
   } else {
     setError(result.error || "Registration failed.")
   }
@@ -65,7 +65,7 @@ const handleSubmit = async (e: FormEvent) => {
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
           color: "white",
           p: 6,
           position: "relative",
@@ -97,10 +97,10 @@ const handleSubmit = async (e: FormEvent) => {
 
         <Box sx={{ zIndex: 1, maxWidth: "400px" }}>
           <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-            Find Top Talent
+            Join Your Team
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Connect with qualified candidates and build your team
+            Become a representative and help your company find top talent
           </Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -108,10 +108,10 @@ const handleSubmit = async (e: FormEvent) => {
               <PeopleIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Qualified Candidates
+                  Connect with Students
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Access thousands of talented students
+                  Build relationships with qualified candidates
                 </Typography>
               </Box>
             </Box>
@@ -119,10 +119,10 @@ const handleSubmit = async (e: FormEvent) => {
               <EventIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Virtual Events
+                  Participate in Events
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Host information sessions and interviews
+                  Join virtual sessions and career fairs
                 </Typography>
               </Box>
             </Box>
@@ -130,10 +130,10 @@ const handleSubmit = async (e: FormEvent) => {
               <TrendingUpIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Grow Your Team
+                  Support Recruitment
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Find the perfect fit for your company
+                  Help your team find the best talent
                 </Typography>
               </Box>
             </Box>
@@ -165,13 +165,13 @@ const handleSubmit = async (e: FormEvent) => {
                   width: 60,
                   height: 60,
                   borderRadius: "50%",
-                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <Badge sx={{ fontSize: 32, color: "white" }} />
+                <PersonIcon sx={{ fontSize: 32, color: "white" }} />
               </Box>
             </Box>
 
@@ -182,10 +182,10 @@ const handleSubmit = async (e: FormEvent) => {
               align="center"
               sx={{ fontWeight: 700, color: "#1a1a1a" }}
             >
-              Employer Registration
+              Representative Registration
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
-              Create your account to find top talent
+              Join your company's recruitment team
             </Typography>
 
             {error && (
@@ -197,7 +197,7 @@ const handleSubmit = async (e: FormEvent) => {
             <form onSubmit={handleSubmit}>
               <TextField
                 fullWidth
-                label="Company Email Address"
+                label="Email Address"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -208,11 +208,11 @@ const handleSubmit = async (e: FormEvent) => {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#388560",
+                      borderColor: "#b03a6c",
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#388560",
+                    color: "#b03a6c",
                   },
                 }}
               />
@@ -230,11 +230,11 @@ const handleSubmit = async (e: FormEvent) => {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#388560",
+                      borderColor: "#b03a6c",
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#388560",
+                    color: "#b03a6c",
                   },
                 }}
               />
@@ -247,58 +247,59 @@ const handleSubmit = async (e: FormEvent) => {
                 margin="normal"
                 required
                 sx={{
-                  mb: 3,
+                  mb: 2,
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#388560",
+                      borderColor: "#b03a6c",
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#388560",
+                    color: "#b03a6c",
                   },
                 }}
               />
               <TextField
-  fullWidth
-  label="Company Name"
-  value={companyName}
-  onChange={(e) => setCompanyName(e.target.value)}
-  margin="normal"
-  required
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
+                fullWidth
+                label="Company Name"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                margin="normal"
+                required
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#b03a6c",
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: "#b03a6c",
+                  },
+                }}
+              />
               <TextField
-  fullWidth
-  label="Username (Optional)"
-  value={username}
-  onChange={(e) => setUsername(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
-           
+                fullWidth
+                label="Invite Code"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                margin="normal"
+                required
+                helperText="Get this from your company owner"
+                sx={{
+                  mb: 3,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#b03a6c",
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: "#b03a6c",
+                  },
+                }}
+              />
               <Button
                 type="submit"
                 fullWidth
@@ -309,18 +310,18 @@ const handleSubmit = async (e: FormEvent) => {
                   mb: 3,
                   py: 1.5,
                   borderRadius: 2,
-                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
                   fontSize: "1.1rem",
                   fontWeight: 600,
                   textTransform: "none",
-                  boxShadow: "0 4px 12px rgba(56, 133, 96, 0.3)",
+                  boxShadow: "0 4px 12px rgba(176, 58, 108, 0.3)",
                   "&:hover": {
-                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                    boxShadow: "0 6px 16px rgba(56, 133, 96, 0.4)",
+                    background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                    boxShadow: "0 6px 16px rgba(176, 58, 108, 0.4)",
                   },
                 }}
               >
-                Create Employer Account
+                Create Representative Account
               </Button>
             </form>
 
@@ -328,7 +329,7 @@ const handleSubmit = async (e: FormEvent) => {
               <Typography variant="body2" color="text.secondary">
                 Already have an account?{" "}
                 <Link
-                  to="/employer/login"
+                  to="/representative/login"
                   style={{
                     color: "#b03a6c",
                     textDecoration: "none",
@@ -340,13 +341,13 @@ const handleSubmit = async (e: FormEvent) => {
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 <Link
-                  to="/"
+                  to="/employer/role-selection"
                   style={{
                     color: "#666",
                     textDecoration: "none",
                   }}
                 >
-                  ← Back to role selection
+                  ← Back to employer role selection
                 </Link>
               </Typography>
             </Box>
@@ -356,3 +357,4 @@ const handleSubmit = async (e: FormEvent) => {
     </Box>
   )
 }
+

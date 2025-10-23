@@ -5,6 +5,9 @@ import StudentLogin from "./pages/StudentLogin"
 import EmployerRegister from "./pages/EmployerRegister"
 import EmployerLogin from "./pages/EmployerLogin"
 import Dashboard from "./pages/Dashboard"
+import EmployerRoleSelection from "./pages/EmployerRoleSelection"
+import RepresentativeLogin from "./pages/RepresentativeLogin"
+import RepresentativeRegister from "./pages/RepresentativeRegister"
 
 function App() {
   return (
@@ -15,11 +18,13 @@ function App() {
         <Route path="/student/register" element={<StudentRegister />} />
         <Route path="/student/login" element={<StudentLogin />} />
 
+        <Route path="/employer/role-selection" element={<EmployerRoleSelection />} />
+
         <Route path="/employer/register" element={<EmployerRegister />} />
         <Route path="/employer/login" element={<EmployerLogin />} />
 
-        <Route path="/register" element={<StudentRegister />} />
-        <Route path="/login" element={<StudentLogin />} />
+        <Route path="/representative/register" element={<RepresentativeRegister />} />
+        <Route path="/representative/login" element={<RepresentativeLogin />} />
 
         <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
