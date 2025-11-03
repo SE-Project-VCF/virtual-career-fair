@@ -1,8 +1,8 @@
 "use client"
 
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import Badge from "@mui/icons-material/Badge"
-import SchoolIcon from "@mui/icons-material/School"
+import PersonAddIcon from "@mui/icons-material/PersonAdd"
+import LoginIcon from "@mui/icons-material/Login"
 import { Box, Button, Container, Paper, Typography } from "@mui/material"
 import { useNavigate } from "react-router-dom"
 
@@ -35,10 +35,10 @@ export default function RoleSelection() {
             Job Goblin - Virtual Career Fair
           </Typography>
           <Typography variant="h5" color="text.secondary" sx={{ mb: 1 }}>
-            Welcome! Please select your role to continue
+            Welcome! Get started with your account
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Choose how you'd like to participate in the career fair
+            Register for a new account or sign in to continue
           </Typography>
         </Box>
 
@@ -51,7 +51,7 @@ export default function RoleSelection() {
             mx: "auto",
           }}
         >
-          {/* Student Card */}
+          {/* Register Card */}
           <Paper
             elevation={0}
             sx={{
@@ -67,7 +67,7 @@ export default function RoleSelection() {
                 boxShadow: "0 12px 24px rgba(176, 58, 108, 0.2)",
               },
             }}
-            onClick={() => navigate("/student/register")}
+            onClick={() => navigate("/register")}
           >
             <Box
               sx={{
@@ -82,16 +82,15 @@ export default function RoleSelection() {
                 mb: 3,
               }}
             >
-              <SchoolIcon sx={{ fontSize: 48, color: "white" }} />
+              <PersonAddIcon sx={{ fontSize: 48, color: "white" }} />
             </Box>
 
             <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2, color: "#1a1a1a" }}>
-              I'm a Student
+              Create Account
             </Typography>
 
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4, lineHeight: 1.7 }}>
-              Explore career opportunities, connect with employers, and discover your next internship or full-time
-              position
+              Join our platform as a student, company owner, or representative and start connecting with career opportunities
             </Typography>
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 4 }}>
@@ -105,7 +104,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Browse job and internship opportunities
+                  Register as student, employer, or representative
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -118,7 +117,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Connect with recruiters and employers
+                  Access exclusive career opportunities
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -131,7 +130,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Attend virtual workshops and sessions
+                  Connect with top employers and talented candidates
                 </Typography>
               </Box>
             </Box>
@@ -153,11 +152,11 @@ export default function RoleSelection() {
                 },
               }}
             >
-              Continue as Student
+              Register Now
             </Button>
           </Paper>
 
-          {/* Employer Card */}
+          {/* Login Card */}
           <Paper
             elevation={0}
             sx={{
@@ -173,7 +172,7 @@ export default function RoleSelection() {
                 boxShadow: "0 12px 24px rgba(56, 133, 96, 0.2)",
               },
             }}
-            onClick={() => navigate("/employer/role-selection")}
+            onClick={() => navigate("/login")}
           >
             <Box
               sx={{
@@ -188,15 +187,15 @@ export default function RoleSelection() {
                 mb: 3,
               }}
             >
-              <Badge sx={{ fontSize: 48, color: "white" }} />
+              <LoginIcon sx={{ fontSize: 48, color: "white" }} />
             </Box>
 
             <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2, color: "#1a1a1a" }}>
-              I'm an Employer
+              Sign In
             </Typography>
 
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4, lineHeight: 1.7 }}>
-              Find talented candidates, showcase your company, and build your team with top students and graduates
+              Access your existing account and continue your journey with our virtual career fair platform
             </Typography>
 
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 4 }}>
@@ -210,7 +209,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Post job openings and internships
+                  Quick and secure login for all account types
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -223,7 +222,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Connect with qualified candidates
+                  Access your dashboard and saved opportunities
                 </Typography>
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -236,7 +235,7 @@ export default function RoleSelection() {
                   }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Host virtual information sessions
+                  Continue where you left off
                 </Typography>
               </Box>
             </Box>
@@ -258,7 +257,7 @@ export default function RoleSelection() {
                 },
               }}
             >
-              Continue as Employer
+              Sign In Now
             </Button>
           </Paper>
         </Box>

@@ -89,7 +89,7 @@ export default function Dashboard() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              Welcome back, {user.role === "employer" ? user.companyName : user.role === "representative" ? user.email : user.firstName ?? user.email}!
+              Welcome back, {user.role === "companyOwner" ? user.email : user.role === "representative" ? user.email : user.firstName ?? user.email}!
             </Typography>
             
             {/* Company name display for representatives */}
@@ -117,8 +117,8 @@ export default function Dashboard() {
             </Typography>
           </Box>
 
-          {/* Employer-specific section */}
-          {user && user.role === "employer" && (
+          {/* Company Owner-specific section */}
+          {user && user.role === "companyOwner" && (
             <Box sx={{ mb: 4 }}>
               <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
                 Company Management
@@ -148,7 +148,7 @@ export default function Dashboard() {
                       </Typography>
                       <Button
                         variant="contained"
-                        onClick={() => navigate("/invite-code")}
+                        onClick={() => navigate("/companies")}
                         sx={{
                           background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
                           "&:hover": {
@@ -156,7 +156,7 @@ export default function Dashboard() {
                           },
                         }}
                       >
-                        Manage Invite Codes
+                        Manage Companies
                       </Button>
                     </CardContent>
                   </Card>

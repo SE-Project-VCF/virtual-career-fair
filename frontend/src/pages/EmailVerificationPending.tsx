@@ -14,6 +14,7 @@ import {
 } from "@mui/material"
 import { auth } from "../firebase"
 import { sendEmailVerification } from "firebase/auth"
+import { authUtils } from "../utils/auth"
 import EmailIcon from "@mui/icons-material/Email"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
@@ -86,17 +87,32 @@ export default function EmailVerificationPending() {
 
   const checkVerificationStatus = async () => {
     try {
+      setLoading(true)
+      setError("")
+      
       const user = auth.currentUser
       if (user) {
         await user.reload() // Refresh user data
         if (user.emailVerified) {
-          navigate("/dashboard")
+          // Log the user in (save to localStorage) before navigating to dashboard
+          const loginResult = await authUtils.loginAfterVerification()
+          if (loginResult.success) {
+            navigate("/dashboard")
+          } else {
+            setError(loginResult.error || "Failed to log in. Please try logging in manually.")
+          }
         } else {
           setError("Email not yet verified. Please check your inbox and click the verification link.")
         }
+      } else {
+        setError("No user found. Please try logging in.")
+        navigate("/login")
       }
     } catch (err) {
+      console.error("Error checking verification status:", err)
       setError("Error checking verification status.")
+    } finally {
+      setLoading(false)
     }
   }
 

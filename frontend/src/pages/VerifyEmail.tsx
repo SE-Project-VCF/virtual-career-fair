@@ -13,6 +13,7 @@ import {
   CircularProgress
 } from "@mui/material"
 import { auth } from "../firebase"
+import { authUtils } from "../utils/auth"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import ErrorIcon from "@mui/icons-material/Error"
 import EmailIcon from "@mui/icons-material/Email"
@@ -33,10 +34,17 @@ export default function VerifyEmail() {
           
           if (user.emailVerified) {
             setStatus("verified")
-            // Redirect to dashboard after a short delay
-            setTimeout(() => {
-              navigate("/dashboard")
-            }, 2000)
+            // Log the user in (save to localStorage) before navigating to dashboard
+            const loginResult = await authUtils.loginAfterVerification()
+            if (loginResult.success) {
+              // Redirect to dashboard after a short delay
+              setTimeout(() => {
+                navigate("/dashboard")
+              }, 2000)
+            } else {
+              setStatus("failed")
+              setError(loginResult.error || "Failed to log in. Please try logging in manually.")
+            }
           } else {
             setStatus("failed")
             setError("Email verification failed. Please try again.")
