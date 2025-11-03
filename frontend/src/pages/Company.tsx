@@ -399,10 +399,7 @@ export default function Company() {
                 <Button
                   variant="contained"
                   startIcon={<EditIcon />}
-                  onClick={() => {
-                    // TODO: Navigate to booth editor when implemented
-                    alert("Booth editing feature coming soon!")
-                  }}
+                  onClick={() => navigate(`/company/${company.id}/booth`)}
                   sx={{
                     background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
                     "&:hover": {
@@ -410,17 +407,14 @@ export default function Company() {
                     },
                   }}
                 >
-                  Edit Booth
+                  {company.boothId ? "Edit Booth" : "Create Booth"}
                 </Button>
 
                 {company.boothId && (
                   <Box sx={{ mt: 2 }}>
                     <Button
                       variant="outlined"
-                      onClick={() => {
-                        // TODO: Navigate to booth view when implemented
-                        alert(`View booth: ${company.boothId}`)
-                      }}
+                      onClick={() => navigate(`/booth/${company.boothId}`)}
                       sx={{
                         borderColor: "#388560",
                         color: "#388560",

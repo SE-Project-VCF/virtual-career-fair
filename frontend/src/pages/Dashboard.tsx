@@ -193,6 +193,174 @@ export default function Dashboard() {
             </Box>
           )}
 
+          {/* Representative-specific section */}
+          {user && user.role === "representative" && (
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+                Company Management
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(56, 133, 96, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Manage Company
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        View and manage your company information and booth.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => {
+                          // Navigate to company page if companyId is available
+                          if (user.companyId) {
+                            navigate(`/company/${user.companyId}`)
+                          } else {
+                            navigate("/dashboard")
+                          }
+                        }}
+                        sx={{
+                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                          },
+                        }}
+                      >
+                        View Company
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(56, 133, 96, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Browse All Booths
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Explore other companies' booths at the virtual career fair.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/booths")}
+                        sx={{
+                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                          },
+                        }}
+                      >
+                        View All Booths
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+
+          {/* Student-specific section */}
+          {user && user.role === "student" && (
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+                Career Opportunities
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(176, 58, 108, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <BusinessIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Browse Company Booths
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Explore opportunities from top companies at the virtual career fair.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/booths")}
+                        sx={{
+                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                          },
+                        }}
+                      >
+                        View All Booths
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(176, 58, 108, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <WorkIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Job Opportunities
+                        </Typography>
+                      </Box>
+                      <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
+                        0
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Available positions
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+
           {/* Stats Cards */}
           <Grid container spacing={3}>
             <Grid size={{ xs: 12, md: 4 }}>
