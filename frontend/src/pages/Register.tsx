@@ -55,12 +55,10 @@ export default function Register() {
       return
     }
 
-    // Role-specific validation
-    if (role === "student") {
-      if (!firstName || !lastName) {
-        setError("First name and last name are required for students.")
-        return
-      }
+    // First name and last name are required for all roles
+    if (!firstName || !lastName) {
+      setError("First name and last name are required.")
+      return
     }
 
     let result
@@ -74,11 +72,15 @@ export default function Register() {
       })
     } else if (role === "companyOwner") {
       result = await authUtils.registerCompanyOwner(email, password, {
+        firstName,
+        lastName,
         username: username || undefined,
       })
     } else if (role === "representative") {
       // Invite code is optional for representatives
       result = await authUtils.registerRepresentative(email, password, {
+        firstName,
+        lastName,
         inviteCode: inviteCode || undefined,
       })
     } else {
@@ -340,49 +342,51 @@ export default function Register() {
                 }}
               />
 
+              {/* First Name and Last Name - Required for all roles */}
+              <TextField
+                fullWidth
+                label="First Name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                margin="normal"
+                required
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: getBorderColor(),
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: getBorderColor(),
+                  },
+                }}
+              />
+              <TextField
+                fullWidth
+                label="Last Name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                margin="normal"
+                required
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: getBorderColor(),
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: getBorderColor(),
+                  },
+                }}
+              />
+
               {/* Student-specific fields */}
               {role === "student" && (
                 <>
-                  <TextField
-                    fullWidth
-                    label="First Name"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    margin="normal"
-                    required
-                    sx={{
-                      mb: 2,
-                      "& .MuiOutlinedInput-root": {
-                        borderRadius: 2,
-                        "&.Mui-focused fieldset": {
-                          borderColor: "#b03a6c",
-                        },
-                      },
-                      "& .MuiInputLabel-root.Mui-focused": {
-                        color: "#b03a6c",
-                      },
-                    }}
-                  />
-                  <TextField
-                    fullWidth
-                    label="Last Name"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    margin="normal"
-                    required
-                    sx={{
-                      mb: 2,
-                      "& .MuiOutlinedInput-root": {
-                        borderRadius: 2,
-                        "&.Mui-focused fieldset": {
-                          borderColor: "#b03a6c",
-                        },
-                      },
-                      "& .MuiInputLabel-root.Mui-focused": {
-                        color: "#b03a6c",
-                      },
-                    }}
-                  />
                   <TextField
                     fullWidth
                     label="School"
