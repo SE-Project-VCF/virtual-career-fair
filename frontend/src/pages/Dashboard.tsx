@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { doc, getDoc, query, collection, getDocs, where } from "firebase/firestore"
+import { db } from "../firebase"
 import LogoutIcon from "@mui/icons-material/Logout"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
@@ -14,6 +16,7 @@ import PeopleIcon from "@mui/icons-material/People"
 export default function Dashboard() {
   const navigate = useNavigate()
   const user = authUtils.getCurrentUser()
+  const [representativeCount, setRepresentativeCount] = useState(0)
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -21,9 +24,27 @@ export default function Dashboard() {
       return
     }
     
-    // Additional role validation could be added here if needed
-    // For now, the login functions handle role validation
-  }, [navigate])
+    // Fetch representative count for employers
+    if (user?.role === "employer") {
+      fetchRepresentativeCount()
+    }
+  }, [navigate, user])
+
+  const fetchRepresentativeCount = async () => {
+    try {
+      if (!user?.uid) return
+      
+      // Query representatives collection for this company
+      const q = query(
+        collection(db, "representatives"),
+        where("companyId", "==", user.uid)
+      )
+      const querySnapshot = await getDocs(q)
+      setRepresentativeCount(querySnapshot.size)
+    } catch (err) {
+      console.error("Error fetching representative count:", err)
+    }
+  }
 
   const handleLogout = () => {
     authUtils.logout()
@@ -181,7 +202,7 @@ export default function Dashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                        0
+                        {representativeCount}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Representatives registered
