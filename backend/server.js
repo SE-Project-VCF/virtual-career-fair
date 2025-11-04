@@ -1,8 +1,7 @@
-// server.js
-const express = require('express');
-const cors = require('cors');
-const { db, auth } = require('./firebase'); // Firebase Admin
-const admin = require('firebase-admin');
+const express = require("express");
+const cors = require("cors");
+const { db, auth } = require("./firebase");
+const admin = require("firebase-admin");
 
 const app = express();
 const PORT = 5000;
@@ -10,101 +9,147 @@ const PORT = 5000;
 app.use(cors({ origin: "http://localhost:5173" }));
 app.use(express.json());
 
-// Helper to remove undefined fields
 function removeUndefined(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
 }
 
 // -------------------
-// Student Registration
+// Register User (Student, Representative, or Company Owner)
 // -------------------
-app.post('/register-student', async (req, res) => {
+app.post("/register-user", async (req, res) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
-    if (!firstName || !lastName || !email || !password)
-      return res.status(400).send({ success: false, error: "Missing required fields" });
+    const { firstName, lastName, email, password, role, companyName } = req.body;
 
+    if (!email || !password || !role) {
+      return res.status(400).send({ success: false, error: "Missing required fields" });
+    }
+
+    // Create the user in Firebase Auth
     const userRecord = await auth.createUser({
       email,
       password,
-      displayName: `${firstName} ${lastName}`
+      displayName: `${firstName || ""} ${lastName || ""}`.trim(),
     });
 
-    const docData = removeUndefined({ firstName, lastName, email, createdAt: admin.firestore.Timestamp.now() });
-    await db.collection('students').doc(userRecord.uid).set(docData);
+    let companyId = null;
+    let inviteCode = null;
 
-    // Return the user for frontend auto-login
-    res.send({ success: true, user: { uid: userRecord.uid, email, role: 'student' } });
+    // If this is a company owner, create a company record too
+    if (role === "companyOwner") {
+      inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      const companyRef = db.collection("companies").doc();
+      companyId = companyRef.id;
+
+      await companyRef.set(
+        removeUndefined({
+          companyId,
+          companyName,
+          ownerId: userRecord.uid,
+          inviteCode,
+          createdAt: admin.firestore.Timestamp.now(),
+        })
+      );
+    }
+
+    // Create the user entry
+    const docData = removeUndefined({
+      uid: userRecord.uid,
+      firstName,
+      lastName,
+      email,
+      role, // student, representative, or companyOwner
+      companyId,
+      inviteCode,
+      emailVerified: false,
+      createdAt: admin.firestore.Timestamp.now(),
+    });
+
+    await db.collection("users").doc(userRecord.uid).set(docData);
+
+    res.send({
+      success: true,
+      user: {
+        uid: userRecord.uid,
+        email,
+        role,
+        companyId,
+      },
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Error registering user:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });
 
 // -------------------
-// Student Login
+// Add Job (Company only)
 // -------------------
-app.post('/login-student', async (req, res) => {
+app.post("/add-job", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
+    const { companyId, name, description, majorsAssociated, applicationLink } = req.body;
+
+    if (!companyId || !name) {
       return res.status(400).send({ success: false, error: "Missing required fields" });
+    }
 
-    // Firebase Auth does not allow password validation via Admin SDK.
-    // Instead, frontend should use Firebase client SDK to login, or we return the user object
-    const user = await auth.getUserByEmail(email);
-    res.send({ success: true, user: { uid: user.uid, email, role: 'student' } });
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(403).send({ success: false, error: "Invalid company ID" });
+    }
+
+    const jobRef = await db.collection("jobs").add(
+      removeUndefined({
+        companyId,
+        name,
+        description,
+        majorsAssociated,
+        applicationLink,
+        createdAt: admin.firestore.Timestamp.now(),
+      })
+    );
+
+    res.send({ success: true, jobId: jobRef.id });
   } catch (err) {
-    console.error(err);
-    res.status(401).send({ success: false, error: "Invalid login" });
-  }
-});
-
-// -------------------
-// Employer Registration
-// -------------------
-app.post('/register-employer', async (req, res) => {
-  try {
-    const { email, password, companyName } = req.body;
-    if (!email || !password || !companyName)
-      return res.status(400).send({ success: false, error: "Missing required fields" });
-
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: companyName
-    });
-
-    const docData = removeUndefined({ companyName, email, createdAt: admin.firestore.Timestamp.now() });
-    await db.collection('employers').doc(userRecord.uid).set(docData);
-
-    res.send({ success: true, user: { uid: userRecord.uid, email, role: 'employer' } });
-  } catch (err) {
-    console.error(err);
+    console.error("Error adding job:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });
 
 // -------------------
-// Employer Login
+// Add Booth (Company only)
 // -------------------
-app.post('/login-employer', async (req, res) => {
+app.post("/add-booth", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).send({ success: false, error: "Missing required fields" });
+    const { companyId, boothName, location, description, representatives } = req.body;
 
-    const user = await auth.getUserByEmail(email);
-    res.send({ success: true, user: { uid: user.uid, email, role: 'employer' } });
+    if (!companyId || !boothName) {
+      return res.status(400).send({ success: false, error: "Missing required fields" });
+    }
+
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(403).send({ success: false, error: "Invalid company ID" });
+    }
+
+    const boothRef = await db.collection("booths").add(
+      removeUndefined({
+        companyId,
+        boothName,
+        location,
+        description,
+        representatives,
+        createdAt: admin.firestore.Timestamp.now(),
+      })
+    );
+
+    res.send({ success: true, boothId: boothRef.id });
   } catch (err) {
-    console.error(err);
-    res.status(401).send({ success: false, error: "Invalid login" });
+    console.error("Error adding booth:", err);
+    res.status(500).send({ success: false, error: err.message });
   }
 });
 
-// -------------------
-// Start Server
-// -------------------
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

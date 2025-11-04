@@ -24,8 +24,9 @@ export default function StudentLogin() {
       setError("All fields are required.")
       return
     }
-  
-    const result = await authUtils.loginStudent(email, password);
+
+    // ✅ Use the new unified login function with "student" role
+    const result = await authUtils.loginUser(email, password, "student");
   
     if (result.success) {
       navigate("/dashboard")

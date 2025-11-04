@@ -24,9 +24,10 @@ export default function EmployerLogin() {
       setError("All fields are required.")
       return
     }
-  
-    const result = await authUtils.loginEmployer(email, password);
-  
+
+    // ✅ Use the unified login system for companyOwner role
+    const result = await authUtils.loginUser(email, password, "companyOwner")
+
     if (result.success) {
       navigate("/dashboard")
     } else {

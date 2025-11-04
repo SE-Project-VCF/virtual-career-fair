@@ -3,365 +3,158 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
+  signOut,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, query, collection, getDocs, where } from "firebase/firestore";
+import type { User as FirebaseUser } from "firebase/auth";
+import { doc, setDoc, getDoc, collection } from "firebase/firestore";
 
 export interface User {
   uid: string;
   email: string;
-  role: "student" | "employer" | "representative";
+  role: "student" | "representative" | "company" | "companyOwner";
   [key: string]: any;
 }
 
-const generateInviteCode = (): string => {
-  // Generate a cryptographically secure random invite code
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  
-  // Use crypto.getRandomValues for better randomness
-  const array = new Uint8Array(8);
-  crypto.getRandomValues(array);
-  
-  for (let i = 0; i < 8; i++) {
-    result += chars[array[i] % chars.length];
-  }
-  
-  return result;
-};
-
-const validateInviteCode = async (inviteCode: string) => {
-  try {
-    // Query employers collection for matching invite code
-    const q = query(
-      collection(db, "employers"),
-      where("inviteCode", "==", inviteCode)
-    );
-    const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.empty) {
-      return { valid: false, error: "Invalid invite code" };
-    }
-    
-    const employerDoc = querySnapshot.docs[0];
-    const employerData = employerDoc.data();
-    
-    return {
-      valid: true,
-      employerId: employerDoc.id,
-      companyName: employerData.companyName
-    };
-  } catch (err) {
-    return { valid: false, error: "Error validating invite code" };
-  }
-};
-
 export const authUtils = {
   // ------------------------------
-  // Register Student
+  // Register user (student, representative, or companyOwner)
   // ------------------------------
-  registerStudent: async (
+  registerUser: async (
     email: string,
     password: string,
+    role: "student" | "representative" | "companyOwner",
     additionalData?: any
   ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
       // Send verification email
       await sendEmailVerification(user);
 
-      // ✅ Add user to Firestore collection "students"
-      await setDoc(doc(db, "students", user.uid), {
+      let companyId = null;
+      let inviteCode = null;
+
+      // If companyOwner, create an entry in companies collection
+      if (role === "companyOwner") {
+        const companyRef = doc(collection(db, "companies"));
+        companyId = companyRef.id;
+        inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+        await setDoc(companyRef, {
+          companyId,
+          companyName: additionalData?.companyName || "Untitled Company",
+          ownerId: user.uid,
+          inviteCode,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      // Add user to "users" collection
+      await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email,
-        role: "student",
-        emailVerified: false,
-        createdAt: new Date().toISOString(),
-        ...additionalData,
-      });
-
-      // Don't save to localStorage yet - user needs to verify email first
-      return { success: true, needsVerification: true };
-    } catch (err: any) {
-      console.error("Error registering student:", err);
-      return { success: false, error: err.message };
-    }
-  },
-
-  // ------------------------------
-  // Register Employer
-  // ------------------------------
-  registerEmployer: async (
-    email: string,
-    password: string,
-    additionalData?: any
-  ): Promise<{ success: boolean; inviteCode?: string; error?: string; needsVerification?: boolean }> => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      const user = userCredential.user;
-
-      const inviteCode = generateInviteCode();
-
-      // Send verification email
-      await sendEmailVerification(user);
-
-      // ✅ Add to Firestore collection "employers"
-      await setDoc(doc(db, "employers", user.uid), {
-        uid: user.uid,
-        email,
-        role: "employer",
+        role,
+        companyId,
         inviteCode,
         emailVerified: false,
         createdAt: new Date().toISOString(),
         ...additionalData,
       });
 
-      // Don't save to localStorage yet - user needs to verify email first
-      return { success: true, needsVerification: true, inviteCode };
-    } catch (err: any) {
-      console.error("Error registering employer:", err);
-      return { success: false, error: err.message };
-    }
-  },
-
-  // ------------------------------
-  // Register Representative
-  // ------------------------------
-  registerRepresentative: async (
-    email: string,
-    password: string,
-    additionalData?: any
-  ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
-    try {
-      const inviteValidation = await validateInviteCode(additionalData.inviteCode);
-      if (!inviteValidation.valid) {
-        return { success: false, error: inviteValidation.error };
-      }
-
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      const user = userCredential.user;
-
-      // Send verification email
-      await sendEmailVerification(user);
-
-      // ✅ Add to Firestore collection "representatives"
-      await setDoc(doc(db, "representatives", user.uid), {
-        uid: user.uid,
-        email,
-        role: "representative",
-        companyId: inviteValidation.employerId, // Link to employer
-        companyName: inviteValidation.companyName,
-        inviteCode: additionalData.inviteCode,
-        emailVerified: false,
-        createdAt: new Date().toISOString(),
-        ...additionalData,
-      });
-
-      // Don't save to localStorage yet - user needs to verify email first
       return { success: true, needsVerification: true };
     } catch (err: any) {
-      console.error("Error registering representative:", err);
+      console.error("Error registering user:", err);
       return { success: false, error: err.message };
     }
   },
 
   // ------------------------------
-  // Logins
+  // Login user (student, representative, companyOwner)
   // ------------------------------
-  loginStudent: async (email: string, password: string): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
+  loginUser: async (
+    email: string,
+    password: string,
+    role: string
+  ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
-      // Fetch user data from Firestore to verify they are actually a student
-      const userDoc = await getDoc(doc(db, "students", user.uid));
-      
-      if (!userDoc.exists()) {
-        // User is not registered as a student, sign them out
-        await auth.signOut();
-        return { success: false, error: "No student account found with this email." };
-      }
-      
-      const userData = userDoc.data();
-      
-      // Verify the role matches
-      if (userData.role !== "student") {
-        await auth.signOut();
-        return { success: false, error: "Invalid account type. Please use the correct login portal." };
-      }
-      
-      // Check if email is verified
-      if (!user.emailVerified) {
-        await auth.signOut();
-        return { 
-          success: false, 
-          error: "Please verify your email before logging in. Check your inbox for a verification link.",
-          needsVerification: true 
-        };
-      }
-      
-      const currentUser: User = { 
-        uid: user.uid, 
-        email: user.email!, 
-        role: "student",
-        ...userData
-      };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-      return { success: true };
-    } catch (err: any) {
-      console.error("Error logging in student:", err);
-      return { success: false, error: err.message };
-    }
-  },
 
-  loginEmployer: async (email: string, password: string): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Fetch user data from Firestore to verify they are actually an employer
-      const userDoc = await getDoc(doc(db, "employers", user.uid));
-      
+      const userDoc = await getDoc(doc(db, "users", user.uid));
       if (!userDoc.exists()) {
-        // User is not registered as an employer, sign them out
         await auth.signOut();
-        return { success: false, error: "No employer account found with this email." };
+        return { success: false, error: "Account not found." };
       }
-      
-      const userData = userDoc.data();
-      
-      // Verify the role matches
-      if (userData.role !== "employer") {
-        await auth.signOut();
-        return { success: false, error: "Invalid account type. Please use the correct login portal." };
-      }
-      
-      // Check if email is verified
-      if (!user.emailVerified) {
-        await auth.signOut();
-        return { 
-          success: false, 
-          error: "Please verify your email before logging in. Check your inbox for a verification link.",
-          needsVerification: true 
-        };
-      }
-      
-      const currentUser: User = { 
-        uid: user.uid, 
-        email: user.email!, 
-        role: "employer",
-        ...userData
-      };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-      return { success: true };
-    } catch (err: any) {
-      console.error("Error logging in employer:", err);
-      return { success: false, error: err.message };
-    }
-  },
 
-  loginRepresentative: async (email: string, password: string): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Fetch user data from Firestore to verify they are actually a representative
-      const userDoc = await getDoc(doc(db, "representatives", user.uid));
-      
-      if (!userDoc.exists()) {
-        // User is not registered as a representative, sign them out
-        await auth.signOut();
-        return { success: false, error: "No representative account found with this email." };
-      }
-      
       const userData = userDoc.data();
-      
-      // Verify the role matches
-      if (userData.role !== "representative") {
+      if (userData.role !== role) {
         await auth.signOut();
-        return { success: false, error: "Invalid account type. Please use the correct login portal." };
+        return { success: false, error: `Invalid account type. Expected ${role}.` };
       }
-      
-      // Check if email is verified
+
       if (!user.emailVerified) {
         await auth.signOut();
-        return { 
-          success: false, 
-          error: "Please verify your email before logging in. Check your inbox for a verification link.",
-          needsVerification: true 
+        return {
+          success: false,
+          error: "Please verify your email before logging in.",
+          needsVerification: true,
         };
       }
-      
-      const currentUser: User = { 
-        uid: user.uid, 
-        email: user.email!, 
-        role: "representative",
-        ...userData
-      };
+
+      const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
       return { success: true };
     } catch (err: any) {
-      console.error("Error logging in representative:", err);
+      console.error("Error logging in:", err);
       return { success: false, error: err.message };
     }
   },
 
   // ------------------------------
-  // Role validation helpers
+  // ✅ Centralized verification + auto-login helper
   // ------------------------------
-  validateUserRole: async (uid: string, expectedRole: string): Promise<{ valid: boolean; error?: string }> => {
+  verifyAndLogin: async (email?: string, password?: string) => {
     try {
-      // Check all collections to find the user
-      const collections = ["students", "employers", "representatives"];
-      let userFound = false;
-      let actualRole = "";
-      
-      for (const collection of collections) {
-        const userDoc = await getDoc(doc(db, collection, uid));
-        if (userDoc.exists()) {
-          userFound = true;
-          const userData = userDoc.data();
-          actualRole = userData.role;
-          break;
+      let user: FirebaseUser | null = auth.currentUser;
+
+      if (!user && email && password) {
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        user = result.user;
+      }
+
+      if (!user) {
+        return { success: false, error: "No user found. Please log in again." };
+      }
+
+      await user.reload();
+
+      if (user.emailVerified) {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (!userDoc.exists()) {
+          return { success: false, error: "User record not found in Firestore." };
         }
+
+        const userData = userDoc.data();
+        const currentUser = { uid: user.uid, email: user.email!, ...userData };
+        localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+        return { success: true, user: currentUser };
+      } else {
+        return { success: false, error: "Email not yet verified." };
       }
-      
-      if (!userFound) {
-        return { valid: false, error: "User not found in any role collection." };
-      }
-      
-      if (actualRole !== expectedRole) {
-        return { 
-          valid: false, 
-          error: `Invalid role. Expected ${expectedRole}, but user is registered as ${actualRole}.` 
-        };
-      }
-      
-      return { valid: true };
-    } catch (err) {
-      return { valid: false, error: "Error validating user role." };
+    } catch (err: any) {
+      console.error("verifyAndLogin error:", err);
+      return { success: false, error: err.message };
     }
   },
 
   // ------------------------------
-  // Logout / User helpers
+  // Logout / helpers
   // ------------------------------
   logout: () => {
     localStorage.removeItem("currentUser");
-    auth.signOut();
+    signOut(auth);
   },
 
   getCurrentUser: (): User | null => {

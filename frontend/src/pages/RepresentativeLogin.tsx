@@ -24,8 +24,9 @@ export default function RepresentativeLogin() {
       setError("All fields are required.")
       return
     }
-  
-    const result = await authUtils.loginRepresentative(email, password);
+
+    // ✅ Unified login function for representatives
+    const result = await authUtils.loginUser(email, password, "representative")
   
     if (result.success) {
       navigate("/dashboard")
@@ -287,4 +288,3 @@ export default function RepresentativeLogin() {
     </Box>
   )
 }
-
