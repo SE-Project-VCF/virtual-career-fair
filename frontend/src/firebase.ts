@@ -1,8 +1,9 @@
 // src/firebase.ts
 import { initializeApp } from "firebase/app";
-import { getStorage } from "firebase/storage";
+
 import { getAuth, GoogleAuthProvider } from "firebase/auth"; // ✅ added GoogleAuthProvider
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDe9f6r1B4SsgINjxaTJBHbEDRBSLkFnYs",

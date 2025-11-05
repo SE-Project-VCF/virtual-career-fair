@@ -10,6 +10,9 @@ import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
+import { Link } from "react-router-dom";
+import ProfileMenu from "./ProfileMenu";
+
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -48,25 +51,10 @@ export default function Dashboard() {
             <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
               Job Goblin - Virtual Career Fair
             </Typography>
-            <Button
-              variant="outlined"
-              onClick={handleLogout}
-              startIcon={<LogoutIcon />}
-              sx={{
-                color: "white",
-                borderColor: "white",
-                "&:hover": {
-                  borderColor: "white",
-                  bgcolor: "rgba(255,255,255,0.1)",
-                },
-              }}
-            >
-              Logout
-            </Button>
+            <ProfileMenu />
           </Box>
         </Container>
       </Box>
-
       <Container maxWidth="lg">
         <Box sx={{ py: 6 }}>
           {/* Welcome Section */}

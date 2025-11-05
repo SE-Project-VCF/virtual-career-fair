@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
+import StudentProfilePage from "./pages/StudentProfilePage"
 import RoleSelection from "./pages/RoleSelection"
 import StudentRegister from "./pages/StudentRegister"
 import StudentLogin from "./pages/StudentLogin"
@@ -33,6 +34,7 @@ function App() {
         <Route path="/invite-code" element={<InviteCodeManager />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/profile" element={<StudentProfilePage />} />
       </Routes>
     </BrowserRouter>
   )
