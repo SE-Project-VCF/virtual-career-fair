@@ -1,9 +1,10 @@
-import { auth, db } from "../firebase";
+import { auth, db, googleProvider } from "../firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
   signOut,
+  signInWithPopup,
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, collection } from "firebase/firestore";
@@ -29,13 +30,11 @@ export const authUtils = {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Send verification email
       await sendEmailVerification(user);
 
       let companyId = null;
       let inviteCode = null;
 
-      // If companyOwner, create an entry in companies collection
       if (role === "companyOwner") {
         const companyRef = doc(collection(db, "companies"));
         companyId = companyRef.id;
@@ -50,7 +49,6 @@ export const authUtils = {
         });
       }
 
-      // Add user to "users" collection
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email,
@@ -112,7 +110,87 @@ export const authUtils = {
   },
 
   // ------------------------------
-  // ✅ Centralized verification + auto-login helper
+  // ✅ Google Sign-In (creates user + company if missing)
+  // ------------------------------
+  loginWithGoogle: async (
+    role: "student" | "representative" | "companyOwner"
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      const userRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userRef);
+
+      // --- Case 1: Existing user ---
+      if (userDoc.exists()) {
+        const existingUser = userDoc.data();
+        localStorage.setItem(
+          "currentUser",
+          JSON.stringify({
+            uid: user.uid,
+            email: user.email,
+            role: existingUser.role,
+            provider: "google",
+            ...existingUser,
+          })
+        );
+        return { success: true };
+      }
+
+      // --- Case 2: New user (create record) ---
+      let companyId: string | null = null;
+      let inviteCode: string | null = null;
+
+      if (role === "companyOwner") {
+        // Create a new company with a null companyName (editable later)
+        const companyRef = doc(collection(db, "companies"));
+        companyId = companyRef.id;
+        inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+        await setDoc(companyRef, {
+          companyId,
+          companyName: null, // null value by design
+          ownerId: user.uid,
+          inviteCode,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      // Create new user record in Firestore
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email,
+        role,
+        provider: "google",
+        emailVerified: user.emailVerified,
+        companyId,
+        inviteCode,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Store user in localStorage
+      localStorage.setItem(
+        "currentUser",
+        JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          role,
+          companyId,
+          inviteCode,
+          provider: "google",
+        })
+      );
+
+      return { success: true };
+    } catch (err: any) {
+      console.error("Google Sign-In failed:", err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  // ------------------------------
+  // Verify + Auto-login helper
   // ------------------------------
   verifyAndLogin: async (email?: string, password?: string) => {
     try {

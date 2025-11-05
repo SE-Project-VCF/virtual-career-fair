@@ -9,6 +9,7 @@ import EventIcon from "@mui/icons-material/Event"
 import LoginIcon from "@mui/icons-material/Login"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import { Badge } from "@mui/icons-material"
+import GoogleIcon from "@mui/icons-material/Google"
 
 export default function EmployerLogin() {
   const navigate = useNavigate()
@@ -19,13 +20,12 @@ export default function EmployerLogin() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError("")
-  
+
     if (!email || !password) {
       setError("All fields are required.")
       return
     }
 
-    // ✅ Use the unified login system for companyOwner role
     const result = await authUtils.loginUser(email, password, "companyOwner")
 
     if (result.success) {
@@ -39,8 +39,20 @@ export default function EmployerLogin() {
     }
   }
 
+  // ✅ UPDATED: pass role argument to Google login
+  const handleGoogleLogin = async () => {
+    setError("")
+    const result = await authUtils.loginWithGoogle("companyOwner")
+    if (result.success) {
+      navigate("/dashboard")
+    } else {
+      setError(result.error || "Google sign-in failed.")
+    }
+  }
+
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
+      {/* Left green panel */}
       <Box
         sx={{
           flex: 1,
@@ -54,6 +66,7 @@ export default function EmployerLogin() {
           overflow: "hidden",
         }}
       >
+        {/* Circles and content */}
         <Box
           sx={{
             position: "absolute",
@@ -123,6 +136,7 @@ export default function EmployerLogin() {
         </Box>
       </Box>
 
+      {/* Right login panel */}
       <Box
         sx={{
           flex: 1,
@@ -196,16 +210,10 @@ export default function EmployerLogin() {
                 "& .MuiOutlinedInput-root": {
                   bgcolor: "white",
                   borderRadius: 2,
-                  "&:hover fieldset": {
-                    borderColor: "#388560",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "#388560",
-                  },
+                  "&:hover fieldset": { borderColor: "#388560" },
+                  "&.Mui-focused fieldset": { borderColor: "#388560" },
                 },
-                "& .MuiInputLabel-root.Mui-focused": {
-                  color: "#388560",
-                },
+                "& .MuiInputLabel-root.Mui-focused": { color: "#388560" },
               }}
             />
             <TextField
@@ -221,16 +229,10 @@ export default function EmployerLogin() {
                 "& .MuiOutlinedInput-root": {
                   bgcolor: "white",
                   borderRadius: 2,
-                  "&:hover fieldset": {
-                    borderColor: "#388560",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "#388560",
-                  },
+                  "&:hover fieldset": { borderColor: "#388560" },
+                  "&.Mui-focused fieldset": { borderColor: "#388560" },
                 },
-                "& .MuiInputLabel-root.Mui-focused": {
-                  color: "#388560",
-                },
+                "& .MuiInputLabel-root.Mui-focused": { color: "#388560" },
               }}
             />
             <Button
@@ -256,6 +258,31 @@ export default function EmployerLogin() {
               Sign In
             </Button>
           </form>
+
+          {/* ✅ Google Sign-In button */}
+          <Button
+            fullWidth
+            variant="outlined"
+            size="large"
+            startIcon={<GoogleIcon />}
+            onClick={handleGoogleLogin}
+            sx={{
+              mt: 2,
+              py: 1.3,
+              borderRadius: 2,
+              fontSize: "1rem",
+              fontWeight: 600,
+              textTransform: "none",
+              borderColor: "#4285F4",
+              color: "#4285F4",
+              "&:hover": {
+                backgroundColor: "rgba(66, 133, 244, 0.1)",
+                borderColor: "#4285F4",
+              },
+            }}
+          >
+            Sign in with Google
+          </Button>
 
           <Box sx={{ textAlign: "center", mt: 3 }}>
             <Typography variant="body2" color="text.secondary">
