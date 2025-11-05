@@ -226,6 +226,7 @@ export default function StudentProfilePage() {
             <Box
               sx={{
                 display: "flex",
+                background: "b03a6c",
                 justifyContent: "space-between",
                 alignItems: "center",
               }}
@@ -236,7 +237,7 @@ export default function StudentProfilePage() {
 
               <Button type="submit" variant="contained" disabled={loading}>
                 {loading ? (
-                  <CircularProgress size={24} color="inherit" />
+                  <CircularProgress size={24} color="success" />
                 ) : (
                   "Save Profile"
                 )}
