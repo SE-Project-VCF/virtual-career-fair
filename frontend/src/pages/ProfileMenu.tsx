@@ -6,9 +6,9 @@ import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { getAuth } from "firebase/auth"
 
-interface ProfileMenuProps {
-  photoURL?: string
-}
+// interface ProfileMenuProps {
+//   photoURL?: string
+// }
 
 export default function ProfileMenu() {
   const navigate = useNavigate()

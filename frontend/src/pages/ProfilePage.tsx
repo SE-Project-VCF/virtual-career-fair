@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, type ChangeEvent } from "react"
-import { getAuth, type UserCredential, type User } from "firebase/auth"
+import { getAuth, type User } from "firebase/auth"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import axios from "axios"
@@ -76,7 +76,7 @@ export default function ProfilePage() {
     const file = event.target.files[0]
   
     try {
-      // Step 1: Get signed URL from backend (you’ll need an endpoint like /api/sign-resume)
+      // Step 1: Get signed URL from backend
       const { data } = await axios.post("http://localhost:5000/api/sign-s3", {
         fileName: file.name,
         fileType: file.type,
