@@ -271,6 +271,7 @@ export default function Login() {
                   boxShadow: "0 6px 16px rgba(176, 58, 108, 0.4)",
                 },
               }}
+              
             >
               Sign In
             </Button>
@@ -300,7 +301,11 @@ export default function Login() {
           >
             Sign in with Google
           </Button>
-
+          <div style={{ marginTop: "10px" }}>
+        <Link to="/password-reset" style={{ color: "#1976d2", fontSize: "0.9em" }}>
+          Forgot password?
+        </Link>
+        </div>
           <Box sx={{ textAlign: "center", mt: 3 }}>
             <Typography variant="body2" color="text.secondary">
               Don't have an account?{" "}

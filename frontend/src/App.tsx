@@ -11,6 +11,7 @@ import Booths from "./pages/Booths"
 import BoothView from "./pages/BoothView"
 import EmailVerificationPending from "./pages/EmailVerificationPending"
 import VerifyEmail from "./pages/VerifyEmail"
+import PasswordReset from "./pages/PasswordReset"
 
 function App() {
   return (
@@ -20,7 +21,7 @@ function App() {
 
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login />} />
-
+        <Route path="/password-reset" element={<PasswordReset />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />

@@ -22,6 +22,11 @@ export default function ProfileMenu() {
     navigate("/profile")
   }
 
+  const handleResetPassword = () => {
+    handleMenuClose()
+    navigate("/password-reset") // navigate to your reset password page
+  }
+
   const handleLogout = () => {
     handleMenuClose()
     authUtils.logout()
@@ -50,6 +55,11 @@ export default function ProfileMenu() {
             <Divider />
           </>
         )}
+
+        {/* New Reset Password item for all users */}
+        <MenuItem onClick={handleResetPassword}>Reset Password</MenuItem>
+        <Divider />
+
         <MenuItem onClick={handleLogout} sx={{ color: "red" }}>
           Logout
         </MenuItem>
