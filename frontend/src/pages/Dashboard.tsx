@@ -121,11 +121,11 @@ export default function Dashboard() {
                       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                         <ShareIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
                         <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Invite Representatives
+                          Manage Companies
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Generate and manage invite codes for your company representatives.
+                        Create and manage your companies.
                       </Typography>
                       <Button
                         variant="contained"
@@ -165,7 +165,7 @@ export default function Dashboard() {
                         0
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Representatives registered
+                        Company representatives registered
                       </Typography>
                     </CardContent>
                   </Card>

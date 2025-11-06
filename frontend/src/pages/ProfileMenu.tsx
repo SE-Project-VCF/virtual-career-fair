@@ -44,8 +44,12 @@ export default function ProfileMenu() {
           sx: { mt: 1.5, minWidth: 180, borderRadius: 2 },
         }}
       >
-        <MenuItem onClick={handleProfile}>Edit Profile</MenuItem>
-        <Divider />
+        {user?.role === "student" && (
+          <>
+            <MenuItem onClick={handleProfile}>Edit Profile</MenuItem>
+            <Divider />
+          </>
+        )}
         <MenuItem onClick={handleLogout} sx={{ color: "red" }}>
           Logout
         </MenuItem>
