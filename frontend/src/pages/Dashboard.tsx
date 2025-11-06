@@ -16,7 +16,7 @@ import ProfileMenu from "./ProfileMenu";
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const user = authUtils.getCurrentUser()
+  const [user, setUser] = useState(authUtils.getCurrentUser())
   const [inviteCodeDialogOpen, setInviteCodeDialogOpen] = useState(false)
   const [inviteCode, setInviteCode] = useState("")
   const [inviteCodeError, setInviteCodeError] = useState("")
@@ -78,8 +78,11 @@ export default function Dashboard() {
     if (result.success) {
       setInviteCodeDialogOpen(false)
       setInviteCode("")
-      // Refresh the page to update user data
-      window.location.reload()
+      // Update user state with fresh data from localStorage
+      const updatedUser = authUtils.getCurrentUser()
+      if (updatedUser) {
+        setUser(updatedUser)
+      }
     } else {
       setInviteCodeError(result.error || "Failed to link invite code")
     }
