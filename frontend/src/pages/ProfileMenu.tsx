@@ -30,7 +30,7 @@ export default function ProfileMenu() {
 
   return (
     <>
-      <IconButton onClick={handleMenuOpen} sx={{ ml: 2 }}>
+      <IconButton onClick={handleMenuOpen}>
         <Avatar sx={{ bgcolor: "#b03a6c", width: 40, height: 40 }}>
           {user?.email?.charAt(0).toUpperCase() || "U"}
         </Avatar>

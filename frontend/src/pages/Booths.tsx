@@ -23,6 +23,7 @@ import EventIcon from "@mui/icons-material/Event"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import WorkIcon from "@mui/icons-material/Work"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
+import ProfileMenu from "./ProfileMenu"
 
 interface Booth {
   id: string
@@ -112,22 +113,25 @@ export default function Booths() {
                 Explore opportunities from top companies
               </Typography>
             </Box>
-            {user && (
-              <Button
-                variant="outlined"
-                onClick={() => navigate("/dashboard")}
-                sx={{
-                  color: "white",
-                  borderColor: "white",
-                  "&:hover": {
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              {user && (
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate("/dashboard")}
+                  sx={{
+                    color: "white",
                     borderColor: "white",
-                    bgcolor: "rgba(255,255,255,0.1)",
-                  },
-                }}
-              >
-                Dashboard
-              </Button>
-            )}
+                    "&:hover": {
+                      borderColor: "white",
+                      bgcolor: "rgba(255,255,255,0.1)",
+                    },
+                  }}
+                >
+                  Dashboard
+                </Button>
+              )}
+              <ProfileMenu />
+            </Box>
           </Box>
         </Container>
       </Box>

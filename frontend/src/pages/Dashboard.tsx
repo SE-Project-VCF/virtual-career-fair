@@ -105,7 +105,10 @@ export default function Dashboard() {
             <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
               Job Goblin - Virtual Career Fair
             </Typography>
-            <ProfileMenu />
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              {/* Other buttons can be added here */}
+              <ProfileMenu />
+            </Box>
           </Box>
         </Container>
       </Box>

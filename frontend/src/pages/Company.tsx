@@ -25,6 +25,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import PeopleIcon from "@mui/icons-material/People"
 import EditIcon from "@mui/icons-material/Edit"
 import DeleteIcon from "@mui/icons-material/Delete"
+import ProfileMenu from "./ProfileMenu"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -288,14 +289,19 @@ export default function Company() {
         }}
       >
         <Container maxWidth="lg">
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton onClick={() => navigate(isOwner ? "/companies" : "/dashboard")} sx={{ color: "white" }}>
-              <ArrowBackIcon />
-            </IconButton>
-            <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-            <Typography variant="h4" sx={{ fontWeight: 700, color: "white", flex: 1 }}>
-              {company.companyName}
-            </Typography>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+              <IconButton onClick={() => navigate(isOwner ? "/companies" : "/dashboard")} sx={{ color: "white" }}>
+                <ArrowBackIcon />
+              </IconButton>
+              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
+              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
+                {company.companyName}
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <ProfileMenu />
+            </Box>
           </Box>
         </Container>
       </Box>

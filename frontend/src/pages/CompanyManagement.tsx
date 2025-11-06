@@ -28,6 +28,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import AddIcon from "@mui/icons-material/Add"
 import PeopleIcon from "@mui/icons-material/People"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import ProfileMenu from "./ProfileMenu"
 import DeleteIcon from "@mui/icons-material/Delete"
 
 interface Company {
@@ -207,23 +208,31 @@ export default function CompanyManagement() {
                 Company Management
               </Typography>
             </Box>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => setCreateDialogOpen(true)}
-              sx={{
-                bgcolor: "white",
-                color: "#388560",
-                "&:hover": {
-                  bgcolor: "rgba(255,255,255,0.9)",
-                },
-              }}
-            >
-              Create Company
-            </Button>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <ProfileMenu />
+            </Box>
           </Box>
         </Container>
       </Box>
+
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box sx={{ mb: 3 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setCreateDialogOpen(true)}
+            sx={{
+              bgcolor: "white",
+              color: "#388560",
+              "&:hover": {
+                bgcolor: "rgba(255,255,255,0.9)",
+              },
+            }}
+          >
+            Create Company
+          </Button>
+        </Box>
+      </Container>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {error && (

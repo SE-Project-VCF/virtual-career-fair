@@ -27,6 +27,7 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
+import ProfileMenu from "./ProfileMenu"
 
 interface Booth {
   id: string
@@ -134,24 +135,29 @@ export default function BoothView() {
         }}
       >
         <Container maxWidth="lg">
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Button
-              onClick={() => navigate("/booths")}
-              sx={{
-                color: "white",
-                minWidth: "auto",
-                p: 1,
-                "&:hover": {
-                  bgcolor: "rgba(255,255,255,0.1)",
-                },
-              }}
-            >
-              <ArrowBackIcon />
-            </Button>
-            <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-            <Typography variant="h4" sx={{ fontWeight: 700, color: "white", flex: 1 }}>
-              {booth.companyName}
-            </Typography>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Button
+                onClick={() => navigate("/booths")}
+                sx={{
+                  color: "white",
+                  minWidth: "auto",
+                  p: 1,
+                  "&:hover": {
+                    bgcolor: "rgba(255,255,255,0.1)",
+                  },
+                }}
+              >
+                <ArrowBackIcon />
+              </Button>
+              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
+              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
+                {booth.companyName}
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <ProfileMenu />
+            </Box>
           </Box>
         </Container>
       </Box>

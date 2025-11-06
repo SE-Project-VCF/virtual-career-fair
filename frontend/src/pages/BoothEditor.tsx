@@ -26,6 +26,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
+import ProfileMenu from "./ProfileMenu"
 
 interface BoothData {
   companyName: string
@@ -315,18 +316,25 @@ export default function BoothEditor() {
         }}
       >
         <Container maxWidth="lg">
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton onClick={() => navigate(`/company/${company.id}`)} sx={{ color: "white" }}>
-              <ArrowBackIcon />
-            </IconButton>
-            <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-            <Typography variant="h4" sx={{ fontWeight: 700, color: "white", flex: 1 }}>
-              {company.boothId ? "Edit Booth" : "Create Booth"}
-            </Typography>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+              <IconButton onClick={() => navigate(`/company/${company.id}`)} sx={{ color: "white" }}>
+                <ArrowBackIcon />
+              </IconButton>
+              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
+              <Box>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
+                  {company.boothId ? "Edit Booth" : "Create Booth"}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
+                  Set up your company presence at the virtual career fair
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <ProfileMenu />
+            </Box>
           </Box>
-          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 1, ml: 9 }}>
-            Set up your company presence at the virtual career fair
-          </Typography>
         </Container>
       </Box>
 
