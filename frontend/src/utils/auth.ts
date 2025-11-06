@@ -32,13 +32,20 @@ export const authUtils = {
 
       await sendEmailVerification(user);
 
-      let companyId = null;
-      let inviteCode = null;
+      let userData: any = {
+        uid: user.uid,
+        email,
+        role,
+        emailVerified: false,
+        createdAt: new Date().toISOString(),
+        ...additionalData,
+      };
 
+      // ✅ Only create company & attach company fields for companyOwner
       if (role === "companyOwner") {
         const companyRef = doc(collection(db, "companies"));
-        companyId = companyRef.id;
-        inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+        const companyId = companyRef.id;
+        const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
 
         await setDoc(companyRef, {
           companyId,
@@ -47,18 +54,16 @@ export const authUtils = {
           inviteCode,
           createdAt: new Date().toISOString(),
         });
+
+        // Add company fields only for company owners
+        userData = {
+          ...userData,
+          companyId,
+          inviteCode,
+        };
       }
 
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        email,
-        role,
-        companyId,
-        inviteCode,
-        emailVerified: false,
-        createdAt: new Date().toISOString(),
-        ...additionalData,
-      });
+      await setDoc(doc(db, "users", user.uid), userData);
 
       return { success: true, needsVerification: true };
     } catch (err: any) {
