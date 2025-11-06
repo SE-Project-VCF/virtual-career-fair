@@ -571,7 +571,7 @@ export default function Dashboard() {
               },
             }}
           >
-            {linking ? "Linking..." : "Link Company"}
+            {linking ? "Joining..." : "Join Company"}
           </Button>
         </DialogActions>
       </Dialog>

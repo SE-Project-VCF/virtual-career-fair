@@ -7,7 +7,7 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
 
 export interface User {
   uid: string;
@@ -29,8 +29,6 @@ export const authUtils = {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      await sendEmailVerification(user);
-
       let userData: any = {
         uid: user.uid,
         email,
@@ -40,7 +38,16 @@ export const authUtils = {
         ...additionalData,
       };
 
+      // Remove any undefined values from userData (Firestore doesn't allow undefined)
+      userData = Object.fromEntries(
+        Object.entries(userData).filter(([_, value]) => value !== undefined)
+      );
+
+      // Save user data first, then send verification email
       await setDoc(doc(db, "users", user.uid), userData);
+
+      // Only send verification email after successful registration
+      await sendEmailVerification(user);
 
       return { success: true, needsVerification: true };
     } catch (err: any) {
@@ -328,10 +335,10 @@ export const authUtils = {
       if (companyData.exists()) {
         const currentReps = companyData.data().representativeIDs || [];
         if (!currentReps.includes(userId)) {
-          await setDoc(companyRef, {
-            ...companyData.data(),
-            representativeIDs: [...currentReps, userId],
-          }, { merge: true });
+          // Use arrayUnion to add the user ID - this is safer and works better with security rules
+          await updateDoc(companyRef, {
+            representativeIDs: arrayUnion(userId),
+          });
         }
       }
 

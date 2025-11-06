@@ -62,12 +62,17 @@ export default function Register() {
     let result
 
     if (role === "student") {
-      result = await authUtils.registerUser(email, password, "student", {
+      const studentData: any = {
         firstName,
         lastName,
-        school: school || undefined,
-        major: major || undefined,
-      })
+      };
+      if (school && school.trim()) {
+        studentData.school = school.trim();
+      }
+      if (major && major.trim()) {
+        studentData.major = major.trim();
+      }
+      result = await authUtils.registerUser(email, password, "student", studentData)
     } else if (role === "companyOwner") {
       result = await authUtils.registerUser(email, password, "companyOwner", {
         firstName,
@@ -75,11 +80,14 @@ export default function Register() {
       })
     } else if (role === "representative") {
       // Invite code is optional for representatives
-      result = await authUtils.registerUser(email, password, "representative", {
+      const representativeData: any = {
         firstName,
         lastName,
-        inviteCode: inviteCode || undefined,
-      })
+      };
+      if (inviteCode && inviteCode.trim()) {
+        representativeData.inviteCode = inviteCode.trim();
+      }
+      result = await authUtils.registerUser(email, password, "representative", representativeData)
     } else {
       setError("Invalid role selected.")
       return
