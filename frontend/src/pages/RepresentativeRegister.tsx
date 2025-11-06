@@ -17,40 +17,41 @@ export default function RepresentativeRegister() {
   const [error, setError] = useState("")
   const [inviteCode, setInviteCode] = useState("")
 
-const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault()
-  setError("")
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError("")
 
-  if (!email || !password || !confirmPassword || !inviteCode) {
-    setError("All fields are required.")
-    return
-  }
-
-  if (password !== confirmPassword) {
-    setError("Passwords do not match.")
-    return
-  }
-
-  if (password.length < 6) {
-    setError("Password must be at least 6 characters long.")
-    return
-  }
-
-  // Use the new backend registration with invite code (company name comes from validation)
-  const result = await authUtils.registerRepresentative(email, password, {
-    inviteCode,
-  })
-
-  if (result.success) {
-    if (result.needsVerification) {
-      navigate("/verification-pending", { state: { email } })
-    } else {
-      navigate("/dashboard")
+    if (!email || !password || !confirmPassword || !inviteCode) {
+      setError("All fields are required.")
+      return
     }
-  } else {
-    setError(result.error || "Registration failed.")
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.")
+      return
+    }
+
+    // ✅ Unified registration for representative accounts
+    const result = await authUtils.registerUser(email, password, "representative", {
+      inviteCode,
+    })
+
+    if (result.success) {
+      if (result.needsVerification) {
+        // ✅ Pass both email and password to verification screen for auto-login
+        navigate("/verification-pending", { state: { email, password } })
+      } else {
+        navigate("/dashboard")
+      }
+    } else {
+      setError(result.error || "Registration failed.")
+    }
   }
-}
 
   return (
     <Box
@@ -268,7 +269,7 @@ const handleSubmit = async (e: FormEvent) => {
                 onChange={(e) => setInviteCode(e.target.value)}
                 margin="normal"
                 required
-                helperText="Your company name will be automatically linked based on this invite code"
+                helperText="Your company will be linked automatically based on this code"
                 sx={{
                   mb: 3,
                   "& .MuiOutlinedInput-root": {
@@ -339,4 +340,3 @@ const handleSubmit = async (e: FormEvent) => {
     </Box>
   )
 }
-

@@ -20,7 +20,6 @@ import { authUtils } from "../utils/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
-//import RefreshIcon from "@mui/icons-material/Refresh"
 import BusinessIcon from "@mui/icons-material/Business"
 import ShareIcon from "@mui/icons-material/Share"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
@@ -30,18 +29,12 @@ export default function InviteCodeManager() {
   const user = authUtils.getCurrentUser()
   const [inviteCode, setInviteCode] = useState("")
   const [companyName, setCompanyName] = useState("")
-  //const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
   useEffect(() => {
-    // Check if user is authenticated and is an employer
-    // if (!authUtils.isAuthenticated()) {
-    //   navigate("/")
-    //   return
-    // }
-
-    if (user?.role !== "employer") {
+    // Check if user is authenticated and is a company
+    if (user?.role !== "company") {
       navigate("/dashboard")
       return
     }
@@ -51,21 +44,18 @@ export default function InviteCodeManager() {
 
   const fetchInviteCode = async () => {
     try {
-      //setLoading(true)
-      const employerDoc = await getDoc(doc(db, "employers", user?.uid ?? ""))
+      const companyDoc = await getDoc(doc(db, "company", user?.uid ?? ""))
       
-      if (employerDoc.exists()) {
-        const data = employerDoc.data()
+      if (companyDoc.exists()) {
+        const data = companyDoc.data()
         setInviteCode(data.inviteCode || "")
         setCompanyName(data.companyName || "")
       } else {
-        setError("Employer profile not found")
+        setError("Company profile not found.")
       }
     } catch (err) {
       console.error("Error fetching invite code:", err)
-      setError("Failed to load invite code")
-    } finally {
-      //setLoading(false)
+      setError("Failed to load invite code.")
     }
   }
 
@@ -73,52 +63,11 @@ export default function InviteCodeManager() {
     try {
       await navigator.clipboard.writeText(inviteCode)
       setSuccess("Invite code copied to clipboard!")
-      setTimeout(() => {
-        setSuccess("")
-      }, 2000)
-    } catch (err) {
-      setError("Failed to copy to clipboard")
+      setTimeout(() => setSuccess(""), 2000)
+    } catch {
+      setError("Failed to copy to clipboard.")
     }
   }
-
-  // const generateNewCode = async () => {
-  //   try {
-  //     //setLoading(true)
-  //     setError("")
-      
-  //     // Generate new invite code
-  //     const newCode = generateInviteCode()
-      
-  //     // Update in Firestore
-  //     await updateDoc(doc(db, "employers", user?.uid ?? ""), {
-  //       inviteCode: newCode,
-  //       updatedAt: new Date().toISOString()
-  //     })
-      
-  //     setInviteCode(newCode)
-  //     setSuccess("New invite code generated successfully!")
-  //     setTimeout(() => setSuccess(""), 3000)
-  //   } catch (err) {
-  //     console.error("Error generating new code:", err)
-  //     setError("Failed to generate new invite code")
-  //   } finally {
-  //     setLoading(false)
-  //   }
-  // }
-
-  // const generateInviteCode = (): string => {
-  //   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  //   let result = ''
-    
-  //   const array = new Uint8Array(8)
-  //   crypto.getRandomValues(array)
-    
-  //   for (let i = 0; i < 8; i++) {
-  //     result += chars[array[i] % chars.length]
-  //   }
-    
-  //   return result
-  // }
 
   const shareInstructions = `Share this invite code with your company representatives:
 
@@ -134,8 +83,8 @@ This code links them to your company account.`
       await navigator.clipboard.writeText(shareInstructions)
       setSuccess("Instructions copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
-    } catch (err) {
-      setError("Failed to copy instructions")
+    } catch {
+      setError("Failed to copy instructions.")
     }
   }
 
@@ -152,10 +101,7 @@ This code links them to your company account.`
       >
         <Container maxWidth="lg">
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <IconButton 
-              onClick={() => navigate("/dashboard")}
-              sx={{ color: "white" }}
-            >
+            <IconButton onClick={() => navigate("/dashboard")} sx={{ color: "white" }}>
               <ArrowBackIcon />
             </IconButton>
             <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
@@ -167,17 +113,8 @@ This code links them to your company account.`
       </Box>
 
       <Container maxWidth="md" sx={{ py: 4 }}>
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {error}
-          </Alert>
-        )}
-
-        {success && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            {success}
-          </Alert>
-        )}
+        {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+        {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
 
         <Grid container spacing={3}>
           {/* Invite Code Card */}
@@ -210,28 +147,10 @@ This code links them to your company account.`
                     }}
                   />
                   <Tooltip title="Copy invite code">
-                    <IconButton 
-                      onClick={copyToClipboard}
-                      color="primary"
-                      size="large"
-                    >
+                    <IconButton onClick={copyToClipboard} color="primary" size="large">
                       <ContentCopyIcon />
                     </IconButton>
                   </Tooltip>
-                </Box>
-
-                <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                  
-                  {/* <Button
-                    variant="outlined"
-                    color="warning"
-                    onClick={generateNewCode}
-                    startIcon={<RefreshIcon />}
-                    disabled={loading}
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Generate New Code
-                  </Button> */}
                 </Box>
               </CardContent>
             </Card>
@@ -262,14 +181,15 @@ This code links them to your company account.`
                     <strong>Step 5:</strong> They complete registration and are linked to your company
                   </Typography>
                 </Box>
+
                 <Button
-                    variant="outlined"
-                    onClick={copyInstructions}
-                    startIcon={<ShareIcon />}
-                    sx={{ borderRadius: 2, mt: 1 }}
-                  >
-                    Copy Instructions
-                  </Button>
+                  variant="outlined"
+                  onClick={copyInstructions}
+                  startIcon={<ShareIcon />}
+                  sx={{ borderRadius: 2, mt: 2 }}
+                >
+                  Copy Instructions
+                </Button>
 
                 <Divider sx={{ my: 3 }} />
 

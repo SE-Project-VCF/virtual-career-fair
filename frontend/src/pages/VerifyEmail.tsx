@@ -1,18 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { 
-  Container, 
-  Box, 
-  Typography, 
-  Button, 
-  Card, 
-  CardContent, 
+import { useNavigate, useLocation } from "react-router-dom"
+import {
+  Container,
+  Box,
+  Typography,
+  Button,
+  Card,
+  CardContent,
   Alert,
   CircularProgress
 } from "@mui/material"
-import { auth } from "../firebase"
 import { authUtils } from "../utils/auth"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import ErrorIcon from "@mui/icons-material/Error"
@@ -21,86 +20,55 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 
 export default function VerifyEmail() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [status, setStatus] = useState<"verifying" | "verified" | "failed">("verifying")
   const [error, setError] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
 
   useEffect(() => {
-    const handleVerification = async () => {
-      try {
-        const user = auth.currentUser
-        if (user) {
-          // Reload user to get latest verification status
-          await user.reload()
-          
-          if (user.emailVerified) {
-            setStatus("verified")
-            // Log the user in (save to localStorage) before navigating to dashboard
-            const loginResult = await authUtils.loginAfterVerification()
-            if (loginResult.success) {
-              // Redirect to dashboard after a short delay
-              setTimeout(() => {
-                navigate("/dashboard")
-              }, 2000)
-            } else {
-              setStatus("failed")
-              setError(loginResult.error || "Failed to log in. Please try logging in manually.")
-            }
-          } else {
-            setStatus("failed")
-            setError("Email verification failed. Please try again.")
-          }
-        } else {
-          setStatus("failed")
-          setError("No user found. Please try logging in again.")
-        }
-      } catch (err: any) {
-        console.error("Error verifying email:", err)
+    const state = location.state as { email?: string; password?: string } | null
+    if (state?.email) setEmail(state.email)
+    if (state?.password) setPassword(state.password)
+
+    const verify = async () => {
+      const result = await authUtils.verifyAndLogin(state?.email, state?.password)
+      if (result.success) {
+        setStatus("verified")
+        setTimeout(() => navigate("/dashboard"), 2000)
+      } else {
         setStatus("failed")
-        setError("Error verifying email. Please try again.")
+        setError(result.error)
       }
     }
 
-    handleVerification()
-  }, [navigate])
+    verify()
+  }, [location.state, navigate])
 
-  const getStatusContent = () => {
-    switch (status) {
-      case "verifying":
-        return {
+  const content =
+    status === "verifying"
+      ? {
           icon: <CircularProgress size={60} sx={{ color: "#388560" }} />,
           title: "Verifying Your Email...",
-          message: "Please wait while we verify your email address.",
-          color: "#388560"
+          message: "Please wait while we confirm your email.",
+          color: "#388560",
         }
-      case "verified":
-        return {
+      : status === "verified"
+      ? {
           icon: <CheckCircleIcon sx={{ fontSize: 60, color: "#388560" }} />,
           title: "Email Verified Successfully!",
-          message: "Your email has been verified. Redirecting to dashboard...",
-          color: "#388560"
+          message: "Redirecting you to your dashboard...",
+          color: "#388560",
         }
-      case "failed":
-        return {
+      : {
           icon: <ErrorIcon sx={{ fontSize: 60, color: "#b03a6c" }} />,
           title: "Verification Failed",
-          message: error || "Email verification failed. Please try again.",
-          color: "#b03a6c"
+          message: error || "Please try again.",
+          color: "#b03a6c",
         }
-      default:
-        return {
-          icon: <CircularProgress size={60} />,
-          title: "Processing...",
-          message: "Please wait...",
-          color: "#388560"
-        }
-    }
-  }
-
-  const content = getStatusContent()
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
       <Box
         sx={{
           background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
@@ -111,10 +79,7 @@ export default function VerifyEmail() {
       >
         <Container maxWidth="lg">
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Button 
-              onClick={() => navigate("/")}
-              sx={{ color: "white", minWidth: "auto", p: 1 }}
-            >
+            <Button onClick={() => navigate("/")} sx={{ color: "white", p: 1 }}>
               <ArrowBackIcon />
             </Button>
             <EmailIcon sx={{ fontSize: 32, color: "white" }} />
@@ -128,41 +93,39 @@ export default function VerifyEmail() {
       <Container maxWidth="md" sx={{ py: 6 }}>
         <Card sx={{ boxShadow: 3 }}>
           <CardContent sx={{ p: 6, textAlign: "center" }}>
-            <Box sx={{ mb: 4 }}>
-              {content.icon}
-            </Box>
-            
+            <Box sx={{ mb: 4 }}>{content.icon}</Box>
+
             <Typography variant="h4" sx={{ fontWeight: 600, mb: 2, color: content.color }}>
               {content.title}
             </Typography>
-            
+
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
               {content.message}
             </Typography>
 
             {status === "failed" && (
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "center" }}>
-                <Button
-                  variant="contained"
-                  onClick={() => navigate("/")}
-                  sx={{
-                    background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
-                    "&:hover": {
-                      background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                    },
-                    px: 4,
-                    py: 1.5,
-                    borderRadius: 2,
-                  }}
-                >
-                  Back to Home
-                </Button>
-              </Box>
+              <Button
+                variant="contained"
+                onClick={() =>
+                  navigate("/verification-pending", { state: { email, password } })
+                }
+                sx={{
+                  background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                  "&:hover": {
+                    background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                  },
+                  px: 4,
+                  py: 1.5,
+                  borderRadius: 2,
+                }}
+              >
+                Try Again
+              </Button>
             )}
 
             {status === "verified" && (
               <Alert severity="success" sx={{ mt: 3, borderRadius: 2 }}>
-                You will be redirected to the dashboard shortly.
+                Redirecting to dashboard...
               </Alert>
             )}
           </CardContent>

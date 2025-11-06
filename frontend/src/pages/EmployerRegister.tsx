@@ -18,41 +18,42 @@ export default function EmployerRegister() {
   const [companyName, setCompanyName] = useState("")
   const [username, setUsername] = useState("")
 
-const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault()
-  setError("")
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError("")
 
-  if (!email || !password || !confirmPassword || !companyName) {
-    setError("Email, password, confirm password, and company name are required.")
-    return
-  }
-
-  if (password !== confirmPassword) {
-    setError("Passwords do not match.")
-    return
-  }
-
-  if (password.length < 6) {
-    setError("Password must be at least 6 characters long.")
-    return
-  }
-
-  // Use the new backend registration with all company data
-  const result = await authUtils.registerEmployer(email, password, {
-    companyName,
-    username,
-  })
-
-  if (result.success) {
-    if (result.needsVerification) {
-      navigate("/verification-pending", { state: { email } })
-    } else {
-      navigate("/employer/login")
+    if (!email || !password || !confirmPassword || !companyName) {
+      setError("Email, password, confirm password, and company name are required.")
+      return
     }
-  } else {
-    setError(result.error || "Registration failed.")
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.")
+      return
+    }
+
+    // ✅ Use unified registration for companyOwner role
+    const result = await authUtils.registerUser(email, password, "companyOwner", {
+      companyName,
+      username,
+    })
+
+    if (result.success) {
+      if (result.needsVerification) {
+        // ✅ Pass both email and password for auto-login after verification
+        navigate("/verification-pending", { state: { email, password } })
+      } else {
+        navigate("/employer/login")
+      }
+    } else {
+      setError(result.error || "Registration failed.")
+    }
   }
-}
 
   return (
     <Box
@@ -264,45 +265,45 @@ const handleSubmit = async (e: FormEvent) => {
                 }}
               />
               <TextField
-  fullWidth
-  label="Company Name"
-  value={companyName}
-  onChange={(e) => setCompanyName(e.target.value)}
-  margin="normal"
-  required
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
+                fullWidth
+                label="Company Name"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                margin="normal"
+                required
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#388560",
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: "#388560",
+                  },
+                }}
+              />
               <TextField
-  fullWidth
-  label="Username (Optional)"
-  value={username}
-  onChange={(e) => setUsername(e.target.value)}
-  margin="normal"
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#388560",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#388560",
-    },
-  }}
-/>
-           
+                fullWidth
+                label="Username (Optional)"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                margin="normal"
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#388560",
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: "#388560",
+                  },
+                }}
+              />
+
               <Button
                 type="submit"
                 fullWidth

@@ -16,43 +16,45 @@ export default function StudentRegister() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [firstName, setFirstName] = useState("")
-const [lastName, setLastName] = useState("")
+  const [lastName, setLastName] = useState("")
 
-const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault()
-  setError("")
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError("")
 
-  if (!email || !password || !confirmPassword || !firstName || !lastName) {
-    setError("Email, password, confirm password, first name, and last name are required.")
-    return
-  }
-
-  if (password !== confirmPassword) {
-    setError("Passwords do not match.")
-    return
-  }
-
-  if (password.length < 6) {
-    setError("Password must be at least 6 characters long.")
-    return
-  }
-
-  // Use the new backend registration with all student data
-  const result = await authUtils.registerStudent(email, password, {
-    firstName,
-    lastName,
-  })
-
-  if (result.success) {
-    if (result.needsVerification) {
-      navigate("/verification-pending", { state: { email } })
-    } else {
-      navigate("/student/login")
+    if (!email || !password || !confirmPassword || !firstName || !lastName) {
+      setError("Email, password, confirm password, first name, and last name are required.")
+      return
     }
-  } else {
-    setError(result.error || "Registration failed.")
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.")
+      return
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.")
+      return
+    }
+
+    // ✅ Use the unified registration system for students
+    const result = await authUtils.registerUser(email, password, "student", {
+      firstName,
+      lastName,
+    })
+
+    if (result.success) {
+      if (result.needsVerification) {
+        // ✅ Pass both email and password so the verification screen can auto-login later
+        navigate("/verification-pending", { state: { email, password } })
+      } else {
+        navigate("/student/login")
+      }
+    } else {
+      setError(result.error || "Registration failed.")
+    }
   }
-}
+
   return (
     <Box
       sx={{
@@ -263,45 +265,45 @@ const handleSubmit = async (e: FormEvent) => {
                 }}
               />
               <TextField
-  fullWidth
-  label="First Name"
-  value={firstName}
-  onChange={(e) => setFirstName(e.target.value)}
-  margin="normal"
-  required
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
-<TextField
-  fullWidth
-  label="Last Name"
-  value={lastName}
-  onChange={(e) => setLastName(e.target.value)}
-  margin="normal"
-  required
-  sx={{
-    mb: 2,
-    "& .MuiOutlinedInput-root": {
-      borderRadius: 2,
-      "&.Mui-focused fieldset": {
-        borderColor: "#b03a6c",
-      },
-    },
-    "& .MuiInputLabel-root.Mui-focused": {
-      color: "#b03a6c",
-    },
-  }}
-/>
+                fullWidth
+                label="First Name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                margin="normal"
+                required
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#b03a6c",
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: "#b03a6c",
+                  },
+                }}
+              />
+              <TextField
+                fullWidth
+                label="Last Name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                margin="normal"
+                required
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 2,
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#b03a6c",
+                    },
+                  },
+                  "& .MuiInputLabel-root.Mui-focused": {
+                    color: "#b03a6c",
+                  },
+                }}
+              />
               <Button
                 type="submit"
                 fullWidth
