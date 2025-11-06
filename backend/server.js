@@ -12,6 +12,26 @@ app.use(express.json());
 function removeUndefined(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
 }
+// Generate presigned URL for profile picture
+app.post("/generate-profile-upload-url", async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const fileKey = `profile-pictures/${userId}-${Date.now()}.jpg`;
+
+    const params = {
+      Bucket: BUCKET,
+      Key: fileKey,
+      Expires: 60,
+      ContentType: "image/jpeg",
+    };
+
+    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
+    res.json({ uploadURL, fileKey });
+  } catch (err) {
+    console.error("Error generating upload URL:", err);
+    res.status(500).json({ error: "Failed to get upload URL" });
+  }
+});
 
 // -------------------
 // Register User (Student, Representative, or Company Owner)

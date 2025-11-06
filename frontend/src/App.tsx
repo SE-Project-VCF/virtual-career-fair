@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
-import StudentProfilePage from "./pages/StudentProfilePage"
+import StudentProfilePage from "./pages/ProfilePage"
 import RoleSelection from "./pages/RoleSelection"
 import Register from "./pages/Register"
 import Login from "./pages/Login"

@@ -1,21 +1,36 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { IconButton, Menu, MenuItem, Avatar, Divider } from "@mui/material"
 import { useNavigate } from "react-router-dom"
 import { authUtils } from "../utils/auth"
+import { doc, getDoc } from "firebase/firestore"
+import { db } from "../firebase"
 
 export default function ProfileMenu() {
   const navigate = useNavigate()
   const user = authUtils.getCurrentUser()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const [role, setRole] = useState(null)
   const open = Boolean(anchorEl)
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget)
-  }
+  useEffect(() => {
+    const fetchRole = async () => {
+      if (!user?.uid) return
+      try {
+        const userRef = doc(db, "users", user.uid)
+        const snapshot = await getDoc(userRef)
+        if (snapshot.exists()) {
+          const data = snapshot.data()
+          setRole(data.role)
+        }
+      } catch (error) {
+        console.error("Error fetching user role:", error)
+      }
+    }
+    fetchRole()
+  }, [user])
 
-  const handleMenuClose = () => {
-    setAnchorEl(null)
-  }
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget)
+  const handleMenuClose = () => setAnchorEl(null)
 
   const handleProfile = () => {
     handleMenuClose()
@@ -24,7 +39,7 @@ export default function ProfileMenu() {
 
   const handleResetPassword = () => {
     handleMenuClose()
-    navigate("/password-reset") // navigate to your reset password page
+    navigate("/password-reset")
   }
 
   const handleLogout = () => {
@@ -40,6 +55,7 @@ export default function ProfileMenu() {
           {user?.email?.charAt(0).toUpperCase() || "U"}
         </Avatar>
       </IconButton>
+
       <Menu
         anchorEl={anchorEl}
         open={open}
@@ -49,14 +65,23 @@ export default function ProfileMenu() {
           sx: { mt: 1.5, minWidth: 180, borderRadius: 2 },
         }}
       >
-        {user?.role === "student" && (
+        <MenuItem onClick={handleProfile}>Edit Profile</MenuItem>
+        <Divider />
+
+        {/* Role-specific options (only if needed in the menu) */}
+        {role === "companyOwner" || role === "companyRepresentative" ? (
           <>
-            <MenuItem onClick={handleProfile}>Edit Profile</MenuItem>
+            <MenuItem onClick={() => navigate("/company/dashboard")}>
+              Company Dashboard
+            </MenuItem>
+            <Divider />
+            <MenuItem onClick={() => navigate("/company/post-job")}>
+              Post a Job
+            </MenuItem>
             <Divider />
           </>
-        )}
+        ) : null}
 
-        {/* New Reset Password item for all users */}
         <MenuItem onClick={handleResetPassword}>Reset Password</MenuItem>
         <Divider />
 
