@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { collection, query, where, getDocs } from "firebase/firestore"
+import { db } from "../firebase"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
@@ -19,6 +21,7 @@ export default function Dashboard() {
   const [inviteCode, setInviteCode] = useState("")
   const [inviteCodeError, setInviteCodeError] = useState("")
   const [linking, setLinking] = useState(false)
+  const [totalRepresentatives, setTotalRepresentatives] = useState(0)
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -29,6 +32,32 @@ export default function Dashboard() {
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
   }, [navigate])
+
+  // Fetch total representatives count for company owners
+  useEffect(() => {
+    const fetchTotalRepresentatives = async () => {
+      if (user?.role === "companyOwner" && user?.uid) {
+        try {
+          const companiesRef = collection(db, "companies")
+          const q = query(companiesRef, where("ownerId", "==", user.uid))
+          const querySnapshot = await getDocs(q)
+          
+          let totalCount = 0
+          querySnapshot.forEach((doc) => {
+            const data = doc.data()
+            const representativeIDs = data.representativeIDs || []
+            totalCount += representativeIDs.length
+          })
+          
+          setTotalRepresentatives(totalCount)
+        } catch (err) {
+          console.error("Error fetching representatives count:", err)
+        }
+      }
+    }
+
+    fetchTotalRepresentatives()
+  }, [user])
 
   const handleLinkInviteCode = async () => {
     if (!inviteCode.trim()) {
@@ -204,7 +233,7 @@ export default function Dashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                        0
+                        {totalRepresentatives}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Company representatives registered
