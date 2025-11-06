@@ -8,7 +8,6 @@ import {
   Typography,
   Button,
   Card,
-  CardContent,
   TextField,
   Alert,
   CircularProgress,
@@ -21,7 +20,7 @@ import {
   Grid,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc } from "firebase/firestore"
+import { doc, getDoc, updateDoc, collection, addDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"

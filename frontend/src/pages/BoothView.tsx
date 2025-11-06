@@ -16,7 +16,6 @@ import {
   Divider,
   Link,
 } from "@mui/material"
-import { authUtils } from "../utils/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"

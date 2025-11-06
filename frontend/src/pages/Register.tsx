@@ -64,21 +64,21 @@ export default function Register() {
     let result
 
     if (role === "student") {
-      result = await authUtils.registerStudent(email, password, {
+      result = await authUtils.registerUser(email, password, "student", {
         firstName,
         lastName,
         school: school || undefined,
         major: major || undefined,
       })
     } else if (role === "companyOwner") {
-      result = await authUtils.registerCompanyOwner(email, password, {
+      result = await authUtils.registerUser(email, password, "companyOwner", {
         firstName,
         lastName,
         username: username || undefined,
       })
     } else if (role === "representative") {
       // Invite code is optional for representatives
-      result = await authUtils.registerRepresentative(email, password, {
+      result = await authUtils.registerUser(email, password, "representative", {
         firstName,
         lastName,
         inviteCode: inviteCode || undefined,

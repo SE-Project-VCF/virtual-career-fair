@@ -66,6 +66,44 @@ export const authUtils = {
   },
 
   // ------------------------------
+  // Unified login (auto-detects user role)
+  // ------------------------------
+  login: async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      if (!userDoc.exists()) {
+        await auth.signOut();
+        return { success: false, error: "Account not found." };
+      }
+
+      const userData = userDoc.data();
+      const role = userData.role;
+
+      if (!user.emailVerified) {
+        await auth.signOut();
+        return {
+          success: false,
+          error: "Please verify your email before logging in.",
+          needsVerification: true,
+        };
+      }
+
+      const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+      return { success: true };
+    } catch (err: any) {
+      console.error("Error logging in:", err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  // ------------------------------
   // Login user (student, representative, companyOwner)
   // ------------------------------
   loginUser: async (
@@ -240,5 +278,46 @@ export const authUtils = {
 
   isAuthenticated: (): boolean => {
     return authUtils.getCurrentUser() !== null;
+  },
+
+  // ------------------------------
+  // Create Company (for company owners)
+  // ------------------------------
+  createCompany: async (
+    companyName: string,
+    ownerId: string
+  ): Promise<{ success: boolean; error?: string; companyId?: string }> => {
+    try {
+      const companyRef = doc(collection(db, "companies"));
+      const companyId = companyRef.id;
+      const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      await setDoc(companyRef, {
+        companyId,
+        companyName,
+        ownerId,
+        inviteCode,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Update the user's companyId if they don't have one
+      const userRef = doc(db, "users", ownerId);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (!userData.companyId) {
+          await setDoc(userRef, {
+            ...userData,
+            companyId,
+            inviteCode,
+          }, { merge: true });
+        }
+      }
+
+      return { success: true, companyId };
+    } catch (err: any) {
+      console.error("Error creating company:", err);
+      return { success: false, error: err.message };
+    }
   },
 };

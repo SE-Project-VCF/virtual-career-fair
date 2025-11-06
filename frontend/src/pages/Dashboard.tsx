@@ -4,13 +4,11 @@ import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import LogoutIcon from "@mui/icons-material/Logout"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
-import { Link } from "react-router-dom";
 import ProfileMenu from "./ProfileMenu";
 
 
@@ -27,11 +25,6 @@ export default function Dashboard() {
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
   }, [navigate])
-
-  const handleLogout = () => {
-    authUtils.logout()
-    navigate("/")
-  }
 
   if (!user) return null
 
