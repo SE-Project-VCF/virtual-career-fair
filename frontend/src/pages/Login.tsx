@@ -8,6 +8,7 @@ import LoginIcon from "@mui/icons-material/Login"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import GoogleIcon from "@mui/icons-material/Google"
 
 export default function Login() {
   const navigate = useNavigate()
@@ -35,6 +36,25 @@ export default function Login() {
       } else {
         setError(result.error || "Login failed.")
       }
+    }
+  }
+
+  const handleGoogleLogin = async () => {
+    setError("")
+    try {
+      // Try to login with Google - if user exists in Firestore, use their role
+      // If new user, loginWithGoogle will create a Firestore record with "student" role
+      // For existing users, it will use their actual role from Firestore
+      const result = await authUtils.loginWithGoogle("student")
+      
+      if (result.success) {
+        navigate("/dashboard")
+      } else {
+        setError(result.error || "Google login failed.")
+      }
+    } catch (err: any) {
+      console.error("Google login error:", err)
+      setError("Failed to sign in with Google. Please try again.")
     }
   }
 
@@ -255,6 +275,31 @@ export default function Login() {
               Sign In
             </Button>
           </form>
+
+          {/* Google Sign-In button */}
+          <Button
+            fullWidth
+            variant="outlined"
+            size="large"
+            startIcon={<GoogleIcon />}
+            onClick={handleGoogleLogin}
+            sx={{
+              mt: 2,
+              py: 1.3,
+              borderRadius: 2,
+              fontSize: "1rem",
+              fontWeight: 600,
+              textTransform: "none",
+              borderColor: "#4285F4",
+              color: "#4285F4",
+              "&:hover": {
+                backgroundColor: "rgba(66, 133, 244, 0.1)",
+                borderColor: "#4285F4",
+              },
+            }}
+          >
+            Sign in with Google
+          </Button>
 
           <Box sx={{ textAlign: "center", mt: 3 }}>
             <Typography variant="body2" color="text.secondary">

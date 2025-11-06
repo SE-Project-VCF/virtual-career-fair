@@ -2,12 +2,13 @@
 
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel } from "@mui/material"
+import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import PersonAddIcon from "@mui/icons-material/PersonAdd"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import GoogleIcon from "@mui/icons-material/Google"
 
 type RoleType = "student" | "companyOwner" | "representative" | ""
 
@@ -96,6 +97,27 @@ export default function Register() {
       }
     } else {
       setError(result.error || "Registration failed.")
+    }
+  }
+
+  const handleGoogleRegister = async () => {
+    if (!role) {
+      setError("Please select an account type first.")
+      return
+    }
+
+    setError("")
+    try {
+      const result = await authUtils.loginWithGoogle(role as "student" | "representative" | "companyOwner")
+      
+      if (result.success) {
+        navigate("/dashboard")
+      } else {
+        setError(result.error || "Google registration failed.")
+      }
+    } catch (err: any) {
+      console.error("Google registration error:", err)
+      setError("Failed to register with Google. Please try again.")
     }
   }
 
@@ -507,6 +529,44 @@ export default function Register() {
                 Create Account
               </Button>
             </form>
+
+            {/* Google Sign-In button */}
+            <Tooltip
+              title={!role ? "Please select an account type first" : ""}
+              arrow
+              placement="top"
+            >
+              <span>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="large"
+                  startIcon={<GoogleIcon />}
+                  onClick={handleGoogleRegister}
+                  disabled={!role}
+                  sx={{
+                    mt: 2,
+                    py: 1.3,
+                    borderRadius: 2,
+                    fontSize: "1rem",
+                    fontWeight: 600,
+                    textTransform: "none",
+                    borderColor: "#4285F4",
+                    color: "#4285F4",
+                    "&:hover": {
+                      backgroundColor: "rgba(66, 133, 244, 0.1)",
+                      borderColor: "#4285F4",
+                    },
+                    "&:disabled": {
+                      borderColor: "#ccc",
+                      color: "#ccc",
+                    },
+                  }}
+                >
+                  Register with Google
+                </Button>
+              </span>
+            </Tooltip>
 
             <Box sx={{ textAlign: "center", mt: 2 }}>
               <Typography variant="body2" color="text.secondary">
