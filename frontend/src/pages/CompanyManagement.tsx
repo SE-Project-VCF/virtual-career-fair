@@ -28,6 +28,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import AddIcon from "@mui/icons-material/Add"
 import PeopleIcon from "@mui/icons-material/People"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import DeleteIcon from "@mui/icons-material/Delete"
 
 interface Company {
   id: string
@@ -48,6 +49,9 @@ export default function CompanyManagement() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newCompanyName, setNewCompanyName] = useState("")
   const [creating, setCreating] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Memoize user ID and role to prevent unnecessary re-renders
   const userId = useMemo(() => user?.uid, [user?.uid])
@@ -140,6 +144,37 @@ export default function CompanyManagement() {
       setTimeout(() => setSuccess(""), 3000)
     } catch (err) {
       setError("Failed to copy to clipboard")
+    }
+  }
+
+  const handleDeleteClick = (company: Company) => {
+    setCompanyToDelete(company)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!companyToDelete || !userId) return
+
+    try {
+      setDeleting(true)
+      setError("")
+      
+      const result = await authUtils.deleteCompany(companyToDelete.id, userId)
+      
+      if (result.success) {
+        setSuccess(`Company "${companyToDelete.companyName}" has been deleted successfully.`)
+        setDeleteDialogOpen(false)
+        setCompanyToDelete(null)
+        fetchCompanies() // Refresh the list
+        setTimeout(() => setSuccess(""), 3000)
+      } else {
+        setError(result.error || "Failed to delete company")
+      }
+    } catch (err) {
+      console.error("Error deleting company:", err)
+      setError("Failed to delete company")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -286,21 +321,36 @@ export default function CompanyManagement() {
                       </Typography>
                     </Box>
 
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      onClick={() => navigate(`/company/${company.id}`)}
-                      sx={{
-                        borderColor: "#388560",
-                        color: "#388560",
-                        "&:hover": {
-                          borderColor: "#2d6b4d",
-                          bgcolor: "rgba(56, 133, 96, 0.05)",
-                        },
-                      }}
-                    >
-                      Manage Company
-                    </Button>
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        onClick={() => navigate(`/company/${company.id}`)}
+                        sx={{
+                          borderColor: "#388560",
+                          color: "#388560",
+                          "&:hover": {
+                            borderColor: "#2d6b4d",
+                            bgcolor: "rgba(56, 133, 96, 0.05)",
+                          },
+                        }}
+                      >
+                        Manage Company
+                      </Button>
+                      <Tooltip title="Delete Company">
+                        <IconButton
+                          onClick={() => handleDeleteClick(company)}
+                          sx={{
+                            color: "#d32f2f",
+                            "&:hover": {
+                              bgcolor: "rgba(211, 47, 47, 0.1)",
+                            },
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
@@ -308,6 +358,52 @@ export default function CompanyManagement() {
           </Grid>
         )}
       </Container>
+
+      {/* Delete Company Confirmation Dialog */}
+      <Dialog 
+        open={deleteDialogOpen} 
+        onClose={() => !deleting && setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Company</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This action cannot be undone. This will permanently delete the company and all associated data.
+          </Alert>
+          <Typography variant="body1">
+            Are you sure you want to delete <strong>{companyToDelete?.companyName}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will:
+            <ul style={{ marginTop: 8, marginBottom: 0 }}>
+              <li>Remove the company permanently</li>
+              <li>Unlink all representatives from this company</li>
+              <li>Delete the associated booth (if any)</li>
+            </ul>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setDeleteDialogOpen(false)
+              setCompanyToDelete(null)
+            }}
+            disabled={deleting}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+            disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {deleting ? "Deleting..." : "Delete Company"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Create Company Dialog */}
       <Dialog open={createDialogOpen} onClose={() => !creating && setCreateDialogOpen(false)} maxWidth="sm" fullWidth>

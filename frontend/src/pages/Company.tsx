@@ -48,7 +48,6 @@ interface Representative {
   email: string
   firstName?: string
   lastName?: string
-  username?: string
 }
 
 export default function Company() {
@@ -64,6 +63,8 @@ export default function Company() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [representativeToDelete, setRepresentativeToDelete] = useState<Representative | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [deleteCompanyDialogOpen, setDeleteCompanyDialogOpen] = useState(false)
+  const [deletingCompany, setDeletingCompany] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -147,7 +148,6 @@ export default function Company() {
             email: data.email || "",
             firstName: data.firstName,
             lastName: data.lastName,
-            username: data.username,
           } as Representative
         }
         return null
@@ -179,6 +179,13 @@ export default function Company() {
         representativeIDs: arrayRemove(representativeToDelete.uid)
       })
       
+      // Remove companyId and companyName from representative's user document
+      const representativeUserRef = doc(db, "users", representativeToDelete.uid)
+      await updateDoc(representativeUserRef, {
+        companyId: null,
+        companyName: null,
+      })
+      
       // Update local state
       setRepresentatives(representatives.filter(rep => rep.uid !== representativeToDelete.uid))
       setCompany({
@@ -206,6 +213,32 @@ export default function Company() {
       return rep.firstName
     }
     return rep.email
+  }
+
+  const handleDeleteCompanyClick = () => {
+    setDeleteCompanyDialogOpen(true)
+  }
+
+  const handleDeleteCompanyConfirm = async () => {
+    if (!company || !userId || !isOwner) return
+
+    try {
+      setDeletingCompany(true)
+      setError("")
+      
+      const result = await authUtils.deleteCompany(company.id, userId)
+      
+      if (result.success) {
+        navigate("/companies")
+      } else {
+        setError(result.error || "Failed to delete company")
+      }
+    } catch (err) {
+      console.error("Error deleting company:", err)
+      setError("Failed to delete company")
+    } finally {
+      setDeletingCompany(false)
+    }
   }
 
   const copyToClipboard = async (text: string) => {
@@ -431,6 +464,36 @@ export default function Company() {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Delete Company Card (Owner only) */}
+          {isOwner && (
+            <Grid size={{ xs: 12 }}>
+              <Card sx={{ border: "2px solid rgba(211, 47, 47, 0.3)" }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#d32f2f", display: "flex", alignItems: "center", gap: 1 }}>
+                    <DeleteIcon />
+                    Danger Zone
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Permanently delete this company. This action cannot be undone and will remove all company data, unlink representatives, and delete the associated booth.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={handleDeleteCompanyClick}
+                    sx={{
+                      "&:hover": {
+                        bgcolor: "#c62828",
+                      },
+                    }}
+                  >
+                    Delete Company
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
         </Grid>
       </Container>
 
@@ -457,6 +520,51 @@ export default function Company() {
             startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
           >
             {deleting ? "Removing..." : "Remove"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Company Confirmation Dialog */}
+      <Dialog 
+        open={deleteCompanyDialogOpen} 
+        onClose={() => !deletingCompany && setDeleteCompanyDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Delete Company</DialogTitle>
+        <DialogContent>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            This action cannot be undone. This will permanently delete the company and all associated data.
+          </Alert>
+          <Typography variant="body1">
+            Are you sure you want to delete <strong>{company?.companyName}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will:
+            <ul style={{ marginTop: 8, marginBottom: 0 }}>
+              <li>Remove the company permanently</li>
+              <li>Unlink all representatives from this company</li>
+              <li>Delete the associated booth (if any)</li>
+            </ul>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setDeleteCompanyDialogOpen(false)
+            }}
+            disabled={deletingCompany}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteCompanyConfirm}
+            variant="contained"
+            color="error"
+            disabled={deletingCompany}
+            startIcon={deletingCompany ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {deletingCompany ? "Deleting..." : "Delete Company"}
           </Button>
         </DialogActions>
       </Dialog>

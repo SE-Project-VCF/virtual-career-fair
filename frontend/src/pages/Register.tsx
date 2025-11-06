@@ -26,9 +26,6 @@ export default function Register() {
   const [school, setSchool] = useState("")
   const [major, setMajor] = useState("")
   
-  // Company Owner fields
-  const [username, setUsername] = useState("")
-  
   // Representative fields
   const [inviteCode, setInviteCode] = useState("")
 
@@ -75,7 +72,6 @@ export default function Register() {
       result = await authUtils.registerUser(email, password, "companyOwner", {
         firstName,
         lastName,
-        username: username || undefined,
       })
     } else if (role === "representative") {
       // Invite code is optional for representatives
@@ -452,30 +448,9 @@ export default function Register() {
 
               {/* Company Owner-specific fields */}
               {role === "companyOwner" && (
-                <>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    You can create companies after registration from your dashboard.
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    label="Username (Optional)"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    margin="normal"
-                    sx={{
-                      mb: 3,
-                      "& .MuiOutlinedInput-root": {
-                        borderRadius: 2,
-                        "&.Mui-focused fieldset": {
-                          borderColor: "#388560",
-                        },
-                      },
-                      "& .MuiInputLabel-root.Mui-focused": {
-                        color: "#388560",
-                      },
-                    }}
-                  />
-                </>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  You can create companies after registration from your dashboard.
+                </Typography>
               )}
 
               {/* Representative-specific fields */}
