@@ -4,6 +4,11 @@ import { useNavigate } from "react-router-dom"
 import { authUtils } from "../utils/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
+import { getAuth } from "firebase/auth"
+
+interface ProfileMenuProps {
+  photoURL?: string
+}
 
 export default function ProfileMenu() {
   const navigate = useNavigate()
@@ -11,7 +16,20 @@ export default function ProfileMenu() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [role, setRole] = useState(null)
   const open = Boolean(anchorEl)
+  const [photoURL, setPhotoURL] = useState<string | undefined>()
 
+  useEffect(() => {
+    const fetchPhoto = async () => {
+      const user = getAuth().currentUser
+      if (!user) return
+      const userRef = doc(db, "users", user.uid)
+      const snapshot = await getDoc(userRef)
+      if (snapshot.exists()) {
+        setPhotoURL(snapshot.data()?.photoURL)
+      }
+    }
+    fetchPhoto()
+  }, [])
   useEffect(() => {
     const fetchRole = async () => {
       if (!user?.uid) return
@@ -51,9 +69,13 @@ export default function ProfileMenu() {
   return (
     <>
       <IconButton onClick={handleMenuOpen}>
-        <Avatar sx={{ bgcolor: "#b03a6c", width: 40, height: 40 }}>
-          {user?.email?.charAt(0).toUpperCase() || "U"}
-        </Avatar>
+      <Avatar
+  sx={{ bgcolor: "#b03a6c", width: 40, height: 40 }}
+  src={photoURL}
+>
+  {!photoURL && (user?.email?.charAt(0).toUpperCase() || "U")}
+</Avatar>
+
       </IconButton>
 
       <Menu

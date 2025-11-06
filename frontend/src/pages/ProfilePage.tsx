@@ -4,6 +4,7 @@ import { useState, useEffect, type ChangeEvent } from "react"
 import { getAuth, type UserCredential, type User } from "firebase/auth"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { db } from "../firebase"
+import axios from "axios"
 import {
   Container,
   Box,
@@ -29,6 +30,7 @@ interface UserProfile {
   companyName?: string
   position?: string
   description?: string
+  photoURL?: string
 }
 
 export default function ProfilePage() {
@@ -38,6 +40,64 @@ export default function ProfilePage() {
 
   const role = userData?.role
 
+  const handleProfilePicChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || event.target.files.length === 0 || !auth.currentUser) return
+    const file = event.target.files[0]
+  
+    try {
+      // Step 2a: get signed URL from backend
+      const { data } = await axios.post("http://localhost:5000/api/sign-s3", {
+        fileName: file.name,
+        fileType: file.type,
+        userId: auth.currentUser.uid,
+      })
+  
+      // Step 2b: upload file directly to S3 using signed URL
+      await axios.put(data.signedUrl, file, {
+        headers: {
+          "Content-Type": file.type,
+        },
+      })
+  
+      // Step 2c: save public S3 URL in Firestore
+      const userRef = doc(db, "users", auth.currentUser.uid)
+      await updateDoc(userRef, { photoURL: data.url })
+  
+      // Step 2d: update local state
+      setUserData(prev => prev ? { ...prev, photoURL: data.url } : null)
+  
+      alert("Profile picture uploaded!")
+    } catch (err) {
+      console.error("Error uploading profile picture:", err)
+    }
+  }
+  const handleResumeUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || event.target.files.length === 0 || !auth.currentUser) return
+    const file = event.target.files[0]
+  
+    try {
+      // Step 1: Get signed URL from backend (you’ll need an endpoint like /api/sign-resume)
+      const { data } = await axios.post("http://localhost:5000/api/sign-s3", {
+        fileName: file.name,
+        fileType: file.type,
+        userId: auth.currentUser.uid,
+      })
+  
+      // Step 2: Upload file to S3
+      await axios.put(data.signedUrl, file, {
+        headers: { "Content-Type": file.type },
+      })
+  
+      // Step 3: Save public URL in Firestore (e.g., field resumeURL)
+      const userRef = doc(db, "users", auth.currentUser.uid)
+      await updateDoc(userRef, { resumeURL: data.url })
+  
+      alert("Resume uploaded successfully!")
+    } catch (err) {
+      console.error("Error uploading resume:", err)
+    }
+  }
+  
   // Fetch user profile
   useEffect(() => {
     const fetchProfile = async () => {
@@ -129,7 +189,10 @@ export default function ProfilePage() {
               disabled
               fullWidth
             />
+<Box mt={2}>
+  
 
+</Box>
             {/* Conditional fields */}
             {role === "student" ? (
               <>
@@ -147,7 +210,25 @@ export default function ProfilePage() {
                   onChange={handleChange}
                   fullWidth
                 />
+                <Box mt={2} display="flex" gap={2} flexDirection="column">
+    {/* Profile Picture Upload */}
+    <Button variant="outlined" component="label">
+      Upload Profile Picture
+      <input hidden type="file" accept="image/*" onChange={handleProfilePicChange} />
+    </Button>
+
+    {/* Resume Upload */}
+    <Button
+      variant="contained"
+      component="label"
+      sx={{ bgcolor: "green", "&:hover": { bgcolor: "#006400" } }}
+    >
+      Upload Resume
+      <input hidden type="file" accept=".pdf,.doc,.docx" onChange={handleResumeUpload} />
+    </Button>
+  </Box>
               </>
+              
             ) : (
               <>
                 <TextField

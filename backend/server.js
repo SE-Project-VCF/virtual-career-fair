@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
-
+const AWS = require("aws-sdk");
 const app = express();
 const PORT = 5000;
 
@@ -12,24 +12,35 @@ app.use(express.json());
 function removeUndefined(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== undefined));
 }
-// Generate presigned URL for profile picture
-app.post("/generate-profile-upload-url", async (req, res) => {
+app.use(cors({ origin: "http://localhost:5173" }));
+app.use(express.json());
+
+AWS.config.update({
+  region: process.env.AWS_REGION,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+});
+
+const s3 = new AWS.S3();
+
+app.post("/api/sign-s3", async (req, res) => {
+  const { fileName, fileType, userId } = req.body;
+
+  const s3Params = {
+    Bucket: process.env.S3_BUCKET_NAME,
+    Key: `profilePictures/${userId}/${fileName}`,
+    Expires: 60, // seconds
+    ContentType: fileType,
+    ACL: "public-read", // so the image is viewable
+  };
+
   try {
-    const { userId } = req.body;
-    const fileKey = `profile-pictures/${userId}-${Date.now()}.jpg`;
-
-    const params = {
-      Bucket: BUCKET,
-      Key: fileKey,
-      Expires: 60,
-      ContentType: "image/jpeg",
-    };
-
-    const uploadURL = await s3.getSignedUrlPromise("putObject", params);
-    res.json({ uploadURL, fileKey });
+    const signedUrl = await s3.getSignedUrlPromise("putObject", s3Params);
+    const url = `https://${process.env.S3_BUCKET_NAME}.s3.amazonaws.com/profilePictures/${userId}/${fileName}`;
+    res.json({ signedUrl, url });
   } catch (err) {
-    console.error("Error generating upload URL:", err);
-    res.status(500).json({ error: "Failed to get upload URL" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to get signed URL" });
   }
 });
 
