@@ -13,7 +13,7 @@ import {
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import ProfileMenu from "./ProfileMenu"
-import { doc, getDoc, updateDoc } from "firebase/firestore"
+import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db, storage } from "../firebase"
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
 
@@ -97,12 +97,13 @@ export default function StudentProfilePage() {
         })
       }
 
-      await updateDoc(docRef, {
+      // Use setDoc with merge: true to create the document if it doesn't exist, or update if it does
+      await setDoc(docRef, {
         major,
         expectedGradYear: year,
         skills,
         resumeUrl: uploadedUrl || null,
-      })
+      }, { merge: true })
       setResumeUrl(uploadedUrl || null)
       alert("Profile saved successfully!")
     } catch (err) {
