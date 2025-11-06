@@ -106,7 +106,7 @@ export default function Booths() {
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Box>
               <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                Virtual Career Fair
+                Job Goblin - Virtual Career Fair
               </Typography>
               <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.9)", mt: 1 }}>
                 Explore opportunities from top companies
