@@ -2,28 +2,44 @@
 
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Container, Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
+import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import SchoolIcon from "@mui/icons-material/School"
+import PersonAddIcon from "@mui/icons-material/PersonAdd"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
+import GoogleIcon from "@mui/icons-material/Google"
 
-export default function StudentRegister() {
+type RoleType = "student" | "companyOwner" | "representative" | ""
+
+export default function Register() {
   const navigate = useNavigate()
+  const [role, setRole] = useState<RoleType>("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
+  
+  // Student fields
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
+  const [school, setSchool] = useState("")
+  const [major, setMajor] = useState("")
+  
+  // Representative fields
+  const [inviteCode, setInviteCode] = useState("")
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError("")
 
-    if (!email || !password || !confirmPassword || !firstName || !lastName) {
-      setError("Email, password, confirm password, first name, and last name are required.")
+    if (!role) {
+      setError("Please select a role.")
+      return
+    }
+
+    if (!email || !password || !confirmPassword) {
+      setError("Email, password, and confirm password are required.")
       return
     }
 
@@ -37,22 +53,88 @@ export default function StudentRegister() {
       return
     }
 
-    // ✅ Use the unified registration system for students
-    const result = await authUtils.registerUser(email, password, "student", {
-      firstName,
-      lastName,
-    })
+    // First name and last name are required for all roles
+    if (!firstName || !lastName) {
+      setError("First name and last name are required.")
+      return
+    }
+
+    let result
+
+    if (role === "student") {
+      const studentData: any = {
+        firstName,
+        lastName,
+      };
+      if (school && school.trim()) {
+        studentData.school = school.trim();
+      }
+      if (major && major.trim()) {
+        studentData.major = major.trim();
+      }
+      result = await authUtils.registerUser(email, password, "student", studentData)
+    } else if (role === "companyOwner") {
+      result = await authUtils.registerUser(email, password, "companyOwner", {
+        firstName,
+        lastName,
+      })
+    } else if (role === "representative") {
+      // Invite code is optional for representatives
+      const representativeData: any = {
+        firstName,
+        lastName,
+      };
+      if (inviteCode && inviteCode.trim()) {
+        representativeData.inviteCode = inviteCode.trim();
+      }
+      result = await authUtils.registerUser(email, password, "representative", representativeData)
+    } else {
+      setError("Invalid role selected.")
+      return
+    }
 
     if (result.success) {
       if (result.needsVerification) {
-        // ✅ Pass both email and password so the verification screen can auto-login later
-        navigate("/verification-pending", { state: { email, password } })
+        navigate("/verification-pending", { state: { email } })
       } else {
-        navigate("/student/login")
+        navigate("/login")
       }
     } else {
       setError(result.error || "Registration failed.")
     }
+  }
+
+  const handleGoogleRegister = async () => {
+    if (!role) {
+      setError("Please select an account type first.")
+      return
+    }
+
+    setError("")
+    try {
+      const result = await authUtils.loginWithGoogle(role as "student" | "representative" | "companyOwner")
+      
+      if (result.success) {
+        navigate("/dashboard")
+      } else {
+        setError(result.error || "Google registration failed.")
+      }
+    } catch (err: any) {
+      console.error("Google registration error:", err)
+      setError("Failed to register with Google. Please try again.")
+    }
+  }
+
+  const getGradientColor = () => {
+    if (role === "student") return "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+    if (role === "companyOwner") return "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
+    return "linear-gradient(135deg, #b03a6c 0%, #388560 100%)"
+  }
+
+  const getBorderColor = () => {
+    if (role === "student") return "#b03a6c"
+    if (role === "companyOwner") return "#388560"
+    return "#b03a6c"
   }
 
   return (
@@ -70,7 +152,7 @@ export default function StudentRegister() {
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+          background: getGradientColor(),
           color: "white",
           p: 6,
           position: "relative",
@@ -102,10 +184,10 @@ export default function StudentRegister() {
 
         <Box sx={{ zIndex: 1, maxWidth: "400px" }}>
           <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-            Start Your Career Journey
+            Join Our Platform
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Connect with top employers and discover opportunities
+            Create your account and start your journey
           </Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -113,10 +195,10 @@ export default function StudentRegister() {
               <WorkIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  100+ Companies
+                  Career Opportunities
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Top employers waiting to meet you
+                  Connect with top employers and students
                 </Typography>
               </Box>
             </Box>
@@ -135,7 +217,7 @@ export default function StudentRegister() {
               <TrendingUpIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Career Growth
+                  Grow Your Career
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
                   Find opportunities that match your goals
@@ -176,7 +258,7 @@ export default function StudentRegister() {
                   justifyContent: "center",
                 }}
               >
-                <SchoolIcon sx={{ fontSize: 32, color: "white" }} />
+                <PersonAddIcon sx={{ fontSize: 32, color: "white" }} />
               </Box>
             </Box>
 
@@ -187,10 +269,10 @@ export default function StudentRegister() {
               align="center"
               sx={{ fontWeight: 700, color: "#1a1a1a" }}
             >
-              Student Registration
+              Create Account
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
-              Create your account to access career opportunities
+              Register to access career opportunities
             </Typography>
 
             {error && (
@@ -200,6 +282,27 @@ export default function StudentRegister() {
             )}
 
             <form onSubmit={handleSubmit}>
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel id="role-select-label">Account Type</InputLabel>
+                <Select
+                  labelId="role-select-label"
+                  value={role}
+                  label="Account Type"
+                  onChange={(e) => setRole(e.target.value as RoleType)}
+                  required
+                  sx={{
+                    borderRadius: 2,
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                      borderColor: getBorderColor(),
+                    },
+                  }}
+                >
+                  <MenuItem value="student">Student</MenuItem>
+                  <MenuItem value="companyOwner">Company Owner</MenuItem>
+                  <MenuItem value="representative">Representative</MenuItem>
+                </Select>
+              </FormControl>
+
               <TextField
                 fullWidth
                 label="Email Address"
@@ -213,11 +316,11 @@ export default function StudentRegister() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: getBorderColor(),
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: getBorderColor(),
                   },
                 }}
               />
@@ -235,11 +338,11 @@ export default function StudentRegister() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: getBorderColor(),
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: getBorderColor(),
                   },
                 }}
               />
@@ -256,14 +359,16 @@ export default function StudentRegister() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: getBorderColor(),
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: getBorderColor(),
                   },
                 }}
               />
+
+              {/* First Name and Last Name - Required for all roles */}
               <TextField
                 fullWidth
                 label="First Name"
@@ -276,11 +381,11 @@ export default function StudentRegister() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: getBorderColor(),
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: getBorderColor(),
                   },
                 }}
               />
@@ -296,14 +401,92 @@ export default function StudentRegister() {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: 2,
                     "&.Mui-focused fieldset": {
-                      borderColor: "#b03a6c",
+                      borderColor: getBorderColor(),
                     },
                   },
                   "& .MuiInputLabel-root.Mui-focused": {
-                    color: "#b03a6c",
+                    color: getBorderColor(),
                   },
                 }}
               />
+
+              {/* Student-specific fields */}
+              {role === "student" && (
+                <>
+                  <TextField
+                    fullWidth
+                    label="School"
+                    value={school}
+                    onChange={(e) => setSchool(e.target.value)}
+                    margin="normal"
+                    sx={{
+                      mb: 2,
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: 2,
+                        "&.Mui-focused fieldset": {
+                          borderColor: "#b03a6c",
+                        },
+                      },
+                      "& .MuiInputLabel-root.Mui-focused": {
+                        color: "#b03a6c",
+                      },
+                    }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Major"
+                    value={major}
+                    onChange={(e) => setMajor(e.target.value)}
+                    margin="normal"
+                    sx={{
+                      mb: 3,
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: 2,
+                        "&.Mui-focused fieldset": {
+                          borderColor: "#b03a6c",
+                        },
+                      },
+                      "& .MuiInputLabel-root.Mui-focused": {
+                        color: "#b03a6c",
+                      },
+                    }}
+                  />
+                </>
+              )}
+
+              {/* Company Owner-specific fields */}
+              {role === "companyOwner" && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  You can create companies after registration from your dashboard.
+                </Typography>
+              )}
+
+              {/* Representative-specific fields */}
+              {role === "representative" && (
+                <>
+                  <TextField
+                    fullWidth
+                    label="Invite Code (Optional)"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    margin="normal"
+                    helperText="Get this code from your employer (optional)"
+                    sx={{
+                      mb: 3,
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: 2,
+                        "&.Mui-focused fieldset": {
+                          borderColor: "#b03a6c",
+                        },
+                      },
+                      "& .MuiInputLabel-root.Mui-focused": {
+                        color: "#b03a6c",
+                      },
+                    }}
+                  />
+                </>
+              )}
+
               <Button
                 type="submit"
                 fullWidth
@@ -314,26 +497,65 @@ export default function StudentRegister() {
                   mb: 3,
                   py: 1.5,
                   borderRadius: 2,
-                  background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                  background: getGradientColor(),
                   fontSize: "1.1rem",
                   fontWeight: 600,
                   textTransform: "none",
-                  boxShadow: "0 4px 12px rgba(176, 58, 108, 0.3)",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
                   "&:hover": {
-                    background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                    boxShadow: "0 6px 16px rgba(176, 58, 108, 0.4)",
+                    background: getGradientColor(),
+                    filter: "brightness(0.9)",
+                    boxShadow: "0 6px 16px rgba(0,0,0,0.4)",
                   },
                 }}
               >
-                Create Student Account
+                Create Account
               </Button>
             </form>
+
+            {/* Google Sign-In button */}
+            <Tooltip
+              title={!role ? "Please select an account type first" : ""}
+              arrow
+              placement="top"
+            >
+              <span>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="large"
+                  startIcon={<GoogleIcon />}
+                  onClick={handleGoogleRegister}
+                  disabled={!role}
+                  sx={{
+                    mt: 2,
+                    py: 1.3,
+                    borderRadius: 2,
+                    fontSize: "1rem",
+                    fontWeight: 600,
+                    textTransform: "none",
+                    borderColor: "#4285F4",
+                    color: "#4285F4",
+                    "&:hover": {
+                      backgroundColor: "rgba(66, 133, 244, 0.1)",
+                      borderColor: "#4285F4",
+                    },
+                    "&:disabled": {
+                      borderColor: "#ccc",
+                      color: "#ccc",
+                    },
+                  }}
+                >
+                  Register with Google
+                </Button>
+              </span>
+            </Tooltip>
 
             <Box sx={{ textAlign: "center", mt: 2 }}>
               <Typography variant="body2" color="text.secondary">
                 Already have an account?{" "}
                 <Link
-                  to="/student/login"
+                  to="/login"
                   style={{
                     color: "#388560",
                     textDecoration: "none",
@@ -351,7 +573,7 @@ export default function StudentRegister() {
                     textDecoration: "none",
                   }}
                 >
-                  ← Back to role selection
+                  ← Back to Home
                 </Link>
               </Typography>
             </Box>
@@ -361,3 +583,4 @@ export default function StudentRegister() {
     </Box>
   )
 }
+

@@ -30,7 +30,7 @@ export default function ProfileMenu() {
 
   return (
     <>
-      <IconButton onClick={handleMenuOpen} sx={{ ml: 2 }}>
+      <IconButton onClick={handleMenuOpen}>
         <Avatar sx={{ bgcolor: "#b03a6c", width: 40, height: 40 }}>
           {user?.email?.charAt(0).toUpperCase() || "U"}
         </Avatar>
@@ -44,8 +44,12 @@ export default function ProfileMenu() {
           sx: { mt: 1.5, minWidth: 180, borderRadius: 2 },
         }}
       >
-        <MenuItem onClick={handleProfile}>Edit Profile</MenuItem>
-        <Divider />
+        {user?.role === "student" && (
+          <>
+            <MenuItem onClick={handleProfile}>Edit Profile</MenuItem>
+            <Divider />
+          </>
+        )}
         <MenuItem onClick={handleLogout} sx={{ color: "red" }}>
           Logout
         </MenuItem>

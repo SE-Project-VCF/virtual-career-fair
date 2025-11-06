@@ -150,10 +150,10 @@ export default function StudentProfilePage() {
           sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
         >
           <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-            Virtual Career Fair
+            Job Goblin - Virtual Career Fair
           </Typography>
-          {/* Profile circle button far right */}
-          <Box sx={{ ml: 4 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {/* Other buttons can be added here */}
             <ProfileMenu />
           </Box>
         </Container>

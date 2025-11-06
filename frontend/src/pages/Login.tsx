@@ -4,14 +4,13 @@ import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import PeopleIcon from "@mui/icons-material/People"
-import EventIcon from "@mui/icons-material/Event"
 import LoginIcon from "@mui/icons-material/Login"
+import WorkIcon from "@mui/icons-material/Work"
+import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
-import { Badge } from "@mui/icons-material"
 import GoogleIcon from "@mui/icons-material/Google"
 
-export default function EmployerLogin() {
+export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -26,7 +25,8 @@ export default function EmployerLogin() {
       return
     }
 
-    const result = await authUtils.loginUser(email, password, "companyOwner")
+    // Try unified login - it will automatically detect the user's role
+    const result = await authUtils.login(email, password)
 
     if (result.success) {
       navigate("/dashboard")
@@ -39,24 +39,31 @@ export default function EmployerLogin() {
     }
   }
 
-  // ✅ UPDATED: pass role argument to Google login
   const handleGoogleLogin = async () => {
     setError("")
-    const result = await authUtils.loginWithGoogle("companyOwner")
-    if (result.success) {
-      navigate("/dashboard")
-    } else {
-      setError(result.error || "Google sign-in failed.")
+    try {
+      // Try to login with Google - if user exists in Firestore, use their role
+      // If new user, loginWithGoogle will create a Firestore record with "student" role
+      // For existing users, it will use their actual role from Firestore
+      const result = await authUtils.loginWithGoogle("student")
+      
+      if (result.success) {
+        navigate("/dashboard")
+      } else {
+        setError(result.error || "Google login failed.")
+      }
+    } catch (err: any) {
+      console.error("Google login error:", err)
+      setError("Failed to sign in with Google. Please try again.")
     }
   }
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      {/* Left green panel */}
       <Box
         sx={{
           flex: 1,
-          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
           color: "white",
           p: 6,
           display: { xs: "none", md: "flex" },
@@ -66,7 +73,6 @@ export default function EmployerLogin() {
           overflow: "hidden",
         }}
       >
-        {/* Circles and content */}
         <Box
           sx={{
             position: "absolute",
@@ -92,32 +98,32 @@ export default function EmployerLogin() {
 
         <Box sx={{ position: "relative", zIndex: 1 }}>
           <Typography variant="h3" sx={{ fontWeight: 700, mb: 3 }}>
-            Welcome Back, Employer!
+            Welcome Back!
           </Typography>
           <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Continue building your team with top talent
+            Sign in to continue your journey
           </Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <PeopleIcon sx={{ fontSize: 40 }} />
+              <WorkIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Find Candidates
+                  Career Opportunities
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Browse qualified student profiles
+                  Access exclusive job openings and events
                 </Typography>
               </Box>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <EventIcon sx={{ fontSize: 40 }} />
+              <GroupsIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Host Events
+                  Network with Others
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Organize virtual sessions
+                  Connect with employers and students
                 </Typography>
               </Box>
             </Box>
@@ -125,10 +131,10 @@ export default function EmployerLogin() {
               <TrendingUpIcon sx={{ fontSize: 40 }} />
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Grow Your Team
+                  Grow Your Career
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Post jobs and internships
+                  Attend workshops and sessions
                 </Typography>
               </Box>
             </Box>
@@ -136,7 +142,6 @@ export default function EmployerLogin() {
         </Box>
       </Box>
 
-      {/* Right login panel */}
       <Box
         sx={{
           flex: 1,
@@ -163,13 +168,13 @@ export default function EmployerLogin() {
                 width: 60,
                 height: 60,
                 borderRadius: "50%",
-                background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Badge sx={{ fontSize: 32, color: "white" }} />
+              <LoginIcon sx={{ fontSize: 32, color: "white" }} />
             </Box>
           </Box>
 
@@ -183,10 +188,10 @@ export default function EmployerLogin() {
                 color: "#1a1a1a",
               }}
             >
-              Employer Sign In
+              Sign In
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center">
-              Access your employer dashboard
+              Access your account
             </Typography>
           </Box>
 
@@ -210,10 +215,16 @@ export default function EmployerLogin() {
                 "& .MuiOutlinedInput-root": {
                   bgcolor: "white",
                   borderRadius: 2,
-                  "&:hover fieldset": { borderColor: "#388560" },
-                  "&.Mui-focused fieldset": { borderColor: "#388560" },
+                  "&:hover fieldset": {
+                    borderColor: "#b03a6c",
+                  },
+                  "&.Mui-focused fieldset": {
+                    borderColor: "#b03a6c",
+                  },
                 },
-                "& .MuiInputLabel-root.Mui-focused": { color: "#388560" },
+                "& .MuiInputLabel-root.Mui-focused": {
+                  color: "#b03a6c",
+                },
               }}
             />
             <TextField
@@ -229,10 +240,16 @@ export default function EmployerLogin() {
                 "& .MuiOutlinedInput-root": {
                   bgcolor: "white",
                   borderRadius: 2,
-                  "&:hover fieldset": { borderColor: "#388560" },
-                  "&.Mui-focused fieldset": { borderColor: "#388560" },
+                  "&:hover fieldset": {
+                    borderColor: "#b03a6c",
+                  },
+                  "&.Mui-focused fieldset": {
+                    borderColor: "#b03a6c",
+                  },
                 },
-                "& .MuiInputLabel-root.Mui-focused": { color: "#388560" },
+                "& .MuiInputLabel-root.Mui-focused": {
+                  color: "#b03a6c",
+                },
               }}
             />
             <Button
@@ -244,14 +261,14 @@ export default function EmployerLogin() {
               sx={{
                 py: 1.5,
                 borderRadius: 2,
-                background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
                 fontSize: "1.1rem",
                 fontWeight: 600,
                 textTransform: "none",
-                boxShadow: "0 4px 12px rgba(56, 133, 96, 0.3)",
+                boxShadow: "0 4px 12px rgba(176, 58, 108, 0.3)",
                 "&:hover": {
-                  background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                  boxShadow: "0 6px 16px rgba(56, 133, 96, 0.4)",
+                  background: "linear-gradient(135deg, #388560 0%, #b03a6c 100%)",
+                  boxShadow: "0 6px 16px rgba(176, 58, 108, 0.4)",
                 },
               }}
             >
@@ -259,7 +276,7 @@ export default function EmployerLogin() {
             </Button>
           </form>
 
-          {/* ✅ Google Sign-In button */}
+          {/* Google Sign-In button */}
           <Button
             fullWidth
             variant="outlined"
@@ -288,9 +305,9 @@ export default function EmployerLogin() {
             <Typography variant="body2" color="text.secondary">
               Don't have an account?{" "}
               <Link
-                to="/employer/register"
+                to="/register"
                 style={{
-                  color: "#b03a6c",
+                  color: "#388560",
                   textDecoration: "none",
                   fontWeight: 600,
                 }}
@@ -306,7 +323,7 @@ export default function EmployerLogin() {
                   textDecoration: "none",
                 }}
               >
-                ← Back to role selection
+                ← Back to Home
               </Link>
             </Typography>
           </Box>
@@ -315,3 +332,4 @@ export default function EmployerLogin() {
     </Box>
   )
 }
+
