@@ -18,7 +18,9 @@
     "firebase": "^12.4.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.4"
+    "react-router-dom": "^7.9.4",
+    "stream-chat": "^9.25.0",
+    "stream-chat-react": "^13.11.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
@@ -39,7 +41,7 @@
     "vite": "^7.1.7"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "^4.52.2",
-    "@esbuild/linux-x64": "^0.25.10"
+    "@esbuild/linux-x64": "^0.25.10",
+    "@rollup/rollup-linux-x64-gnu": "^4.52.2"
   }
 }

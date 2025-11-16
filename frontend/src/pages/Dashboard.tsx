@@ -11,6 +11,8 @@ import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
+import { Badge, Tooltip } from "@mui/material"
+import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu";
 
 
@@ -22,16 +24,68 @@ export default function Dashboard() {
   const [inviteCodeError, setInviteCodeError] = useState("")
   const [linking, setLinking] = useState(false)
   const [totalRepresentatives, setTotalRepresentatives] = useState(0)
+  const [unreadCount, setUnreadCount] = useState<number>(0)
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
       navigate("/")
       return
     }
-    
+
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
   }, [navigate])
+
+  // Fetch unread chat count and keep it updated
+  // Fetch unread chat count
+useEffect(() => {
+  console.log("DEBUG: Dashboard user =", user);
+
+  if (!user || !user.uid) {
+    console.log("DEBUG: No user yet, skipping unread load");
+    return;
+  }
+
+  let cancelled = false;
+
+  const fetchUnread = async () => {
+    console.log("DEBUG: Fetching unread count for", user.uid);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/stream-unread?userId=${user.uid}`
+      );
+
+      if (!res.ok) {
+        console.error("Unread API error:", await res.text());
+        return;
+      }
+
+      const data = await res.json();
+      console.log("DEBUG: unread API returned:", JSON.stringify(data, null, 2));
+
+
+      if (!cancelled && typeof data.unread === "number") {
+        setUnreadCount(data.unread);
+      }
+    } catch (err) {
+      console.error("Failed to fetch unread count:", err);
+    }
+  };
+
+  // initial load
+  fetchUnread();
+
+  // poll every 10s
+  const interval = setInterval(fetchUnread, 10000);
+
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
+}, [user]);
+
+
 
   // Fetch total representatives count for company owners
   useEffect(() => {
@@ -41,14 +95,14 @@ export default function Dashboard() {
           const companiesRef = collection(db, "companies")
           const q = query(companiesRef, where("ownerId", "==", user.uid))
           const querySnapshot = await getDocs(q)
-          
+
           let totalCount = 0
           querySnapshot.forEach((doc) => {
             const data = doc.data()
             const representativeIDs = data.representativeIDs || []
             totalCount += representativeIDs.length
           })
-          
+
           setTotalRepresentatives(totalCount)
         } catch (err) {
           console.error("Error fetching representatives count:", err)
@@ -109,9 +163,34 @@ export default function Dashboard() {
               Job Goblin - Virtual Career Fair
             </Typography>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              {/* Other buttons can be added here */}
+              {/* ✅ Chat Button with Unread Badge */}
+              <Tooltip title="Open Chat">
+                <Badge
+                  color="error"
+                  badgeContent={unreadCount > 0 ? unreadCount : null}
+                  overlap="circular"
+                >
+                  <Button
+                    onClick={() => navigate("/dashboard/chat")}
+                    startIcon={<ChatIcon />}
+                    sx={{
+                      fontWeight: 600,
+                      color: "white",
+                      background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      "&:hover": {
+                        background: "linear-gradient(135deg, #388560 0%, #b03a6c 100%)",
+                      },
+                    }}
+                  >
+                    Chat
+                  </Button>
+                </Badge>
+              </Tooltip>
+
               <ProfileMenu />
             </Box>
+
           </Box>
         </Container>
       </Box>
@@ -149,13 +228,13 @@ export default function Dashboard() {
                 }
               })()}!
             </Typography>
-            
+
             {/* Company name display for representatives - only show if they have a valid companyId */}
             {user.role === "representative" && user.companyId && user.companyName && (
-              <Box sx={{ 
-                display: "inline-flex", 
-                alignItems: "center", 
-                gap: 1, 
+              <Box sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 1,
                 mb: 2,
                 px: 2,
                 py: 1,
@@ -169,7 +248,7 @@ export default function Dashboard() {
                 </Typography>
               </Box>
             )}
-            
+
             <Typography variant="body1" color="text.secondary">
               You're all set to explore career opportunities at our virtual fair.
             </Typography>
@@ -551,8 +630,8 @@ export default function Dashboard() {
       </Container>
 
       {/* Invite Code Dialog */}
-      <Dialog 
-        open={inviteCodeDialogOpen} 
+      <Dialog
+        open={inviteCodeDialogOpen}
         onClose={() => {
           setInviteCodeDialogOpen(false)
           setInviteCode("")
@@ -585,7 +664,7 @@ export default function Dashboard() {
           />
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setInviteCodeDialogOpen(false)
               setInviteCode("")
@@ -595,7 +674,7 @@ export default function Dashboard() {
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={handleLinkInviteCode}
             variant="contained"
             disabled={linking || !inviteCode.trim()}
