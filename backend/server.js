@@ -110,6 +110,13 @@ app.post("/register-user", async (req, res) => {
         .send({ success: false, error: "Missing required fields" });
     }
 
+    // Prevent administrator registration through public endpoint
+    if (role === "administrator") {
+      return res
+        .status(403)
+        .send({ success: false, error: "Administrator accounts cannot be created through public registration" });
+    }
+
     // Create Firebase Auth user
     const userRecord = await auth.createUser({
       email,
@@ -323,6 +330,178 @@ app.post("/add-booth", async (req, res) => {
   } catch (err) {
     console.error("Error adding booth:", err);
     res.status(500).send({ success: false, error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   GET CAREER FAIR LIVE STATUS
+---------------------------------------------------- */
+app.get("/api/fair-status", async (req, res) => {
+  try {
+    const statusDoc = await db.collection("fairSettings").doc("liveStatus").get();
+    
+    if (!statusDoc.exists) {
+      // Default to not live if document doesn't exist
+      return res.json({ isLive: false });
+    }
+
+    const data = statusDoc.data();
+    return res.json({ isLive: data.isLive || false });
+  } catch (err) {
+    console.error("Error fetching fair status:", err);
+    return res.status(500).json({ error: "Failed to fetch fair status" });
+  }
+});
+
+/* ----------------------------------------------------
+   TOGGLE CAREER FAIR LIVE STATUS (Admin only)
+---------------------------------------------------- */
+app.post("/api/toggle-fair-status", async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
+    // Verify user is administrator
+    const userDoc = await db.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+    if (userData.role !== "administrator") {
+      return res.status(403).json({ error: "Only administrators can toggle fair status" });
+    }
+
+    // Get current status
+    const statusRef = db.collection("fairSettings").doc("liveStatus");
+    const statusDoc = await statusRef.get();
+
+    let newStatus = true;
+    if (statusDoc.exists) {
+      const currentData = statusDoc.data();
+      newStatus = !currentData.isLive;
+    }
+
+    // Update status
+    await statusRef.set({
+      isLive: newStatus,
+      updatedAt: admin.firestore.Timestamp.now(),
+      updatedBy: userId,
+    }, { merge: true });
+
+    return res.json({ success: true, isLive: newStatus });
+  } catch (err) {
+    console.error("Error toggling fair status:", err);
+    return res.status(500).json({ error: "Failed to toggle fair status" });
+  }
+});
+
+/* ----------------------------------------------------
+   CREATE ADMIN ACCOUNT (Protected - requires secret key)
+---------------------------------------------------- */
+app.post("/api/create-admin", async (req, res) => {
+  try {
+    const { firstName, lastName, email, password, adminSecret } = req.body;
+
+    if (!email || !password || !adminSecret) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify admin secret key
+    const expectedSecret = process.env.ADMIN_SECRET_KEY;
+    if (!expectedSecret) {
+      console.error("ADMIN_SECRET_KEY not set in environment variables");
+      return res.status(500).json({ error: "Server configuration error" });
+    }
+
+    if (adminSecret !== expectedSecret) {
+      return res.status(403).json({ error: "Invalid admin secret key" });
+    }
+
+    // Check if user already exists
+    let userRecord;
+    try {
+      userRecord = await auth.getUserByEmail(email);
+      // User exists, check if they're already an admin
+      const userDoc = await db.collection("users").doc(userRecord.uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        if (userData.role === "administrator") {
+          return res.status(400).json({ error: "User is already an administrator" });
+        }
+        // Update existing user to admin
+        await db.collection("users").doc(userRecord.uid).update({
+          role: "administrator",
+        });
+        return res.json({ 
+          success: true, 
+          message: "User upgraded to administrator",
+          uid: userRecord.uid 
+        });
+      }
+    } catch (err) {
+      if (err.code !== "auth/user-not-found") {
+        throw err;
+      }
+      // User doesn't exist, create new one
+    }
+
+    // Create new Firebase Auth user
+    if (!userRecord) {
+      userRecord = await auth.createUser({
+        email,
+        password,
+        displayName: `${firstName || ""} ${lastName || ""}`.trim(),
+        emailVerified: true, // Auto-verify admin emails
+      });
+    }
+
+    // Save user in Firestore
+    const docData = removeUndefined({
+      uid: userRecord.uid,
+      firstName,
+      lastName,
+      email,
+      role: "administrator",
+      emailVerified: true,
+      createdAt: admin.firestore.Timestamp.now(),
+    });
+
+    await db.collection("users").doc(userRecord.uid).set(docData, { merge: true });
+
+    // Upsert to Stream Chat
+    try {
+      const username = email.includes("@")
+        ? email.split("@")[0]
+        : email;
+
+      await streamServer.upsertUser({
+        id: userRecord.uid,
+        name: `${firstName || ""} ${lastName || ""}`.trim() || email,
+        email,
+        username,
+        firstName: firstName || "",
+        lastName: lastName || "",
+        role: "user",
+      });
+    } catch (streamErr) {
+      console.error("STREAM UPSERT ERROR:", streamErr);
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        uid: userRecord.uid,
+        email,
+        role: "administrator",
+      },
+    });
+  } catch (err) {
+    console.error("Error creating admin:", err);
+    return res.status(500).json({ error: err.message || "Failed to create admin account" });
   }
 });
 

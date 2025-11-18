@@ -12,6 +12,7 @@ import BoothView from "./pages/BoothView"
 import EmailVerificationPending from "./pages/EmailVerificationPending"
 import VerifyEmail from "./pages/VerifyEmail"
 import ChatPage from "./pages/ChatPage" // ✅ added import
+import AdminDashboard from "./pages/AdminDashboard"
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
 
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/dashboard/chat" element={<ChatPage />} /> {/* ✅ added route */}
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />

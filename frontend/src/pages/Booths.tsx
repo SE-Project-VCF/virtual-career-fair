@@ -15,7 +15,7 @@ import {
   Chip,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { collection, getDocs, query, orderBy } from "firebase/firestore"
+import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
@@ -60,26 +60,100 @@ export default function Booths() {
   const [booths, setBooths] = useState<Booth[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [isLive, setIsLive] = useState(false)
 
   useEffect(() => {
+    fetchFairStatus()
     fetchBooths()
   }, [])
+
+  const fetchFairStatus = async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/fair-status")
+      if (response.ok) {
+        const data = await response.json()
+        setIsLive(data.isLive || false)
+      }
+    } catch (err) {
+      console.error("Error fetching fair status:", err)
+    }
+  }
 
   const fetchBooths = async () => {
     try {
       setLoading(true)
       setError("")
 
-      const q = query(collection(db, "booths"), orderBy("companyName"))
-      const querySnapshot = await getDocs(q)
+      // First check if fair is live
+      const statusResponse = await fetch("http://localhost:5000/api/fair-status")
+      let fairIsLive = false
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json()
+        fairIsLive = statusData.isLive || false
+        setIsLive(fairIsLive)
+      }
 
-      const boothsList: Booth[] = []
-      querySnapshot.forEach((doc) => {
-        boothsList.push({
-          id: doc.id,
-          ...doc.data(),
-        } as Booth)
-      })
+      let boothsList: Booth[] = []
+
+      if (fairIsLive) {
+        // Fair is live - show all booths
+        const q = query(collection(db, "booths"), orderBy("companyName"))
+        const querySnapshot = await getDocs(q)
+        querySnapshot.forEach((doc) => {
+          boothsList.push({
+            id: doc.id,
+            ...doc.data(),
+          } as Booth)
+        })
+      } else {
+        // Fair is not live - only show booths for company owners/representatives
+        if (user && (user.role === "companyOwner" || user.role === "representative")) {
+          // Get user's company IDs
+          const companiesRef = collection(db, "companies")
+          let companyIds: string[] = []
+
+          if (user.role === "companyOwner") {
+            // Get all companies owned by this user
+            const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+            const ownerSnapshot = await getDocs(ownerQuery)
+            ownerSnapshot.forEach((doc) => {
+              companyIds.push(doc.id)
+            })
+          } else if (user.role === "representative" && user.companyId) {
+            // Get the company the representative is linked to
+            companyIds.push(user.companyId)
+          }
+
+          // Get booths for these companies
+          if (companyIds.length > 0) {
+            // Get companies to find boothIds
+            const boothIds: string[] = []
+            for (const companyId of companyIds) {
+              const companyDoc = await getDoc(doc(db, "companies", companyId))
+              if (companyDoc.exists()) {
+                const companyData = companyDoc.data()
+                if (companyData.boothId) {
+                  boothIds.push(companyData.boothId)
+                }
+              }
+            }
+
+            // Get booths by boothId
+            if (boothIds.length > 0) {
+              for (const boothId of boothIds) {
+                const boothDoc = await getDoc(doc(db, "booths", boothId))
+                if (boothDoc.exists()) {
+                  boothsList.push({
+                    id: boothDoc.id,
+                    ...boothDoc.data(),
+                  } as Booth)
+                }
+              }
+            }
+          }
+        }
+        // If user is student or not logged in, they see no booths when fair is not live
+      }
 
       setBooths(boothsList)
     } catch (err) {
@@ -214,11 +288,11 @@ export default function Booths() {
                       justifyContent: "center",
                     }}
                   >
-                    <EventIcon sx={{ fontSize: 28, color: "#388560" }} />
+                    <EventIcon sx={{ fontSize: 28, color: isLive ? "#388560" : "#ccc" }} />
                   </Box>
                   <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
-                      Live Now
+                    <Typography variant="h4" sx={{ fontWeight: 700, color: isLive ? "#388560" : "#ccc" }}>
+                      {isLive ? "Live Now" : "Not Live"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Event Status
@@ -244,10 +318,12 @@ export default function Booths() {
           <Card sx={{ textAlign: "center", p: 6, border: "1px solid rgba(56, 133, 96, 0.3)" }}>
             <BusinessIcon sx={{ fontSize: 80, color: "#ccc", mb: 2 }} />
             <Typography variant="h5" sx={{ mb: 2, color: "text.secondary" }}>
-              No booths yet
+              {isLive ? "No booths available" : "Career Fair Not Live"}
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Companies are setting up their booths. Check back soon!
+              {isLive 
+                ? "Companies are setting up their booths. Check back soon!"
+                : "The career fair is not currently live. You can only view and edit your own booth."}
             </Typography>
           </Card>
         ) : (

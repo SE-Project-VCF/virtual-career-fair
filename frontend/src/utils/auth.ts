@@ -12,7 +12,7 @@ import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUn
 export interface User {
   uid: string;
   email: string;
-  role: "student" | "representative" | "company" | "companyOwner";
+  role: "student" | "representative" | "company" | "companyOwner" | "administrator";
   [key: string]: any;
 }
 export const authUtils = {
@@ -22,7 +22,7 @@ export const authUtils = {
   registerUser: async (
     email: string,
     password: string,
-    role: "student" | "representative" | "companyOwner",
+    role: "student" | "representative" | "companyOwner" | "administrator",
     additionalData?: any
   ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
@@ -140,7 +140,7 @@ export const authUtils = {
   // ✅ Google Sign-In (creates user + company if missing)
   // ------------------------------
   loginWithGoogle: async (
-    role: "student" | "representative" | "companyOwner"
+    role: "student" | "representative" | "companyOwner" | "administrator"
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       const result = await signInWithPopup(auth, googleProvider);

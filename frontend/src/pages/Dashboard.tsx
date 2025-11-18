@@ -25,6 +25,8 @@ export default function Dashboard() {
   const [linking, setLinking] = useState(false)
   const [totalRepresentatives, setTotalRepresentatives] = useState(0)
   const [unreadCount, setUnreadCount] = useState<number>(0)
+  const [isLive, setIsLive] = useState(false)
+  const [loadingFairStatus, setLoadingFairStatus] = useState(true)
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -35,6 +37,26 @@ export default function Dashboard() {
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
   }, [navigate])
+
+  // Fetch fair status
+  useEffect(() => {
+    const fetchFairStatus = async () => {
+      try {
+        setLoadingFairStatus(true)
+        const response = await fetch("http://localhost:5000/api/fair-status")
+        if (response.ok) {
+          const data = await response.json()
+          setIsLive(data.isLive || false)
+        }
+      } catch (err) {
+        console.error("Error fetching fair status:", err)
+      } finally {
+        setLoadingFairStatus(false)
+      }
+    }
+
+    fetchFairStatus()
+  }, [])
 
   // Fetch unread chat count and keep it updated
   // Fetch unread chat count
@@ -254,6 +276,30 @@ useEffect(() => {
             </Typography>
           </Box>
 
+          {/* Fair Status Alert */}
+          {!loadingFairStatus && !isLive && (
+            <Alert 
+              severity="info" 
+              sx={{ 
+                mb: 3, 
+                borderRadius: 2,
+                bgcolor: "rgba(56, 133, 96, 0.1)",
+                border: "1px solid rgba(56, 133, 96, 0.3)",
+              }}
+            >
+              <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Career Fair is Not Currently Live
+              </Typography>
+              <Typography variant="body2">
+                {user?.role === "student" 
+                  ? "The career fair is not currently live. You will be able to browse all company booths once the fair goes live."
+                  : user?.role === "representative" || user?.role === "companyOwner"
+                  ? "The career fair is not currently live. You can still view and edit your own booth, but you cannot browse other companies' booths until the fair goes live."
+                  : "The career fair is not currently live. Only company owners and representatives can view their own booths."}
+              </Typography>
+            </Alert>
+          )}
+
           {/* Company Owner-specific section */}
           {user && user.role === "companyOwner" && (
             <Box sx={{ mb: 4 }}>
@@ -442,19 +488,79 @@ useEffect(() => {
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Explore other companies' booths at the virtual career fair.
+                        {isLive 
+                          ? "Explore other companies' booths at the virtual career fair."
+                          : "The career fair is not currently live. You can only view your own company's booth."}
                       </Typography>
                       <Button
                         variant="contained"
                         onClick={() => navigate("/booths")}
+                        disabled={!isLive}
                         sx={{
-                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          background: isLive 
+                            ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
+                            : "rgba(0, 0, 0, 0.12)",
+                          color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
                           "&:hover": {
-                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                            background: isLive 
+                              ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                          },
+                          "&:disabled": {
+                            background: "rgba(0, 0, 0, 0.12)",
+                            color: "rgba(0, 0, 0, 0.26)",
                           },
                         }}
                       >
                         View All Booths
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+
+          {/* Administrator-specific section */}
+          {user && user.role === "administrator" && (
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+                Administrator Controls
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(176, 58, 108, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Manage Career Fair
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Control when the career fair is live and visible to all users.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/admin")}
+                        sx={{
+                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                          },
+                        }}
+                      >
+                        Go to Admin Dashboard
                       </Button>
                     </CardContent>
                   </Card>
@@ -490,15 +596,27 @@ useEffect(() => {
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Explore opportunities from top companies at the virtual career fair.
+                        {isLive 
+                          ? "Explore opportunities from top companies at the virtual career fair."
+                          : "The career fair is not currently live. Check back later to browse company booths."}
                       </Typography>
                       <Button
                         variant="contained"
                         onClick={() => navigate("/booths")}
+                        disabled={!isLive}
                         sx={{
-                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                          background: isLive 
+                            ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+                            : "rgba(0, 0, 0, 0.12)",
+                          color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
                           "&:hover": {
-                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                            background: isLive 
+                              ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                          },
+                          "&:disabled": {
+                            background: "rgba(0, 0, 0, 0.12)",
+                            color: "rgba(0, 0, 0, 0.26)",
                           },
                         }}
                       >
