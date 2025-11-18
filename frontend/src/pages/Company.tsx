@@ -25,7 +25,11 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import PeopleIcon from "@mui/icons-material/People"
 import EditIcon from "@mui/icons-material/Edit"
 import DeleteIcon from "@mui/icons-material/Delete"
+import RefreshIcon from "@mui/icons-material/Refresh"
+import SaveIcon from "@mui/icons-material/Save"
+import CancelIcon from "@mui/icons-material/Cancel"
 import ProfileMenu from "./ProfileMenu"
+import TextField from "@mui/material/TextField"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -66,6 +70,9 @@ export default function Company() {
   const [deleting, setDeleting] = useState(false)
   const [deleteCompanyDialogOpen, setDeleteCompanyDialogOpen] = useState(false)
   const [deletingCompany, setDeletingCompany] = useState(false)
+  const [editingInviteCode, setEditingInviteCode] = useState(false)
+  const [editedInviteCode, setEditedInviteCode] = useState("")
+  const [updatingInviteCode, setUpdatingInviteCode] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -252,6 +259,62 @@ export default function Company() {
     }
   }
 
+  const handleRegenerateInviteCode = async () => {
+    if (!company || !userId) return
+
+    try {
+      setUpdatingInviteCode(true)
+      setError("")
+      
+      const result = await authUtils.updateInviteCode(company.id, userId)
+      
+      if (result.success && result.inviteCode) {
+        setSuccess("Invite code regenerated successfully!")
+        fetchCompany() // Refresh company data
+        setTimeout(() => setSuccess(""), 3000)
+      } else {
+        setError(result.error || "Failed to regenerate invite code")
+      }
+    } catch (err) {
+      console.error("Error regenerating invite code:", err)
+      setError("Failed to regenerate invite code")
+    } finally {
+      setUpdatingInviteCode(false)
+    }
+  }
+
+  const handleSaveInviteCode = async () => {
+    if (!company || !userId) return
+
+    const trimmedCode = editedInviteCode.trim()
+    if (!trimmedCode || trimmedCode.length < 4 || trimmedCode.length > 20) {
+      setError("Invite code must be 4-20 characters")
+      return
+    }
+
+    try {
+      setUpdatingInviteCode(true)
+      setError("")
+      
+      const result = await authUtils.updateInviteCode(company.id, userId, trimmedCode)
+      
+      if (result.success && result.inviteCode) {
+        setSuccess("Invite code updated successfully!")
+        setEditingInviteCode(false)
+        setEditedInviteCode("")
+        fetchCompany() // Refresh company data
+        setTimeout(() => setSuccess(""), 3000)
+      } else {
+        setError(result.error || "Failed to update invite code")
+      }
+    } catch (err) {
+      console.error("Error updating invite code:", err)
+      setError("Failed to update invite code")
+    } finally {
+      setUpdatingInviteCode(false)
+    }
+  }
+
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
@@ -340,18 +403,91 @@ export default function Company() {
 
                 {isOwner && (
                   <Box sx={{ mb: 3 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Invite Code
-                    </Typography>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <Typography variant="body1" sx={{ fontFamily: "monospace", fontWeight: 600, flex: 1 }}>
-                        {company.inviteCode}
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Invite Code
                       </Typography>
-                      <Tooltip title="Copy invite code">
-                        <IconButton onClick={() => copyToClipboard(company.inviteCode)} size="small">
-                          <ContentCopyIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      {!editingInviteCode ? (
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                          <Tooltip title="Regenerate invite code">
+                            <IconButton
+                              onClick={() => handleRegenerateInviteCode()}
+                              size="small"
+                              disabled={updatingInviteCode}
+                              sx={{ color: "#388560" }}
+                            >
+                              <RefreshIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Edit invite code">
+                            <IconButton
+                              onClick={() => {
+                                setEditingInviteCode(true)
+                                setEditedInviteCode(company.inviteCode)
+                              }}
+                              size="small"
+                              sx={{ color: "#388560" }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                          <Tooltip title="Save">
+                            <IconButton
+                              onClick={() => handleSaveInviteCode()}
+                              size="small"
+                              disabled={updatingInviteCode}
+                              sx={{ color: "#388560" }}
+                            >
+                              <SaveIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Cancel">
+                            <IconButton
+                              onClick={() => {
+                                setEditingInviteCode(false)
+                                setEditedInviteCode("")
+                              }}
+                              size="small"
+                              sx={{ color: "#666" }}
+                            >
+                              <CancelIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      )}
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      {editingInviteCode ? (
+                        <TextField
+                          fullWidth
+                          value={editedInviteCode}
+                          onChange={(e) => {
+                            setEditedInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                          }}
+                          disabled={updatingInviteCode}
+                          sx={{
+                            "& .MuiOutlinedInput-root": {
+                              fontFamily: "monospace",
+                              fontWeight: 600,
+                            },
+                          }}
+                          helperText="4-20 characters, letters and numbers only"
+                        />
+                      ) : (
+                        <>
+                          <Typography variant="body1" sx={{ fontFamily: "monospace", fontWeight: 600, flex: 1 }}>
+                            {company.inviteCode}
+                          </Typography>
+                          <Tooltip title="Copy invite code">
+                            <IconButton onClick={() => copyToClipboard(company.inviteCode)} size="small">
+                              <ContentCopyIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
                     </Box>
                   </Box>
                 )}

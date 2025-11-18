@@ -400,6 +400,69 @@ app.post("/api/toggle-fair-status", async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   UPDATE COMPANY INVITE CODE (Owner only)
+---------------------------------------------------- */
+app.post("/api/update-invite-code", async (req, res) => {
+  try {
+    const { companyId, userId, newInviteCode } = req.body;
+
+    if (!companyId || !userId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify user is the owner of the company
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(404).json({ error: "Company not found" });
+    }
+
+    const companyData = companyDoc.data();
+    if (companyData.ownerId !== userId) {
+      return res.status(403).json({ error: "Only the company owner can update the invite code" });
+    }
+
+    // Generate new invite code if not provided, or validate provided one
+    let inviteCode;
+    if (newInviteCode) {
+      // Validate custom invite code (alphanumeric, 4-20 characters)
+      if (!/^[A-Z0-9]{4,20}$/.test(newInviteCode.toUpperCase())) {
+        return res.status(400).json({ 
+          error: "Invite code must be 4-20 characters and contain only letters and numbers" 
+        });
+      }
+      inviteCode = newInviteCode.toUpperCase();
+    } else {
+      // Generate random 8-character code
+      inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+    }
+
+    // Check if invite code is already in use by another company
+    const companiesSnapshot = await db.collection("companies").get();
+    let codeInUse = false;
+    companiesSnapshot.forEach((doc) => {
+      if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
+        codeInUse = true;
+      }
+    });
+
+    if (codeInUse) {
+      return res.status(400).json({ error: "This invite code is already in use by another company" });
+    }
+
+    // Update the invite code
+    await db.collection("companies").doc(companyId).update({
+      inviteCode: inviteCode,
+      inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
+    });
+
+    return res.json({ success: true, inviteCode });
+  } catch (err) {
+    console.error("Error updating invite code:", err);
+    return res.status(500).json({ error: "Failed to update invite code" });
+  }
+});
+
+/* ----------------------------------------------------
    CREATE ADMIN ACCOUNT (Protected - requires secret key)
 ---------------------------------------------------- */
 app.post("/api/create-admin", async (req, res) => {
