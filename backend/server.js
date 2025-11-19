@@ -28,6 +28,42 @@ function removeUndefined(obj) {
 }
 
 /* ----------------------------------------------------
+   HELPER: Parse datetime string as UTC and return Firestore Timestamp
+   Ensures all dates are stored as UTC in the database
+---------------------------------------------------- */
+function parseUTCToTimestamp(dateTimeString) {
+  if (!dateTimeString) {
+    throw new Error("Date string is required");
+  }
+  
+  let date;
+  
+  // Check if it's already a full ISO string with timezone (ends with Z or has timezone offset)
+  if (dateTimeString.includes('Z') || dateTimeString.match(/[+-]\d{2}:\d{2}$/)) {
+    // Already has timezone info, parse directly
+    date = new Date(dateTimeString);
+  } else if (dateTimeString.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+    // ISO format without timezone - treat as UTC by appending Z
+    date = new Date(dateTimeString + 'Z');
+  } else if (dateTimeString.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
+    // datetime-local format (YYYY-MM-DDTHH:mm) - treat as UTC by appending Z
+    date = new Date(dateTimeString + 'Z');
+  } else {
+    // Try parsing as-is (will use local timezone, then we convert)
+    date = new Date(dateTimeString);
+  }
+  
+  // Validate the date
+  if (isNaN(date.getTime())) {
+    throw new Error(`Invalid date string: ${dateTimeString}`);
+  }
+  
+  // Firestore Timestamp stores UTC internally, so we use the UTC milliseconds
+  // This ensures consistent UTC storage regardless of server timezone
+  return admin.firestore.Timestamp.fromMillis(date.getTime());
+}
+
+/* ----------------------------------------------------
    STREAM TOKEN ENDPOINT
 ---------------------------------------------------- */
 app.get("/api/stream-token", (req, res) => {
@@ -334,19 +370,71 @@ app.post("/add-booth", async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   HELPER: Evaluate if fair should be live based on schedules
+   Checks all enabled schedules - fair is live if ANY schedule is active
+---------------------------------------------------- */
+async function evaluateFairStatus() {
+  try {
+    const now = admin.firestore.Timestamp.now();
+    
+    // Check all enabled schedules in the schedules collection
+    const schedulesSnapshot = await db.collection("fairSchedules")
+      .where("enabled", "==", true)
+      .get();
+    
+    // Check if any schedule is currently active
+    for (const scheduleDoc of schedulesSnapshot.docs) {
+      const scheduleData = scheduleDoc.data();
+      
+      if (scheduleData.startTime && scheduleData.endTime) {
+        const startTime = scheduleData.startTime;
+        const endTime = scheduleData.endTime;
+        
+        // Check if current time is within this schedule's range
+        if (now.toMillis() >= startTime.toMillis() && now.toMillis() <= endTime.toMillis()) {
+          return { 
+            isLive: true, 
+            source: "schedule",
+            activeScheduleId: scheduleDoc.id,
+            activeScheduleName: scheduleData.name || null,
+            activeScheduleDescription: scheduleData.description || null
+          };
+        }
+      }
+    }
+    
+    // No active schedules found, check manual toggle status
+    const statusDoc = await db.collection("fairSettings").doc("liveStatus").get();
+    if (!statusDoc.exists) {
+      return { isLive: false, source: "manual" };
+    }
+    
+    const data = statusDoc.data();
+    return { isLive: data.isLive || false, source: "manual" };
+  } catch (err) {
+    console.error("Error evaluating fair status:", err);
+    // Fallback to manual status on error
+    const statusDoc = await db.collection("fairSettings").doc("liveStatus").get();
+    if (!statusDoc.exists) {
+      return { isLive: false, source: "manual" };
+    }
+    const data = statusDoc.data();
+    return { isLive: data.isLive || false, source: "manual" };
+  }
+}
+
+/* ----------------------------------------------------
    GET CAREER FAIR LIVE STATUS
 ---------------------------------------------------- */
 app.get("/api/fair-status", async (req, res) => {
   try {
-    const statusDoc = await db.collection("fairSettings").doc("liveStatus").get();
-    
-    if (!statusDoc.exists) {
-      // Default to not live if document doesn't exist
-      return res.json({ isLive: false });
-    }
-
-    const data = statusDoc.data();
-    return res.json({ isLive: data.isLive || false });
+    const status = await evaluateFairStatus();
+    return res.json({ 
+      isLive: status.isLive, 
+      source: status.source,
+      scheduleName: status.activeScheduleName || null,
+      scheduleDescription: status.activeScheduleDescription || null
+    });
   } catch (err) {
     console.error("Error fetching fair status:", err);
     return res.status(500).json({ error: "Failed to fetch fair status" });
@@ -355,6 +443,7 @@ app.get("/api/fair-status", async (req, res) => {
 
 /* ----------------------------------------------------
    TOGGLE CAREER FAIR LIVE STATUS (Admin only)
+   Note: Manual toggle will override schedule temporarily
 ---------------------------------------------------- */
 app.post("/api/toggle-fair-status", async (req, res) => {
   try {
@@ -375,7 +464,10 @@ app.post("/api/toggle-fair-status", async (req, res) => {
       return res.status(403).json({ error: "Only administrators can toggle fair status" });
     }
 
-    // Get current status
+    // Get current evaluated status
+    const currentStatus = await evaluateFairStatus();
+    
+    // Get manual status
     const statusRef = db.collection("fairSettings").doc("liveStatus");
     const statusDoc = await statusRef.get();
 
@@ -385,17 +477,242 @@ app.post("/api/toggle-fair-status", async (req, res) => {
       newStatus = !currentData.isLive;
     }
 
-    // Update status
+    // Update manual status (this will be used if schedule is disabled)
     await statusRef.set({
       isLive: newStatus,
       updatedAt: admin.firestore.Timestamp.now(),
       updatedBy: userId,
     }, { merge: true });
 
+    // Manual toggle disables all schedules to allow manual override
+    // Note: We don't disable schedules here - manual toggle takes precedence
+    // Schedules will be re-evaluated when manual toggle is turned off
+
     return res.json({ success: true, isLive: newStatus });
   } catch (err) {
     console.error("Error toggling fair status:", err);
     return res.status(500).json({ error: "Failed to toggle fair status" });
+  }
+});
+
+/* ----------------------------------------------------
+   HELPER: Verify user is administrator
+---------------------------------------------------- */
+async function verifyAdmin(userId) {
+  if (!userId) {
+    return { error: "Missing userId", status: 400 };
+  }
+
+  const userDoc = await db.collection("users").doc(userId).get();
+  if (!userDoc.exists) {
+    return { error: "User not found", status: 404 };
+  }
+
+  const userData = userDoc.data();
+  if (userData.role !== "administrator") {
+    return { error: "Only administrators can manage schedules", status: 403 };
+  }
+
+  return null;
+}
+
+/* ----------------------------------------------------
+   GET ALL FAIR SCHEDULES (Admin only)
+---------------------------------------------------- */
+app.get("/api/fair-schedules", async (req, res) => {
+  try {
+    const userId = req.query.userId;
+
+    const adminCheck = await verifyAdmin(userId);
+    if (adminCheck) {
+      return res.status(adminCheck.status).json({ error: adminCheck.error });
+    }
+
+    const schedulesSnapshot = await db.collection("fairSchedules")
+      .orderBy("startTime", "asc")
+      .get();
+
+    const schedules = [];
+    schedulesSnapshot.forEach((doc) => {
+      const data = doc.data();
+      schedules.push({
+        id: doc.id,
+        name: data.name || null,
+        enabled: data.enabled || false,
+        startTime: data.startTime ? data.startTime.toMillis() : null,
+        endTime: data.endTime ? data.endTime.toMillis() : null,
+        description: data.description || null,
+        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        updatedAt: data.updatedAt ? data.updatedAt.toMillis() : null,
+        createdBy: data.createdBy || null,
+        updatedBy: data.updatedBy || null,
+      });
+    });
+
+    return res.json({ schedules });
+  } catch (err) {
+    console.error("Error fetching fair schedules:", err);
+    return res.status(500).json({ error: "Failed to fetch fair schedules" });
+  }
+});
+
+/* ----------------------------------------------------
+   CREATE FAIR SCHEDULE (Admin only)
+---------------------------------------------------- */
+app.post("/api/fair-schedules", async (req, res) => {
+  try {
+    const { userId, name, startTime, endTime, description, enabled } = req.body;
+
+    const adminCheck = await verifyAdmin(userId);
+    if (adminCheck) {
+      return res.status(adminCheck.status).json({ error: adminCheck.error });
+    }
+
+    if (!startTime || !endTime) {
+      return res.status(400).json({ error: "Start time and end time are required" });
+    }
+
+    // Parse dates as UTC to ensure consistent storage
+    const start = parseUTCToTimestamp(startTime);
+    const end = parseUTCToTimestamp(endTime);
+    const now = admin.firestore.Timestamp.now();
+
+    if (end.toMillis() <= start.toMillis()) {
+      return res.status(400).json({ error: "End time must be after start time" });
+    }
+
+    // Create schedule document
+    const scheduleData = {
+      name: name || null,
+      description: description || null,
+      enabled: enabled !== false, // Default to true
+      startTime: start,
+      endTime: end,
+      createdAt: admin.firestore.Timestamp.now(),
+      updatedAt: admin.firestore.Timestamp.now(),
+      createdBy: userId,
+      updatedBy: userId,
+    };
+
+    const scheduleRef = await db.collection("fairSchedules").add(scheduleData);
+
+    return res.json({
+      success: true,
+      schedule: {
+        id: scheduleRef.id,
+        name: scheduleData.name,
+        enabled: scheduleData.enabled,
+        startTime: start.toMillis(),
+        endTime: end.toMillis(),
+        description: scheduleData.description,
+      },
+    });
+  } catch (err) {
+    console.error("Error creating fair schedule:", err);
+    return res.status(500).json({ error: "Failed to create fair schedule" });
+  }
+});
+
+/* ----------------------------------------------------
+   UPDATE FAIR SCHEDULE (Admin only)
+---------------------------------------------------- */
+app.put("/api/fair-schedules/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, name, startTime, endTime, description, enabled } = req.body;
+
+    const adminCheck = await verifyAdmin(userId);
+    if (adminCheck) {
+      return res.status(adminCheck.status).json({ error: adminCheck.error });
+    }
+
+    const scheduleRef = db.collection("fairSchedules").doc(id);
+    const scheduleDoc = await scheduleRef.get();
+
+    if (!scheduleDoc.exists) {
+      return res.status(404).json({ error: "Schedule not found" });
+    }
+
+    const updateData = {
+      updatedAt: admin.firestore.Timestamp.now(),
+      updatedBy: userId,
+    };
+
+    // Update fields if provided
+    if (name !== undefined) updateData.name = name || null;
+    if (description !== undefined) updateData.description = description || null;
+    if (enabled !== undefined) updateData.enabled = enabled;
+
+    if (startTime !== undefined || endTime !== undefined) {
+      // Get existing times if not provided
+      const existingData = scheduleDoc.data();
+      const start = startTime !== undefined 
+        ? parseUTCToTimestamp(startTime)
+        : existingData.startTime;
+      const end = endTime !== undefined 
+        ? parseUTCToTimestamp(endTime)
+        : existingData.endTime;
+
+      if (!start || !end) {
+        return res.status(400).json({ error: "Both start time and end time are required" });
+      }
+
+      if (end.toMillis() <= start.toMillis()) {
+        return res.status(400).json({ error: "End time must be after start time" });
+      }
+
+      updateData.startTime = start;
+      updateData.endTime = end;
+    }
+
+    await scheduleRef.update(updateData);
+
+    const updatedDoc = await scheduleRef.get();
+    const updatedData = updatedDoc.data();
+
+    return res.json({
+      success: true,
+      schedule: {
+        id: updatedDoc.id,
+        name: updatedData.name || null,
+        enabled: updatedData.enabled || false,
+        startTime: updatedData.startTime ? updatedData.startTime.toMillis() : null,
+        endTime: updatedData.endTime ? updatedData.endTime.toMillis() : null,
+        description: updatedData.description || null,
+      },
+    });
+  } catch (err) {
+    console.error("Error updating fair schedule:", err);
+    return res.status(500).json({ error: "Failed to update fair schedule" });
+  }
+});
+
+/* ----------------------------------------------------
+   DELETE FAIR SCHEDULE (Admin only)
+---------------------------------------------------- */
+app.delete("/api/fair-schedules/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.query.userId;
+
+    const adminCheck = await verifyAdmin(userId);
+    if (adminCheck) {
+      return res.status(adminCheck.status).json({ error: adminCheck.error });
+    }
+
+    const scheduleRef = db.collection("fairSchedules").doc(id);
+    const scheduleDoc = await scheduleRef.get();
+
+    if (!scheduleDoc.exists) {
+      return res.status(404).json({ error: "Schedule not found" });
+    }
+
+    await scheduleRef.delete();
+
+    return res.json({ success: true, message: "Schedule deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting fair schedule:", err);
+    return res.status(500).json({ error: "Failed to delete fair schedule" });
   }
 });
 

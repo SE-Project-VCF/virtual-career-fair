@@ -61,6 +61,8 @@ export default function Booths() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [isLive, setIsLive] = useState(false)
+  const [scheduleName, setScheduleName] = useState<string | null>(null)
+  const [scheduleDescription, setScheduleDescription] = useState<string | null>(null)
 
   useEffect(() => {
     fetchFairStatus()
@@ -73,6 +75,8 @@ export default function Booths() {
       if (response.ok) {
         const data = await response.json()
         setIsLive(data.isLive || false)
+        setScheduleName(data.scheduleName || null)
+        setScheduleDescription(data.scheduleDescription || null)
       }
     } catch (err) {
       console.error("Error fetching fair status:", err)
@@ -91,6 +95,8 @@ export default function Booths() {
         const statusData = await statusResponse.json()
         fairIsLive = statusData.isLive || false
         setIsLive(fairIsLive)
+        setScheduleName(statusData.scheduleName || null)
+        setScheduleDescription(statusData.scheduleDescription || null)
       }
 
       let boothsList: Booth[] = []
@@ -211,6 +217,31 @@ export default function Booths() {
       </Box>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        {/* Fair Name and Description Banner - Show when active */}
+        {isLive && (scheduleName || scheduleDescription) && (
+          <Alert 
+            severity="success" 
+            sx={{ 
+              mb: 4, 
+              borderRadius: 2,
+              bgcolor: "rgba(56, 133, 96, 0.1)",
+              border: "1px solid rgba(56, 133, 96, 0.3)",
+            }}
+          >
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
+              {scheduleName || "Career Fair is LIVE"}
+            </Typography>
+            {scheduleDescription && (
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                {scheduleDescription}
+              </Typography>
+            )}
+            <Typography variant="body2">
+              Browse and explore all company booths at the career fair.
+            </Typography>
+          </Alert>
+        )}
+
         {/* Stats Bar */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid size={{ xs: 12, md: 4 }}>
@@ -292,10 +323,12 @@ export default function Booths() {
                   </Box>
                   <Box>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: isLive ? "#388560" : "#ccc" }}>
-                      {isLive ? "Live Now" : "Not Live"}
+                      {isLive ? (scheduleName || "Live Now") : "Not Live"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Event Status
+                      {isLive && scheduleDescription 
+                        ? scheduleDescription 
+                        : "Event Status"}
                     </Typography>
                   </Box>
                 </Box>
