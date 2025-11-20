@@ -188,6 +188,20 @@ export default function Dashboard() {
                   color="error"
                   badgeContent={unreadCount > 0 ? unreadCount : null}
                   overlap="circular"
+                  anchorOrigin={{
+                    vertical: "top",
+                    horizontal: "right",
+                  }}
+                  sx={{
+                    "& .MuiBadge-badge": {
+                      fontSize: "0.875rem",
+                      height: "20px",
+                      minWidth: "20px",
+                      padding: "0 6px",
+                      right: "4px",
+                      top: "4px",
+                    },
+                  }}
                 >
                   <Button
                     onClick={() => navigate("/dashboard/chat")}
