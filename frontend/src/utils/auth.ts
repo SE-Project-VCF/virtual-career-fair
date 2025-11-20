@@ -12,7 +12,7 @@ import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUn
 export interface User {
   uid: string;
   email: string;
-  role: "student" | "representative" | "company" | "companyOwner";
+  role: "student" | "representative" | "company" | "companyOwner" | "administrator";
   [key: string]: any;
 }
 export const authUtils = {
@@ -22,7 +22,7 @@ export const authUtils = {
   registerUser: async (
     email: string,
     password: string,
-    role: "student" | "representative" | "companyOwner",
+    role: "student" | "representative" | "companyOwner" | "administrator",
     additionalData?: any
   ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
@@ -140,7 +140,7 @@ export const authUtils = {
   // Google Sign-In (with optional creation)
   // --------------------------------------------------------
   loginWithGoogle: async (
-    role: "student" | "representative" | "companyOwner",
+    role: "student" | "representative" | "companyOwner" | "administrator",
     createIfMissing: boolean
   ): Promise<{
     success: boolean;
@@ -479,6 +479,92 @@ export const authUtils = {
     } catch (err: any) {
       console.error("Error deleting company:", err);
       return { success: false, error: err.message };
+    }
+  },
+
+  // ------------------------------
+  // Update Company Invite Code (for company owners)
+  // ------------------------------
+  updateInviteCode: async (
+    companyId: string,
+    ownerId: string,
+    newInviteCode?: string
+  ): Promise<{ success: boolean; error?: string; inviteCode?: string }> => {
+    try {
+      // Verify the company exists and user is the owner
+      const companyRef = doc(db, "companies", companyId);
+      const companyDoc = await getDoc(companyRef);
+      
+      if (!companyDoc.exists()) {
+        return { success: false, error: "Company not found" };
+      }
+
+      const companyData = companyDoc.data();
+      if (companyData.ownerId !== ownerId) {
+        return { success: false, error: "Only the company owner can update the invite code" };
+      }
+
+      // Generate new invite code if not provided, or validate provided one
+      let inviteCode: string;
+      if (newInviteCode) {
+        // Validate custom invite code (alphanumeric, 4-20 characters)
+        const trimmedCode = newInviteCode.trim().toUpperCase();
+        if (!/^[A-Z0-9]{4,20}$/.test(trimmedCode)) {
+          return { 
+            success: false, 
+            error: "Invite code must be 4-20 characters and contain only letters and numbers" 
+          };
+        }
+        inviteCode = trimmedCode;
+      } else {
+        // Generate random 8-character code
+        inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      }
+
+      // Check if invite code is already in use by another company
+      const companiesRef = collection(db, "companies");
+      const companiesSnapshot = await getDocs(companiesRef);
+      let codeInUse = false;
+      
+      companiesSnapshot.forEach((doc) => {
+        if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
+          codeInUse = true;
+        }
+      });
+
+      if (codeInUse) {
+        // If regenerating, try again (up to 5 times)
+        if (!newInviteCode) {
+          let attempts = 0;
+          while (codeInUse && attempts < 5) {
+            inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+            codeInUse = false;
+            companiesSnapshot.forEach((doc) => {
+              if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
+                codeInUse = true;
+              }
+            });
+            attempts++;
+          }
+          
+          if (codeInUse) {
+            return { success: false, error: "Failed to generate unique invite code. Please try again." };
+          }
+        } else {
+          return { success: false, error: "This invite code is already in use by another company" };
+        }
+      }
+
+      // Update the invite code
+      await updateDoc(companyRef, {
+        inviteCode: inviteCode,
+        inviteCodeUpdatedAt: new Date().toISOString(),
+      });
+
+      return { success: true, inviteCode };
+    } catch (err: any) {
+      console.error("Error updating invite code:", err);
+      return { success: false, error: err.message || "Failed to update invite code" };
     }
   },
 };

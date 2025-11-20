@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type React from "react";
-import { Box, CircularProgress } from "@mui/material";
+import { Box, CircularProgress, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import type { Channel as StreamChannel } from "stream-chat";
 
@@ -43,75 +43,88 @@ export default function ChatPage() {
      STEP 1 — CORRECT STREAM USER SESSION HANDLING
     ============================================================
     */
-    useEffect(() => {
-        if (!user) {
-            if (streamClient.userID) {
-                streamClient.disconnectUser();
-            }
-            return;
+  useEffect(() => {
+    if (!user || !streamClient) {
+      if (!streamClient) {
+        console.log("STREAM DEBUG: Stream client not initialized (missing API key)");
+      } else if (!user) {
+        console.log("STREAM DEBUG: No Firebase user, disconnecting Stream...");
+        if (streamClient.userID) {
+          streamClient.disconnectUser();
+        }
+      }
+      return;
+    }
+
+    // TypeScript type narrowing: streamClient is guaranteed to be non-null here
+    const client = streamClient;
+
+    const init = async () => {
+      try {
+        console.log("STREAM DEBUG: Firebase user =", user.uid);
+        console.log("STREAM DEBUG: Current Stream userID =", client.userID);
+
+        // If Stream is connected as someone else → disconnect
+        if (client.userID && client.userID !== user.uid) {
+          console.log("STREAM DEBUG: Disconnecting old Stream user...");
+          await client.disconnectUser();
         }
 
-        const init = async () => {
-            try {
+        // If not connected → connect
+        if (!client.userID) {
+          const res = await fetch(
+            `http://localhost:5000/api/stream-token?userId=${user.uid}`
+          );
 
-                // If Stream is connected as someone else → disconnect
-                if (streamClient.userID && streamClient.userID !== user.uid) {
-                    await streamClient.disconnectUser();
-                }
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || "Failed to fetch Stream token");
+          }
 
-                // If not connected → connect
-                if (!streamClient.userID) {
-                    const res = await fetch(
-                        `http://localhost:5000/api/stream-token?userId=${user.uid}`
-                    );
+          const { token } = await res.json();
 
-                    if (!res.ok) {
-                        const err = await res.json();
-                        throw new Error(err.error || "Failed to fetch Stream token");
-                    }
+          const fullName =
+            `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+            user.email;
 
-                    const { token } = await res.json();
+          console.log("STREAM DEBUG: Connecting Stream as", user.uid);
 
-                    const fullName =
-                        `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
-                        user.email;
+          await client.connectUser(
+            {
+              id: user.uid,
+              name: fullName,
+              email: user.email,
+              username: user.email.split("@")[0],
+            } as any,
+            token
+          );
 
+          console.log("STREAM DEBUG: Stream connected as", user.uid);
+        }
 
-                    await streamClient.connectUser(
-                        {
-                            id: user.uid,
-                            name: fullName,
-                            email: user.email,
-                            username: user.email.split("@")[0],
-                        } as any,
-                        token
-                    );
+        setClientReady(true);
 
-                }
-
-                setClientReady(true);
-
-                // Unread count tracking
-                const updateUnread = () => {
-                    const count = (streamClient.user as any)?.total_unread_count ?? 0;
-                    setUnreadCount(count);
-                };
-
-                updateUnread();
-                streamClient.on("notification.message_new", updateUnread);
-                streamClient.on("notification.mark_read", updateUnread);
-
-                return () => {
-                    streamClient.off("notification.message_new", updateUnread);
-                    streamClient.off("notification.mark_read", updateUnread);
-                };
-            } catch (err) {
-                console.error("STREAM INIT ERROR:");
-            }
+        // Unread count tracking
+        const updateUnread = () => {
+          const count = (client.user as any)?.total_unread_count ?? 0;
+          setUnreadCount(count);
         };
 
-        init();
-    }, [user]);
+        updateUnread();
+        client.on("notification.message_new", updateUnread);
+        client.on("notification.mark_read", updateUnread);
+
+        return () => {
+          client.off("notification.message_new", updateUnread);
+          client.off("notification.mark_read", updateUnread);
+        };
+      } catch (err) {
+        console.error("STREAM INIT ERROR:", err);
+      }
+    };
+
+    init();
+  }, [user]);
 
     /* Select a channel */
     const handleSelectChannel = async (channel: StreamChannel) => {
@@ -178,7 +191,32 @@ export default function ChatPage() {
         el.style.height = el.scrollHeight + "px";
     };
 
-    if (!clientReady || !streamClient.userID) {
+    if (!streamClient) {
+        return (
+            <Box
+                sx={{
+                    height: "100vh",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                }}
+            >
+                <Box sx={{ textAlign: "center" }}>
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                        Chat Not Available
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Stream Chat API key is not configured. Please set VITE_STREAM_API_KEY in your environment variables.
+                    </Typography>
+                </Box>
+            </Box>
+        );
+    }
+
+    // TypeScript type narrowing: streamClient is guaranteed to be non-null here
+    const client = streamClient;
+
+    if (!clientReady || !client.userID) {
         return (
             <Box
                 sx={{
@@ -202,9 +240,9 @@ export default function ChatPage() {
             />
 
             <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
-                <Chat client={streamClient} theme="messaging light">
+                <Chat client={client} theme="messaging light">
                     <ChatSidebar
-                        client={streamClient}
+                        client={client}
                         onSelectChannel={handleSelectChannel}
                         activeChannel={activeChannel}
                     />
@@ -320,7 +358,7 @@ export default function ChatPage() {
             <NewChatDialog
                 open={dialogOpen}
                 onClose={() => setDialogOpen(false)}
-                client={streamClient}
+                client={client}
                 currentUser={user}
                 clientReady={clientReady}
                 onSelectChannel={handleSelectChannel} />

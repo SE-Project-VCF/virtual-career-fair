@@ -16,8 +16,9 @@ import {
   Divider,
   Link,
 } from "@mui/material"
-import { doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
+import { authUtils } from "../utils/auth"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -61,6 +62,7 @@ const INDUSTRY_LABELS: Record<string, string> = {
 export default function BoothView() {
   const navigate = useNavigate()
   const { boothId } = useParams<{ boothId: string }>()
+  const user = authUtils.getCurrentUser()
   const [booth, setBooth] = useState<Booth | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -80,6 +82,14 @@ export default function BoothView() {
       setLoading(true)
       setError("")
 
+      // Check if fair is live
+      const statusResponse = await fetch("http://localhost:5000/api/fair-status")
+      let fairIsLive = false
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json()
+        fairIsLive = statusData.isLive || false
+      }
+
       const boothDoc = await getDoc(doc(db, "booths", boothId))
 
       if (!boothDoc.exists()) {
@@ -88,10 +98,53 @@ export default function BoothView() {
         return
       }
 
-      setBooth({
+      const boothData = {
         id: boothDoc.id,
         ...boothDoc.data(),
-      } as Booth)
+      } as Booth
+
+      // If fair is not live, check if user has access
+      if (!fairIsLive) {
+        // Only company owners and representatives can view booths when not live
+        if (!user || (user.role !== "companyOwner" && user.role !== "representative")) {
+          setError("The career fair is not currently live. You can only view your own booth.")
+          setLoading(false)
+          return
+        }
+
+        // Check if this booth belongs to the user's company
+        let hasAccess = false
+        const companiesRef = collection(db, "companies")
+        
+        if (user.role === "companyOwner") {
+          // Get all companies owned by this user
+          const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+          const ownerSnapshot = await getDocs(ownerQuery)
+          ownerSnapshot.forEach((doc) => {
+            const companyData = doc.data()
+            if (companyData.boothId === boothId) {
+              hasAccess = true
+            }
+          })
+        } else if (user.role === "representative" && user.companyId) {
+          // Check if the representative's company owns this booth
+          const companyDoc = await getDoc(doc(db, "companies", user.companyId))
+          if (companyDoc.exists()) {
+            const companyData = companyDoc.data()
+            if (companyData.boothId === boothId) {
+              hasAccess = true
+            }
+          }
+        }
+
+        if (!hasAccess) {
+          setError("You don't have access to view this booth. The career fair is not currently live.")
+          setLoading(false)
+          return
+        }
+      }
+
+      setBooth(boothData)
     } catch (err) {
       console.error("Error fetching booth:", err)
       setError("Failed to load booth")
