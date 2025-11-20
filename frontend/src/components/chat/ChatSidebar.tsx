@@ -50,12 +50,12 @@ export default function ChatSidebar({
           sort={{ last_message_at: -1 as const }}
           options={{ state: true, watch: true, presence: true }}
           Preview={(props: any) => {
-            const unread =
-              typeof props.unread === "number"
-                ? props.unread
-                : typeof props.channel?.countUnread === "function"
-                  ? props.channel.countUnread()
-                  : 0;
+            // const unread =
+            //   typeof props.unread === "number"
+            //     ? props.unread
+            //     : typeof props.channel?.countUnread === "function"
+            //       ? props.channel.countUnread()
+            //       : 0;
 
             return (
               <ChannelPreviewMessenger
