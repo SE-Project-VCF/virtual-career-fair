@@ -168,6 +168,10 @@ export const authUtils = {
           (existing.role === "student" &&
             (!existing.school || !existing.major));
 
+        // Save user to localStorage for authentication persistence
+        const currentUser = { uid: user.uid, email: user.email!, role: existing.role, ...existing };
+        localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
         return {
           success: true,
           exists: true,
@@ -216,6 +220,10 @@ export const authUtils = {
       }
 
       await setDoc(userRef, newUser);
+
+      // Save user to localStorage for authentication persistence
+      const currentUser = { uid: user.uid, email: user.email!, role, ...newUser };
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
       return {
         success: true,
