@@ -19,6 +19,7 @@ import {
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
+import { evaluateFairStatus } from "../utils/fairStatus"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -83,12 +84,8 @@ export default function BoothView() {
       setError("")
 
       // Check if fair is live
-      const statusResponse = await fetch("http://localhost:5000/api/fair-status")
-      let fairIsLive = false
-      if (statusResponse.ok) {
-        const statusData = await statusResponse.json()
-        fairIsLive = statusData.isLive || false
-      }
+      const status = await evaluateFairStatus()
+      const fairIsLive = status.isLive
 
       const boothDoc = await getDoc(doc(db, "booths", boothId))
 

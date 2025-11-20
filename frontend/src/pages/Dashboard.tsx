@@ -4,8 +4,9 @@ import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { collection, query, where, getDocs } from "firebase/firestore"
+import { collection, query, where, getDocs, Timestamp } from "firebase/firestore"
 import { db } from "../firebase"
+import { evaluateFairStatus } from "../utils/fairStatus"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
@@ -48,11 +49,8 @@ export default function Dashboard() {
     const fetchFairStatus = async () => {
       try {
         setLoadingFairStatus(true)
-        const response = await fetch("http://localhost:5000/api/fair-status")
-        if (response.ok) {
-          const data = await response.json()
-          setIsLive(data.isLive || false)
-        }
+        const status = await evaluateFairStatus()
+        setIsLive(status.isLive)
       } catch (err) {
         console.error("Error fetching fair status:", err)
       } finally {
@@ -143,15 +141,19 @@ export default function Dashboard() {
         setLoadingStats(true)
         
         // Fetch upcoming events count (schedules that haven't ended)
-        const schedulesResponse = await fetch("http://localhost:5000/api/public/fair-schedules")
-        if (schedulesResponse.ok) {
-          const schedulesData = await schedulesResponse.json()
-          const now = Date.now()
-          const upcomingCount = (schedulesData.schedules || []).filter((schedule: any) => 
-            schedule.endTime && schedule.endTime > now
-          ).length
-          setUpcomingEventsCount(upcomingCount)
-        }
+        const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
+        const now = Date.now()
+        let upcomingCount = 0
+        schedulesSnapshot.forEach((doc) => {
+          const data = doc.data()
+          const endTime = data.endTime instanceof Timestamp
+            ? data.endTime.toMillis()
+            : data.endTime
+          if (endTime && endTime > now) {
+            upcomingCount++
+          }
+        })
+        setUpcomingEventsCount(upcomingCount)
 
         // Fetch total companies count
         const companiesSnapshot = await getDocs(collection(db, "companies"))

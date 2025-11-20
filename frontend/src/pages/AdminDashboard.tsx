@@ -30,6 +30,9 @@ import {
   Chip,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, setDoc, Timestamp } from "firebase/firestore"
+import { db } from "../firebase"
+import { evaluateFairStatus } from "../utils/fairStatus"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import EventIcon from "@mui/icons-material/Event"
 import ScheduleIcon from "@mui/icons-material/Schedule"
@@ -89,15 +92,10 @@ export default function AdminDashboard() {
     try {
       setLoading(true)
       setError("")
-      const response = await fetch("http://localhost:5000/api/fair-status")
-      if (response.ok) {
-        const data = await response.json()
-        setIsLive(data.isLive || false)
-        setScheduleName(data.scheduleName || null)
-        setScheduleDescription(data.scheduleDescription || null)
-      } else {
-        setError("Failed to fetch fair status")
-      }
+      const status = await evaluateFairStatus()
+      setIsLive(status.isLive)
+      setScheduleName(status.scheduleName)
+      setScheduleDescription(status.scheduleDescription)
     } catch (err) {
       console.error("Error fetching fair status:", err)
       setError("Failed to fetch fair status")
@@ -111,13 +109,41 @@ export default function AdminDashboard() {
 
     try {
       setLoadingSchedules(true)
-      const response = await fetch(`http://localhost:5000/api/fair-schedules?userId=${user.uid}`)
-      if (response.ok) {
-        const data = await response.json()
-        setSchedules(data.schedules || [])
-      } else {
-        console.error("Failed to fetch schedules")
-      }
+      const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
+      const schedulesList: any[] = []
+      
+      schedulesSnapshot.forEach((doc) => {
+        const data = doc.data()
+        schedulesList.push({
+          id: doc.id,
+          name: data.name || null,
+          startTime: data.startTime instanceof Timestamp
+            ? data.startTime.toMillis()
+            : data.startTime,
+          endTime: data.endTime instanceof Timestamp
+            ? data.endTime.toMillis()
+            : data.endTime,
+          description: data.description || null,
+          createdAt: data.createdAt instanceof Timestamp
+            ? data.createdAt.toMillis()
+            : data.createdAt,
+          updatedAt: data.updatedAt instanceof Timestamp
+            ? data.updatedAt.toMillis()
+            : data.updatedAt,
+          createdBy: data.createdBy || null,
+          updatedBy: data.updatedBy || null,
+        })
+      })
+      
+      // Sort by start time
+      schedulesList.sort((a, b) => {
+        if (!a.startTime && !b.startTime) return 0
+        if (!a.startTime) return 1
+        if (!b.startTime) return -1
+        return a.startTime - b.startTime
+      })
+      
+      setSchedules(schedulesList)
     } catch (err) {
       console.error("Error fetching schedules:", err)
     } finally {
@@ -151,27 +177,28 @@ export default function AdminDashboard() {
       setError("")
       setSuccess("")
 
-      const response = await fetch("http://localhost:5000/api/toggle-fair-status", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId: user.uid }),
-      })
+      // Get current status
+      const statusDoc = await getDoc(doc(db, "fairSettings", "liveStatus"))
+      const currentStatus = statusDoc.exists() ? statusDoc.data().isLive || false : false
+      const newStatus = !currentStatus
 
-      if (response.ok) {
-        const data = await response.json()
-        setIsLive(data.isLive)
-        setSuccess(
-          data.isLive
-            ? "Career fair is now LIVE! All users can see all booths."
-            : "Career fair is now offline. Only company owners and representatives can see their own booths."
-        )
-        setTimeout(() => setSuccess(""), 5000)
-      } else {
-        const errorData = await response.json()
-        setError(errorData.error || "Failed to toggle fair status")
-      }
+      // Update Firestore
+      await setDoc(doc(db, "fairSettings", "liveStatus"), {
+        isLive: newStatus,
+        updatedAt: Timestamp.now(),
+        updatedBy: user.uid,
+      }, { merge: true })
+
+      setIsLive(newStatus)
+      setSuccess(
+        newStatus
+          ? "Career fair is now LIVE! All users can see all booths."
+          : "Career fair is now offline. Only company owners and representatives can see their own booths."
+      )
+      setTimeout(() => setSuccess(""), 5000)
+      
+      // Refresh status to get schedule name/description if applicable
+      fetchFairStatus()
     } catch (err) {
       console.error("Error toggling fair status:", err)
       setError("Failed to toggle fair status")
@@ -228,46 +255,43 @@ export default function AdminDashboard() {
       setError("")
       setSuccess("")
 
-      // Convert local datetime to UTC before sending
-      const startTimeUTC = localToUTC(scheduleForm.startTime)
-      const endTimeUTC = localToUTC(scheduleForm.endTime)
-
-      const url = editingSchedule
-        ? `http://localhost:5000/api/fair-schedules/${editingSchedule.id}`
-        : "http://localhost:5000/api/fair-schedules"
-      const method = editingSchedule ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user.uid,
-          name: scheduleForm.name || null,
-          description: scheduleForm.description || null,
-          startTime: startTimeUTC,
-          endTime: endTimeUTC,
-        }),
-      })
-
-      if (response.ok) {
-        setSuccess(
-          editingSchedule
-            ? "Career fair schedule updated successfully!"
-            : "Career fair scheduled successfully!"
-        )
-        setTimeout(() => setSuccess(""), 5000)
-        handleCloseScheduleDialog()
-        fetchSchedules()
-        fetchFairStatus()
-      } else {
-        const errorData = await response.json()
-        setError(errorData.error || "Failed to save career fair schedule")
+      // Convert local datetime to UTC Timestamp
+      const startDate = new Date(localToUTC(scheduleForm.startTime))
+      const endDate = new Date(localToUTC(scheduleForm.endTime))
+      
+      if (endDate <= startDate) {
+        setError("End time must be after start time")
+        return
       }
-    } catch (err) {
+
+      const scheduleData: any = {
+        name: scheduleForm.name || null,
+        description: scheduleForm.description || null,
+        startTime: Timestamp.fromDate(startDate),
+        endTime: Timestamp.fromDate(endDate),
+        updatedAt: Timestamp.now(),
+        updatedBy: user.uid,
+      }
+
+      if (editingSchedule) {
+        // Update existing schedule
+        await updateDoc(doc(db, "fairSchedules", editingSchedule.id), scheduleData)
+        setSuccess("Career fair schedule updated successfully!")
+      } else {
+        // Create new schedule
+        scheduleData.createdAt = Timestamp.now()
+        scheduleData.createdBy = user.uid
+        await addDoc(collection(db, "fairSchedules"), scheduleData)
+        setSuccess("Career fair scheduled successfully!")
+      }
+
+      setTimeout(() => setSuccess(""), 5000)
+      handleCloseScheduleDialog()
+      fetchSchedules()
+      fetchFairStatus()
+    } catch (err: any) {
       console.error("Error saving schedule:", err)
-      setError("Failed to save career fair schedule")
+      setError(err.message || "Failed to save career fair schedule")
     } finally {
       setSavingSchedule(false)
     }
@@ -285,25 +309,14 @@ export default function AdminDashboard() {
 
     try {
       setError("")
-      const response = await fetch(
-        `http://localhost:5000/api/fair-schedules/${scheduleId}?userId=${user.uid}`,
-        {
-          method: "DELETE",
-        }
-      )
-
-      if (response.ok) {
-        setSuccess("Career fair schedule deleted successfully!")
-        setTimeout(() => setSuccess(""), 5000)
-        fetchSchedules()
-        fetchFairStatus()
-      } else {
-        const errorData = await response.json()
-        setError(errorData.error || "Failed to delete career fair schedule")
-      }
-    } catch (err) {
+      await deleteDoc(doc(db, "fairSchedules", scheduleId))
+      setSuccess("Career fair schedule deleted successfully!")
+      setTimeout(() => setSuccess(""), 5000)
+      fetchSchedules()
+      fetchFairStatus()
+    } catch (err: any) {
       console.error("Error deleting schedule:", err)
-      setError("Failed to delete career fair schedule")
+      setError(err.message || "Failed to delete career fair schedule")
     }
   }
 
