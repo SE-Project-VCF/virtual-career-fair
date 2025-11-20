@@ -28,6 +28,10 @@ export default function Dashboard() {
   const [unreadCount, setUnreadCount] = useState<number>(0)
   const [isLive, setIsLive] = useState(false)
   const [loadingFairStatus, setLoadingFairStatus] = useState(true)
+  const [upcomingEventsCount, setUpcomingEventsCount] = useState(0)
+  const [totalCompaniesCount, setTotalCompaniesCount] = useState(0)
+  const [totalJobOpenings, setTotalJobOpenings] = useState(0)
+  const [loadingStats, setLoadingStats] = useState(true)
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -131,6 +135,45 @@ export default function Dashboard() {
 
     fetchTotalRepresentatives()
   }, [user])
+
+  // Fetch dashboard statistics
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoadingStats(true)
+        
+        // Fetch upcoming events count (schedules that haven't ended)
+        const schedulesResponse = await fetch("http://localhost:5000/api/public/fair-schedules")
+        if (schedulesResponse.ok) {
+          const schedulesData = await schedulesResponse.json()
+          const now = Date.now()
+          const upcomingCount = (schedulesData.schedules || []).filter((schedule: any) => 
+            schedule.endTime && schedule.endTime > now
+          ).length
+          setUpcomingEventsCount(upcomingCount)
+        }
+
+        // Fetch total companies count
+        const companiesSnapshot = await getDocs(collection(db, "companies"))
+        setTotalCompaniesCount(companiesSnapshot.size)
+
+        // Fetch total job openings (sum of openPositions from all booths)
+        const boothsSnapshot = await getDocs(collection(db, "booths"))
+        let totalOpenings = 0
+        boothsSnapshot.forEach((doc) => {
+          const data = doc.data()
+          totalOpenings += data.openPositions || 0
+        })
+        setTotalJobOpenings(totalOpenings)
+      } catch (err) {
+        console.error("Error fetching stats:", err)
+      } finally {
+        setLoadingStats(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
 
   const handleLinkInviteCode = async () => {
     if (!inviteCode.trim()) {
@@ -693,10 +736,10 @@ export default function Dashboard() {
                     </Typography>
                   </Box>
                   <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                    12
+                    {loadingStats ? "..." : upcomingEventsCount}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Career sessions available
+                    Career fairs scheduled
                   </Typography>
                 </CardContent>
               </Card>
@@ -721,7 +764,7 @@ export default function Dashboard() {
                     </Typography>
                   </Box>
                   <Typography variant="h3" sx={{ fontWeight: 700, color: "#388560", mb: 1 }}>
-                    45
+                    {loadingStats ? "..." : totalCompaniesCount}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Employers participating
@@ -749,7 +792,7 @@ export default function Dashboard() {
                     </Typography>
                   </Box>
                   <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                    128
+                    {loadingStats ? "..." : totalJobOpenings}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Positions available
