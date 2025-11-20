@@ -60,52 +60,48 @@ export default function Dashboard() {
 
   // Fetch unread chat count and keep it updated
   // Fetch unread chat count
-useEffect(() => {
-  console.log("DEBUG: Dashboard user =", user);
+  useEffect(() => {
 
-  if (!user || !user.uid) {
-    console.log("DEBUG: No user yet, skipping unread load");
-    return;
-  }
-
-  let cancelled = false;
-
-  const fetchUnread = async () => {
-    console.log("DEBUG: Fetching unread count for", user.uid);
-
-    try {
-      const res = await fetch(
-        `http://localhost:5000/api/stream-unread?userId=${user.uid}`
-      );
-
-      if (!res.ok) {
-        console.error("Unread API error:", await res.text());
-        return;
-      }
-
-      const data = await res.json();
-      console.log("DEBUG: unread API returned:", JSON.stringify(data, null, 2));
-
-
-      if (!cancelled && typeof data.unread === "number") {
-        setUnreadCount(data.unread);
-      }
-    } catch (err) {
-      console.error("Failed to fetch unread count:", err);
+    if (!user || !user.uid) {
+      return;
     }
-  };
 
-  // initial load
-  fetchUnread();
+    let cancelled = false;
 
-  // poll every 10s
-  const interval = setInterval(fetchUnread, 10000);
+    const fetchUnread = async () => {
 
-  return () => {
-    cancelled = true;
-    clearInterval(interval);
-  };
-}, [user]);
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/stream-unread?userId=${user.uid}`
+        );
+
+        if (!res.ok) {
+          console.error("Unread API error");
+          return;
+        }
+
+        const data = await res.json();
+
+
+        if (!cancelled && typeof data.unread === "number") {
+          setUnreadCount(data.unread);
+        }
+      } catch (err) {
+        console.error("Failed to fetch unread count");
+      }
+    };
+
+    // initial load
+    fetchUnread();
+
+    // poll every 10s
+    const interval = setInterval(fetchUnread, 10000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user]);
 
 
 
@@ -127,7 +123,7 @@ useEffect(() => {
 
           setTotalRepresentatives(totalCount)
         } catch (err) {
-          console.error("Error fetching representatives count:", err)
+          console.error("Error fetching representatives count");
         }
       }
     }

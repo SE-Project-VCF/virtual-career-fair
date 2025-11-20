@@ -9,6 +9,16 @@ import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GoogleIcon from "@mui/icons-material/Google"
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from "@mui/material"
+import { doc, setDoc } from "firebase/firestore"
+import { db } from "../firebase"
+import { auth } from "../firebase"
+
 
 type RoleType = "student" | "companyOwner" | "representative" | ""
 
@@ -19,15 +29,29 @@ export default function Register() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
-  
+
   // Student fields
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [school, setSchool] = useState("")
   const [major, setMajor] = useState("")
-  
+
   // Representative fields
   const [inviteCode, setInviteCode] = useState("")
+
+  // ------------------------------
+  // Google Profile Completion Dialog State
+  // ------------------------------
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [googleFirstName, setGoogleFirstName] = useState("");
+  const [googleLastName, setGoogleLastName] = useState("");
+  // Student-specific Google fields
+  const [googleSchool, setGoogleSchool] = useState("")
+  const [googleMajor, setGoogleMajor] = useState("")
+  const [hasGoogleName, setHasGoogleName] = useState(false)
+
+
+
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -106,24 +130,52 @@ export default function Register() {
 
   const handleGoogleRegister = async () => {
     if (!role) {
-      setError("Please select an account type first.")
-      return
+      setError("Please select an account type first.");
+      return;
     }
 
-    setError("")
+    setError("");
+
     try {
-      const result = await authUtils.loginWithGoogle(role as "student" | "representative" | "companyOwner")
-      
+      const result = await authUtils.loginWithGoogle(
+        role as "student" | "representative" | "companyOwner"
+        ,true );
+
       if (result.success) {
-        navigate("/dashboard")
+        if (result.needsProfile) {
+          const currentUser = auth.currentUser;
+
+          if (currentUser?.displayName) {
+            const parts = currentUser.displayName.trim().split(" ");
+            setGoogleFirstName(parts[0] || "");
+            setGoogleLastName(parts.slice(1).join(" ") || "");
+            setHasGoogleName(true);
+          } else {
+            setGoogleFirstName("");
+            setGoogleLastName("");
+            setHasGoogleName(false);
+          }
+
+          // reset student fields
+          setGoogleSchool("");
+          setGoogleMajor("");
+
+          setShowProfileDialog(true);
+          return;
+        }
+
+
+        // No missing fields — continue normally
+        navigate("/dashboard");
       } else {
-        setError(result.error || "Google registration failed.")
+        setError(result.error || "Google registration failed.");
       }
     } catch (err: any) {
-      console.error("Google registration error:", err)
-      setError("Failed to register with Google. Please try again.")
+      console.error("Google registration error:", err);
+      setError("Failed to register with Google. Please try again.");
     }
-  }
+  };
+
 
   const getGradientColor = () => {
     if (role === "student") return "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
@@ -580,7 +632,90 @@ export default function Register() {
           </Paper>
         </Container>
       </Box>
-    </Box>
+      {/* Google Profile Completion Dialog */}
+      <Dialog open={showProfileDialog}>
+        <DialogTitle>Complete Your Profile</DialogTitle>
+
+        <DialogContent>
+          {/* Show name fields ONLY if Google did NOT provide them */}
+          {!hasGoogleName && (
+            <>
+              <TextField
+                fullWidth
+                label="First Name"
+                value={googleFirstName}
+                onChange={(e) => setGoogleFirstName(e.target.value)}
+                sx={{ mt: 2 }}
+              />
+
+              <TextField
+                fullWidth
+                label="Last Name"
+                value={googleLastName}
+                onChange={(e) => setGoogleLastName(e.target.value)}
+                sx={{ mt: 2 }}
+              />
+            </>
+          )}
+
+          {/* Student-specific fields */}
+          {role === "student" && (
+            <>
+              <TextField
+                fullWidth
+                label="School"
+                value={googleSchool}
+                onChange={(e) => setGoogleSchool(e.target.value)}
+                sx={{ mt: 2 }}
+              />
+
+              <TextField
+                fullWidth
+                label="Major"
+                value={googleMajor}
+                onChange={(e) => setGoogleMajor(e.target.value)}
+                sx={{ mt: 2 }}
+              />
+            </>
+          )}
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setShowProfileDialog(false)}>Cancel</Button>
+
+          <Button
+            variant="contained"
+            onClick={async () => {
+              const currentUser = auth.currentUser;
+              if (!currentUser) return;
+
+              const updateData: any = {
+                firstName: googleFirstName,
+                lastName: googleLastName,
+              };
+
+              if (role === "student") {
+                updateData.school = googleSchool;
+                updateData.major = googleMajor;
+              }
+
+              await setDoc(
+                doc(db, "users", currentUser.uid),
+                updateData,
+                { merge: true }
+              );
+
+              setShowProfileDialog(false);
+              navigate("/dashboard");
+            }}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+
+    </Box >
   )
 }
 

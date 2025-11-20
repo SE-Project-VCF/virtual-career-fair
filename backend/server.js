@@ -77,7 +77,7 @@ app.get("/api/stream-token", (req, res) => {
     const token = streamServer.createToken(userId);
     return res.json({ token });
   } catch (err) {
-    console.error("Stream token error:", err);
+    console.error("Stream token error:");
     return res.status(500).json({ error: "Unable to create token" });
   }
 });
@@ -127,7 +127,7 @@ app.get("/api/stream-unread", async (req, res) => {
     return res.json({ unread });
 
   } catch (err) {
-    console.error("Unread calc error:", err);
+    console.error("Unread calc error:");
     return res.status(500).json({ error: "Failed to compute unread" });
   }
 });
@@ -215,7 +215,7 @@ app.post("/register-user", async (req, res) => {
       });
 
     } catch (streamErr) {
-      console.error("STREAM UPSERT ERROR:", streamErr);
+      console.error("STREAM UPSERT ERROR:");
     }
 
     res.send({
@@ -228,7 +228,7 @@ app.post("/register-user", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Error registering user:", err);
+    console.error("Error registering user:");
     res.status(500).send({ success: false, error: err.message });
   }
 });
@@ -238,8 +238,7 @@ app.post("/register-user", async (req, res) => {
 ---------------------------------------------------- */
 app.post("/api/sync-stream-users", async (req, res) => {
   try {
-    console.log("SYNC: Reading Firestore users...");
-
+    console.log("Starting Stream user sync...");
     const snapshot = await db.collection("users").get();
     const users = snapshot.docs.map((d) => d.data());
 
@@ -271,14 +270,14 @@ app.post("/api/sync-stream-users", async (req, res) => {
       count++;
     }
 
-    console.log(`SYNC COMPLETE: ${count} Stream users updated.`);
+    console.log(`Stream user sync complete: ${count} users.`);
 
     return res.json({
       success: true,
       count,
     });
   } catch (err) {
-    console.error("SYNC ERROR:", err);
+    console.error("Stream user sync failed");
     return res.status(500).json({
       success: false,
       error: err.message,
@@ -325,7 +324,7 @@ app.post("/add-job", async (req, res) => {
 
     res.send({ success: true, jobId: jobRef.id });
   } catch (err) {
-    console.error("Error adding job:", err);
+    console.error("Error adding job:");
     res.status(500).send({ success: false, error: err.message });
   }
 });
@@ -364,7 +363,7 @@ app.post("/add-booth", async (req, res) => {
 
     res.send({ success: true, boothId: boothRef.id });
   } catch (err) {
-    console.error("Error adding booth:", err);
+    console.error("Error adding booth:");
     res.status(500).send({ success: false, error: err.message });
   }
 });
