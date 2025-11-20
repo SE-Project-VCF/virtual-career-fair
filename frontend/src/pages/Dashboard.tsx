@@ -13,7 +13,8 @@ import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
 import { Badge, Tooltip } from "@mui/material"
 import ChatIcon from "@mui/icons-material/Chat"
-import ProfileMenu from "./ProfileMenu";
+import ProfileMenu from "./ProfileMenu"
+import EventList from "../components/EventList"
 
 
 export default function Dashboard() {
@@ -271,6 +272,9 @@ export default function Dashboard() {
               You're all set to explore career opportunities at our virtual fair.
             </Typography>
           </Box>
+
+          {/* Event List - Shows scheduled career fairs */}
+          <EventList />
 
           {/* Fair Status Alert */}
           {!loadingFairStatus && !isLive && (

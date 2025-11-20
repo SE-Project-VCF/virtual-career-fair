@@ -55,7 +55,6 @@ export default function AdminDashboard() {
     description: "",
     startTime: "",
     endTime: "",
-    enabled: true,
   })
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [scheduleName, setScheduleName] = useState<string | null>(null)
@@ -189,7 +188,6 @@ export default function AdminDashboard() {
         description: schedule.description || "",
         startTime: schedule.startTime ? utcToLocal(schedule.startTime) : "",
         endTime: schedule.endTime ? utcToLocal(schedule.endTime) : "",
-        enabled: schedule.enabled !== false,
       })
     } else {
       setEditingSchedule(null)
@@ -198,7 +196,6 @@ export default function AdminDashboard() {
         description: "",
         startTime: "",
         endTime: "",
-        enabled: true,
       })
     }
     setScheduleDialogOpen(true)
@@ -212,7 +209,6 @@ export default function AdminDashboard() {
       description: "",
       startTime: "",
       endTime: "",
-      enabled: true,
     })
   }
 
@@ -252,7 +248,6 @@ export default function AdminDashboard() {
           description: scheduleForm.description || null,
           startTime: startTimeUTC,
           endTime: endTimeUTC,
-          enabled: scheduleForm.enabled,
         }),
       })
 
@@ -325,7 +320,7 @@ export default function AdminDashboard() {
   }
 
   const getScheduleStatus = (schedule: any) => {
-    if (!schedule.enabled || !schedule.startTime || !schedule.endTime) {
+    if (!schedule.startTime || !schedule.endTime) {
       return null
     }
 
@@ -537,7 +532,6 @@ export default function AdminDashboard() {
                       <TableCell sx={{ fontWeight: 600 }}>Start Time</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>End Time</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Enabled</TableCell>
                       <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -572,15 +566,8 @@ export default function AdminDashboard() {
                                 }
                               />
                             ) : (
-                              <Chip label="Disabled" size="small" color="default" />
+                              <Chip label="No Status" size="small" color="default" />
                             )}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={schedule.enabled ? "Yes" : "No"}
-                              size="small"
-                              color={schedule.enabled ? "success" : "default"}
-                            />
                           </TableCell>
                           <TableCell align="right">
                             <IconButton
@@ -608,7 +595,7 @@ export default function AdminDashboard() {
 
             <Box sx={{ mt: 3 }}>
               <Typography variant="body2" color="text.secondary">
-                <strong>Note:</strong> The career fair will be live when ANY enabled career fair schedule is active. Manual toggle takes precedence over scheduled fairs.
+                <strong>Note:</strong> The career fair will be live when ANY scheduled career fair is active. Manual toggle takes precedence over scheduled fairs.
               </Typography>
             </Box>
           </CardContent>
@@ -673,23 +660,6 @@ export default function AdminDashboard() {
                   />
                 </Grid>
               </Grid>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={scheduleForm.enabled}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, enabled: e.target.checked })}
-                    sx={{
-                      "& .MuiSwitch-switchBase.Mui-checked": {
-                        color: "#b03a6c",
-                      },
-                      "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
-                        backgroundColor: "#b03a6c",
-                      },
-                    }}
-                  />
-                }
-                label="Enable this career fair schedule"
-              />
             </Box>
           </DialogContent>
           <DialogActions>

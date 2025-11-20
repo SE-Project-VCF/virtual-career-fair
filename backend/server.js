@@ -370,16 +370,14 @@ app.post("/add-booth", async (req, res) => {
 
 /* ----------------------------------------------------
    HELPER: Evaluate if fair should be live based on schedules
-   Checks all enabled schedules - fair is live if ANY schedule is active
+   Checks all schedules - fair is live if ANY schedule is active
 ---------------------------------------------------- */
 async function evaluateFairStatus() {
   try {
     const now = admin.firestore.Timestamp.now();
     
-    // Check all enabled schedules in the schedules collection
-    const schedulesSnapshot = await db.collection("fairSchedules")
-      .where("enabled", "==", true)
-      .get();
+    // Check all schedules in the schedules collection
+    const schedulesSnapshot = await db.collection("fairSchedules").get();
     
     // Check if any schedule is currently active
     for (const scheduleDoc of schedulesSnapshot.docs) {
@@ -537,7 +535,6 @@ app.get("/api/fair-schedules", async (req, res) => {
       schedules.push({
         id: doc.id,
         name: data.name || null,
-        enabled: data.enabled || false,
         startTime: data.startTime ? data.startTime.toMillis() : null,
         endTime: data.endTime ? data.endTime.toMillis() : null,
         description: data.description || null,
@@ -551,6 +548,41 @@ app.get("/api/fair-schedules", async (req, res) => {
     return res.json({ schedules });
   } catch (err) {
     console.error("Error fetching fair schedules:", err);
+    return res.status(500).json({ error: "Failed to fetch fair schedules" });
+  }
+});
+
+/* ----------------------------------------------------
+   GET PUBLIC FAIR SCHEDULES (All users)
+---------------------------------------------------- */
+app.get("/api/public/fair-schedules", async (req, res) => {
+  try {
+    // Get all schedules (no orderBy to avoid composite index requirement)
+    const schedulesSnapshot = await db.collection("fairSchedules").get();
+
+    const schedules = [];
+    schedulesSnapshot.forEach((doc) => {
+      const data = doc.data();
+      schedules.push({
+        id: doc.id,
+        name: data.name || null,
+        startTime: data.startTime ? data.startTime.toMillis() : null,
+        endTime: data.endTime ? data.endTime.toMillis() : null,
+        description: data.description || null,
+      });
+    });
+
+    // Sort by start time in memory (ascending)
+    schedules.sort((a, b) => {
+      if (!a.startTime && !b.startTime) return 0;
+      if (!a.startTime) return 1;
+      if (!b.startTime) return -1;
+      return a.startTime - b.startTime;
+    });
+
+    return res.json({ schedules });
+  } catch (err) {
+    console.error("Error fetching public fair schedules:", err);
     return res.status(500).json({ error: "Failed to fetch fair schedules" });
   }
 });
@@ -584,7 +616,6 @@ app.post("/api/fair-schedules", async (req, res) => {
     const scheduleData = {
       name: name || null,
       description: description || null,
-      enabled: enabled !== false, // Default to true
       startTime: start,
       endTime: end,
       createdAt: admin.firestore.Timestamp.now(),
@@ -600,7 +631,6 @@ app.post("/api/fair-schedules", async (req, res) => {
       schedule: {
         id: scheduleRef.id,
         name: scheduleData.name,
-        enabled: scheduleData.enabled,
         startTime: start.toMillis(),
         endTime: end.toMillis(),
         description: scheduleData.description,
@@ -618,7 +648,7 @@ app.post("/api/fair-schedules", async (req, res) => {
 app.put("/api/fair-schedules/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, name, startTime, endTime, description, enabled } = req.body;
+    const { userId, name, startTime, endTime, description } = req.body;
 
     const adminCheck = await verifyAdmin(userId);
     if (adminCheck) {
@@ -640,7 +670,6 @@ app.put("/api/fair-schedules/:id", async (req, res) => {
     // Update fields if provided
     if (name !== undefined) updateData.name = name || null;
     if (description !== undefined) updateData.description = description || null;
-    if (enabled !== undefined) updateData.enabled = enabled;
 
     if (startTime !== undefined || endTime !== undefined) {
       // Get existing times if not provided
@@ -674,7 +703,6 @@ app.put("/api/fair-schedules/:id", async (req, res) => {
       schedule: {
         id: updatedDoc.id,
         name: updatedData.name || null,
-        enabled: updatedData.enabled || false,
         startTime: updatedData.startTime ? updatedData.startTime.toMillis() : null,
         endTime: updatedData.endTime ? updatedData.endTime.toMillis() : null,
         description: updatedData.description || null,
