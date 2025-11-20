@@ -18,7 +18,38 @@ const streamServer = StreamChat.getInstance(
 const app = express();
 const PORT = 5000;
 
-app.use(cors({ origin: "http://localhost:5173" }));
+// CORS configuration - allow multiple origins
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://virtual-career-fair-git-dev-ninapellis-projects.vercel.app",
+  process.env.FRONTEND_URL, // Allow custom frontend URL from env
+].filter(Boolean); // Remove any undefined values
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } 
+      // Allow all Vercel deployment URLs (for flexibility during development/deployment)
+      else if (origin.includes(".vercel.app")) {
+        callback(null, true);
+      } 
+      // Allow localhost on any port (for development)
+      else if (origin.startsWith("http://localhost:") || origin.startsWith("https://localhost:")) {
+        callback(null, true);
+      }
+      else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 function removeUndefined(obj) {
