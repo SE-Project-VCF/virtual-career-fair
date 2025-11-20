@@ -24,6 +24,7 @@ interface NewChatDialogProps {
     client: StreamChat;
     currentUser: User | null;
     clientReady: boolean;
+    onSelectChannel?: (channel: any) => void;
 }
 
 export default function NewChatDialog({
@@ -32,6 +33,7 @@ export default function NewChatDialog({
     client,
     currentUser,
     clientReady,
+    onSelectChannel,
 }: NewChatDialogProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [results, setResults] = useState<any[]>([]);
@@ -41,6 +43,7 @@ export default function NewChatDialog({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+
 
     /* -------------------------
          USER SEARCH
@@ -134,23 +137,21 @@ export default function NewChatDialog({
                 await channel.watch();
             }
 
-            // Success UI
-            setSuccess("Chat created!");
-            setSearchQuery("");
-            setSelectedUser(null);
-            setRecipientEmail("");
+            // 🚀 NEW: Immediately open the channel in ChatPage
+            if (onSelectChannel) {
+                onSelectChannel(channel);
+            }
 
-            setTimeout(() => {
-                setSuccess("");
-                onClose();
-            }, 1000);
+            // Close dialog right away
+            onClose();
         } catch (err) {
-            console.error("Error creating chat:");
+            console.error("Error creating chat:", err);
             setError("Failed to create chat.");
         }
 
         setLoading(false);
     };
+
 
     return (
         <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">

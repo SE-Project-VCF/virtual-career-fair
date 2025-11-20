@@ -8,9 +8,14 @@ import type { StreamChat, Channel } from "stream-chat";
 interface ChatSidebarProps {
   client: StreamChat;
   onSelectChannel: (channel: Channel) => void;
+  activeChannel: Channel | null;
 }
 
-export default function ChatSidebar({ client, onSelectChannel }: ChatSidebarProps) {
+export default function ChatSidebar({
+  client,
+  onSelectChannel,
+  activeChannel,
+}: ChatSidebarProps) {
   return (
     <Box
       sx={{
@@ -40,23 +45,34 @@ export default function ChatSidebar({ client, onSelectChannel }: ChatSidebarProp
         <ChannelList
           filters={{
             type: "messaging",
-            // ONLY show channels the current user is a member of
             members: { $in: [client.userID!] },
           }}
           sort={{ last_message_at: -1 as const }}
           options={{ state: true, watch: true, presence: true }}
-          Preview={(props: any) => (
-            <ChannelPreviewMessenger
-              {...props}
-              onSelect={() => {
-                const channel = props.channel;
-                props.setActiveChannel?.(channel);
+          Preview={(props: any) => {
+            const unread =
+              typeof props.unread === "number"
+                ? props.unread
+                : typeof props.channel?.countUnread === "function"
+                  ? props.channel.countUnread()
+                  : 0;
 
-                // pass channel object upwards
-                onSelectChannel(channel);
-              }}
-            />
-          )}
+            return (
+              <ChannelPreviewMessenger
+                {...props}
+                onSelect={() => {
+                  const channel = props.channel;
+                  props.setActiveChannel?.(channel);
+                  onSelectChannel(channel);
+                }}
+                channel={props.channel}
+                latestMessagePreview={props.latestMessagePreview}
+                Avatar={props.Avatar}
+                active={activeChannel?.cid === props.channel?.cid}   // ✅ Highlights sidebar item
+              />
+
+            );
+          }}
         />
       </Box>
     </Box>
