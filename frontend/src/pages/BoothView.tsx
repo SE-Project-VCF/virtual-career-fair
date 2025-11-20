@@ -66,7 +66,6 @@ export default function BoothView() {
   const [booth, setBooth] = useState<Booth | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [isLive, setIsLive] = useState(false)
 
   useEffect(() => {
     if (!boothId) {
@@ -89,7 +88,6 @@ export default function BoothView() {
       if (statusResponse.ok) {
         const statusData = await statusResponse.json()
         fairIsLive = statusData.isLive || false
-        setIsLive(fairIsLive)
       }
 
       const boothDoc = await getDoc(doc(db, "booths", boothId))
