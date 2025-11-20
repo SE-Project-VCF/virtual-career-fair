@@ -17,6 +17,7 @@ import {
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
+import { evaluateFairStatus } from "../utils/fairStatus"
 import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
@@ -71,13 +72,10 @@ export default function Booths() {
 
   const fetchFairStatus = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/fair-status")
-      if (response.ok) {
-        const data = await response.json()
-        setIsLive(data.isLive || false)
-        setScheduleName(data.scheduleName || null)
-        setScheduleDescription(data.scheduleDescription || null)
-      }
+      const status = await evaluateFairStatus()
+      setIsLive(status.isLive)
+      setScheduleName(status.scheduleName)
+      setScheduleDescription(status.scheduleDescription)
     } catch (err) {
       console.error("Error fetching fair status:", err)
     }
@@ -89,15 +87,11 @@ export default function Booths() {
       setError("")
 
       // First check if fair is live
-      const statusResponse = await fetch("http://localhost:5000/api/fair-status")
-      let fairIsLive = false
-      if (statusResponse.ok) {
-        const statusData = await statusResponse.json()
-        fairIsLive = statusData.isLive || false
-        setIsLive(fairIsLive)
-        setScheduleName(statusData.scheduleName || null)
-        setScheduleDescription(statusData.scheduleDescription || null)
-      }
+      const status = await evaluateFairStatus()
+      const fairIsLive = status.isLive
+      setIsLive(fairIsLive)
+      setScheduleName(status.scheduleName)
+      setScheduleDescription(status.scheduleDescription)
 
       let boothsList: Booth[] = []
 

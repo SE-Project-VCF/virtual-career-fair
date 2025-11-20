@@ -9,6 +9,8 @@ import {
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import AccessTimeIcon from "@mui/icons-material/AccessTime"
+import { collection, getDocs, Timestamp } from "firebase/firestore"
+import { db } from "../firebase"
 
 interface FairSchedule {
   id: string
@@ -28,19 +30,40 @@ export default function EventList() {
       try {
         setLoading(true)
         setError("")
-        const response = await fetch("http://localhost:5000/api/public/fair-schedules")
-        if (response.ok) {
-          const data = await response.json()
-          const now = Date.now()
-          // Filter out events that have already ended
-          const upcomingSchedules = (data.schedules || []).filter((schedule: FairSchedule) => {
-            // Only show events that haven't ended yet
-            return schedule.endTime && schedule.endTime > now
-          })
-          setSchedules(upcomingSchedules)
-        } else {
-          setError("Failed to load events")
-        }
+        const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
+        const now = Date.now()
+        
+        const schedulesList: FairSchedule[] = []
+        schedulesSnapshot.forEach((doc) => {
+          const data = doc.data()
+          const startTime = data.startTime instanceof Timestamp
+            ? data.startTime.toMillis()
+            : data.startTime
+          const endTime = data.endTime instanceof Timestamp
+            ? data.endTime.toMillis()
+            : data.endTime
+          
+          // Only include events that haven't ended yet
+          if (endTime && endTime > now) {
+            schedulesList.push({
+              id: doc.id,
+              name: data.name || null,
+              startTime,
+              endTime,
+              description: data.description || null,
+            })
+          }
+        })
+        
+        // Sort by start time
+        schedulesList.sort((a, b) => {
+          if (!a.startTime && !b.startTime) return 0
+          if (!a.startTime) return 1
+          if (!b.startTime) return -1
+          return a.startTime - b.startTime
+        })
+        
+        setSchedules(schedulesList)
       } catch (err) {
         console.error("Error fetching schedules:", err)
         setError("Failed to load events")
