@@ -45,7 +45,6 @@ export default function ChatPage() {
   */
   useEffect(() => {
     if (!user) {
-      console.log("STREAM DEBUG: No Firebase user, disconnecting Stream...");
       if (streamClient.userID) {
         streamClient.disconnectUser();
       }
@@ -54,12 +53,9 @@ export default function ChatPage() {
 
     const init = async () => {
       try {
-        console.log("STREAM DEBUG: Firebase user =", user.uid);
-        console.log("STREAM DEBUG: Current Stream userID =", streamClient.userID);
 
         // If Stream is connected as someone else → disconnect
         if (streamClient.userID && streamClient.userID !== user.uid) {
-          console.log("STREAM DEBUG: Disconnecting old Stream user...");
           await streamClient.disconnectUser();
         }
 
@@ -80,7 +76,6 @@ export default function ChatPage() {
             `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
             user.email;
 
-          console.log("STREAM DEBUG: Connecting Stream as", user.uid);
 
           await streamClient.connectUser(
             {
@@ -92,7 +87,6 @@ export default function ChatPage() {
             token
           );
 
-          console.log("STREAM DEBUG: Stream connected as", user.uid);
         }
 
         setClientReady(true);
@@ -112,7 +106,7 @@ export default function ChatPage() {
           streamClient.off("notification.mark_read", updateUnread);
         };
       } catch (err) {
-        console.error("STREAM INIT ERROR:", err);
+        console.error("STREAM INIT ERROR:");
       }
     };
 

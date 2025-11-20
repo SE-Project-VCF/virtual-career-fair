@@ -136,63 +136,101 @@ export const authUtils = {
     }
   },
 
-  // ------------------------------
-  // ✅ Google Sign-In (creates user + company if missing)
-  // ------------------------------
+  // --------------------------------------------------------
+  // Google Sign-In (with optional creation)
+  // --------------------------------------------------------
   loginWithGoogle: async (
-    role: "student" | "representative" | "companyOwner"
-  ): Promise<{ success: boolean; error?: string }> => {
+    role: "student" | "representative" | "companyOwner",
+    createIfMissing: boolean
+  ): Promise<{
+    success: boolean;
+    exists?: boolean;
+    needsProfile?: boolean;
+    role?: string;
+    error?: string;
+  }> => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
       const userRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userRef);
+      const userSnap = await getDoc(userRef);
 
-      // --- Case 1: Existing user ---
-      if (userDoc.exists()) {
-        const existingUser = userDoc.data();
-        localStorage.setItem(
-          "currentUser",
-          JSON.stringify({
-            uid: user.uid,
-            email: user.email,
-            role: existingUser.role,
-            provider: "google",
-            ...existingUser,
-          })
-        );
-        return { success: true };
+      // -------------------------------
+      // Existing User (Login or Register)
+      // -------------------------------
+      if (userSnap.exists()) {
+        const existing = userSnap.data();
+
+        const needsProfile =
+          !existing.firstName ||
+          !existing.lastName ||
+          (existing.role === "student" &&
+            (!existing.school || !existing.major));
+
+        return {
+          success: true,
+          exists: true,
+          needsProfile,
+          role: existing.role,
+        };
       }
 
-      // --- Case 2: New user (create record) ---
-      // Create new user record in Firestore
-      await setDoc(userRef, {
+      // ------------------------------------
+      // New User — Only allowed if registering
+      // ------------------------------------
+      if (!createIfMissing) {
+        // LOGIN MODE: block unregistered users
+        return {
+          success: true,
+          exists: false,
+          needsProfile: false,
+          role: undefined,
+        };
+      }
+
+      // ------------------------------------
+      // New user — Registration mode
+      // ------------------------------------
+      let firstName = "";
+      let lastName = "";
+      if (user.displayName) {
+        const parts = user.displayName.split(" ");
+        firstName = parts[0];
+        lastName = parts.slice(1).join(" ");
+      }
+
+      const newUser: any = {
         uid: user.uid,
         email: user.email,
         role,
         provider: "google",
-        emailVerified: user.emailVerified,
+        firstName: firstName || null,
+        lastName: lastName || null,
         createdAt: new Date().toISOString(),
-      });
+      };
 
-      // Store user in localStorage
-      localStorage.setItem(
-        "currentUser",
-        JSON.stringify({
-          uid: user.uid,
-          email: user.email,
-          role,
-          provider: "google",
-        })
-      );
+      if (role === "student") {
+        newUser.school = null;
+        newUser.major = null;
+      }
 
-      return { success: true };
+      await setDoc(userRef, newUser);
+
+      return {
+        success: true,
+        exists: false,
+        needsProfile: true,
+        role,
+      };
     } catch (err: any) {
       console.error("Google Sign-In failed:", err);
       return { success: false, error: err.message };
     }
   },
+
+
+
 
   // ------------------------------
   // Verify + Auto-login helper
@@ -301,10 +339,10 @@ export const authUtils = {
       // Find company with matching invite code
       const companiesRef = collection(db, "companies");
       const companiesSnapshot = await getDocs(companiesRef);
-      
+
       let companyDoc: any = null;
       let companyId: string | null = null;
-      
+
       companiesSnapshot.forEach((doc) => {
         const data = doc.data();
         if (data.inviteCode === inviteCode.toUpperCase()) {
@@ -320,7 +358,7 @@ export const authUtils = {
       // Check if user is already linked to this company
       const userRef = doc(db, "users", userId);
       const userDoc = await getDoc(userRef);
-      
+
       if (userDoc.exists()) {
         const userData = userDoc.data();
         if (userData.companyId === companyId) {
@@ -331,7 +369,7 @@ export const authUtils = {
       // Add user to company's representativeIDs array (if not already there)
       const companyRef = doc(db, "companies", companyId);
       const companyData = await getDoc(companyRef);
-      
+
       if (companyData.exists()) {
         const currentReps = companyData.data().representativeIDs || [];
         if (!currentReps.includes(userId)) {
@@ -361,10 +399,10 @@ export const authUtils = {
         );
       }
 
-      return { 
-        success: true, 
-        companyId, 
-        companyName: companyDoc.companyName 
+      return {
+        success: true,
+        companyId,
+        companyName: companyDoc.companyName
       };
     } catch (err: any) {
       console.error("Error linking representative to company:", err);
@@ -383,7 +421,7 @@ export const authUtils = {
       // Verify the company exists and user is the owner
       const companyRef = doc(db, "companies", companyId);
       const companyDoc = await getDoc(companyRef);
-      
+
       if (!companyDoc.exists()) {
         return { success: false, error: "Company not found." };
       }
