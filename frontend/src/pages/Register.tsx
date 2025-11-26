@@ -48,7 +48,6 @@ export default function Register() {
   // Student-specific Google fields
   const [googleSchool, setGoogleSchool] = useState("")
   const [googleMajor, setGoogleMajor] = useState("")
-  const [hasGoogleName, setHasGoogleName] = useState(false)
 
 
 
@@ -139,7 +138,7 @@ export default function Register() {
     try {
       const result = await authUtils.loginWithGoogle(
         role as "student" | "representative" | "companyOwner"
-        ,true );
+        , true);
 
       if (result.success) {
         if (result.needsProfile) {
@@ -149,11 +148,9 @@ export default function Register() {
             const parts = currentUser.displayName.trim().split(" ");
             setGoogleFirstName(parts[0] || "");
             setGoogleLastName(parts.slice(1).join(" ") || "");
-            setHasGoogleName(true);
           } else {
             setGoogleFirstName("");
             setGoogleLastName("");
-            setHasGoogleName(false);
           }
 
           // reset student fields
@@ -637,26 +634,22 @@ export default function Register() {
         <DialogTitle>Complete Your Profile</DialogTitle>
 
         <DialogContent>
-          {/* Show name fields ONLY if Google did NOT provide them */}
-          {!hasGoogleName && (
-            <>
-              <TextField
-                fullWidth
-                label="First Name"
-                value={googleFirstName}
-                onChange={(e) => setGoogleFirstName(e.target.value)}
-                sx={{ mt: 2 }}
-              />
+          {/* Always show name fields – prefilled from Google if available */}
+          <TextField
+            fullWidth
+            label="First Name"
+            value={googleFirstName}
+            onChange={(e) => setGoogleFirstName(e.target.value)}
+            sx={{ mt: 2 }}
+          />
 
-              <TextField
-                fullWidth
-                label="Last Name"
-                value={googleLastName}
-                onChange={(e) => setGoogleLastName(e.target.value)}
-                sx={{ mt: 2 }}
-              />
-            </>
-          )}
+          <TextField
+            fullWidth
+            label="Last Name"
+            value={googleLastName}
+            onChange={(e) => setGoogleLastName(e.target.value)}
+            sx={{ mt: 2 }}
+          />
 
           {/* Student-specific fields */}
           {role === "student" && (
@@ -680,29 +673,46 @@ export default function Register() {
           )}
         </DialogContent>
 
+
         <DialogActions>
           <Button onClick={() => setShowProfileDialog(false)}>Cancel</Button>
 
           <Button
             variant="contained"
+            disabled={
+              !googleFirstName.trim() ||
+              !googleLastName.trim() ||
+              (role === "student" && (!googleSchool.trim() || !googleMajor.trim()))
+            }
             onClick={async () => {
               const currentUser = auth.currentUser;
               if (!currentUser) return;
 
-              const updateData: any = {
-                firstName: googleFirstName,
-                lastName: googleLastName,
+              const userRef = doc(db, "users", currentUser.uid);
+
+              // Build the full user data object
+              const userData: any = {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                role,
+                firstName: googleFirstName.trim(),
+                lastName: googleLastName.trim(),
+                createdAt: new Date().toISOString(),
+                provider: "google",
               };
 
               if (role === "student") {
-                updateData.school = googleSchool;
-                updateData.major = googleMajor;
+                userData.school = googleSchool.trim();
+                userData.major = googleMajor.trim();
               }
 
-              await setDoc(
-                doc(db, "users", currentUser.uid),
-                updateData,
-                { merge: true }
+              // Save user in Firestore
+              await setDoc(userRef, userData);
+
+              // Persist user to localStorage
+              localStorage.setItem(
+                "currentUser",
+                JSON.stringify(userData)
               );
 
               setShowProfileDialog(false);
@@ -711,7 +721,9 @@ export default function Register() {
           >
             Save
           </Button>
+
         </DialogActions>
+
       </Dialog>
 
 

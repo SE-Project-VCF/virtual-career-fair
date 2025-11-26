@@ -156,29 +156,21 @@ export const authUtils = {
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
 
-      // -------------------------------
-      // Existing User (Login or Register)
-      // -------------------------------
+      // ------------------------------------
+      // Existing User — Block Re-registration
+      // ------------------------------------
       if (userSnap.exists()) {
         const existing = userSnap.data();
 
-        const needsProfile =
-          !existing.firstName ||
-          !existing.lastName ||
-          (existing.role === "student" &&
-            (!existing.school || !existing.major));
-
-        // Save user to localStorage for authentication persistence
-        const currentUser = { uid: user.uid, email: user.email!, role: existing.role, ...existing };
-        localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
         return {
-          success: true,
-          exists: true,
-          needsProfile,
+          success: false,   // ❗ important: not a successful registration
+          exists: true,     // tells UI a user already exists
+          needsProfile: false,
           role: existing.role,
+          error: "An account already exists with this Google email. Please sign in instead.",
         };
       }
+
 
       // ------------------------------------
       // New User — Only allowed if registering
@@ -193,44 +185,30 @@ export const authUtils = {
         };
       }
 
-      // ------------------------------------
+      /// ------------------------------------
       // New user — Registration mode
       // ------------------------------------
       let firstName = "";
       let lastName = "";
+
+      // Parse Google name (prefill only)
       if (user.displayName) {
-        const parts = user.displayName.split(" ");
-        firstName = parts[0];
-        lastName = parts.slice(1).join(" ");
+        const parts = user.displayName.trim().split(" ");
+        firstName = parts[0] || "";
+        lastName = parts.slice(1).join(" ") || "";
       }
 
-      const newUser: any = {
-        uid: user.uid,
-        email: user.email,
-        role,
-        provider: "google",
-        firstName: firstName || null,
-        lastName: lastName || null,
-        createdAt: new Date().toISOString(),
-      };
-
-      if (role === "student") {
-        newUser.school = null;
-        newUser.major = null;
-      }
-
-      await setDoc(userRef, newUser);
-
-      // Save user to localStorage for authentication persistence
-      const currentUser = { uid: user.uid, email: user.email!, role, ...newUser };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
+      // Do NOT create Firestore user yet.
+      // Let frontend collect full profile, then create user manually.
       return {
         success: true,
         exists: false,
         needsProfile: true,
         role,
       };
+
+
+
     } catch (err: any) {
       console.error("Google Sign-In failed:", err);
       return { success: false, error: err.message };
@@ -502,7 +480,7 @@ export const authUtils = {
       // Verify the company exists and user is the owner
       const companyRef = doc(db, "companies", companyId);
       const companyDoc = await getDoc(companyRef);
-      
+
       if (!companyDoc.exists()) {
         return { success: false, error: "Company not found" };
       }
@@ -518,9 +496,9 @@ export const authUtils = {
         // Validate custom invite code (alphanumeric, 4-20 characters)
         const trimmedCode = newInviteCode.trim().toUpperCase();
         if (!/^[A-Z0-9]{4,20}$/.test(trimmedCode)) {
-          return { 
-            success: false, 
-            error: "Invite code must be 4-20 characters and contain only letters and numbers" 
+          return {
+            success: false,
+            error: "Invite code must be 4-20 characters and contain only letters and numbers"
           };
         }
         inviteCode = trimmedCode;
@@ -533,7 +511,7 @@ export const authUtils = {
       const companiesRef = collection(db, "companies");
       const companiesSnapshot = await getDocs(companiesRef);
       let codeInUse = false;
-      
+
       companiesSnapshot.forEach((doc) => {
         if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
           codeInUse = true;
@@ -554,7 +532,7 @@ export const authUtils = {
             });
             attempts++;
           }
-          
+
           if (codeInUse) {
             return { success: false, error: "Failed to generate unique invite code. Please try again." };
           }
