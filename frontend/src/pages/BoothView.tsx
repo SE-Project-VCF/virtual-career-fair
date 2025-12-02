@@ -68,6 +68,33 @@ export default function BoothView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
+  const handleStartChat = async () => {
+    try {
+      if (!booth) return;
+
+      // Query Firestore for representative user
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("email", "==", booth.contactEmail));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        console.warn("Chat: representative not found");
+        return;
+      }
+
+      const repDoc = snap.docs[0];
+      const repData = repDoc.data();
+      const representativeId = repData.uid;
+
+      // Navigate to chat page, passing repId so ChatPage can auto-create/select DM
+      navigate("/dashboard/chat", {
+        state: { repId: representativeId },
+      });
+    } catch (err) {
+      console.error("Chat: failed to initialize");
+    }
+  };
+
   useEffect(() => {
     if (!boothId) {
       navigate("/booths")
@@ -112,7 +139,7 @@ export default function BoothView() {
         // Check if this booth belongs to the user's company
         let hasAccess = false
         const companiesRef = collection(db, "companies")
-        
+
         if (user.role === "companyOwner") {
           // Get all companies owned by this user
           const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
@@ -406,6 +433,31 @@ export default function BoothView() {
                       <Typography variant="body1">{booth.contactEmail}</Typography>
                     </Link>
                   </Box>
+
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+
+
+                    {/* ✅ INSERT THIS BUTTON RIGHT HERE */}
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      onClick={handleStartChat}
+                      sx={{
+                        mt: 2,
+                        background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                        textTransform: "none",
+                        fontWeight: 600,
+                        borderRadius: 2,
+                        "&:hover": {
+                          background: "linear-gradient(135deg, #2d6b4d 0%, #1f523b 100%)",
+                        },
+                      }}
+                    >
+                      Message Representative
+                    </Button>
+
+                  </Box>
+
 
                   {booth.contactPhone && (
                     <Box>

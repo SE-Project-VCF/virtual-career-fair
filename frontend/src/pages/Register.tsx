@@ -117,12 +117,25 @@ export default function Register() {
     }
 
     if (result.success) {
+      // 🔥 Sync new user to Stream Chat
+      await fetch("http://localhost:5000/api/sync-stream-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: auth.currentUser?.uid,
+          email,
+          firstName,
+          lastName,
+        }),
+      });
+
       if (result.needsVerification) {
-        navigate("/verification-pending", { state: { email } })
+        navigate("/verification-pending", { state: { email } });
       } else {
-        navigate("/login")
+        navigate("/login");
       }
-    } else {
+    }
+    else {
       setError(result.error || "Registration failed.")
     }
   }
@@ -709,6 +722,18 @@ export default function Register() {
               // Save user in Firestore
               await setDoc(userRef, userData);
 
+              // 🔥 Sync Google user to Stream Chat
+              await fetch("http://localhost:5000/api/sync-stream-user", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  uid: currentUser.uid,
+                  email: currentUser.email!,
+                  firstName: userData.firstName,
+                  lastName: userData.lastName,
+                }),
+              });
+
               // Persist user to localStorage
               localStorage.setItem(
                 "currentUser",
@@ -717,6 +742,7 @@ export default function Register() {
 
               setShowProfileDialog(false);
               navigate("/dashboard");
+
             }}
           >
             Save

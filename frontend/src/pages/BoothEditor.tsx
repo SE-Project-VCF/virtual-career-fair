@@ -20,7 +20,17 @@ import {
   Grid,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { doc, getDoc, updateDoc, collection, addDoc } from "firebase/firestore"
+import { 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  query, 
+  where 
+} from "firebase/firestore";
+
 import { db } from "../firebase"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
@@ -208,12 +218,30 @@ export default function BoothEditor() {
       setError("")
       setSuccess("")
 
-      // Validate required fields
-      if (!formData.companyName || !formData.industry || !formData.companySize || !formData.location || !formData.description || !formData.contactName || !formData.contactEmail) {
-        setError("Please fill in all required fields")
-        setSaving(false)
-        return
+      // Validate contact rep is a real Firestore user
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("email", "==", formData.contactEmail));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        setError("Contact email does not match any registered user.");
+        setSaving(false);
+        return;
       }
+
+      const rep = snap.docs[0].data();
+      const repId = rep.uid;
+
+      // Check that this user belongs to the company
+      const isOwner = repId === company.ownerId;
+      const isRep = company.representativeIDs?.includes(repId);
+
+      if (!isOwner && !isRep) {
+        setError("This user is not an owner or representative of your company.");
+        setSaving(false);
+        return;
+      }
+
 
       const boothData = {
         companyId: company.id,

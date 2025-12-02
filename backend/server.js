@@ -163,6 +163,40 @@ app.get("/api/stream-unread", async (req, res) => {
   }
 });
 
+/* ----------------------------------------------------
+   ENSURE SINGLE USER EXISTS IN STREAM
+   Called from frontend after login/registration
+---------------------------------------------------- */
+app.post("/api/sync-stream-user", async (req, res) => {
+  try {
+    const { uid, email, firstName, lastName } = req.body;
+
+    if (!uid || !email) {
+      return res.status(400).json({ error: "Missing uid or email" });
+    }
+
+    const username =
+      email && email.includes("@")
+        ? email.split("@")[0]
+        : email || uid;
+
+    await streamServer.upsertUser({
+      id: uid,
+      name: `${firstName || ""} ${lastName || ""}`.trim() || email,
+      email,
+      username,
+      firstName: firstName || "",
+      lastName: lastName || "",
+      role: "user",
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Stream single-user sync error:", err);
+    return res.status(500).json({ error: "Failed to sync user to Stream" });
+  }
+});
+
 
 /* ----------------------------------------------------
    REGISTER USER (Firestore + Stream upsert)
