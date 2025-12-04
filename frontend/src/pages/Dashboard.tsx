@@ -426,6 +426,55 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(56, 133, 96, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Browse All Booths
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {isLive 
+                          ? "Explore other companies' booths at the virtual career fair."
+                          : "The career fair is not currently live. You can only view your own company's booth."}
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/booths")}
+                        disabled={!isLive}
+                        sx={{
+                          background: isLive 
+                            ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
+                            : "rgba(0, 0, 0, 0.12)",
+                          color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                          "&:hover": {
+                            background: isLive 
+                              ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                          },
+                          "&:disabled": {
+                            background: "rgba(0, 0, 0, 0.12)",
+                            color: "rgba(0, 0, 0, 0.26)",
+                          },
+                        }}
+                      >
+                        View All Booths
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
               </Grid>
             </Box>
           )}
