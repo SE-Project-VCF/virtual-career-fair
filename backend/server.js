@@ -363,10 +363,40 @@ app.post("/add-job", async (req, res) => {
       applicationLink,
     } = req.body;
 
-    if (!companyId || !name) {
+    // Validate required fields
+    if (!companyId) {
       return res
         .status(400)
-        .send({ success: false, error: "Missing required fields" });
+        .send({ success: false, error: "Company ID is required" });
+    }
+
+    if (!name || !name.trim()) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Job title is required" });
+    }
+
+    if (!description || !description.trim()) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Job description is required" });
+    }
+
+    if (!majorsAssociated || !majorsAssociated.trim()) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Skills are required" });
+    }
+
+    // Validate application link format if provided
+    if (applicationLink && applicationLink.trim()) {
+      try {
+        new URL(applicationLink.trim());
+      } catch (e) {
+        return res
+          .status(400)
+          .send({ success: false, error: "Invalid application URL format" });
+      }
     }
 
     const companyDoc = await db.collection("companies").doc(companyId).get();
@@ -379,18 +409,141 @@ app.post("/add-job", async (req, res) => {
     const jobRef = await db.collection("jobs").add(
       removeUndefined({
         companyId,
-        name,
-        description,
-        majorsAssociated,
-        applicationLink,
+        name: name.trim(),
+        description: description.trim(),
+        majorsAssociated: majorsAssociated.trim(),
+        applicationLink: applicationLink && applicationLink.trim() ? applicationLink.trim() : undefined,
         createdAt: admin.firestore.Timestamp.now(),
       })
     );
 
     res.send({ success: true, jobId: jobRef.id });
   } catch (err) {
-    console.error("Error adding job:");
+    console.error("Error adding job:", err);
     res.status(500).send({ success: false, error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   GET JOBS BY COMPANY ID
+---------------------------------------------------- */
+app.get("/api/jobs", async (req, res) => {
+  try {
+    const { companyId } = req.query;
+
+    if (!companyId) {
+      return res.status(400).json({ error: "Company ID is required" });
+    }
+
+    // Query without orderBy to avoid composite index requirement
+    // We'll sort in memory instead
+    const jobsSnapshot = await db.collection("jobs")
+      .where("companyId", "==", companyId)
+      .get();
+
+    const jobs = [];
+    jobsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      jobs.push({
+        id: doc.id,
+        companyId: data.companyId,
+        name: data.name,
+        description: data.description,
+        majorsAssociated: data.majorsAssociated,
+        applicationLink: data.applicationLink || null,
+        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+      });
+    });
+
+    // Sort by createdAt descending in memory
+    jobs.sort((a, b) => {
+      if (!a.createdAt && !b.createdAt) return 0;
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt - a.createdAt;
+    });
+
+    return res.json({ jobs });
+  } catch (err) {
+    console.error("Error fetching jobs:", err);
+    return res.status(500).json({ error: "Failed to fetch jobs", details: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   UPDATE JOB
+---------------------------------------------------- */
+app.put("/api/jobs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, majorsAssociated, applicationLink } = req.body;
+
+    // Validate required fields
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: "Job title is required" });
+    }
+
+    if (!description || !description.trim()) {
+      return res.status(400).json({ success: false, error: "Job description is required" });
+    }
+
+    if (!majorsAssociated || !majorsAssociated.trim()) {
+      return res.status(400).json({ success: false, error: "Skills are required" });
+    }
+
+    // Validate application link format if provided
+    if (applicationLink && applicationLink.trim()) {
+      try {
+        new URL(applicationLink.trim());
+      } catch (e) {
+        return res.status(400).json({ success: false, error: "Invalid application URL format" });
+      }
+    }
+
+    const jobRef = db.collection("jobs").doc(id);
+    const jobDoc = await jobRef.get();
+
+    if (!jobDoc.exists) {
+      return res.status(404).json({ success: false, error: "Job not found" });
+    }
+
+    await jobRef.update(
+      removeUndefined({
+        name: name.trim(),
+        description: description.trim(),
+        majorsAssociated: majorsAssociated.trim(),
+        applicationLink: applicationLink && applicationLink.trim() ? applicationLink.trim() : null,
+        updatedAt: admin.firestore.Timestamp.now(),
+      })
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Error updating job:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   DELETE JOB
+---------------------------------------------------- */
+app.delete("/api/jobs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const jobRef = db.collection("jobs").doc(id);
+    const jobDoc = await jobRef.get();
+
+    if (!jobDoc.exists) {
+      return res.status(404).json({ success: false, error: "Job not found" });
+    }
+
+    await jobRef.delete();
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting job:", err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
