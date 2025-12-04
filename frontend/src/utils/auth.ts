@@ -9,6 +9,24 @@ import {
 import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
 
+async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
+  try {
+    await fetch("http://localhost:5000/api/sync-stream-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uid,
+        email,
+        firstName: firstName || "",
+        lastName: lastName || "",
+      }),
+    });
+  } catch (err) {
+    console.error("STREAM SYNC FAILED:", err);
+  }
+}
+
+
 export interface User {
   uid: string;
   email: string;
@@ -49,6 +67,13 @@ export const authUtils = {
       // Only send verification email after successful registration
       await sendEmailVerification(user);
 
+      await syncStreamUser(
+        user.uid,
+        email,
+        userData.firstName,
+        userData.lastName
+      );
+
       return { success: true, needsVerification: true };
     } catch (err: any) {
       console.error("Error registering user:", err);
@@ -87,6 +112,14 @@ export const authUtils = {
 
       const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      await syncStreamUser(
+        user.uid,
+        user.email!,
+        userData.firstName,
+        userData.lastName
+      );
+
       return { success: true };
     } catch (err: any) {
       console.error("Error logging in:", err);
@@ -129,6 +162,14 @@ export const authUtils = {
 
       const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      await syncStreamUser(
+        user.uid,
+        user.email!,
+        userData.firstName,
+        userData.lastName
+      );
+
       return { success: true };
     } catch (err: any) {
       console.error("Error logging in:", err);
@@ -156,58 +197,70 @@ export const authUtils = {
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
 
-      // ------------------------------------
-      // Existing User — Block Re-registration
-      // ------------------------------------
+      // --------------------------------------------------------
+      // EXISTING USER FOUND
+      // --------------------------------------------------------
       if (userSnap.exists()) {
-        const existing = userSnap.data();
+        const existingData = userSnap.data();
 
-        return {
-          success: false,   // ❗ important: not a successful registration
-          exists: true,     // tells UI a user already exists
-          needsProfile: false,
-          role: existing.role,
-          error: "An account already exists with this Google email. Please sign in instead.",
+        if (createIfMissing) {
+          // ❌ REGISTER SCREEN → blocking login here
+          return {
+            success: false,
+            exists: true,
+            error: "An account already exists with this Google email. Please sign in instead.",
+          };
+        }
+
+        // ✔ LOGIN SCREEN → allow login
+        const currentUser = {
+          uid: user.uid,
+          email: user.email!,
+          role: existingData.role,
+          ...existingData,
         };
-      }
 
+        localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
-      // ------------------------------------
-      // New User — Only allowed if registering
-      // ------------------------------------
-      if (!createIfMissing) {
-        // LOGIN MODE: block unregistered users
+        await syncStreamUser(
+          user.uid,
+          user.email!,
+          existingData.firstName,
+          existingData.lastName
+        );
+
         return {
           success: true,
-          exists: false,
+          exists: true,
           needsProfile: false,
-          role: undefined,
+          role: existingData.role,
         };
       }
 
-      /// ------------------------------------
-      // New user — Registration mode
-      // ------------------------------------
-      let firstName = "";
-      let lastName = "";
 
-      // Parse Google name (prefill only)
-      if (user.displayName) {
-        const parts = user.displayName.trim().split(" ");
-        firstName = parts[0] || "";
-        lastName = parts.slice(1).join(" ") || "";
+      // --------------------------------------------------------
+      // CASE 2: USER DOES NOT EXIST, AND THIS IS LOGIN MODE
+      // --------------------------------------------------------
+      if (!createIfMissing) {
+        return {
+          success: false,
+          exists: false,
+          needsProfile: false,
+          error: "No account found. Please register first.",
+        };
       }
 
-      // Do NOT create Firestore user yet.
-      // Let frontend collect full profile, then create user manually.
+      // --------------------------------------------------------
+      // CASE 3: USER DOES NOT EXIST — REGISTRATION MODE
+      // --------------------------------------------------------
+      
+      // Tell frontend to collect profile info
       return {
         success: true,
         exists: false,
         needsProfile: true,
         role,
       };
-
-
 
     } catch (err: any) {
       console.error("Google Sign-In failed:", err);
