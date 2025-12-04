@@ -431,30 +431,6 @@ export default function BoothView() {
                   </Box>
                 ) : null}
 
-                {/* Hiring Information */}
-                <Box sx={{ mb: 4 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
-                    <WorkIcon sx={{ color: "#388560" }} />
-                    Open Positions: {jobs.length}
-                  </Typography>
-                  {booth.hiringFor && (
-                    <Box
-                      sx={{
-                        p: 2,
-                        bgcolor: "rgba(56, 133, 96, 0.05)",
-                        borderRadius: 2,
-                        border: "1px solid rgba(56, 133, 96, 0.2)",
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, color: "#388560" }}>
-                        Currently Hiring For:
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
-                        {booth.hiringFor}
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
 
                 {/* Links */}
                 {(booth.website || booth.careersPage) && (

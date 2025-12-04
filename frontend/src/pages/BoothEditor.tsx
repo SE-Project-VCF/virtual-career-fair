@@ -45,8 +45,6 @@ interface BoothData {
   location: string
   description: string
   logoUrl?: string
-  openPositions: number
-  hiringFor?: string
   website?: string
   careersPage?: string
   contactName: string
@@ -98,8 +96,6 @@ export default function BoothEditor() {
     companySize: "",
     location: "",
     description: "",
-    openPositions: 0,
-    hiringFor: "",
     website: "",
     careersPage: "",
     contactName: "",
@@ -195,8 +191,6 @@ export default function BoothEditor() {
           location: boothData.location || "",
           description: boothData.description || "",
           logoUrl: boothData.logoUrl,
-          openPositions: boothData.openPositions || 0,
-          hiringFor: boothData.hiringFor || "",
           website: boothData.website || "",
           careersPage: boothData.careersPage || "",
           contactName: boothData.contactName || "",
@@ -251,8 +245,6 @@ export default function BoothEditor() {
         location: formData.location,
         description: formData.description,
         logoUrl: formData.logoUrl || null,
-        openPositions: formData.openPositions || 0,
-        hiringFor: formData.hiringFor || null,
         website: formData.website || null,
         careersPage: formData.careersPage || null,
         contactName: formData.contactName,
@@ -503,30 +495,6 @@ export default function BoothEditor() {
               </Typography>
 
               <Grid container spacing={3}>
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Number of Open Positions"
-                    type="number"
-                    value={formData.openPositions}
-                    onChange={(e) => setFormData({ ...formData, openPositions: parseInt(e.target.value) || 0 })}
-                    required
-                    inputProps={{ min: 0 }}
-                  />
-                </Grid>
-
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Hiring For (Optional)"
-                    value={formData.hiringFor}
-                    onChange={(e) => setFormData({ ...formData, hiringFor: e.target.value })}
-                    multiline
-                    rows={3}
-                    placeholder="e.g., Software Engineers, Data Scientists, Product Managers..."
-                  />
-                </Grid>
-
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
