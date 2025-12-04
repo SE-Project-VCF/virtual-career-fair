@@ -366,7 +366,7 @@ export default function Dashboard() {
                 Company Management
               </Typography>
               <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 6 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                   <Card
                     sx={{
                       bgcolor: "white",
@@ -403,7 +403,7 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                   <Card
                     sx={{
                       bgcolor: "white",
@@ -866,6 +866,7 @@ export default function Dashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+
     </Box>
   )
 }

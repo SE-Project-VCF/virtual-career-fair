@@ -46,6 +46,17 @@ interface Booth {
   contactName: string
   contactEmail: string
   contactPhone?: string
+  companyId?: string
+}
+
+interface Job {
+  id: string
+  companyId: string
+  name: string
+  description: string
+  majorsAssociated: string
+  applicationLink: string | null
+  createdAt: number | null
 }
 
 const INDUSTRY_LABELS: Record<string, string> = {
@@ -65,7 +76,9 @@ export default function BoothView() {
   const { boothId } = useParams<{ boothId: string }>()
   const user = authUtils.getCurrentUser()
   const [booth, setBooth] = useState<Booth | null>(null)
+  const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -142,11 +155,47 @@ export default function BoothView() {
       }
 
       setBooth(boothData)
+      
+      // Get companyId from booth or look it up from companies
+      let companyId = boothData.companyId
+      if (!companyId) {
+        // Try to find companyId by looking up companies with this boothId
+        const companiesRef = collection(db, "companies")
+        const companiesSnapshot = await getDocs(companiesRef)
+        companiesSnapshot.forEach((doc) => {
+          const companyData = doc.data()
+          if (companyData.boothId === boothId) {
+            companyId = doc.id
+          }
+        })
+      }
+      
+      // Fetch jobs for this company if companyId is available
+      if (companyId) {
+        fetchJobs(companyId)
+      }
     } catch (err) {
       console.error("Error fetching booth:", err)
       setError("Failed to load booth")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchJobs = async (companyId: string) => {
+    try {
+      setLoadingJobs(true)
+      const response = await fetch(`http://localhost:5000/api/jobs?companyId=${companyId}`)
+      if (!response.ok) {
+        throw new Error("Failed to fetch jobs")
+      }
+      const data = await response.json()
+      setJobs(data.jobs || [])
+    } catch (err) {
+      console.error("Error fetching jobs:", err)
+      // Don't show error to user, just log it
+    } finally {
+      setLoadingJobs(false)
     }
   }
 
@@ -290,6 +339,66 @@ export default function BoothView() {
                     {booth.description}
                   </Typography>
                 </Box>
+
+                {/* Job Postings */}
+                {jobs.length > 0 && (
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
+                      <WorkIcon sx={{ color: "#388560" }} />
+                      Job Openings ({jobs.length})
+                    </Typography>
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      {jobs.map((job) => (
+                        <Card
+                          key={job.id}
+                          sx={{
+                            border: "1px solid rgba(56, 133, 96, 0.2)",
+                            borderRadius: 2,
+                            transition: "box-shadow 0.2s",
+                            "&:hover": {
+                              boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                            },
+                          }}
+                        >
+                          <CardContent sx={{ p: 3 }}>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
+                                {job.name}
+                              </Typography>
+                              {job.applicationLink && (
+                                <Button
+                                  variant="contained"
+                                  href={job.applicationLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  sx={{
+                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                    "&:hover": {
+                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                                    },
+                                  }}
+                                >
+                                  Apply Now
+                                </Button>
+                              )}
+                            </Box>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
+                              {job.description}
+                            </Typography>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                                Required Skills:
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {job.majorsAssociated}
+                              </Typography>
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
 
                 {/* Hiring Information */}
                 <Box sx={{ mb: 4 }}>
