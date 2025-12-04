@@ -368,7 +368,11 @@ export default function BoothView() {
                 </Box>
 
                 {/* Job Postings */}
-                {jobs.length > 0 && (
+                {loadingJobs ? (
+                  <Box sx={{ mb: 4, display: "flex", justifyContent: "center", alignItems: "center", py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : jobs.length > 0 ? (
                   <Box sx={{ mb: 4 }}>
                     <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
                       <WorkIcon sx={{ color: "#388560" }} />
@@ -425,7 +429,7 @@ export default function BoothView() {
                       ))}
                     </Box>
                   </Box>
-                )}
+                ) : null}
 
                 {/* Hiring Information */}
                 <Box sx={{ mb: 4 }}>
