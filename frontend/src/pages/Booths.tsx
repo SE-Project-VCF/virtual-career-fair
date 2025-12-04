@@ -35,6 +35,7 @@ interface Booth {
   description: string
   logoUrl?: string
   openPositions: number
+  companyId?: string
   hiringFor?: string
   website?: string
   careersPage?: string
@@ -64,11 +65,37 @@ export default function Booths() {
   const [isLive, setIsLive] = useState(false)
   const [scheduleName, setScheduleName] = useState<string | null>(null)
   const [scheduleDescription, setScheduleDescription] = useState<string | null>(null)
+  const [jobCounts, setJobCounts] = useState<Record<string, number>>({})
+  const [totalJobs, setTotalJobs] = useState(0)
 
   useEffect(() => {
     fetchFairStatus()
     fetchBooths()
+    fetchJobCounts()
   }, [])
+
+  const fetchJobCounts = async () => {
+    try {
+      // Fetch all jobs and count by companyId
+      const jobsSnapshot = await getDocs(collection(db, "jobs"))
+      const counts: Record<string, number> = {}
+      let total = 0
+      
+      jobsSnapshot.forEach((doc) => {
+        const jobData = doc.data()
+        const companyId = jobData.companyId
+        if (companyId) {
+          counts[companyId] = (counts[companyId] || 0) + 1
+          total++
+        }
+      })
+      
+      setJobCounts(counts)
+      setTotalJobs(total)
+    } catch (err) {
+      console.error("Error fetching job counts:", err)
+    }
+  }
 
   const fetchFairStatus = async () => {
     try {
@@ -99,10 +126,23 @@ export default function Booths() {
         // Fair is live - show all booths
         const q = query(collection(db, "booths"), orderBy("companyName"))
         const querySnapshot = await getDocs(q)
+        
+        // Also fetch companies to map boothId to companyId
+        const companiesSnapshot = await getDocs(collection(db, "companies"))
+        const boothIdToCompanyId: Record<string, string> = {}
+        companiesSnapshot.forEach((companyDoc) => {
+          const companyData = companyDoc.data()
+          if (companyData.boothId) {
+            boothIdToCompanyId[companyData.boothId] = companyDoc.id
+          }
+        })
+        
         querySnapshot.forEach((doc) => {
+          const boothData = doc.data()
           boothsList.push({
             id: doc.id,
-            ...doc.data(),
+            ...boothData,
+            companyId: boothData.companyId || boothIdToCompanyId[doc.id],
           } as Booth)
         })
       } else {
@@ -143,9 +183,26 @@ export default function Booths() {
               for (const boothId of boothIds) {
                 const boothDoc = await getDoc(doc(db, "booths", boothId))
                 if (boothDoc.exists()) {
+                  const boothData = boothDoc.data()
+                  // Find companyId for this booth
+                  let boothCompanyId: string | undefined = boothData.companyId
+                  if (!boothCompanyId) {
+                    // Look up companyId from companies collection
+                    for (const companyId of companyIds) {
+                      const companyDoc = await getDoc(doc(db, "companies", companyId))
+                      if (companyDoc.exists()) {
+                        const companyData = companyDoc.data()
+                        if (companyData.boothId === boothId) {
+                          boothCompanyId = companyId
+                          break
+                        }
+                      }
+                    }
+                  }
                   boothsList.push({
                     id: boothDoc.id,
-                    ...boothDoc.data(),
+                    ...boothData,
+                    companyId: boothCompanyId,
                   } as Booth)
                 }
               }
@@ -164,7 +221,13 @@ export default function Booths() {
     }
   }
 
-  const totalPositions = booths.reduce((sum, booth) => sum + (booth.openPositions || 0), 0)
+  // Get companyId for each booth and count jobs
+  const getJobCountForBooth = (booth: Booth): number => {
+    if (booth.companyId) {
+      return jobCounts[booth.companyId] || 0
+    }
+    return 0
+  }
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
@@ -287,7 +350,7 @@ export default function Booths() {
                   </Box>
                   <Box>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
-                      {totalPositions}
+                      {totalJobs}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Open Positions
@@ -463,7 +526,7 @@ export default function Booths() {
                         }}
                       >
                         <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
-                          {booth.openPositions} open position{booth.openPositions !== 1 ? "s" : ""}
+                          {getJobCountForBooth(booth)} open position{getJobCountForBooth(booth) !== 1 ? "s" : ""}
                         </Typography>
                         <Button
                           variant="outlined"

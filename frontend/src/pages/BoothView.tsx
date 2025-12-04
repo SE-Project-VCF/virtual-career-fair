@@ -431,7 +431,7 @@ export default function BoothView() {
                 <Box sx={{ mb: 4 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
                     <WorkIcon sx={{ color: "#388560" }} />
-                    Open Positions: {booth.openPositions}
+                    Open Positions: {jobs.length}
                   </Typography>
                   {booth.hiringFor && (
                     <Box
@@ -612,10 +612,10 @@ export default function BoothView() {
                   <WorkIcon sx={{ fontSize: 32, color: "#388560" }} />
                 </Box>
                 <Typography variant="h4" sx={{ fontWeight: 700, color: "#388560", mb: 1 }}>
-                  {booth.openPositions}
+                  {jobs.length}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Open Position{booth.openPositions !== 1 ? "s" : ""}
+                  Open Position{jobs.length !== 1 ? "s" : ""}
                 </Typography>
               </CardContent>
             </Card>

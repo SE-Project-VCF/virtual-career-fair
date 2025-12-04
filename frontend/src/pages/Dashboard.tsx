@@ -159,14 +159,9 @@ export default function Dashboard() {
         const companiesSnapshot = await getDocs(collection(db, "companies"))
         setTotalCompaniesCount(companiesSnapshot.size)
 
-        // Fetch total job openings (sum of openPositions from all booths)
-        const boothsSnapshot = await getDocs(collection(db, "booths"))
-        let totalOpenings = 0
-        boothsSnapshot.forEach((doc) => {
-          const data = doc.data()
-          totalOpenings += data.openPositions || 0
-        })
-        setTotalJobOpenings(totalOpenings)
+        // Fetch total job openings (count of all job postings)
+        const jobsSnapshot = await getDocs(collection(db, "jobs"))
+        setTotalJobOpenings(jobsSnapshot.size)
       } catch (err) {
         console.error("Error fetching stats:", err)
       } finally {
