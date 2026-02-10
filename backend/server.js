@@ -3,9 +3,9 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
-const crypto = require("crypto");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
+const { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin } = require("./helpers");
 
 // --------------------------
 // ENVIRONMENT VALIDATION
@@ -57,12 +57,14 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 
 // Rate limiting - 100 requests per 15 minutes per IP
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
+if (process.env.NODE_ENV !== "test") {
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  }));
+}
 
 /* ----------------------------------------------------
    FIREBASE AUTH MIDDLEWARE
@@ -85,51 +87,6 @@ async function verifyFirebaseToken(req, res, next) {
   }
 }
 
-function removeUndefined(obj) {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([_, v]) => v !== undefined)
-  );
-}
-
-function generateInviteCode() {
-  return crypto.randomBytes(4).toString("hex").toUpperCase();
-}
-
-/* ----------------------------------------------------
-   HELPER: Parse datetime string as UTC and return Firestore Timestamp
-   Ensures all dates are stored as UTC in the database
----------------------------------------------------- */
-function parseUTCToTimestamp(dateTimeString) {
-  if (!dateTimeString) {
-    throw new Error("Date string is required");
-  }
-  
-  let date;
-  
-  // Check if it's already a full ISO string with timezone (ends with Z or has timezone offset)
-  if (dateTimeString.includes('Z') || dateTimeString.match(/[+-]\d{2}:\d{2}$/)) {
-    // Already has timezone info, parse directly
-    date = new Date(dateTimeString);
-  } else if (dateTimeString.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
-    // ISO format without timezone - treat as UTC by appending Z
-    date = new Date(dateTimeString + 'Z');
-  } else if (dateTimeString.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
-    // datetime-local format (YYYY-MM-DDTHH:mm) - treat as UTC by appending Z
-    date = new Date(dateTimeString + 'Z');
-  } else {
-    // Try parsing as-is (will use local timezone, then we convert)
-    date = new Date(dateTimeString);
-  }
-  
-  // Validate the date
-  if (isNaN(date.getTime())) {
-    throw new Error(`Invalid date string: ${dateTimeString}`);
-  }
-  
-  // Firestore Timestamp stores UTC internally, so we use the UTC milliseconds
-  // This ensures consistent UTC storage regardless of server timezone
-  return admin.firestore.Timestamp.fromMillis(date.getTime());
-}
 
 /* ----------------------------------------------------
    STREAM TOKEN ENDPOINT
@@ -780,27 +737,6 @@ app.post("/api/toggle-fair-status", async (req, res) => {
 });
 
 /* ----------------------------------------------------
-   HELPER: Verify user is administrator
----------------------------------------------------- */
-async function verifyAdmin(userId) {
-  if (!userId) {
-    return { error: "Missing userId", status: 400 };
-  }
-
-  const userDoc = await db.collection("users").doc(userId).get();
-  if (!userDoc.exists) {
-    return { error: "User not found", status: 404 };
-  }
-
-  const userData = userDoc.data();
-  if (userData.role !== "administrator") {
-    return { error: "Only administrators can manage schedules", status: 403 };
-  }
-
-  return null;
-}
-
-/* ----------------------------------------------------
    GET ALL FAIR SCHEDULES (Admin only)
 ---------------------------------------------------- */
 app.get("/api/fair-schedules", async (req, res) => {
@@ -1207,6 +1143,10 @@ app.post("/api/create-admin", async (req, res) => {
 /* ----------------------------------------------------
    START SERVER
 ---------------------------------------------------- */
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
