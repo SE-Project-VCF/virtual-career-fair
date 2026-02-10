@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 import Dashboard from "../Dashboard"
+import { getDocs } from "firebase/firestore"
 
 const mockNavigate = vi.fn()
 vi.mock("react-router-dom", async () => {
@@ -38,22 +39,11 @@ global.fetch = vi.fn().mockResolvedValue({
   json: () => Promise.resolve({ unread: 0 }),
 })
 
-// Mock getDocs for stats
-vi.mock("firebase/firestore", async () => {
-  const actual = await vi.importActual("firebase/firestore")
-  return {
-    ...actual,
-    getDocs: vi.fn().mockResolvedValue({ size: 5, forEach: vi.fn(), docs: [] }),
-    collection: vi.fn(),
-    query: vi.fn(),
-    where: vi.fn(),
-    Timestamp: { fromMillis: vi.fn((ms: number) => ({ toMillis: () => ms })) },
-  }
-})
-
 beforeEach(() => {
   vi.clearAllMocks()
   mockIsAuthenticated.mockReturnValue(true)
+  // Mock getDocs for stats
+  vi.mocked(getDocs).mockResolvedValue({ size: 5, forEach: vi.fn(), docs: [] } as any)
 })
 
 describe("Dashboard", () => {
@@ -106,7 +96,8 @@ describe("Dashboard", () => {
 
     expect(screen.getByText(/Welcome back, Jane/)).toBeInTheDocument()
     expect(screen.getByText("Company Management")).toBeInTheDocument()
-    expect(screen.getByText("Manage Companies")).toBeInTheDocument()
+    const manageCompaniesElements = screen.getAllByText("Manage Companies")
+    expect(manageCompaniesElements.length).toBeGreaterThan(0)
   })
 
   it("renders administrator dashboard", async () => {

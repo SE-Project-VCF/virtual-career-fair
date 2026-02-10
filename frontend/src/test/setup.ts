@@ -20,12 +20,17 @@ vi.mock("firebase/app", () => ({
 const mockSignOut = vi.fn()
 const mockCurrentUser = { uid: "user1", email: "test@test.com", emailVerified: true, reload: vi.fn(), getIdToken: vi.fn(() => Promise.resolve("mock-token")), displayName: "Test User" }
 
+// Mock GoogleAuthProvider as a class constructor
+class MockGoogleAuthProvider {
+  constructor() {}
+}
+
 vi.mock("firebase/auth", () => ({
   getAuth: vi.fn(() => ({
     currentUser: mockCurrentUser,
     signOut: mockSignOut,
   })),
-  GoogleAuthProvider: vi.fn(() => ({})),
+  GoogleAuthProvider: MockGoogleAuthProvider,
   createUserWithEmailAndPassword: vi.fn(),
   signInWithEmailAndPassword: vi.fn(),
   sendEmailVerification: vi.fn(),
@@ -34,9 +39,21 @@ vi.mock("firebase/auth", () => ({
 }))
 
 // Mock firebase/firestore
+const mockFirestore = {
+  _app: {},
+  type: 'firestore',
+  _databaseId: {
+    projectId: 'test-project',
+    database: '(default)'
+  }
+}
+
 vi.mock("firebase/firestore", () => ({
-  getFirestore: vi.fn(() => ({})),
-  doc: vi.fn((_db: any, ...pathSegments: string[]) => ({ path: pathSegments.join("/") })),
+  getFirestore: vi.fn(() => mockFirestore),
+  doc: vi.fn((_db: any, ...pathSegments: string[]) => ({
+    path: pathSegments.join("/"),
+    id: `mock-id-${Math.random().toString(36).substring(7)}`
+  })),
   collection: vi.fn((_db: any, path: string) => ({ path })),
   setDoc: vi.fn(),
   getDoc: vi.fn(),
@@ -47,9 +64,18 @@ vi.mock("firebase/firestore", () => ({
   query: vi.fn(),
   where: vi.fn(),
   orderBy: vi.fn(),
-  Timestamp: {
-    now: vi.fn(() => ({ toMillis: () => Date.now() })),
-    fromMillis: vi.fn((ms: number) => ({ toMillis: () => ms })),
+  Timestamp: class MockTimestamp {
+    seconds: number
+    nanoseconds: number
+    static now = vi.fn(() => ({ toMillis: () => Date.now() }))
+    static fromMillis = vi.fn((ms: number) => ({ toMillis: () => ms }))
+    constructor(seconds: number, nanoseconds: number) {
+      this.seconds = seconds
+      this.nanoseconds = nanoseconds
+    }
+    toMillis() {
+      return this.seconds * 1000 + this.nanoseconds / 1000000
+    }
   },
   arrayUnion: vi.fn((...args: any[]) => args),
 }))

@@ -181,6 +181,25 @@ describe("POST /api/fair-schedules", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 500 when database add fails", async () => {
+    verifyAdmin.mockResolvedValue(null);
+
+    db.collection.mockReturnValue({
+      add: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+    });
+
+    const res = await request(app)
+      .post("/api/fair-schedules")
+      .send({
+        userId: "admin1",
+        name: "Spring Fair",
+        startTime: "2024-06-15T10:00",
+        endTime: "2024-06-15T18:00",
+        description: "Annual spring fair",
+      });
+    expect(res.status).toBe(500);
+  });
+
   it("creates schedule successfully", async () => {
     verifyAdmin.mockResolvedValue(null);
 
@@ -229,6 +248,53 @@ describe("PUT /api/fair-schedules/:id", () => {
       .put("/api/fair-schedules/s1")
       .send({ userId: "admin1", name: "Updated" });
     expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when end time is before start time", async () => {
+    verifyAdmin.mockResolvedValue(null);
+
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({
+            startTime: { toMillis: () => 2000 },
+            endTime: { toMillis: () => 3000 },
+          }),
+        }),
+      })),
+    });
+
+    const res = await request(app)
+      .put("/api/fair-schedules/s1")
+      .send({
+        userId: "admin1",
+        startTime: "2024-06-15T18:00",
+        endTime: "2024-06-15T10:00",
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 500 when database update fails", async () => {
+    verifyAdmin.mockResolvedValue(null);
+
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({
+            startTime: { toMillis: () => 1000 },
+            endTime: { toMillis: () => 2000 },
+          }),
+        }),
+        update: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+      })),
+    });
+
+    const res = await request(app)
+      .put("/api/fair-schedules/s1")
+      .send({ userId: "admin1", name: "Updated Fair" });
+    expect(res.status).toBe(500);
   });
 
   it("updates schedule successfully", async () => {
@@ -291,6 +357,20 @@ describe("DELETE /api/fair-schedules/:id", () => {
 
     const res = await request(app).delete("/api/fair-schedules/s1?userId=admin1");
     expect(res.status).toBe(404);
+  });
+
+  it("returns 500 when database delete fails", async () => {
+    verifyAdmin.mockResolvedValue(null);
+
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue({ exists: true }),
+        delete: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+      })),
+    });
+
+    const res = await request(app).delete("/api/fair-schedules/s1?userId=admin1");
+    expect(res.status).toBe(500);
   });
 
   it("deletes schedule successfully", async () => {

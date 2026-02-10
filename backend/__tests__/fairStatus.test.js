@@ -44,6 +44,25 @@ const { db } = require("../firebase");
 describe("GET /api/fair-status", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 500 when database fetch fails", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "fairSchedules") {
+        return {
+          get: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({
+          get: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+        })),
+      };
+    });
+
+    const res = await request(app).get("/api/fair-status");
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("Failed to fetch fair status");
+  });
+
   it("returns isLive true when a schedule is active", async () => {
     // Timestamp.now() returns 5000, so schedule from 1000-10000 is active
     db.collection.mockImplementation((name) => {
@@ -155,6 +174,28 @@ describe("POST /api/toggle-fair-status", () => {
       .post("/api/toggle-fair-status")
       .send({ userId: "user1" });
     expect(res.status).toBe(403);
+  });
+
+  it("returns 500 when database operation fails", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
+          })),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({
+          get: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+        })),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/toggle-fair-status")
+      .send({ userId: "admin1" });
+    expect(res.status).toBe(500);
   });
 
   it("toggles status from false to true", async () => {

@@ -8,9 +8,6 @@ import {
 } from "firebase/auth"
 import { setDoc, getDoc, getDocs, deleteDoc, updateDoc } from "firebase/firestore"
 
-// Get reference to the mocked auth object
-const mockAuth = await import("../../firebase").then((m) => m.auth)
-
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()

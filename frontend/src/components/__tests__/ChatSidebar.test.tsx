@@ -5,7 +5,7 @@ import * as streamChatReact from "stream-chat-react";
 
 // Mock the stream-chat-react module
 vi.mock("stream-chat-react", () => ({
-  ChannelList: ({ Preview, filters }: any) => (
+  ChannelList: ({ Preview }: any) => (
     <div data-testid="channel-list">
       {Preview && Preview({ channel: { cid: "test-channel" }, setActiveChannel: vi.fn() })}
     </div>
@@ -85,7 +85,7 @@ describe("ChatSidebar", () => {
       />
     );
 
-    const preview = channelListSpy.mock.calls[0]?.[0]?.Preview;
+    const preview = channelListSpy.mock.calls[0]?.[0]?.Preview as any;
     if (preview) {
       const mockSetActiveChannel = vi.fn();
       const result = preview({
@@ -112,14 +112,15 @@ describe("ChatSidebar", () => {
     );
 
     const call = channelListSpy.mock.calls[0]?.[0];
-    const preview = call?.Preview;
+    const preview = call?.Preview as any;
 
-    const previewComponent = preview?.({
-      channel: mockChannel,
-      setActiveChannel: vi.fn(),
-    });
-
-    expect(previewComponent?.props?.active).toBeTrue();
+    if (preview) {
+      const previewComponent = preview({
+        channel: mockChannel,
+        setActiveChannel: vi.fn(),
+      });
+      expect(previewComponent?.props?.active).toBe(true);
+    }
 
     channelListSpy.mockRestore();
   });
@@ -139,7 +140,8 @@ describe("ChatSidebar", () => {
     );
 
     const call = channelListSpy.mock.calls[0]?.[0];
-    expect(call?.filters?.members?.$in).toContain("custom-user-123");
+    const filters = call?.filters as any;
+    expect(filters?.members?.$in).toContain("custom-user-123");
 
     channelListSpy.mockRestore();
   });

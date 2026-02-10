@@ -1,29 +1,41 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { evaluateFairStatus } from "../fairStatus"
-import { getDoc, getDocs } from "firebase/firestore"
+import { getDoc, getDocs, Timestamp } from "firebase/firestore"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Set default mock implementations
+  vi.mocked(getDoc).mockResolvedValue({
+    exists: () => false,
+  } as any)
+  vi.mocked(getDocs).mockResolvedValue({
+    docs: [],
+  } as any)
 })
 
 describe("evaluateFairStatus", () => {
   it("returns live when manual toggle is on with active schedule", async () => {
+    // Use a fixed timestamp to avoid timing issues
+    const fixedNow = 1700000000000 // Fixed timestamp
+    vi.spyOn(Date, 'now').mockReturnValue(fixedNow)
+
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => true,
       data: () => ({ isLive: true }),
     } as any)
-    vi.mocked(getDocs).mockResolvedValue({
+
+    vi.mocked(getDocs).mockImplementation(async () => ({
       docs: [
         {
           data: () => ({
-            startTime: Date.now() - 1000,
-            endTime: Date.now() + 100000,
+            startTime: fixedNow - 10000,
+            endTime: fixedNow + 100000,
             name: "Spring Fair",
             description: "Spring career fair",
           }),
         },
       ],
-    } as any)
+    } as any))
 
     const result = await evaluateFairStatus()
 
@@ -48,6 +60,7 @@ describe("evaluateFairStatus", () => {
   })
 
   it("returns live based on active schedule even without manual toggle", async () => {
+    const now = Date.now()
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => true,
       data: () => ({ isLive: false }),
@@ -56,8 +69,8 @@ describe("evaluateFairStatus", () => {
       docs: [
         {
           data: () => ({
-            startTime: Date.now() - 1000,
-            endTime: Date.now() + 100000,
+            startTime: now - 10000,
+            endTime: now + 100000,
             name: "Active Fair",
             description: "Currently running",
           }),
@@ -107,6 +120,7 @@ describe("evaluateFairStatus", () => {
   })
 
   it("handles Timestamp objects for schedule times", async () => {
+    const now = Date.now()
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => false,
     } as any)
@@ -114,8 +128,8 @@ describe("evaluateFairStatus", () => {
       docs: [
         {
           data: () => ({
-            startTime: { toMillis: () => Date.now() - 1000 },
-            endTime: { toMillis: () => Date.now() + 100000 },
+            startTime: new Timestamp(Math.floor((now - 10000) / 1000), 0),
+            endTime: new Timestamp(Math.floor((now + 100000) / 1000), 0),
             name: "Timestamp Fair",
           }),
         },

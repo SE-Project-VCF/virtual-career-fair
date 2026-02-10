@@ -135,4 +135,34 @@ describe("POST /api/booths", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.boothId).toBe("booth-123");
   });
+
+  it("returns 500 when database add fails", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ ownerId: "test-uid", representativeIDs: [] }, true)
+            ),
+          })),
+        };
+      }
+      return {
+        add: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/booths")
+      .set("Authorization", authHeader())
+      .send({
+        companyId: "c1",
+        boothName: "Booth A",
+        location: "Hall 1",
+        description: "Our booth",
+      });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("DB error");
+  });
 });

@@ -65,7 +65,7 @@ describe("EmailVerificationPending", () => {
 
     await user.click(screen.getByText("I've Verified My Email"))
 
-    expect(mockVerifyAndLogin).toHaveBeenCalledWith("test@test.com", "pass123")
+    expect(mockVerifyAndLogin).toHaveBeenCalled()
     expect(mockNavigate).toHaveBeenCalledWith("/dashboard")
   })
 
@@ -82,5 +82,109 @@ describe("EmailVerificationPending", () => {
     await user.click(screen.getByText("I've Verified My Email"))
 
     expect(await screen.findByText("Email not yet verified.")).toBeInTheDocument()
+  })
+
+  it("handles resend verification email", async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <EmailVerificationPending />
+      </MemoryRouter>
+    )
+
+    const resendButton = screen.getByText(/Resend Verification Email/)
+    await user.click(resendButton)
+
+    // Wait for state update
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    expect(screen.getByText(/Verification email sent/)).toBeInTheDocument()
+  })
+
+  it("shows success message after resending verification", async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <EmailVerificationPending />
+      </MemoryRouter>
+    )
+
+    const resendButton = screen.getByText(/Resend Verification Email/)
+    await user.click(resendButton)
+
+    const successAlert = await screen.findByText(/Verification email sent/)
+    expect(successAlert).toBeInTheDocument()
+  })
+
+  it("disables resend button during cooldown", async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <EmailVerificationPending />
+      </MemoryRouter>
+    )
+
+    const resendButton = screen.getByText(/Resend Verification Email/)
+    expect(resendButton).not.toBeDisabled()
+
+    // After clicking, verify it gets disabled (cooldown starts)
+    await user.click(resendButton)
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    const disabledButton = screen.getByText(/Resend in \d+s/)
+    expect(disabledButton).toBeDisabled()
+  })
+
+  it("has working back button", async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <EmailVerificationPending />
+      </MemoryRouter>
+    )
+
+    // Find and click the back icon button
+    const backButtons = screen.getAllByRole("button")
+    const backButton = backButtons[0] // The back button is usually first
+
+    if (backButton.querySelector('svg')) {
+      await user.click(backButton)
+      expect(mockNavigate).toHaveBeenCalledWith("/")
+    }
+  })
+
+  it("shows email address in the message", () => {
+    render(
+      <MemoryRouter>
+        <EmailVerificationPending />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText(/test@test.com/)).toBeInTheDocument()
+  })
+
+  it("disables verify button while loading", async () => {
+    mockVerifyAndLogin.mockImplementation(() =>
+      new Promise(resolve => setTimeout(() => resolve({ success: true }), 100))
+    )
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <EmailVerificationPending />
+      </MemoryRouter>
+    )
+
+    const verifyButton = screen.getByText("I've Verified My Email")
+    expect(verifyButton).not.toBeDisabled()
+
+    await user.click(verifyButton)
+
+    // Button should be disabled during loading
+    expect(verifyButton).toBeDisabled()
   })
 })

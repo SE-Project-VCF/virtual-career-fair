@@ -181,4 +181,25 @@ describe("POST /api/update-invite-code", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.inviteCode).toMatch(/^[A-F0-9]{8}$/);
   });
+
+  it("returns 500 when database operation fails", async () => {
+    db.collection.mockImplementation(() => ({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "user1" }, true)
+        ),
+      })),
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ docs: [] }),
+    }));
+
+    db.runTransaction.mockRejectedValueOnce(new Error("Transaction error"));
+
+    const res = await request(app)
+      .post("/api/update-invite-code")
+      .send({ companyId: "c1", userId: "user1", newInviteCode: "CODE1234" });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("Failed to update invite code");
+  });
 });

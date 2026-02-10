@@ -186,6 +186,37 @@ describe("POST /api/jobs", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
+
+  it("returns 500 when database add fails", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ ownerId: "test-uid", representativeIDs: [] }, true)),
+          })),
+        };
+      }
+      return {
+        add: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/jobs")
+      .set("Authorization", authHeader())
+      .send({ companyId: "c1", name: "Dev", description: "desc", majorsAssociated: "CS" });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("DB error");
+  });
+
+  it("returns 400 when job name is only whitespace", async () => {
+    const res = await request(app)
+      .post("/api/jobs")
+      .set("Authorization", authHeader())
+      .send({ companyId: "c1", name: "   ", description: "desc", majorsAssociated: "CS" });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("GET /api/jobs", () => {
@@ -194,6 +225,17 @@ describe("GET /api/jobs", () => {
   it("returns 400 when companyId is missing", async () => {
     const res = await request(app).get("/api/jobs");
     expect(res.status).toBe(400);
+  });
+
+  it("returns 500 when database fetch fails", async () => {
+    db.collection.mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      get: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+    });
+
+    const res = await request(app).get("/api/jobs?companyId=c1");
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("Failed to fetch jobs");
   });
 
   it("returns empty array when no jobs", async () => {
@@ -249,6 +291,30 @@ describe("PUT /api/jobs/:id", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 when description is empty", async () => {
+    const res = await request(app)
+      .put("/api/jobs/j1")
+      .set("Authorization", authHeader())
+      .send({ name: "Dev", description: "", majorsAssociated: "CS" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when majorsAssociated is empty", async () => {
+    const res = await request(app)
+      .put("/api/jobs/j1")
+      .set("Authorization", authHeader())
+      .send({ name: "Dev", description: "desc", majorsAssociated: "" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when applicationLink is invalid URL", async () => {
+    const res = await request(app)
+      .put("/api/jobs/j1")
+      .set("Authorization", authHeader())
+      .send({ name: "Dev", description: "desc", majorsAssociated: "CS", applicationLink: "not-a-url" });
+    expect(res.status).toBe(400);
+  });
+
   it("returns 404 when job does not exist", async () => {
     setupDbMock({ jobs: { docExists: false } });
 
@@ -257,6 +323,32 @@ describe("PUT /api/jobs/:id", () => {
       .set("Authorization", authHeader())
       .send({ name: "Dev", description: "desc", majorsAssociated: "CS" });
     expect(res.status).toBe(404);
+  });
+
+  it("returns 500 when database update fails", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "jobs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyId: "c1" }, true)),
+            update: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+          })),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({
+          get: jest.fn().mockResolvedValue(
+            mockDocSnap({ ownerId: "test-uid", representativeIDs: [] }, true)
+          ),
+        })),
+      };
+    });
+
+    const res = await request(app)
+      .put("/api/jobs/j1")
+      .set("Authorization", authHeader())
+      .send({ name: "Dev", description: "desc", majorsAssociated: "CS" });
+    expect(res.status).toBe(500);
   });
 
   it("returns 403 when user is not authorized", async () => {
@@ -334,6 +426,56 @@ describe("DELETE /api/jobs/:id", () => {
       .delete("/api/jobs/j1")
       .set("Authorization", authHeader());
     expect(res.status).toBe(404);
+  });
+
+  it("returns 403 when user is not authorized", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "jobs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyId: "c1" }, true)),
+            delete: jest.fn().mockResolvedValue(undefined),
+          })),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({
+          get: jest.fn().mockResolvedValue(
+            mockDocSnap({ ownerId: "other-owner", representativeIDs: [] }, true)
+          ),
+        })),
+      };
+    });
+
+    const res = await request(app)
+      .delete("/api/jobs/j1")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 500 when database delete fails", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "jobs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyId: "c1" }, true)),
+            delete: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+          })),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({
+          get: jest.fn().mockResolvedValue(
+            mockDocSnap({ ownerId: "test-uid", representativeIDs: [] }, true)
+          ),
+        })),
+      };
+    });
+
+    const res = await request(app)
+      .delete("/api/jobs/j1")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(500);
   });
 
   it("deletes job successfully", async () => {

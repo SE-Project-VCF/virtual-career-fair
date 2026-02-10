@@ -106,6 +106,44 @@ describe("POST /api/sync-stream-users", () => {
     expect(res.status).toBe(403);
   });
 
+  it("returns error when no users found", async () => {
+    let callCount = 0;
+    db.collection.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
+          })),
+        };
+      }
+      return {
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/sync-stream-users")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toContain("No users found");
+  });
+
+  it("returns 500 when database fetch fails", async () => {
+    db.collection.mockImplementation(() => ({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockRejectedValueOnce(new Error("DB error")),
+      })),
+    }));
+
+    const res = await request(app)
+      .post("/api/sync-stream-users")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toContain("DB error");
+  });
+
   it("syncs users successfully", async () => {
     const users = [
       mockDocSnap({ uid: "u1", email: "a@b.com", firstName: "A", lastName: "B" }),
@@ -149,6 +187,26 @@ describe("GET /api/stream-token", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 401 when token verification fails", async () => {
+    auth.verifyIdToken.mockRejectedValueOnce(new Error("Invalid token"));
+    const res = await request(app)
+      .get("/api/stream-token")
+      .set("Authorization", "Bearer invalid-token");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toContain("Invalid or expired token");
+  });
+
+  it("returns 500 when stream token creation fails", async () => {
+    mockCreateToken.mockImplementationOnce(() => {
+      throw new Error("Stream error");
+    });
+    const res = await request(app)
+      .get("/api/stream-token")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Unable to create token");
+  });
+
   it("returns token for authenticated user", async () => {
     const res = await request(app)
       .get("/api/stream-token")
@@ -174,6 +232,15 @@ describe("GET /api/stream-unread", () => {
       .set("Authorization", authHeader());
     expect(res.status).toBe(200);
     expect(res.body.unread).toBe(0);
+  });
+
+  it("returns 500 when queryChannels throws error", async () => {
+    mockQueryChannels.mockRejectedValueOnce(new Error("Stream error"));
+    const res = await request(app)
+      .get("/api/stream-unread")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Failed to compute unread");
   });
 
   it("calculates unread correctly", async () => {

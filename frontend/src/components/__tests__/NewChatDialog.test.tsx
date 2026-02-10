@@ -8,6 +8,7 @@ describe("NewChatDialog", () => {
     uid: "test-user-id",
     email: "test@example.com",
     displayName: "Test User",
+    role: "student" as const,
   };
 
   const mockClient = {
@@ -308,7 +309,6 @@ describe("NewChatDialog", () => {
   });
 
   it("shows error message when user selection fails", async () => {
-    const user = userEvent.setup();
     render(
       <NewChatDialog
         open={true}
@@ -320,11 +320,8 @@ describe("NewChatDialog", () => {
     );
 
     const startChatButton = screen.getByRole("button", { name: /start chat/i });
-    await user.click(startChatButton);
-
-    await waitFor(() => {
-      expect(screen.getByText("Please select a user.")).toBeInTheDocument();
-    });
+    // Button should be disabled when no user is selected
+    expect(startChatButton).toBeDisabled();
   });
 
   it("does not call queryUsers when clientReady is false", async () => {

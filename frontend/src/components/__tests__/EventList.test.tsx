@@ -1,20 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import EventList from "../EventList";
-import { getDocs, collection, Timestamp } from "firebase/firestore";
-
-// Mock Firebase Firestore
-vi.mock("firebase/firestore", () => ({
-  getDocs: vi.fn(),
-  collection: vi.fn(),
-  Timestamp: {
-    now: () => ({ toMillis: () => Date.now() }),
-  },
-}));
-
-vi.mock("../firebase", () => ({
-  db: {},
-}));
+import { getDocs, Timestamp } from "firebase/firestore";
 
 describe("EventList", () => {
   beforeEach(() => {

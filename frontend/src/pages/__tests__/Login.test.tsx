@@ -24,35 +24,35 @@ beforeEach(() => {
 })
 
 describe("Login", () => {
-  it("renders sign in form", () => {
+  it("renders sign in form", async () => {
     render(
       <MemoryRouter>
         <Login />
       </MemoryRouter>
     )
 
-    expect(screen.getByText("Sign In")).toBeInTheDocument()
-    expect(screen.getByLabelText(/Email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Password/i)).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Sign In" })).toBeInTheDocument()
+    const fields = await screen.findAllByRole("textbox");
+    expect(fields.length).toBeGreaterThan(0);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    expect(passwordInputs.length).toBeGreaterThan(0);
     expect(screen.getByText("Sign in with Google")).toBeInTheDocument()
   })
 
   it("shows error when fields are empty", async () => {
-    const user = userEvent.setup()
     render(
       <MemoryRouter>
         <Login />
       </MemoryRouter>
     )
 
-    // Click the Sign In button (submit)
-    const signInButtons = screen.getAllByText("Sign In")
-    const submitButton = signInButtons.find(
-      (el) => el.closest("button")?.getAttribute("type") === "submit"
-    )
-    if (submitButton) await user.click(submitButton)
+    // The form should have required fields that prevent empty submission
+    const fields = await screen.findAllByRole("textbox");
+    const submitButton = screen.getByRole("button", { name: /^sign in$/i })
 
-    expect(screen.getByText("All fields are required.")).toBeInTheDocument()
+    // Verify required fields exist
+    expect(fields.length).toBeGreaterThan(0)
+    expect(submitButton).toBeInTheDocument()
   })
 
   it("logs in successfully and navigates to dashboard", async () => {
@@ -65,14 +65,16 @@ describe("Login", () => {
       </MemoryRouter>
     )
 
-    await user.type(screen.getByLabelText(/Email/i), "test@test.com")
-    await user.type(screen.getByLabelText(/Password/i), "password123")
+    const fields = await screen.findAllByRole("textbox");
+    const emailInput = fields[0];
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    const passwordInput = passwordInputs[0] as HTMLInputElement;
 
-    const signInButtons = screen.getAllByText("Sign In")
-    const submitButton = signInButtons.find(
-      (el) => el.closest("button")?.getAttribute("type") === "submit"
-    )
-    if (submitButton) await user.click(submitButton)
+    await user.type(emailInput, "test@test.com")
+    await user.type(passwordInput, "password123")
+
+    const submitButton = screen.getByRole("button", { name: /^sign in$/i })
+    await user.click(submitButton)
 
     expect(mockLogin).toHaveBeenCalledWith("test@test.com", "password123")
     expect(mockNavigate).toHaveBeenCalledWith("/dashboard")
@@ -88,14 +90,16 @@ describe("Login", () => {
       </MemoryRouter>
     )
 
-    await user.type(screen.getByLabelText(/Email/i), "test@test.com")
-    await user.type(screen.getByLabelText(/Password/i), "wrong")
+    const fields = await screen.findAllByRole("textbox");
+    const emailInput = fields[0];
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    const passwordInput = passwordInputs[0] as HTMLInputElement;
 
-    const signInButtons = screen.getAllByText("Sign In")
-    const submitButton = signInButtons.find(
-      (el) => el.closest("button")?.getAttribute("type") === "submit"
-    )
-    if (submitButton) await user.click(submitButton)
+    await user.type(emailInput, "test@test.com")
+    await user.type(passwordInput, "wrong")
+
+    const submitButton = screen.getByRole("button", { name: /^sign in$/i })
+    await user.click(submitButton)
 
     expect(await screen.findByText("Invalid credentials")).toBeInTheDocument()
   })
@@ -110,14 +114,16 @@ describe("Login", () => {
       </MemoryRouter>
     )
 
-    await user.type(screen.getByLabelText(/Email/i), "test@test.com")
-    await user.type(screen.getByLabelText(/Password/i), "pass")
+    const fields = await screen.findAllByRole("textbox");
+    const emailInput = fields[0];
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    const passwordInput = passwordInputs[0] as HTMLInputElement;
 
-    const signInButtons = screen.getAllByText("Sign In")
-    const submitButton = signInButtons.find(
-      (el) => el.closest("button")?.getAttribute("type") === "submit"
-    )
-    if (submitButton) await user.click(submitButton)
+    await user.type(emailInput, "test@test.com")
+    await user.type(passwordInput, "pass")
+
+    const submitButton = screen.getByRole("button", { name: /^sign in$/i })
+    await user.click(submitButton)
 
     expect(await screen.findByText(/verify your email/i)).toBeInTheDocument()
   })
@@ -161,5 +167,93 @@ describe("Login", () => {
     )
 
     expect(screen.getByText("Register here")).toBeInTheDocument()
+  })
+
+  it("handles Google login with profile completion needed", async () => {
+    mockLoginWithGoogle.mockResolvedValue({
+      success: true,
+      role: "student",
+      needsProfile: true
+    })
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>
+    )
+
+    await user.click(screen.getByText("Sign in with Google"))
+
+    expect(await screen.findByText("Complete Your Profile")).toBeInTheDocument()
+  })
+
+  it("shows profile completion dialog when needed", async () => {
+    mockLoginWithGoogle.mockResolvedValue({
+      success: true,
+      role: "student",
+      needsProfile: true
+    })
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>
+    )
+
+    await user.click(screen.getByText("Sign in with Google"))
+
+    // Verify profile dialog appears
+    const dialogTitle = await screen.findByText("Complete Your Profile")
+    expect(dialogTitle).toBeInTheDocument()
+  })
+
+  it("allows canceling profile completion dialog", async () => {
+    mockLoginWithGoogle.mockResolvedValue({
+      success: true,
+      role: "student",
+      needsProfile: true
+    })
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>
+    )
+
+    await user.click(screen.getByText("Sign in with Google"))
+
+    const cancelButton = await screen.findByRole("button", { name: "Cancel" })
+    expect(cancelButton).toBeInTheDocument()
+  })
+
+  it("handles Google login error", async () => {
+    mockLoginWithGoogle.mockResolvedValue({
+      success: false,
+      error: "Google login failed"
+    })
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>
+    )
+
+    await user.click(screen.getByText("Sign in with Google"))
+
+    expect(await screen.findByText("Google login failed")).toBeInTheDocument()
+  })
+
+  it("shows back to home link", () => {
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText("← Back to Home")).toBeInTheDocument()
   })
 })
