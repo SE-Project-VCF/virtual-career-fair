@@ -17,7 +17,7 @@ npm run test:coverage # Generate coverage report
 cd backend
 npm test              # Run all tests once
 npm test:watch       # Watch mode (auto-rerun on changes)
-npm test:coverage    # Generate coverage report
+npm run test:coverage    # Generate coverage report
 ```
 
 ---
