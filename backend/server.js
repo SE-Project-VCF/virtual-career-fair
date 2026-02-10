@@ -137,7 +137,7 @@ function parseUTCToTimestamp(dateTimeString) {
 app.get("/api/stream-token", verifyFirebaseToken, (req, res) => {
   try {
     const token = streamServer.createToken(req.user.uid);
-    return res.json({ token });
+    return res.json({ success: true, token });
   } catch (err) {
     console.error("Stream token error:", err);
     return res.status(500).json({ error: "Unable to create token" });
@@ -182,7 +182,7 @@ app.get("/api/stream-unread", verifyFirebaseToken, async (req, res) => {
       unread += unreadInThisChannel;
     }
 
-    return res.json({ unread });
+    return res.json({ success: true, unread });
 
   } catch (err) {
     console.error("Unread calc error:", err);
@@ -307,7 +307,7 @@ app.post("/api/register-user", async (req, res) => {
       });
 
     } catch (streamErr) {
-      console.error("STREAM UPSERT ERROR:");
+      console.error("Stream upsert error:", streamErr);
     }
 
     res.send({
@@ -320,7 +320,7 @@ app.post("/api/register-user", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Error registering user:");
+    console.error("Error registering user:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });
@@ -375,7 +375,7 @@ app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
       count,
     });
   } catch (err) {
-    console.error("Stream user sync failed");
+    console.error("Stream user sync failed:", err);
     return res.status(500).json({
       success: false,
       error: err.message,
@@ -503,7 +503,7 @@ app.get("/api/jobs", async (req, res) => {
       return b.createdAt - a.createdAt;
     });
 
-    return res.json({ jobs });
+    return res.json({ success: true, jobs });
   } catch (err) {
     console.error("Error fetching jobs:", err);
     return res.status(500).json({ error: "Failed to fetch jobs", details: err.message });
@@ -650,7 +650,7 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
 
     res.send({ success: true, boothId: boothRef.id });
   } catch (err) {
-    console.error("Error adding booth:");
+    console.error("Error adding booth:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });

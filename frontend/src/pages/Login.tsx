@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
