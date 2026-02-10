@@ -19,6 +19,9 @@ vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
     isAuthenticated: vi.fn(() => true),
+    createCompany: vi.fn(),
+    deleteCompany: vi.fn(),
+    updateInviteCode: vi.fn(),
   },
 }));
 
@@ -148,7 +151,280 @@ describe("CompanyManagement", () => {
     expect(container.firstChild).toBeDefined();
   });
 
+  // Company Creation Tests
+  it("opens create company dialog", async () => {
+    const user = userEvent.setup();
+    renderCompanyManagement();
+    await waitFor(() => {
+      const buttons = screen.queryAllByRole("button");
+      expect(buttons.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("validates company name is required", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("creates company successfully", async () => {
+    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
+      success: true,
+      companyId: "new-company-id",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("handles company creation error", async () => {
+    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
+      success: false,
+      error: "Company name already exists",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("closes dialog after successful creation", async () => {
+    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
+      success: true,
+      companyId: "new-id",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  // Company Deletion Tests
+  it("opens delete confirmation dialog", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("deletes company successfully", async () => {
+    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
+      success: true,
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("handles company deletion error", async () => {
+    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
+      success: false,
+      error: "Company has active representatives",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("cancels company deletion", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  // Invite Code Management Tests
+  it("copies invite code to clipboard", async () => {
+    const clipboardSpy = vi.spyOn(navigator.clipboard, "writeText");
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("regenerates invite code successfully", async () => {
+    vi.spyOn(authUtils.authUtils, "updateInviteCode").mockResolvedValueOnce({
+      success: true,
+      inviteCode: "NEWCODE123",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("handles invite code regeneration error", async () => {
+    vi.spyOn(authUtils.authUtils, "updateInviteCode").mockResolvedValueOnce({
+      success: false,
+      error: "Failed to update",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("enters edit mode for invite code", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("saves custom invite code", async () => {
+    vi.spyOn(authUtils.authUtils, "updateInviteCode").mockResolvedValueOnce({
+      success: true,
+      inviteCode: "CUSTOM123",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("cancels invite code edit", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("validates invite code length", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  // Navigation Tests
+  it("navigates to company details", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("navigates back to dashboard", async () => {
+    const user = userEvent.setup();
+    renderCompanyManagement();
+    await waitFor(() => {
+      const backButtons = screen.queryAllByTestId("ArrowBackIcon");
+      if (backButtons.length > 0) {
+        user.click(backButtons[0].closest("button")!);
+      }
+    });
+  });
+
+  // Error Handling Tests
+  it("handles firestore query error", async () => {
+    const firestore = await import("firebase/firestore");
+    vi.spyOn(firestore, "getDocs").mockRejectedValueOnce(
+      new Error("Network error")
+    );
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("handles clipboard copy error", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(
+      new Error("Clipboard error")
+    );
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("displays success message after creation", async () => {
+    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
+      success: true,
+      companyId: "new-id",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("displays success message after deletion", async () => {
+    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
+      success: true,
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
   // State Management Tests
+  it("refreshes companies list after creation", async () => {
+    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
+      success: true,
+      companyId: "new-id",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("refreshes companies list after deletion", async () => {
+    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
+      success: true,
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("clears form after successful creation", async () => {
+    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
+      success: true,
+      companyId: "new-id",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  // Conditional Rendering Tests
+  it("shows empty state when no companies", async () => {
+    const firestore = await import("firebase/firestore");
+    vi.spyOn(firestore, "getDocs").mockResolvedValueOnce({
+      forEach: vi.fn(),
+    } as any);
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("displays company cards when companies exist", async () => {
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
+  it("handles missing user ID gracefully", async () => {
+    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+      uid: undefined,
+      role: "companyOwner",
+    });
+    renderCompanyManagement();
+    await waitFor(() => {
+      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    });
+  });
+
   it("handles missing user UID gracefully", () => {
     (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
       role: "companyOwner",

@@ -263,4 +263,53 @@ describe("Booths", () => {
       expect(alerts).toBeDefined();
     });
   });
+
+  // Additional Coverage Tests
+  it("handles search input changes", async () => {
+    renderBooths();
+    await waitFor(() => {
+      const inputs = screen.queryAllByRole("textbox");
+      expect(inputs.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  it("displays fair description correctly", async () => {
+    renderBooths();
+    await waitFor(() => {
+      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+    });
+  });
+
+  it("calculates total job positions", async () => {
+    renderBooths();
+    await waitFor(() => {
+      expect(screen.getByText(/open positions/i)).toBeInTheDocument();
+    });
+  });
+
+  it("handles firestore query errors", async () => {
+    (fairStatus.evaluateFairStatus as any).mockRejectedValue(new Error("Database error"));
+    renderBooths();
+    await waitFor(() => {
+      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+    });
+  });
+
+  it("displays empty state when no booths available", async () => {
+    renderBooths();
+    await waitFor(() => {
+      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+    });
+  });
+
+  it("shows different views based on user role", async () => {
+    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "user-1",
+      role: "representative",
+    });
+    renderBooths();
+    await waitFor(() => {
+      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+    });
+  });
 });

@@ -199,6 +199,250 @@ describe("authUtils.logout / getCurrentUser / isAuthenticated", () => {
     expect(authUtils.getCurrentUser()).toEqual(user)
   })
 
+  it("isAuthenticated returns true when user exists", () => {
+    localStorage.setItem("currentUser", JSON.stringify({ uid: "u1" }))
+    expect(authUtils.isAuthenticated()).toBe(true)
+  })
+
+  it("isAuthenticated returns false when no user", () => {
+    expect(authUtils.isAuthenticated()).toBe(false)
+  })
+})
+
+describe("authUtils.createCompany", () => {
+  it("creates company successfully", async () => {
+    vi.mocked(setDoc).mockResolvedValue(undefined)
+    vi.mocked(updateDoc).mockResolvedValue(undefined)
+
+    const result = await authUtils.createCompany("Tech Corp", "owner-1")
+
+    expect(result.success).toBe(true)
+    expect(result.companyId).toBeDefined()
+    expect(setDoc).toHaveBeenCalled()
+  })
+
+  it("returns error on failure", async () => {
+    vi.mocked(setDoc).mockRejectedValue(new Error("Database error"))
+
+    const result = await authUtils.createCompany("Tech Corp", "owner-1")
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
+  })
+
+  it("updates user document with company info", async () => {
+    vi.mocked(setDoc).mockResolvedValue(undefined)
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ role: "companyOwner" }),
+    } as any)
+
+    await authUtils.createCompany("Tech Corp", "owner-1")
+
+    expect(setDoc).toHaveBeenCalledTimes(2) // Once for company, once for user
+  })
+})
+
+describe("authUtils.deleteCompany", () => {
+  it("deletes company successfully", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ ownerId: "owner-1", representativeIDs: [] }),
+    } as any)
+    vi.mocked(deleteDoc).mockResolvedValue(undefined)
+    vi.mocked(updateDoc).mockResolvedValue(undefined)
+
+    const result = await authUtils.deleteCompany("company-1", "owner-1")
+
+    expect(result.success).toBe(true)
+    expect(deleteDoc).toHaveBeenCalled()
+  })
+
+  it("returns error when not owner", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ ownerId: "different-owner" }),
+    } as any)
+
+    const result = await authUtils.deleteCompany("company-1", "owner-1")
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain("don't have permission")
+  })
+
+  it("deletes company with representatives successfully", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ ownerId: "owner-1", representativeIDs: ["rep-1", "rep-2"] }),
+    } as any)
+    vi.mocked(deleteDoc).mockResolvedValue(undefined)
+    vi.mocked(setDoc).mockResolvedValue(undefined)
+
+    const result = await authUtils.deleteCompany("company-1", "owner-1")
+
+    expect(result.success).toBe(true)
+    expect(deleteDoc).toHaveBeenCalled()
+  })
+
+  it("returns error when company not found", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => false,
+    } as any)
+
+    const result = await authUtils.deleteCompany("company-1", "owner-1")
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain("not found")
+  })
+})
+
+describe("authUtils.updateInviteCode", () => {
+  it("updates invite code successfully", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ ownerId: "owner-1" }),
+    } as any)
+    const mockForEach = vi.fn()
+    vi.mocked(getDocs).mockResolvedValue({
+      empty: true,
+      forEach: mockForEach,
+    } as any)
+    vi.mocked(updateDoc).mockResolvedValue(undefined)
+
+    const result = await authUtils.updateInviteCode("company-1", "owner-1")
+
+    expect(result.success).toBe(true)
+    expect(result.inviteCode).toBeDefined()
+    expect(updateDoc).toHaveBeenCalled()
+  })
+
+  it("validates custom invite code", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ ownerId: "owner-1" }),
+    } as any)
+    const mockForEach = vi.fn()
+    vi.mocked(getDocs).mockResolvedValue({
+      empty: true,
+      forEach: mockForEach,
+    } as any)
+    vi.mocked(updateDoc).mockResolvedValue(undefined)
+
+    const result = await authUtils.updateInviteCode("company-1", "owner-1", "CUSTOM123")
+
+    expect(result.success).toBe(true)
+    expect(result.inviteCode).toBe("CUSTOM123")
+  })
+
+  it("rejects duplicate invite code", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ ownerId: "owner-1" }),
+    } as any)
+    
+    const mockForEach = vi.fn((callback: any) => {
+      callback({ id: "other-company", data: () => ({ inviteCode: "EXISTING" }) })
+    })
+    
+    vi.mocked(getDocs).mockResolvedValue({
+      empty: false,
+      forEach: mockForEach,
+    } as any)
+
+    const result = await authUtils.updateInviteCode("company-1", "owner-1", "EXISTING")
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
+  })
+
+  it("returns error when not owner", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ ownerId: "different-owner" }),
+    } as any)
+
+    const result = await authUtils.updateInviteCode("company-1", "owner-1", "NEWCODE")
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain("Only the company owner")
+  })
+
+  it("returns error when company not found", async () => {
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => false,
+    } as any)
+
+    const result = await authUtils.updateInviteCode("company-1", "owner-1")
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain("not found")
+  })
+})
+
+describe("authUtils error handling", () => {
+  it("handles Firebase auth errors", async () => {
+    vi.mocked(createUserWithEmailAndPassword).mockRejectedValue({
+      code: "auth/email-already-in-use",
+      message: "Email already in use",
+    })
+
+    const result = await authUtils.registerUser("test@test.com", "pass123", "student")
+
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
+  })
+
+  it("handles Stream sync failures gracefully", async () => {
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValue({
+      user: { uid: "u1", email: "test@test.com", emailVerified: true },
+    } as any)
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      data: () => ({ role: "student" }),
+    } as any)
+    global.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
+
+    const result = await authUtils.login("test@test.com", "pass123")
+
+    expect(result.success).toBe(false)
+  })
+
+  it("handles missing email in Google login", async () => {
+    vi.mocked(signInWithPopup).mockResolvedValue({
+      user: { uid: "u1", email: null },
+    } as any)
+
+    const result = await authUtils.loginWithGoogle("student", false)
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe("authUtils edge cases", () => {
+  it("handles empty localStorage gracefully", () => {
+    localStorage.clear()
+    expect(authUtils.getCurrentUser()).toBeNull()
+    expect(authUtils.isAuthenticated()).toBe(false)
+  })
+
+  it("handles malformed JSON in localStorage", () => {
+    localStorage.setItem("currentUser", "invalid-json")
+    expect(authUtils.getCurrentUser()).toBeNull()
+  })
+
+  it("handles missing firstName/lastName in registration", async () => {
+    vi.mocked(createUserWithEmailAndPassword).mockResolvedValue({
+      user: { uid: "u1", email: "test@test.com" },
+    } as any)
+    vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
+    vi.mocked(setDoc).mockResolvedValue(undefined)
+    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+
+    const result = await authUtils.registerUser("test@test.com", "pass123", "student")
+
+    expect(result.success).toBe(true)
+  })
+
   it("getCurrentUser returns null when empty", () => {
     expect(authUtils.getCurrentUser()).toBeNull()
   })

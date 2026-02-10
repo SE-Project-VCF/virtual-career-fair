@@ -321,7 +321,12 @@ export const authUtils = {
 
   getCurrentUser: (): User | null => {
     const userStr = localStorage.getItem("currentUser");
-    return userStr ? JSON.parse(userStr) : null;
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
   },
 
   isAuthenticated: (): boolean => {
