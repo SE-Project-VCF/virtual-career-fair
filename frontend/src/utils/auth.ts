@@ -8,10 +8,11 @@ import {
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { API_URL } from "../config";
 
 async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
   try {
-    await fetch("http://localhost:5000/api/sync-stream-user", {
+    await fetch(`${API_URL}/api/sync-stream-user`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

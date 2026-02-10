@@ -30,6 +30,7 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import { API_URL } from "../config"
 
 interface Booth {
   id: string
@@ -212,7 +213,7 @@ export default function BoothView() {
   const fetchJobs = async (companyId: string) => {
     try {
       setLoadingJobs(true)
-      const response = await fetch(`http://localhost:5000/api/jobs?companyId=${companyId}`)
+      const response = await fetch(`${API_URL}/api/jobs?companyId=${companyId}`)
       if (!response.ok) {
         throw new Error("Failed to fetch jobs")
       }

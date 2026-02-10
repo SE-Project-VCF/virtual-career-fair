@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type React from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import { useNavigate, useLocation } from "react-router-dom";
+import { API_URL } from "../config";
 import type { Channel as StreamChannel } from "stream-chat";
 
 import {
@@ -20,6 +21,7 @@ import ChatSidebar from "../components/chat/ChatSidebar";
 import NewChatDialog from "../components/chat/NewChatDialog";
 
 import { authUtils } from "../utils/auth";
+import { auth } from "../firebase";
 import { streamClient } from "../utils/streamClient";
 
 export default function ChatPage() {
@@ -70,8 +72,12 @@ export default function ChatPage() {
 
         // If not connected → connect
         if (!client.userID) {
+          const idToken = await auth.currentUser?.getIdToken();
           const res = await fetch(
-            `http://localhost:5000/api/stream-token?userId=${user.uid}`
+            `${API_URL}/api/stream-token`,
+            {
+              headers: { Authorization: `Bearer ${idToken}` },
+            }
           );
 
           if (!res.ok) {

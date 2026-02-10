@@ -30,20 +30,11 @@ app.use(
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-      
+
       // Check if origin is in allowed list
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
-      } 
-      // Allow all Vercel deployment URLs (for flexibility during development/deployment)
-      else if (origin.includes(".vercel.app")) {
-        callback(null, true);
-      } 
-      // Allow localhost on any port (for development)
-      else if (origin.startsWith("http://localhost:") || origin.startsWith("https://localhost:")) {
-        callback(null, true);
-      }
-      else {
+      } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -51,6 +42,27 @@ app.use(
   })
 );
 app.use(express.json());
+
+/* ----------------------------------------------------
+   FIREBASE AUTH MIDDLEWARE
+   Verifies Firebase ID token from Authorization header
+---------------------------------------------------- */
+async function verifyFirebaseToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid Authorization header" });
+  }
+
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await auth.verifyIdToken(idToken);
+    req.user = { uid: decodedToken.uid, email: decodedToken.email };
+    next();
+  } catch (err) {
+    console.error("Token verification failed:", err.message);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
 
 function removeUndefined(obj) {
   return Object.fromEntries(
@@ -97,18 +109,12 @@ function parseUTCToTimestamp(dateTimeString) {
 /* ----------------------------------------------------
    STREAM TOKEN ENDPOINT
 ---------------------------------------------------- */
-app.get("/api/stream-token", (req, res) => {
-  const userId = req.query.userId;
-
-  if (!userId) {
-    return res.status(400).json({ error: "Missing userId" });
-  }
-
+app.get("/api/stream-token", verifyFirebaseToken, (req, res) => {
   try {
-    const token = streamServer.createToken(userId);
+    const token = streamServer.createToken(req.user.uid);
     return res.json({ token });
   } catch (err) {
-    console.error("Stream token error:");
+    console.error("Stream token error:", err);
     return res.status(500).json({ error: "Unable to create token" });
   }
 });
@@ -116,12 +122,8 @@ app.get("/api/stream-token", (req, res) => {
 /* ----------------------------------------------------
    NEW: GET UNREAD COUNT FOR A USER (server-side)
 ---------------------------------------------------- */
-app.get("/api/stream-unread", async (req, res) => {
-  const userId = req.query.userId;
-
-  if (!userId) {
-    return res.status(400).json({ error: "Missing userId" });
-  }
+app.get("/api/stream-unread", verifyFirebaseToken, async (req, res) => {
+  const userId = req.user.uid;
 
   try {
     // 1) Get all channels the user is a member of
@@ -158,7 +160,7 @@ app.get("/api/stream-unread", async (req, res) => {
     return res.json({ unread });
 
   } catch (err) {
-    console.error("Unread calc error:");
+    console.error("Unread calc error:", err);
     return res.status(500).json({ error: "Failed to compute unread" });
   }
 });
@@ -353,7 +355,7 @@ app.post("/api/sync-stream-users", async (req, res) => {
 /* ----------------------------------------------------
    ADD JOB
 ---------------------------------------------------- */
-app.post("/add-job", async (req, res) => {
+app.post("/add-job", verifyFirebaseToken, async (req, res) => {
   try {
     const {
       companyId,
@@ -402,8 +404,15 @@ app.post("/add-job", async (req, res) => {
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) {
       return res
-        .status(403)
+        .status(404)
         .send({ success: false, error: "Invalid company ID" });
+    }
+
+    // Verify the user is the company owner or a representative
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).send({ success: false, error: "Not authorized for this company" });
     }
 
     const jobRef = await db.collection("jobs").add(
@@ -473,7 +482,7 @@ app.get("/api/jobs", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE JOB
 ---------------------------------------------------- */
-app.put("/api/jobs/:id", async (req, res) => {
+app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, majorsAssociated, applicationLink } = req.body;
@@ -507,6 +516,17 @@ app.put("/api/jobs/:id", async (req, res) => {
       return res.status(404).json({ success: false, error: "Job not found" });
     }
 
+    // Verify the user is authorized for this job's company
+    const jobData = jobDoc.data();
+    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
+    if (companyDoc.exists) {
+      const companyData = companyDoc.data();
+      const reps = companyData.representativeIDs || [];
+      if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+        return res.status(403).json({ success: false, error: "Not authorized for this company" });
+      }
+    }
+
     await jobRef.update(
       removeUndefined({
         name: name.trim(),
@@ -527,7 +547,7 @@ app.put("/api/jobs/:id", async (req, res) => {
 /* ----------------------------------------------------
    DELETE JOB
 ---------------------------------------------------- */
-app.delete("/api/jobs/:id", async (req, res) => {
+app.delete("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -536,6 +556,17 @@ app.delete("/api/jobs/:id", async (req, res) => {
 
     if (!jobDoc.exists) {
       return res.status(404).json({ success: false, error: "Job not found" });
+    }
+
+    // Verify the user is authorized for this job's company
+    const jobData = jobDoc.data();
+    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
+    if (companyDoc.exists) {
+      const companyData = companyDoc.data();
+      const reps = companyData.representativeIDs || [];
+      if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+        return res.status(403).json({ success: false, error: "Not authorized for this company" });
+      }
     }
 
     await jobRef.delete();
@@ -550,7 +581,7 @@ app.delete("/api/jobs/:id", async (req, res) => {
 /* ----------------------------------------------------
    ADD BOOTH
 ---------------------------------------------------- */
-app.post("/add-booth", async (req, res) => {
+app.post("/add-booth", verifyFirebaseToken, async (req, res) => {
   try {
     const { companyId, boothName, location, description, representatives } =
       req.body;
@@ -564,8 +595,15 @@ app.post("/add-booth", async (req, res) => {
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) {
       return res
-        .status(403)
+        .status(404)
         .send({ success: false, error: "Invalid company ID" });
+    }
+
+    // Verify the user is the company owner or a representative
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).send({ success: false, error: "Not authorized for this company" });
     }
 
     const boothRef = await db.collection("booths").add(
