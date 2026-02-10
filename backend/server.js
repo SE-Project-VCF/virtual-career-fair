@@ -6,6 +6,17 @@ const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
 
 // --------------------------
+// ENVIRONMENT VALIDATION
+// --------------------------
+const requiredEnvVars = ["STREAM_API_KEY", "STREAM_API_SECRET"];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`Missing required environment variable: ${envVar}`);
+    process.exit(1);
+  }
+}
+
+// --------------------------
 // STREAM CHAT SERVER CLIENT
 // --------------------------
 const { StreamChat } = require("stream-chat");
@@ -303,8 +314,14 @@ app.post("/register-user", async (req, res) => {
 /* ----------------------------------------------------
    SYNC ALL FIRESTORE USERS TO STREAM
 ---------------------------------------------------- */
-app.post("/api/sync-stream-users", async (req, res) => {
+app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
   try {
+    // Verify the user is an administrator
+    const userDoc = await db.collection("users").doc(req.user.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== "administrator") {
+      return res.status(403).json({ success: false, error: "Admin access required" });
+    }
+
     console.log("Starting Stream user sync...");
     const snapshot = await db.collection("users").get();
     const users = snapshot.docs.map((d) => d.data());

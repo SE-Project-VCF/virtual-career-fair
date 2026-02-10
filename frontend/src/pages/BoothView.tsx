@@ -221,7 +221,7 @@ export default function BoothView() {
       setJobs(data.jobs || [])
     } catch (err) {
       console.error("Error fetching jobs:", err)
-      // Don't show error to user, just log it
+      setError("Failed to load job postings.")
     } finally {
       setLoadingJobs(false)
     }

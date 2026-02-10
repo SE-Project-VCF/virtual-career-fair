@@ -84,7 +84,7 @@ export default function Dashboard() {
         );
 
         if (!res.ok) {
-          console.error("Unread API error");
+          console.error("Unread API error:", res.status);
           return;
         }
 

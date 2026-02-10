@@ -23,7 +23,8 @@ async function syncStreamUser(uid: string, email: string, firstName?: string, la
       }),
     });
   } catch (err) {
-    console.error("STREAM SYNC FAILED:", err);
+    console.error("Stream sync failed:", err);
+    throw new Error("Failed to sync chat user. Chat features may not work properly.");
   }
 }
 
