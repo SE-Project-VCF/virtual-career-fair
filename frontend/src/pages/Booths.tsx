@@ -69,42 +69,38 @@ export default function Booths() {
   const [totalJobs, setTotalJobs] = useState(0)
 
   useEffect(() => {
-    fetchFairStatus()
     fetchBooths()
-    fetchJobCounts()
   }, [])
 
-  const fetchJobCounts = async () => {
+  const fetchJobCounts = async (companyIds: string[]) => {
     try {
-      // Fetch all jobs and count by companyId
-      const jobsSnapshot = await getDocs(collection(db, "jobs"))
+      if (companyIds.length === 0) return
+
       const counts: Record<string, number> = {}
       let total = 0
-      
-      jobsSnapshot.forEach((doc) => {
-        const jobData = doc.data()
-        const companyId = jobData.companyId
-        if (companyId) {
-          counts[companyId] = (counts[companyId] || 0) + 1
-          total++
-        }
-      })
-      
+
+      // Firestore "in" queries support max 30 values, batch if needed
+      const batches = []
+      for (let i = 0; i < companyIds.length; i += 30) {
+        batches.push(companyIds.slice(i, i + 30))
+      }
+
+      for (const batch of batches) {
+        const q = query(collection(db, "jobs"), where("companyId", "in", batch))
+        const jobsSnapshot = await getDocs(q)
+        jobsSnapshot.forEach((doc) => {
+          const companyId = doc.data().companyId
+          if (companyId) {
+            counts[companyId] = (counts[companyId] || 0) + 1
+            total++
+          }
+        })
+      }
+
       setJobCounts(counts)
       setTotalJobs(total)
     } catch (err) {
       console.error("Error fetching job counts:", err)
-    }
-  }
-
-  const fetchFairStatus = async () => {
-    try {
-      const status = await evaluateFairStatus()
-      setIsLive(status.isLive)
-      setScheduleName(status.scheduleName)
-      setScheduleDescription(status.scheduleDescription)
-    } catch (err) {
-      console.error("Error fetching fair status:", err)
     }
   }
 
@@ -113,10 +109,10 @@ export default function Booths() {
       setLoading(true)
       setError("")
 
-      // First check if fair is live
+      // Check if fair is live
       const status = await evaluateFairStatus()
       const fairIsLive = status.isLive
-      setIsLive(fairIsLive)
+      setIsLive(status.isLive)
       setScheduleName(status.scheduleName)
       setScheduleDescription(status.scheduleDescription)
 
@@ -213,6 +209,12 @@ export default function Booths() {
       }
 
       setBooths(boothsList)
+
+      // Fetch job counts for the loaded booths' companies
+      const companyIds = boothsList
+        .map((b) => b.companyId)
+        .filter((id): id is string => !!id)
+      fetchJobCounts([...new Set(companyIds)])
     } catch (err) {
       console.error("Error fetching booths:", err)
       setError("Failed to load booths")

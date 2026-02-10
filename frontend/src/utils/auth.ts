@@ -338,7 +338,7 @@ export const authUtils = {
     try {
       const companyRef = doc(collection(db, "companies"));
       const companyId = companyRef.id;
-      const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
 
       await setDoc(companyRef, {
         companyId,
@@ -559,7 +559,7 @@ export const authUtils = {
         inviteCode = trimmedCode;
       } else {
         // Generate random 8-character code
-        inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+        inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
       }
 
       // Check if invite code is already in use by another company
@@ -578,7 +578,7 @@ export const authUtils = {
         if (!newInviteCode) {
           let attempts = 0;
           while (codeInUse && attempts < 5) {
-            inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+            inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
             codeInUse = false;
             companiesSnapshot.forEach((doc) => {
               if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {

@@ -95,7 +95,7 @@ export default function Company() {
   const [jobDescription, setJobDescription] = useState("")
   const [jobSkills, setJobSkills] = useState("")
   const [jobApplicationLink, setJobApplicationLink] = useState("")
-  const [jobErrors, setJobErrors] = useState<{title?: string; description?: string; skills?: string}>({})
+  const [jobErrors, setJobErrors] = useState<{title?: string; description?: string; skills?: string; applicationLink?: string}>({})
   const [savingJob, setSavingJob] = useState(false)
   const [deleteJobDialogOpen, setDeleteJobDialogOpen] = useState(false)
   const [jobToDelete, setJobToDelete] = useState<Job | null>(null)
@@ -273,7 +273,7 @@ export default function Company() {
     setJobErrors({})
 
     // Validate required fields
-    const errors: {title?: string; description?: string; skills?: string} = {}
+    const errors: {title?: string; description?: string; skills?: string; applicationLink?: string} = {}
     if (!jobTitle.trim()) {
       errors.title = "Title is required"
     }
@@ -282,6 +282,13 @@ export default function Company() {
     }
     if (!jobSkills.trim()) {
       errors.skills = "Skills are required"
+    }
+    if (jobApplicationLink.trim()) {
+      try {
+        new URL(jobApplicationLink.trim())
+      } catch {
+        errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)"
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1118,9 +1125,15 @@ export default function Company() {
             fullWidth
             label="Application URL (Optional)"
             value={jobApplicationLink}
-            onChange={(e) => setJobApplicationLink(e.target.value)}
+            onChange={(e) => {
+              setJobApplicationLink(e.target.value)
+              if (jobErrors.applicationLink) {
+                setJobErrors({ ...jobErrors, applicationLink: undefined })
+              }
+            }}
             placeholder="https://company.com/apply"
-            helperText="External link where students can apply directly"
+            error={!!jobErrors.applicationLink}
+            helperText={jobErrors.applicationLink || "External link where students can apply directly"}
             disabled={savingJob}
             sx={{ mb: 2 }}
           />

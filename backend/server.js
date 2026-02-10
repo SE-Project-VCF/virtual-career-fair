@@ -2,6 +2,8 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
+const crypto = require("crypto");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
 
@@ -27,7 +29,7 @@ const streamServer = StreamChat.getInstance(
 );
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // CORS configuration - allow multiple origins
 const allowedOrigins = [
@@ -52,7 +54,15 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
+
+// Rate limiting - 100 requests per 15 minutes per IP
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 /* ----------------------------------------------------
    FIREBASE AUTH MIDDLEWARE
@@ -79,6 +89,10 @@ function removeUndefined(obj) {
   return Object.fromEntries(
     Object.entries(obj).filter(([_, v]) => v !== undefined)
   );
+}
+
+function generateInviteCode() {
+  return crypto.randomBytes(4).toString("hex").toUpperCase();
 }
 
 /* ----------------------------------------------------
@@ -214,7 +228,7 @@ app.post("/api/sync-stream-user", async (req, res) => {
 /* ----------------------------------------------------
    REGISTER USER (Firestore + Stream upsert)
 ---------------------------------------------------- */
-app.post("/register-user", async (req, res) => {
+app.post("/api/register-user", async (req, res) => {
   try {
     const { firstName, lastName, email, password, role, companyName } = req.body;
 
@@ -243,7 +257,7 @@ app.post("/register-user", async (req, res) => {
 
     // Company owner setup
     if (role === "companyOwner") {
-      inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      inviteCode = generateInviteCode();
 
       const companyRef = db.collection("companies").doc();
       companyId = companyRef.id;
@@ -372,7 +386,7 @@ app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
 /* ----------------------------------------------------
    ADD JOB
 ---------------------------------------------------- */
-app.post("/add-job", verifyFirebaseToken, async (req, res) => {
+app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
   try {
     const {
       companyId,
@@ -598,7 +612,7 @@ app.delete("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
 /* ----------------------------------------------------
    ADD BOOTH
 ---------------------------------------------------- */
-app.post("/add-booth", verifyFirebaseToken, async (req, res) => {
+app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
   try {
     const { companyId, boothName, location, description, representatives } =
       req.body;
@@ -1050,26 +1064,31 @@ app.post("/api/update-invite-code", async (req, res) => {
       inviteCode = newInviteCode.toUpperCase();
     } else {
       // Generate random 8-character code
-      inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      inviteCode = generateInviteCode();
     }
 
-    // Check if invite code is already in use by another company
-    const companiesSnapshot = await db.collection("companies").get();
-    let codeInUse = false;
-    companiesSnapshot.forEach((doc) => {
-      if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
-        codeInUse = true;
-      }
-    });
+    // Check if invite code is already in use by another company using a query
+    const existing = await db.collection("companies")
+      .where("inviteCode", "==", inviteCode)
+      .get();
+    const codeInUse = existing.docs.some((doc) => doc.id !== companyId);
 
     if (codeInUse) {
       return res.status(400).json({ error: "This invite code is already in use by another company" });
     }
 
-    // Update the invite code
-    await db.collection("companies").doc(companyId).update({
-      inviteCode: inviteCode,
-      inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
+    // Update the invite code using a transaction to prevent race conditions
+    await db.runTransaction(async (transaction) => {
+      const recheck = await transaction.get(
+        db.collection("companies").where("inviteCode", "==", inviteCode)
+      );
+      if (recheck.docs.some((doc) => doc.id !== companyId)) {
+        throw new Error("Invite code taken");
+      }
+      transaction.update(db.collection("companies").doc(companyId), {
+        inviteCode: inviteCode,
+        inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
+      });
     });
 
     return res.json({ success: true, inviteCode });

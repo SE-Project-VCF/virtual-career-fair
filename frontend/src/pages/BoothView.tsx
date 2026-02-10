@@ -81,10 +81,12 @@ export default function BoothView() {
   const [loading, setLoading] = useState(true)
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
+  const [startingChat, setStartingChat] = useState(false)
 
   const handleStartChat = async () => {
     try {
-      if (!booth) return;
+      if (!booth || startingChat) return;
+      setStartingChat(true);
 
       // Query Firestore for representative user
       const usersRef = collection(db, "users");
@@ -106,6 +108,8 @@ export default function BoothView() {
       });
     } catch (err) {
       console.error("Chat: failed to initialize");
+    } finally {
+      setStartingChat(false);
     }
   };
 
@@ -531,6 +535,7 @@ export default function BoothView() {
                     <Button
                       variant="contained"
                       fullWidth
+                      disabled={startingChat}
                       onClick={handleStartChat}
                       sx={{
                         mt: 2,
@@ -543,7 +548,7 @@ export default function BoothView() {
                         },
                       }}
                     >
-                      Message Representative
+                      {startingChat ? "Connecting..." : "Message Representative"}
                     </Button>
 
                   </Box>
