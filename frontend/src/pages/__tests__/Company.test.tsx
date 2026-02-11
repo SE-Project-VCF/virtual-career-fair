@@ -194,6 +194,20 @@ describe("Company", () => {
     }
   });
 
+  it("shows error when clipboard copy fails", async () => {
+    const user = userEvent.setup();
+    (navigator.clipboard.writeText as any).mockRejectedValueOnce(new Error("copy failed"));
+    renderComp();
+    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+    const copyButtons = screen.queryAllByTestId("ContentCopyIcon");
+    if (copyButtons.length > 0) {
+      await user.click(copyButtons[0].closest("button")!);
+    }
+
+    expect(await screen.findByText(/failed to copy to clipboard/i)).toBeInTheDocument();
+  });
+
   it("regenerates invite code", async () => {
     const user = userEvent.setup();
     (authUtils.updateInviteCode as any).mockResolvedValue({
@@ -282,6 +296,32 @@ describe("Company", () => {
     }
   });
 
+  it("blocks invite code save when length is invalid", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      await user.click(editButtons[0].closest("button")!);
+
+      const inputs = screen.queryAllByRole("textbox");
+      const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE"));
+      if (inviteInput) {
+        await user.clear(inviteInput);
+        await user.type(inviteInput, "A");
+
+        const saveButtons = screen.queryAllByTestId("SaveIcon");
+        if (saveButtons.length > 0) {
+          await user.click(saveButtons[0].closest("button")!);
+        }
+      }
+    }
+
+    expect(await screen.findByText(/invite code must be 4-20 characters/i)).toBeInTheDocument();
+    expect(authUtils.updateInviteCode).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), "A");
+  });
+
   it("displays representatives list", async () => {
     renderComp();
     expect(await screen.findByText(/John Doe/i, {}, { timeout: 3000 })).toBeInTheDocument();
@@ -301,6 +341,25 @@ describe("Company", () => {
         await user.click(confirmButtons[0]);
       }
     }
+  });
+
+  it("shows error when representative removal fails", async () => {
+    const user = userEvent.setup();
+    (updateDoc as any).mockRejectedValueOnce(new Error("remove failed"));
+    renderComp();
+    await screen.findByText(/John Doe/i, {}, { timeout: 3000 });
+
+    const deleteButtons = screen.queryAllByTestId("DeleteIcon");
+    if (deleteButtons.length > 0) {
+      await user.click(deleteButtons[0].closest("button")!);
+
+      const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Remove");
+      if (confirmButtons.length > 0) {
+        await user.click(confirmButtons[0]);
+      }
+    }
+
+    expect(await screen.findByText(/failed to remove representative/i)).toBeInTheDocument();
   });
 
   it("displays job postings", async () => {
@@ -396,6 +455,32 @@ describe("Company", () => {
     }
   });
 
+  it("updates existing job and clears application link", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      await user.click(editButtons[editButtons.length - 1].closest("button")!);
+    }
+
+    const linkInput = screen.getByLabelText(/application url/i);
+    await user.clear(linkInput);
+
+    const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Update Job");
+    if (saveButtons.length > 0) {
+      await user.click(saveButtons[0]);
+    }
+
+    await waitFor(() => {
+      expect(updateDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "job-1" }),
+        expect.objectContaining({ applicationLink: null })
+      );
+    });
+  });
+
   it("deletes job", async () => {
     const user = userEvent.setup();
     renderComp();
@@ -413,6 +498,25 @@ describe("Company", () => {
         });
       }
     }
+  });
+
+  it("shows error when job deletion fails", async () => {
+    const user = userEvent.setup();
+    (deleteDoc as any).mockRejectedValueOnce(new Error("delete failed"));
+    renderComp();
+    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+    const deleteButtons = screen.queryAllByTestId("DeleteIcon");
+    if (deleteButtons.length > 0) {
+      await user.click(deleteButtons[deleteButtons.length - 1].closest("button")!);
+
+      const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
+      if (confirmButtons.length > 0) {
+        await user.click(confirmButtons[0]);
+      }
+    }
+
+    expect(await screen.findByText(/failed to delete job posting/i)).toBeInTheDocument();
   });
 
   it("navigates to booth when booth ID exists", async () => {
