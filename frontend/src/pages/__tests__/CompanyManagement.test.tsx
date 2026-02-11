@@ -1,9 +1,10 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
 import CompanyManagement from "../CompanyManagement";
 import * as authUtils from "../../utils/auth";
+import * as firestore from "firebase/firestore";
 
 const mockNavigate = vi.fn();
 
@@ -30,6 +31,10 @@ vi.mock("../../firebase", () => ({
   db: {},
 }));
 
+vi.mock("../ProfileMenu", () => ({
+  default: () => <div data-testid="profile-menu">Profile Menu</div>,
+}));
+
 const renderCompanyManagement = () => {
   return render(
     <BrowserRouter>
@@ -38,618 +43,638 @@ const renderCompanyManagement = () => {
   );
 };
 
+const mockCompanyData = [
+  {
+    id: "company-1",
+    data: () => ({
+      companyName: "Tech Corp",
+      inviteCode: "TECH123",
+      representativeIDs: ["rep1", "rep2"],
+      ownerId: "owner-1",
+    }),
+  },
+  {
+    id: "company-2",
+    data: () => ({
+      companyName: "Software Inc",
+      inviteCode: "SOFT456",
+      representativeIDs: ["rep3"],
+      ownerId: "owner-1",
+    }),
+  },
+];
+
 describe("CompanyManagement", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
+
     (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
       role: "companyOwner",
       email: "owner@company.com",
     });
     (authUtils.authUtils.isAuthenticated as any).mockReturnValue(true);
+
+    // Default mock for getDocs
+    (firestore.getDocs as any).mockResolvedValue({
+      forEach: (callback: any) => {
+        mockCompanyData.forEach(callback);
+      },
+      docs: mockCompanyData,
+    });
   });
 
   // Authentication Tests
-  it("requires authentication", () => {
-    (authUtils.authUtils.isAuthenticated as any).mockReturnValue(false);
-    renderCompanyManagement();
-    expect(mockNavigate).toHaveBeenCalledWith("/login");
-  });
-
-  it("verifies user is authenticated before rendering", () => {
-    renderCompanyManagement();
-    expect(authUtils.authUtils.isAuthenticated).toHaveBeenCalled();
-  });
-
-  it("calls getCurrentUser to verify authenticated user", () => {
-    renderCompanyManagement();
-    expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-  });
-
-  it("redirects non-company owners away", () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: "student-1",
-      role: "student",
-      email: "student@example.com",
+  describe("Authentication & Authorization", () => {
+    it("redirects to login when not authenticated", () => {
+      (authUtils.authUtils.isAuthenticated as any).mockReturnValue(false);
+      renderCompanyManagement();
+      expect(mockNavigate).toHaveBeenCalledWith("/login");
     });
-    renderCompanyManagement();
-    // Non-company owners should be redirected
-    expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-  });
 
-  // Rendering Tests
-  it("renders company management page", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.isAuthenticated).toHaveBeenCalled();
+    it("redirects non-company owners to dashboard", () => {
+      (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "student-1",
+        role: "student",
+        email: "student@example.com",
+      });
+      renderCompanyManagement();
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+    });
+
+    it("allows company owners to access the page", async () => {
+      renderCompanyManagement();
+      await waitFor(() => {
+        expect(screen.getByText("Company Management")).toBeInTheDocument();
+      });
     });
   });
 
-  it("displays loading state initially", () => {
-    renderCompanyManagement();
-    const progressbars = screen.queryAllByRole("progressbar");
-    expect(progressbars.length).toBeGreaterThanOrEqual(0);
-  });
+  // Loading State Tests
+  describe("Loading States", () => {
+    it("displays loading spinner while fetching companies", () => {
+      (firestore.getDocs as any).mockImplementation(
+        () => new Promise(() => {}) // Never resolves
+      );
+      renderCompanyManagement();
+      expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    });
 
-  it("renders within BrowserRouter without errors", () => {
-    const { container } = renderCompanyManagement();
-    expect(container).toBeDefined();
-  });
-
-  it("renders Material-UI components", () => {
-    const { container } = renderCompanyManagement();
-    const muiElements = container.querySelectorAll("[class*='Mui']");
-    expect(muiElements.length).toBeGreaterThan(0);
-  });
-
-  // Company Owner Role Tests
-  it("allows company owners to access the page", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+    it("hides loading spinner after companies are loaded", async () => {
+      renderCompanyManagement();
+      await waitFor(() => {
+        expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+      });
     });
   });
 
-  it("uses user ID for company operations", async () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: "owner-123",
-      role: "companyOwner",
-      email: "owner@company.com",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+  // Company List Display Tests
+  describe("Company List Display", () => {
+    it("displays empty state when no companies exist", async () => {
+      (firestore.getDocs as any).mockResolvedValue({
+        forEach: vi.fn(),
+        docs: [],
+      });
 
-  // Header/Layout Tests
-  it("displays profile menu in header", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      // ProfileMenu should be rendered
-      expect(screen.queryByRole("button")).toBeDefined();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("No Companies Yet")).toBeInTheDocument();
+        expect(screen.getByText("Create your first company to get started with invite codes and team management.")).toBeInTheDocument();
+      });
     });
-  });
 
-  it("renders with container layout", () => {
-    const { container } = renderCompanyManagement();
-    expect(container.querySelector(".MuiContainer-root")).toBeDefined();
-  });
+    it("displays company cards when companies exist", async () => {
+      renderCompanyManagement();
 
-  // Content Tests
-  it("renders main content area", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const mainContent = screen.queryByRole("main");
-      expect(mainContent).toBeDefined();
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+        expect(screen.getByText("Software Inc")).toBeInTheDocument();
+      });
     });
-  });
 
-  it("renders page without crashing", () => {
-    const { container } = renderCompanyManagement();
-    expect(container.firstChild).toBeDefined();
+    it("displays invite codes for each company", async () => {
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("TECH123")).toBeInTheDocument();
+        expect(screen.getByDisplayValue("SOFT456")).toBeInTheDocument();
+      });
+    });
+
+    it("displays representative counts correctly", async () => {
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("2 Representatives")).toBeInTheDocument();
+        expect(screen.getByText("1 Representative")).toBeInTheDocument();
+      });
+    });
+
+    it("handles error when fetching companies fails", async () => {
+      (firestore.getDocs as any).mockRejectedValue(new Error("Network error"));
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Failed to load companies")).toBeInTheDocument();
+      });
+    });
   });
 
   // Company Creation Tests
-  it("opens create company dialog", async () => {
-    const user = userEvent.setup();
-    renderCompanyManagement();
-    await waitFor(() => {
-      const buttons = screen.queryAllByRole("button");
-      expect(buttons.length).toBeGreaterThan(0);
-    });
-  });
+  describe("Company Creation", () => {
+    it("opens create dialog when Create Company button is clicked", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
 
-  it("validates company name is required", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
 
-  it("creates company successfully", async () => {
-    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
-      success: true,
-      companyId: "new-company-id",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      const createButton = screen.getAllByText("Create Company")[0];
+      await user.click(createButton);
 
-  it("handles company creation error", async () => {
-    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
-      success: false,
-      error: "Company name already exists",
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText("Create New Company")).toBeInTheDocument();
+      expect(screen.getByLabelText("Company Name")).toBeInTheDocument();
     });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
 
-  it("closes dialog after successful creation", async () => {
-    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
-      success: true,
-      companyId: "new-id",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+    it("creates company successfully with valid name", async () => {
+      const user = userEvent.setup();
+      (authUtils.authUtils.createCompany as any).mockResolvedValue({
+        success: true,
+        companyId: "new-company-id",
+      });
 
-  // Company Deletion Tests
-  it("opens delete confirmation dialog", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      renderCompanyManagement();
 
-  it("deletes company successfully", async () => {
-    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
-      success: true,
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
 
-  it("handles company deletion error", async () => {
-    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
-      success: false,
-      error: "Company has active representatives",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      // Open dialog
+      const createButton = screen.getAllByText("Create Company")[0];
+      await user.click(createButton);
 
-  it("cancels company deletion", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+      // Fill in company name
+      const nameInput = screen.getByLabelText("Company Name");
+      await user.type(nameInput, "New Company");
+
+      // Click create button
+      const submitButton = screen.getByRole("button", { name: "Create" });
+      await user.click(submitButton);
+
+      // Verify API was called
+      await waitFor(() => {
+        expect(authUtils.authUtils.createCompany).toHaveBeenCalledWith(
+          "New Company",
+          "owner-1"
+        );
+      });
+
+      // Verify success message
+      await waitFor(() => {
+        expect(screen.getByText(/Company "New Company" created successfully!/)).toBeInTheDocument();
+      });
+    });
+
+    it("shows error when creating company with empty name", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Open dialog
+      const createButton = screen.getAllByText("Create Company")[0];
+      await user.click(createButton);
+
+      // Try to create without entering name
+      const submitButton = screen.getByRole("button", { name: "Create" });
+      expect(submitButton).toBeDisabled();
+    });
+
+    it("shows error when company creation fails", async () => {
+      const user = userEvent.setup();
+      (authUtils.authUtils.createCompany as any).mockResolvedValue({
+        success: false,
+        error: "Company name already exists",
+      });
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Open dialog
+      const createButton = screen.getAllByText("Create Company")[0];
+      await user.click(createButton);
+
+      // Fill in company name
+      const nameInput = screen.getByLabelText("Company Name");
+      await user.type(nameInput, "Duplicate Company");
+
+      // Click create button
+      const submitButton = screen.getByRole("button", { name: "Create" });
+      await user.click(submitButton);
+
+      // Verify error message
+      await waitFor(() => {
+        expect(screen.getByText("Company name already exists")).toBeInTheDocument();
+      });
+    });
+
+    it("closes dialog after successful creation", async () => {
+      const user = userEvent.setup();
+      (authUtils.authUtils.createCompany as any).mockResolvedValue({
+        success: true,
+        companyId: "new-id",
+      });
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Open dialog
+      const createButton = screen.getAllByText("Create Company")[0];
+      await user.click(createButton);
+
+      // Fill and submit
+      const nameInput = screen.getByLabelText("Company Name");
+      await user.type(nameInput, "New Company");
+      const submitButton = screen.getByRole("button", { name: "Create" });
+      await user.click(submitButton);
+
+      // Dialog should close
+      await waitFor(() => {
+        expect(screen.queryByText("Create New Company")).not.toBeInTheDocument();
+      });
     });
   });
 
   // Invite Code Management Tests
-  it("copies invite code to clipboard", async () => {
-    const clipboardSpy = vi.spyOn(navigator.clipboard, "writeText");
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+  describe("Invite Code Management", () => {
+    it("copies invite code to clipboard", async () => {
+      const user = userEvent.setup();
+      const clipboardSpy = vi.spyOn(navigator.clipboard, "writeText");
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Find and click copy button for first company
+      const copyButtons = screen.getAllByRole("button", { name: /copy invite code/i });
+      await user.click(copyButtons[0]);
+
+      expect(clipboardSpy).toHaveBeenCalledWith("TECH123");
+      await waitFor(() => {
+        expect(screen.getByText("Invite code copied to clipboard!")).toBeInTheDocument();
+      });
+    });
+
+    it("regenerates invite code successfully", async () => {
+      const user = userEvent.setup();
+      (authUtils.authUtils.updateInviteCode as any).mockResolvedValue({
+        success: true,
+        inviteCode: "NEWCODE789",
+      });
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Click regenerate button
+      const regenerateButtons = screen.getAllByRole("button", { name: /regenerate invite code/i });
+      await user.click(regenerateButtons[0]);
+
+      await waitFor(() => {
+        expect(authUtils.authUtils.updateInviteCode).toHaveBeenCalledWith("company-1", "owner-1");
+        expect(screen.getByText("Invite code regenerated successfully!")).toBeInTheDocument();
+      });
+    });
+
+    it("enters edit mode for invite code", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Click edit button
+      const editButtons = screen.getAllByRole("button", { name: /edit invite code/i });
+      await user.click(editButtons[0]);
+
+      // Should show save and cancel buttons
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /save/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+      });
+    });
+
+    it("saves custom invite code", async () => {
+      const user = userEvent.setup();
+      (authUtils.authUtils.updateInviteCode as any).mockResolvedValue({
+        success: true,
+        inviteCode: "CUSTOM123",
+      });
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Enter edit mode
+      const editButtons = screen.getAllByRole("button", { name: /edit invite code/i });
+      await user.click(editButtons[0]);
+
+      // Edit the invite code
+      const inviteCodeInput = screen.getByDisplayValue("TECH123");
+      await user.clear(inviteCodeInput);
+      await user.type(inviteCodeInput, "CUSTOM123");
+
+      // Save
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(authUtils.authUtils.updateInviteCode).toHaveBeenCalledWith(
+          "company-1",
+          "owner-1",
+          "CUSTOM123"
+        );
+        expect(screen.getByText("Invite code updated successfully!")).toBeInTheDocument();
+      });
+    });
+
+    it("cancels invite code edit", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Enter edit mode
+      const editButtons = screen.getAllByRole("button", { name: /edit invite code/i });
+      await user.click(editButtons[0]);
+
+      // Cancel
+      const cancelButton = screen.getByRole("button", { name: /cancel/i });
+      await user.click(cancelButton);
+
+      // Should not show save/cancel buttons anymore
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+      });
+    });
+
+    it("validates invite code length (too short)", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Enter edit mode
+      const editButtons = screen.getAllByRole("button", { name: /edit invite code/i });
+      await user.click(editButtons[0]);
+
+      // Enter too short code
+      const inviteCodeInput = screen.getByDisplayValue("TECH123");
+      await user.clear(inviteCodeInput);
+      await user.type(inviteCodeInput, "AB");
+
+      // Try to save
+      const saveButton = screen.getByRole("button", { name: /save/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(screen.getByText("Invite code must be 4-20 characters")).toBeInTheDocument();
+      });
     });
   });
 
-  it("regenerates invite code successfully", async () => {
-    vi.spyOn(authUtils.authUtils, "updateInviteCode").mockResolvedValueOnce({
-      success: true,
-      inviteCode: "NEWCODE123",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+  // Company Deletion Tests
+  describe("Company Deletion", () => {
+    it("opens delete confirmation dialog", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
 
-  it("handles invite code regeneration error", async () => {
-    vi.spyOn(authUtils.authUtils, "updateInviteCode").mockResolvedValueOnce({
-      success: false,
-      error: "Failed to update",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
 
-  it("enters edit mode for invite code", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      // Click delete button
+      const deleteButtons = screen.getAllByRole("button", { name: /delete company/i });
+      await user.click(deleteButtons[0]);
 
-  it("saves custom invite code", async () => {
-    vi.spyOn(authUtils.authUtils, "updateInviteCode").mockResolvedValueOnce({
-      success: true,
-      inviteCode: "CUSTOM123",
+      // Verify dialog appears
+      await waitFor(() => {
+        expect(screen.getAllByText("Delete Company")[0]).toBeInTheDocument();
+        expect(screen.getByText(/Are you sure you want to delete/i)).toBeInTheDocument();
+      });
     });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
 
-  it("cancels invite code edit", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+    it("deletes company successfully", async () => {
+      const user = userEvent.setup();
+      (authUtils.authUtils.deleteCompany as any).mockResolvedValue({
+        success: true,
+      });
 
-  it("validates invite code length", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Open delete dialog
+      const deleteButtons = screen.getAllByRole("button", { name: /delete company/i });
+      await user.click(deleteButtons[0]);
+
+      // Confirm deletion
+      await waitFor(() => {
+        expect(screen.getAllByText("Delete Company")[0]).toBeInTheDocument();
+      });
+
+      const confirmButton = screen.getByRole("button", { name: "Delete Company" });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(authUtils.authUtils.deleteCompany).toHaveBeenCalledWith("company-1", "owner-1");
+        expect(screen.getByText(/Company "Tech Corp" has been deleted successfully/)).toBeInTheDocument();
+      });
+    });
+
+    it("cancels company deletion", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Open delete dialog
+      const deleteButtons = screen.getAllByRole("button", { name: /delete company/i });
+      await user.click(deleteButtons[0]);
+
+      // Cancel
+      const cancelButton = screen.getByRole("button", { name: /cancel/i });
+      await user.click(cancelButton);
+
+      // Dialog should close
+      await waitFor(() => {
+        expect(screen.queryByText(/Are you sure you want to delete/i)).not.toBeInTheDocument();
+      });
+
+      // Company should still be there
+      expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+    });
+
+    it("handles company deletion error", async () => {
+      const user = userEvent.setup();
+      (authUtils.authUtils.deleteCompany as any).mockResolvedValue({
+        success: false,
+        error: "Company has active representatives",
+      });
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      // Open and confirm delete
+      const deleteButtons = screen.getAllByRole("button", { name: /delete company/i });
+      await user.click(deleteButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Delete Company")[0]).toBeInTheDocument();
+      });
+
+      const confirmButton = screen.getByRole("button", { name: "Delete Company" });
+      await user.click(confirmButton);
+
+      await waitFor(() => {
+        expect(screen.getByText("Company has active representatives")).toBeInTheDocument();
+      });
     });
   });
 
   // Navigation Tests
-  it("navigates to company details", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+  describe("Navigation", () => {
+    it("navigates back to dashboard when back button is clicked", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Company Management")).toBeInTheDocument();
+      });
+
+      const backButton = screen.getByRole("button", { name: "" }); // Arrow back has no text
+      await user.click(backButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+    });
+
+    it("navigates to company details when Manage Company is clicked", async () => {
+      const user = userEvent.setup();
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
+
+      const manageButtons = screen.getAllByRole("button", { name: /manage company/i });
+      await user.click(manageButtons[0]);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1");
     });
   });
 
-  it("navigates back to dashboard", async () => {
-    const user = userEvent.setup();
-    renderCompanyManagement();
-    await waitFor(() => {
-      const backButtons = screen.queryAllByTestId("ArrowBackIcon");
-      if (backButtons.length > 0) {
-        user.click(backButtons[0].closest("button")!);
-      }
+  // UI Component Tests
+  describe("UI Components", () => {
+    it("renders profile menu in header", async () => {
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("profile-menu")).toBeInTheDocument();
+      });
+    });
+
+    it("displays page title in header", async () => {
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Company Management")).toBeInTheDocument();
+      });
+    });
+
+    it("renders Create Company button in empty state", async () => {
+      (firestore.getDocs as any).mockResolvedValue({
+        forEach: vi.fn(),
+        docs: [],
+      });
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Create Your First Company")).toBeInTheDocument();
+      });
     });
   });
 
   // Error Handling Tests
-  it("handles firestore query error", async () => {
-    const firestore = await import("firebase/firestore");
-    vi.spyOn(firestore, "getDocs").mockRejectedValueOnce(
-      new Error("Network error")
-    );
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
+  describe("Error Handling", () => {
+    it("displays and dismisses error alerts", async () => {
+      const user = userEvent.setup();
+      (firestore.getDocs as any).mockRejectedValue(new Error("Network error"));
+
+      renderCompanyManagement();
+
+      await waitFor(() => {
+        expect(screen.getByText("Failed to load companies")).toBeInTheDocument();
+      });
+
+      // Close the error alert
+      const closeButton = screen.getByRole("button", { name: /close/i });
+      await user.click(closeButton);
+
+      await waitFor(() => {
+        expect(screen.queryByText("Failed to load companies")).not.toBeInTheDocument();
+      });
     });
-  });
 
-  it("handles clipboard copy error", async () => {
-    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(
-      new Error("Clipboard error")
-    );
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+    it("handles clipboard copy error gracefully", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
+        new Error("Clipboard error")
+      );
 
-  it("displays success message after creation", async () => {
-    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
-      success: true,
-      companyId: "new-id",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      renderCompanyManagement();
 
-  it("displays success message after deletion", async () => {
-    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
-      success: true,
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      await waitFor(() => {
+        expect(screen.getByText("Tech Corp")).toBeInTheDocument();
+      });
 
-  // State Management Tests
-  it("refreshes companies list after creation", async () => {
-    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
-      success: true,
-      companyId: "new-id",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
+      const copyButtons = screen.getAllByRole("button", { name: /copy invite code/i });
+      await user.click(copyButtons[0]);
 
-  it("refreshes companies list after deletion", async () => {
-    vi.spyOn(authUtils.authUtils, "deleteCompany").mockResolvedValueOnce({
-      success: true,
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  it("clears form after successful creation", async () => {
-    vi.spyOn(authUtils.authUtils, "createCompany").mockResolvedValueOnce({
-      success: true,
-      companyId: "new-id",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  // Conditional Rendering Tests
-  it("shows empty state when no companies", async () => {
-    const firestore = await import("firebase/firestore");
-    vi.spyOn(firestore, "getDocs").mockResolvedValueOnce({
-      forEach: vi.fn(),
-    } as any);
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  it("displays company cards when companies exist", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  it("handles missing user ID gracefully", async () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: undefined,
-      role: "companyOwner",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  it("handles missing user UID gracefully", () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      role: "companyOwner",
-      email: "owner@company.com",
-      // uid is missing
-    });
-    renderCompanyManagement();
-    expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-  });
-
-  it("handles null user gracefully", () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue(null);
-    renderCompanyManagement();
-    expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-  });
-
-  // Error Handling Tests
-  it("displays alert elements if needed", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const alerts = screen.queryAllByRole("alert");
-      expect(alerts).toBeDefined();
-    });
-  });
-
-  it("renders with proper Box styling", () => {
-    const { container } = renderCompanyManagement();
-    const boxElements = container.querySelectorAll(".MuiBox-root");
-    expect(boxElements.length).toBeGreaterThan(0);
-  });
-
-  // Navigation Tests
-  it("initializes with authentication check", () => {
-    renderCompanyManagement();
-    expect(authUtils.authUtils.isAuthenticated).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders in Router context without issues", () => {
-    renderCompanyManagement();
-    expect(authUtils.authUtils.isAuthenticated).toHaveBeenCalled();
-  });
-
-  it("maintains user context throughout render", async () => {
-    const testUser = {
-      uid: "company-owner-456",
-      role: "companyOwner",
-      email: "test@company.com",
-    };
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue(testUser);
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  it("handles company owner with full profile", async () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: "owner-789",
-      role: "companyOwner",
-      email: "owner@company.com",
-      companyId: "company-101",
-      companyName: "Tech Corp",
-    });
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  it("renders all sections successfully", () => {
-    const { container } = renderCompanyManagement();
-    // Should have multiple section containers
-    const cardElements = container.querySelectorAll("[class*='Card']");
-    expect(cardElements).toBeDefined();
-  });
-
-  it("displays company list section", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      // Company list should be present
-      expect(screen.queryAllByRole("button")).toBeDefined();
-    });
-  });
-
-  it("renders add company button", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const buttons = screen.queryAllByRole("button");
-      expect(buttons.length).toBeGreaterThan(0);
-    });
-  });
-
-  it("displays company cards in grid layout", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const gridElements = screen.queryAllByRole("region");
-      expect(gridElements || screen.queryAllByText(/./)).toBeDefined();
-    });
-  });
-
-  it("displays delete button for each company card", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const buttons = screen.queryAllByRole("button");
-      expect(buttons.length).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  it("displays invite code copy button", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const buttons = screen.queryAllByRole("button");
-      const copyButton = buttons.find((btn) => btn.textContent?.toLowerCase().includes("copy"));
-      expect(copyButton || buttons.length).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  it("displays company name in card title", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const headings = screen.queryAllByRole("heading");
-      expect(headings || screen.queryAllByText(/./)).toBeDefined();
-    });
-  });
-
-  it("displays representative count badge", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const text = screen.queryAllByText(/representative|rep|members/i);
-      expect(text || screen.queryAllByText(/./)).toBeDefined();
-    });
-  });
-
-  it("renders Material-UI Grid system for responsive layout", () => {
-    const { container } = renderCompanyManagement();
-    const gridElements = container.querySelectorAll(".MuiGrid-root");
-    expect(gridElements.length).toBeGreaterThanOrEqual(0);
-  });
-
-  it("fetches user companies on component mount", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-    });
-  });
-
-  it("shows loading spinner while fetching companies", () => {
-    renderCompanyManagement();
-    const progressbars = screen.queryAllByRole("progressbar");
-    expect(progressbars.length).toBeGreaterThanOrEqual(0);
-  });
-
-  it("Navigates to company page on card click", async () => {
-    const user = userEvent.setup();
-    renderCompanyManagement();
-
-    await waitFor(() => {
-      const cards = screen.queryAllByRole("button");
-      expect(cards.length).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  it("displays create company form in dialog", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const dialogs = screen.queryAllByRole("dialog");
-      expect(dialogs || screen.queryAllByText(/./)).toBeDefined();
-    });
-  });
-
-  it("displays form fields for creating company", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const inputs = screen.queryAllByRole("textbox");
-      expect(inputs || screen.queryAllByText(/./)).toBeDefined();
-    });
-  });
-
-  it("displays company name, invite code, and reps info", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const text = screen.queryAllByText(/./);
-      expect(text.length).toBeGreaterThan(0);
-    });
-  });
-
-  it("renders Material-UI Card for each company", async () => {
-    const { container } = renderCompanyManagement();
-    await waitFor(() => {
-      const cards = container.querySelectorAll(".MuiCard-root");
-      expect(cards.length).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  it("displays edit company action", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const buttons = screen.queryAllByRole("button");
-      const editButton = buttons.find((btn) => btn.textContent?.toLowerCase().includes("edit") || btn.textContent?.toLowerCase().includes("manage"));
-      expect(editButton || buttons.length).toBeGreaterThan(0);
-    });
-  });
-
-  it("shows company count or total companies", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const text = screen.queryAllByText(/company|companies/i);
-      expect(text || screen.queryAllByText(/./)).toBeDefined();
-    });
-  });
-
-  it("handles empty state when no companies exist", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      // Should display message or empty state
-      const text = screen.queryAllByText(/./);
-      expect(text.length).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  it("displays company management header with ProfileMenu", async () => {
-    renderCompanyManagement();
-    await waitFor(() => {
-      const buttons = screen.queryAllByRole("button");
-      expect(buttons.length).toBeGreaterThan(0);
+      await waitFor(() => {
+        expect(screen.getByText("Failed to copy to clipboard")).toBeInTheDocument();
+      });
     });
   });
 });
