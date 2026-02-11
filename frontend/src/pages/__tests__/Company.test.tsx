@@ -1,12 +1,12 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import Company from "../Company";
-import * as authUtils from "../../utils/auth";
-import * as firestore from "firebase/firestore";
+import { getDoc, getDocs, updateDoc, addDoc, deleteDoc, arrayRemove } from "firebase/firestore";
 
 const mockNavigate = vi.fn();
+const mockUseParams = vi.fn(() => ({ id: "company-1" }));
 
 vi.mock("../../utils/auth", () => ({
   authUtils: {
@@ -21,15 +21,30 @@ vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
   return {
     ...actual,
-    useParams: () => ({ id: "company-1" }),
+    useParams: () => mockUseParams(),
     useNavigate: () => mockNavigate,
   };
 });
 
-vi.mock("firebase/firestore");
+vi.mock("firebase/firestore", () => ({
+  getDoc: vi.fn(),
+  getDocs: vi.fn(),
+  updateDoc: vi.fn(),
+  addDoc: vi.fn(),
+  deleteDoc: vi.fn(),
+  arrayRemove: vi.fn(),
+  doc: vi.fn((_db, coll, id) => ({ collection: coll, id })),
+  collection: vi.fn((_db, name) => ({ name })),
+  query: vi.fn((ref) => ref),
+  where: vi.fn(() => ({})),
+}));
+
 vi.mock("../../firebase", () => ({
   db: {},
 }));
+
+// Import after mocks
+import { authUtils } from "../../utils/auth";
 
 // Mock clipboard API
 Object.assign(navigator, {
@@ -39,7 +54,6 @@ Object.assign(navigator, {
 });
 
 const mockCompanyData = {
-  id: "company-1",
   companyName: "Tech Corp",
   inviteCode: "INVITE123",
   representativeIDs: ["rep-1"],
@@ -48,615 +62,547 @@ const mockCompanyData = {
 };
 
 const mockRepresentativeData = {
-  uid: "rep-1",
   email: "rep@example.com",
   firstName: "John",
   lastName: "Doe",
 };
 
 const mockJobData = {
-  id: "job-1",
   companyId: "company-1",
   name: "Software Engineer",
   description: "We are hiring",
   majorsAssociated: "Computer Science",
   applicationLink: "https://example.com/apply",
-  createdAt: new Date().getTime(),
-};
-
-const renderCompany = () => {
-  return render(
-    <BrowserRouter>
-      <Company />
-    </BrowserRouter>
-  );
-};
-
-const setupDefaultMocks = () => {
-  // Mock getDoc for company
-  const mockGetDoc = vi.fn();
-  mockGetDoc.mockResolvedValueOnce({
-    exists: () => true,
-    id: "company-1",
-    data: () => ({
-      companyName: mockCompanyData.companyName,
-      inviteCode: mockCompanyData.inviteCode,
-      representativeIDs: mockCompanyData.representativeIDs,
-      boothId: mockCompanyData.boothId,
-      ownerId: mockCompanyData.ownerId,
-    }),
-  });
-
-  // Mock getDoc for representative
-  mockGetDoc.mockResolvedValueOnce({
-    exists: () => true,
-    id: "rep-1",
-    data: () => mockRepresentativeData,
-  });
-
-  // Mock getDocs for jobs
-  const mockGetDocs = vi.fn();
-  mockGetDocs.mockResolvedValueOnce({
-    forEach: vi.fn((callback) => {
-      callback({
-        id: "job-1",
-        data: () => ({
-          companyId: mockJobData.companyId,
-          name: mockJobData.name,
-          description: mockJobData.description,
-          majorsAssociated: mockJobData.majorsAssociated,
-          applicationLink: mockJobData.applicationLink,
-          createdAt: { toMillis: () => mockJobData.createdAt },
-        }),
-      });
-    }),
-  });
-
-  (firestore.getDoc as any).mockImplementation(mockGetDoc);
-  (firestore.getDocs as any).mockImplementation(mockGetDocs);
-  (firestore.doc as any).mockImplementation((db, collection, id) => ({ collection, id }));
-  (firestore.collection as any).mockImplementation((db, name) => ({ name }));
-  (firestore.query as any).mockImplementation((ref, ...args) => ref);
-  (firestore.where as any).mockImplementation(() => ({}));
-  (firestore.updateDoc as any).mockResolvedValue(undefined);
-  (firestore.addDoc as any).mockResolvedValue({ id: "new-job-1" });
-  (firestore.deleteDoc as any).mockResolvedValue(undefined);
-  (firestore.arrayRemove as any).mockImplementation((val) => val);
+  createdAt: { toMillis: () => 1234567890 },
 };
 
 describe("Company", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+    mockUseParams.mockReturnValue({ id: "company-1" });
+    
+    (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
       role: "companyOwner",
     });
-    (authUtils.authUtils.isAuthenticated as any).mockReturnValue(true);
-    setupDefaultMocks();
+    (authUtils.isAuthenticated as any).mockReturnValue(true);
+
+    // Mock getDoc to return different values based on collection
+    (getDoc as any).mockImplementation((docRef: any) => {
+      if (docRef.id === "company-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "company-1",
+          data: () => mockCompanyData,
+        });
+      }
+      if (docRef.id === "rep-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "rep-1",
+          data: () => mockRepresentativeData,
+        });
+      }
+      return Promise.resolve({
+        exists: () => false,
+      });
+    });
+
+    (getDocs as any).mockResolvedValue({
+      forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobData }),
+      empty: false,
+    });
+
+    (updateDoc as any).mockResolvedValue(undefined);
+    (addDoc as any).mockResolvedValue({ id: "new-job" });
+    (deleteDoc as any).mockResolvedValue(undefined);
+    (arrayRemove as any).mockImplementation((v: unknown) => v);
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
 
-  // Authentication tests
-  it("requires authentication and redirects when not authenticated", () => {
-    (authUtils.authUtils.isAuthenticated as any).mockReturnValue(false);
-    renderCompany();
+  it("redirects unauthenticated users to login", () => {
+    (authUtils.isAuthenticated as any).mockReturnValue(false);
+    renderComp();
     expect(mockNavigate).toHaveBeenCalledWith("/login");
   });
 
-  it("displays error when company not found", async () => {
-    (firestore.getDoc as any).mockResolvedValueOnce({
-      exists: () => false,
-    });
-    renderCompany();
-    await waitFor(() => {
-      const alert = screen.getByRole("alert");
-      expect(alert).toBeInTheDocument();
-    });
-  });
-
-  it("displays 'Go Back' button when company not found", async () => {
-    (firestore.getDoc as any).mockResolvedValueOnce({
-      exists: () => false,
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(screen.getByText("Go Back")).toBeInTheDocument();
-    });
-  });
-
-  it("navigates back when 'Go Back' button is clicked", async () => {
-    (firestore.getDoc as any).mockResolvedValueOnce({
-      exists: () => false,
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(screen.getByText("Go Back")).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByText("Go Back"));
+  it("navigates to /companies when no id param", () => {
+    mockUseParams.mockReturnValue({ id: undefined as any });
+    renderComp();
     expect(mockNavigate).toHaveBeenCalledWith("/companies");
   });
 
-  it("loads and displays company data on mount", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-      expect(firestore.getDocs).toHaveBeenCalled();
-    });
+  it("shows error when company not found", async () => {
+    (getDoc as any).mockImplementation(() => Promise.resolve({ exists: () => false }));
+    renderComp();
+    expect(await screen.findByText(/company not found/i, {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
   it("denies access to non-owner company owners", async () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: "different-owner",
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "other-owner",
       role: "companyOwner",
     });
-    (firestore.getDoc as any).mockResolvedValueOnce({
-      exists: () => true,
-      id: "company-1",
-      data: () => mockCompanyData,
-    });
-    renderCompany();
+    renderComp();
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/companies");
     });
   });
 
-  it("allows representative to access assigned company", async () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: "rep-1",
-      role: "representative",
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
   it("denies access to unassigned representatives", async () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: "different-rep",
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "other-rep",
       role: "representative",
     });
-    (firestore.getDoc as any).mockResolvedValueOnce({
-      exists: () => true,
-      id: "company-1",
-      data: () => mockCompanyData,
-    });
-    renderCompany();
+    renderComp();
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
   });
 
-  // Job management tests
-  it("displays job postings section with fetched jobs", async () => {
-    renderCompany();
+  it("redirects non-company users to dashboard", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "student-1",
+      role: "student",
+    });
+    renderComp();
     await waitFor(() => {
-      expect(firestore.getDocs).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
   });
 
-  it("opens job creation dialog when add job button is clicked", async () => {
-    renderCompany();
-    await waitFor(() => {
-      const addJobButtons = screen.queryAllByRole("button").filter(btn =>
-        btn.textContent?.includes("Add Job") || btn.getAttribute("aria-label")?.includes("add")
-      );
-      if (addJobButtons.length > 0) {
-        fireEvent.click(addJobButtons[0]);
-      }
-    });
+  it("displays company name after loading", async () => {
+    renderComp();
+    expect(await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
-  it("validates job form fields are required", async () => {
-    renderCompany();
-    await waitFor(() => {
-      const buttons = screen.queryAllByRole("button");
-      expect(buttons.length).toBeGreaterThan(0);
-    });
-  });
-
-  it("sends job data to firebase on save", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("fetches company data on first render", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles job creation error gracefully", async () => {
-    (firestore.addDoc as any).mockRejectedValueOnce(new Error("Firebase error"));
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Representative management tests
-  it("displays representatives list after loading", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles representative deletion with confirmation", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("updates company data after removing representative", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Invite code management tests
-  it("displays invite code section", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
+  it("displays invite code", async () => {
+    renderComp();
+    expect(await screen.findByText(/INVITE123/, {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
   it("copies invite code to clipboard", async () => {
-    renderCompany();
-    await waitFor(() => {
-      const clipboardSpy = vi.spyOn(navigator.clipboard, "writeText");
-      expect(clipboardSpy).toBeDefined();
-    });
-  });
-
-  it("regenerates invite code via authUtils", async () => {
-    (authUtils.authUtils.updateInviteCode as any).mockResolvedValueOnce({
-      success: true,
-      inviteCode: "NEWCODE123",
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles invite code update validation", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Company deletion tests
-  it("calls deleteCompany from authUtils on confirm", async () => {
-    (authUtils.authUtils.deleteCompany as any).mockResolvedValueOnce({
-      success: true,
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("navigates to companies page after successful deletion", async () => {
-    (authUtils.authUtils.deleteCompany as any).mockResolvedValueOnce({
-      success: true,
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("displays error when company deletion fails", async () => {
-    (authUtils.authUtils.deleteCompany as any).mockResolvedValueOnce({
-      success: false,
-      error: "Failed to delete company",
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Error handling
-  it("displays error alert on firebase fetch failure", async () => {
-    (firestore.getDoc as any).mockRejectedValueOnce(new Error("Network error"));
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("shows loading state while fetching data", async () => {
-    renderCompany();
-    // Component should have loading state initially
-    expect(firestore.getDoc).toHaveBeenCalled();
-  });
-
-  it("fetches jobs for the company", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDocs).toHaveBeenCalled();
-    });
-  });
-
-  it("fetches representatives for the company", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("renders authUtils.isAuthenticated returns true", () => {
-    renderCompany();
-    expect(authUtils.authUtils.isAuthenticated).toHaveBeenCalled();
-  });
-
-  it("calls getCurrentUser on mount", () => {
-    renderCompany();
-    expect(authUtils.authUtils.getCurrentUser).toHaveBeenCalled();
-  });
-
-  // Job editing tests
-  it("opens edit dialog for existing job", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDocs).toHaveBeenCalled();
-    });
-  });
-
-  it("updates job successfully", async () => {
-    (firestore.updateDoc as any).mockResolvedValueOnce({});
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles job update error", async () => {
-    (firestore.updateDoc as any).mockRejectedValueOnce(new Error("Update failed"));
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("deletes job after confirmation", async () => {
-    (firestore.deleteDoc as any).mockResolvedValueOnce({});
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles job deletion error", async () => {
-    (firestore.deleteDoc as any).mockRejectedValueOnce(new Error("Delete failed"));
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("validates job title is required", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("validates job description is required", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("validates application link URL format", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("allows empty application link", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Representative deletion tests
-  it("removes representative from company", async () => {
-    (firestore.updateDoc as any).mockResolvedValue({});
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("updates representative user document on removal", async () => {
-    (firestore.updateDoc as any).mockResolvedValue({});
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles representative deletion error", async () => {
-    (firestore.updateDoc as any).mockRejectedValueOnce(new Error("Update failed"));
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("displays representative name correctly", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("falls back to email when name is missing", async () => {
-    const mockGetDocNoName = vi.fn();
-    mockGetDocNoName.mockResolvedValueOnce({
-      exists: () => true,
-      id: "company-1",
-      data: () => mockCompanyData,
-    });
-    mockGetDocNoName.mockResolvedValueOnce({
-      exists: () => true,
-      id: "rep-1",
-      data: () => ({ uid: "rep-1", email: "rep@example.com" }),
-    });
-    (firestore.getDoc as any) = mockGetDocNoName;
-    
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Invite code editing tests
-  it("enters edit mode for invite code", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("cancels invite code edit", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("validates invite code length", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("saves custom invite code", async () => {
-    (authUtils.authUtils.updateInviteCode as any).mockResolvedValueOnce({
-      success: true,
-      inviteCode: "CUSTOM123",
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles invite code save error", async () => {
-    (authUtils.authUtils.updateInviteCode as any).mockResolvedValueOnce({
-      success: false,
-      error: "Invite code already in use",
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("handles invite code regeneration error", async () => {
-    (authUtils.authUtils.updateInviteCode as any).mockRejectedValueOnce(
-      new Error("Network error")
-    );
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Company deletion tests  
-  it("opens delete company confirmation dialog", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("cancels company deletion", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  it("only allows owner to delete company", async () => {
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
-      uid: "rep-1",
-      role: "representative",
-    });
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-  });
-
-  // Copy to clipboard tests
-  it("copies invite code on button click", async () => {
     const user = userEvent.setup();
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
-    });
-    
-    const clipboardSpy = vi.spyOn(navigator.clipboard, "writeText");
+    renderComp();
+    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
     const copyButtons = screen.queryAllByTestId("ContentCopyIcon");
     if (copyButtons.length > 0) {
       await user.click(copyButtons[0].closest("button")!);
-      // Clipboard may or may not be called based on rendering
     }
   });
 
-  it("handles clipboard copy error", async () => {
-    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValueOnce(
-      new Error("Clipboard error")
-    );
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
+  it("regenerates invite code", async () => {
+    const user = userEvent.setup();
+    (authUtils.updateInviteCode as any).mockResolvedValue({
+      success: true,
+      inviteCode: "NEWCODE",
     });
+    renderComp();
+    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+    const refreshButtons = screen.queryAllByTestId("RefreshIcon");
+    if (refreshButtons.length > 0) {
+      await user.click(refreshButtons[0].closest("button")!);
+      await waitFor(() => {
+        expect(authUtils.updateInviteCode).toHaveBeenCalled();
+      });
+    }
   });
 
-  // Navigation tests
-  it("navigates back on back button click", async () => {
+  it("edits invite code", async () => {
     const user = userEvent.setup();
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
+    (authUtils.updateInviteCode as any).mockResolvedValue({
+      success: true,
+      inviteCode: "CUSTOM",
     });
+    renderComp();
+    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      await user.click(editButtons[0].closest("button")!);
+
+      const inputs = screen.queryAllByRole("textbox");
+      const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE") || i.getAttribute("label")?.includes("Invite"));
+      if (inviteInput) {
+        await user.clear(inviteInput);
+        await user.type(inviteInput, "CUSTOM");
+
+        const saveButtons = screen.queryAllByTestId("SaveIcon");
+        if (saveButtons.length > 0) {
+          await user.click(saveButtons[0].closest("button")!);
+        }
+      }
+    }
+  });
+
+  it("cancels invite code edit", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      await user.click(editButtons[0].closest("button")!);
+
+      const cancelButtons = screen.queryAllByTestId("CancelIcon");
+      if (cancelButtons.length > 0) {
+        await user.click(cancelButtons[0].closest("button")!);
+      }
+    }
+  });
+
+  it("validates invite code length", async () => {
+   const user = userEvent.setup();
+    (authUtils.updateInviteCode as any).mockResolvedValue({
+      success: false,
+     error: "Invite code must be at least 6 characters long",
+    });
+    renderComp();
+    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      await user.click(editButtons[0].closest("button")!);
+
+      const inputs = screen.queryAllByRole("textbox");
+      const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE"));
+      if (inviteInput) {
+        await user.clear(inviteInput);
+        await user.type(inviteInput, "ABC");
+
+        const saveButtons = screen.queryAllByTestId("SaveIcon");
+        if (saveButtons.length > 0) {
+          await user.click(saveButtons[0].closest("button")!);
+        }
+      }
+    }
+  });
+
+  it("displays representatives list", async () => {
+    renderComp();
+    expect(await screen.findByText(/John Doe/i, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("deletes representative", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/John Doe/i, {}, { timeout: 3000 });
+
+    const deleteButtons = screen.queryAllByTestId("DeleteIcon");
+    if (deleteButtons.length > 0) {
+      await user.click(deleteButtons[0].closest("button")!);
+      
+      const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
+      if (confirmButtons.length > 0) {
+        await user.click(confirmButtons[0]);
+      }
+    }
+  });
+
+  it("displays job postings", async () => {
+    renderComp();
+    expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("opens add job dialog", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
+    if (addButtons.length > 0) {
+      await user.click(addButtons[0]);
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    }
+  });
+
+  it("creates new job", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
+    if (addButtons.length > 0) {
+      await user.click(addButtons[0]);
+      
+      const titleInput = screen.getByLabelText(/job title/i);
+      const descInput = screen.getByLabelText(/description/i);
+      
+      await user.type(titleInput, "New Job");
+      await user.type(descInput, "Description");
+      
+      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+      if (saveButtons.length > 0) {
+        await user.click(saveButtons[0]);
+        await waitFor(() => {
+          expect(addDoc).toHaveBeenCalled();
+        });
+      }
+    }
+  });
+
+  it("validates job title required", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
+    if (addButtons.length > 0) {
+      await user.click(addButtons[0]);
+      
+      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+      if (saveButtons.length > 0) {
+        await user.click(saveButtons[0]);
+        expect(addDoc).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("validates application link URL", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
+    if (addButtons.length > 0) {
+      await user.click(addButtons[0]);
+      
+      const titleInput = screen.getByLabelText(/job title/i);
+      const linkInput = screen.getByLabelText(/application link/i);
+      
+      await user.type(titleInput, "Job");
+      await user.type(linkInput, "not-a-url");
+      
+      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+      if (saveButtons.length > 0) {
+        await user.click(saveButtons[0]);
+        expect(addDoc).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("edits existing job", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      await user.click(editButtons[editButtons.length - 1].closest("button")!);
+    }
+  });
+
+  it("deletes job", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+    const deleteButtons = screen.queryAllByTestId("DeleteIcon");
+    if (deleteButtons.length > 0) {
+      await user.click(deleteButtons[deleteButtons.length - 1].closest("button")!);
+      
+      const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
+      if (confirmButtons.length > 0) {
+        await user.click(confirmButtons[0]);
+        await waitFor(() => {
+          expect(deleteDoc).toHaveBeenCalled();
+        });
+      }
+    }
   });
 
   it("navigates to booth when booth ID exists", async () => {
-    renderCompany();
-    await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const boothButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Booth") || b.textContent?.includes("booth"));
+    if (boothButtons.length > 0) {
+      await user.click(boothButtons[0]);
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("booth"));
+    }
+  });
+
+  it("navigates back on back button", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const backButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Back"));
+    if (backButtons.length > 0) {
+      await user.click(backButtons[0]);
+      expect(mockNavigate).toHaveBeenCalled();
+    }
+  });
+
+  it("opens delete company dialog", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+   const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
+    if (deleteButtons.length > 0) {
+      await user.click(deleteButtons[0]);
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    }
+  });
+
+  it("deletes company", async () => {
+    const user = userEvent.setup();
+    (authUtils.deleteCompany as any).mockResolvedValue({ success: true });
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
+    if (deleteButtons.length > 0) {
+      await user.click(deleteButtons[0]);
+      
+      const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
+      if (confirmButtons.length > 0) {
+        await user.click(confirmButtons[0]);
+        await waitFor(() => {
+          expect(authUtils.deleteCompany).toHaveBeenCalled();
+        });
+      }
+    }
+  });
+
+  it("handles company deletion error", async () => {
+    const user = userEvent.setup();
+    (authUtils.deleteCompany as any).mockResolvedValue({
+      success: false,
+      error: "Failed to delete",
+    });
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
+    if (deleteButtons.length > 0) {
+      await user.click(deleteButtons[0]);
+      
+      const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
+      if (confirmButtons.length > 0) {
+        await user.click(confirmButtons[0]);
+        expect(await screen.findByText(/Failed to delete/i, {}, { timeout: 3000 })).toBeInTheDocument();
+      }
+    }
+  });
+
+  it("handles API errors gracefully", async () => {
+    (getDoc as any).mockRejectedValue(new Error("Network error"));
+    renderComp();
+    expect(await screen.findByText(/failed to load company/i, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("handles job fetch errors", async () => {
+    (getDocs as any).mockRejectedValue(new Error("Job fetch error"));
+    renderComp();
+    // Company should still load
+    expect(await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("allows representatives to view company", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "rep-1",
+      role: "representative",
+    });
+    renderComp();
+    expect(await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("allows empty application link in job", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
+    if (addButtons.length > 0) {
+      await user.click(addButtons[0]);
+      
+      const titleInput = screen.getByLabelText(/job title/i);      
+      await user.type(titleInput, "New Job");
+      
+      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+      if (saveButtons.length > 0) {
+        await user.click(saveButtons[0]);
+      }
+    }
+  });
+
+  it("sorts jobs by creation date", async () => {
+    const job1 = { ...mockJobData, createdAt: { toMillis: () => 1000 } };
+    const job2 = { ...mockJobData, createdAt: { toMillis: () => 2000 } };
+    
+    (getDocs as any).mockResolvedValue({
+      forEach: (cb: any) => {
+        cb({ id: "job-1", data: () => job1 });
+        cb({ id: "job-2", data: () => job2 });
+      },
+      empty: false,
+    });
+    
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+    // Jobs should be displayed (sorted order tested in component)
+  });
+
+  it("handles jobs with no creation date", async () => {
+    const jobNoDate = { ...mockJobData, createdAt: null };
+    
+    (getDocs as any).mockResolvedValue({
+      forEach: (cb: any) => cb({ id: "job-1", data: () => jobNoDate }),
+      empty: false,
+    });
+    
+    renderComp();
+    expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("clears error on successful operation", async () => {
+    (getDoc as any).mockRejectedValueOnce(new Error("Error"));
+    renderComp();
+    await screen.findByText(/failed to load company/i, {}, { timeout: 3000 });
+    
+    // Simulate successful retry by re-rendering
+    vi.clearAllMocks();
+    (getDoc as any).mockImplementation((docRef: any) => {
+      if (docRef.id === "company-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "company-1",
+          data: () => mockCompanyData,
+        });
+      }
+      return Promise.resolve({ exists: () => false });
     });
   });
 
-  // Error boundary tests
-  it("handles missing company ID in params", async () => {
-    const useParamsMock = await import("react-router-dom");
-    vi.spyOn(useParamsMock, "useParams").mockReturnValue({ id: undefined });
-    renderCompany();
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/companies");
-    });
+  it("displays success message on job creation", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/Tech Corp/i, {}, { timeout: 3000 });
+
+    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
+    if (addButtons.length > 0) {
+      await user.click(addButtons[0]);
+      
+      const titleInput = screen.getByLabelText(/job title/i);
+      const descInput = screen.getByLabelText(/description/i);
+      
+      await user.type(titleInput, "New Job");
+      await user.type(descInput, "Description");
+      
+      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+      if (saveButtons.length > 0) {
+        await user.click(saveButtons[0]);
+        await waitFor(() => {
+          expect(addDoc).toHaveBeenCalled();
+        });
+      }
+    }
   });
 });

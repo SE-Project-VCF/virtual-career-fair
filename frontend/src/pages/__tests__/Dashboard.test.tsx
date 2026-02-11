@@ -3,7 +3,6 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import Dashboard from "../Dashboard"
-import * as authUtils from "../../utils/auth"
 import * as firestore from "firebase/firestore"
 
 const mockNavigate = vi.fn()
@@ -145,7 +144,6 @@ describe("Dashboard", () => {
     })
 
     it("navigates to booths page when button clicked (when fair is live)", async () => {
-      const user = userEvent.setup()
       mockGetCurrentUser.mockReturnValue({
         uid: "u1",
         email: "student@test.com",

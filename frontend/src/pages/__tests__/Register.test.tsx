@@ -3,7 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
 import Register from "../Register";
-import * as authUtils from "../../utils/auth";
+
+// Mock navigate function
+const mockNavigate = vi.fn();
+
+// Mock react-router-dom
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 // Mock authUtils
 vi.mock("../../utils/auth", () => ({
@@ -31,6 +42,9 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }));
 
+// Import after mocks
+import { authUtils } from "../../utils/auth";
+
 const renderRegister = () => {
   return render(
     <BrowserRouter>
@@ -42,6 +56,7 @@ const renderRegister = () => {
 describe("Register", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockClear();
     global.fetch = vi.fn();
   });
 
@@ -58,7 +73,7 @@ describe("Register", () => {
   });
 
   it("requires role selection before registration", async () => {
-    (authUtils.authUtils.registerUser as any).mockResolvedValue({
+    (authUtils.registerUser as any).mockResolvedValue({
       success: false,
       error: "Role is required",
     });
@@ -228,7 +243,7 @@ describe("Register", () => {
 
   it("calls registerUser on form submission", async () => {
     const user = userEvent.setup();
-    (authUtils.authUtils.registerUser as any).mockResolvedValue({
+    (authUtils.registerUser as any).mockResolvedValue({
       success: true,
       needsVerification: false,
     });
@@ -266,7 +281,7 @@ describe("Register", () => {
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(authUtils.authUtils.registerUser).toHaveBeenCalledWith(
+      expect(authUtils.registerUser).toHaveBeenCalledWith(
         "test@example.com",
         "password123",
         "student",
@@ -287,5 +302,417 @@ describe("Register", () => {
     const homeLink = screen.getByText(/back to home/i);
     expect(homeLink).toBeInTheDocument();
     expect(homeLink.closest("a")).toHaveAttribute("href", "/");
+  });
+
+  it ("validates email is required", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    // Verify email field has required attribute
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    
+    expect(emailInput).toHaveAttribute('required');
+  });
+
+  it("validates representative invite code is optional", async () => {
+    const user = userEvent.setup();
+    (authUtils.registerUser as any).mockResolvedValue({
+      success: true,
+      needsVerification: false,
+    });
+    (global.fetch as any).mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Representative"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+
+    await user.type(emailInput, "rep@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "Jane");
+    await user.type(lastNameInput, "Smith");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(authUtils.registerUser).toHaveBeenCalledWith(
+        "rep@example.com",
+        "password123",
+        "representative",
+        expect.objectContaining({ firstName: "Jane", lastName: "Smith" })
+      );
+    });
+  });
+
+  it("includes representative invite code when provided", async () => {
+    const user = userEvent.setup();
+    (authUtils.registerUser as any).mockResolvedValue({
+      success: true,
+      needsVerification: false,
+    });
+    (global.fetch as any).mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Representative"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+    const inviteCodeInput = screen.getByLabelText(/invite code/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+
+    await user.type(emailInput, "rep@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "Jane");
+    await user.type(lastNameInput, "Smith");
+    await user.type(inviteCodeInput, "INVITECODE123");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(authUtils.registerUser).toHaveBeenCalledWith(
+        "rep@example.com",
+        "password123",
+        "representative",
+        expect.objectContaining({
+          firstName: "Jane",
+          lastName: "Smith",
+          inviteCode: "INVITECODE123"
+        })
+      );
+    });
+  });
+
+  it("handles registration error", async () => {
+    const user = userEvent.setup();
+    (authUtils.registerUser as any).mockResolvedValue({
+      success: false,
+      error: "Email already in use",
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+
+    await user.type(emailInput, "test@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "John");
+    await user.type(lastNameInput, "Doe");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/email already in use/i)).toBeInTheDocument();
+    });
+  });
+
+  it("redirects to verification-pending when needsVerification is true", async () => {
+    const user = userEvent.setup();
+
+    (authUtils.registerUser as any).mockResolvedValue({
+      success: true,
+      needsVerification: true,
+    });
+    (global.fetch as any).mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+
+    await user.type(emailInput, "test@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "John");
+    await user.type(lastNameInput, "Doe");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/verification-pending", {
+        state: { email: "test@example.com" }
+      });
+    });
+  });
+
+  it("includes student school when provided", async () => {
+    const user = userEvent.setup();
+    (authUtils.registerUser as any).mockResolvedValue({
+      success: true,
+      needsVerification: false,
+    });
+    (global.fetch as any).mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+    const schoolInput = screen.getByLabelText(/school/i);
+    const majorInput = screen.getByLabelText(/major/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+
+    await user.type(emailInput, "student@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "John");
+    await user.type(lastNameInput, "Doe");
+    await user.type(schoolInput, "Harvard");
+    await user.type(majorInput, "Computer Science");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(authUtils.registerUser).toHaveBeenCalledWith(
+        "student@example.com",
+        "password123",
+        "student",
+        expect.objectContaining({
+          firstName: "John",
+          lastName: "Doe",
+          school: "Harvard",
+          major: "Computer Science"
+        })
+      );
+    });
+  });
+
+  it("registers company owner successfully", async () => {
+    const user = userEvent.setup();
+    (authUtils.registerUser as any).mockResolvedValue({
+      success: true,
+      needsVerification: false,
+    });
+    (global.fetch as any).mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Company Owner"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+
+    await user.type(emailInput, "owner@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "Alice");
+    await user.type(lastNameInput, "Johnson");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(authUtils.registerUser).toHaveBeenCalledWith(
+        "owner@example.com",
+        "password123",
+        "companyOwner",
+        expect.objectContaining({ firstName: "Alice", lastName: "Johnson" })
+      );
+    });
+  });
+
+  it("handles Google register click when no role is selected", async () => {
+    renderRegister();
+
+    // Initially disabled
+    const googleButton = screen.getByRole("button", { name: /register with google/i });
+    expect(googleButton).toBeDisabled();
+  });
+
+  it("calls loginWithGoogle when Google register is clicked", async () => {
+    const user = userEvent.setup();
+    (authUtils.loginWithGoogle as any).mockResolvedValue({
+      success: true,
+      user: {
+        uid: "google-uid",
+        email: "google@example.com",
+        displayName: "Google User",
+      },
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    const googleButton = screen.getByRole("button", { name: /register with google/i });
+    await user.click(googleButton);
+
+    await waitFor(() => {
+      expect(authUtils.loginWithGoogle).toHaveBeenCalled();
+    });
+  });
+
+  it("syncs user to Stream Chat on successful registration", async () => {
+    const user = userEvent.setup();
+    (authUtils.registerUser as any).mockResolvedValue({
+      success: true,
+      needsVerification: false,
+    });
+    (global.fetch as any).mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+
+    await user.type(emailInput, "test@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "John");
+    await user.type(lastNameInput, "Doe");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/sync-stream-user"),
+        expect.objectContaining({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    });
+  });
+
+  it("shows error for invalid role", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    // Manually set invalid role by manipulating component state
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("textbox").length).toBeGreaterThan(2);
+    });
+
+    const fields = screen.getAllByRole("textbox");
+    const emailInput = fields.find((el) => el.getAttribute("type") === "email") || screen.getByLabelText(/email address/i);
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    const firstNameInput = screen.getByLabelText(/first name/i);
+    const lastNameInput = screen.getByLabelText(/last name/i);
+
+    await user.type(emailInput, "test@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+    await user.type(firstNameInput, "John");
+    await user.type(lastNameInput, "Doe");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(authUtils.registerUser).toHaveBeenCalled();
+    });
   });
 });

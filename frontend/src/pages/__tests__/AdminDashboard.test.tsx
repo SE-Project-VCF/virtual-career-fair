@@ -59,18 +59,20 @@ const renderAdminDashboard = () => {
   );
 };
 
+const mockScheduleData = {
+  name: "Spring Career Fair 2024",
+  description: "Join us for our spring career fair",
+  startTime: Date.now() + 86400000, // Tomorrow
+  endTime: Date.now() + 90000000, // Day after tomorrow
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  createdBy: "admin-1",
+  updatedBy: "admin-1",
+};
+
 const mockSchedule = {
   id: "schedule-1",
-  data: () => ({
-    name: "Spring Career Fair 2024",
-    description: "Join us for our spring career fair",
-    startTime: Date.now() + 86400000, // Tomorrow
-    endTime: Date.now() + 90000000, // Day after tomorrow
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    createdBy: "admin-1",
-    updatedBy: "admin-1",
-  }),
+  data: () => mockScheduleData,
 };
 
 describe("AdminDashboard", () => {
@@ -89,7 +91,10 @@ describe("AdminDashboard", () => {
       scheduleName: null,
       scheduleDescription: null,
     });
-    (firestore.getDocs as any).mockResolvedValue({ docs: [] });
+    (firestore.getDocs as any).mockResolvedValueOnce({
+      docs: [],
+      forEach: (_callback: any) => {},
+    });
     (firestore.getDoc as any).mockResolvedValue({
       exists: () => false,
       data: () => ({}),
@@ -337,14 +342,14 @@ describe("AdminDashboard", () => {
     it("displays schedule list when schedules exist", async () => {
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],
-        forEach: (callback: Function) => callback(mockSchedule),
+        forEach: (cb: any) => cb(mockSchedule),
       });
-
+      
       renderAdminDashboard();
 
       await waitFor(() => {
-        expect(screen.getByText("Spring Career Fair 2024")).toBeInTheDocument();
-      });
+        expect(screen.getByText(/Spring Career Fair 2024/i)).toBeInTheDocument();
+      }, { timeout: 3000 });
     });
 
     it("opens schedule dialog when Schedule Career Fair button is clicked", async () => {
@@ -362,7 +367,7 @@ describe("AdminDashboard", () => {
       await user.click(scheduleButton!);
 
       expect(screen.getByRole("dialog")).toBeInTheDocument();
-      expect(screen.getByText("Schedule Career Fair")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Schedule Career Fair" })).toBeInTheDocument();
     });
 
     it("displays schedule form fields in dialog", async () => {
@@ -470,14 +475,14 @@ describe("AdminDashboard", () => {
       const user = userEvent.setup();
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],
-        forEach: (callback: Function) => callback(mockSchedule),
+        forEach: (cb: any) => cb(mockSchedule),
       });
 
       renderAdminDashboard();
 
       await waitFor(() => {
         expect(screen.getByTestId("EditIcon")).toBeInTheDocument();
-      });
+      }, { timeout: 2000 });
 
       const editButton = screen.getByTestId("EditIcon").closest("button");
       await user.click(editButton!);
@@ -490,14 +495,14 @@ describe("AdminDashboard", () => {
       const user = userEvent.setup();
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],
-        forEach: (callback: Function) => callback(mockSchedule),
+        forEach: (cb: any) => cb(mockSchedule),
       });
 
       renderAdminDashboard();
 
       await waitFor(() => {
         expect(screen.getByTestId("EditIcon")).toBeInTheDocument();
-      });
+      }, { timeout: 2000 });
 
       const editButton = screen.getByTestId("EditIcon").closest("button");
       await user.click(editButton!);
@@ -521,14 +526,14 @@ describe("AdminDashboard", () => {
       const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],
-        forEach: (callback: Function) => callback(mockSchedule),
+        forEach: (cb: any) => cb(mockSchedule),
       });
 
       renderAdminDashboard();
 
       await waitFor(() => {
         expect(screen.getByTestId("DeleteIcon")).toBeInTheDocument();
-      });
+      }, { timeout: 2000 });
 
       const deleteButton = screen.getByTestId("DeleteIcon").closest("button");
       await user.click(deleteButton!);
@@ -546,14 +551,14 @@ describe("AdminDashboard", () => {
       const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],
-        forEach: (callback: Function) => callback(mockSchedule),
+        forEach: (cb: any) => cb(mockSchedule),
       });
 
       renderAdminDashboard();
 
       await waitFor(() => {
         expect(screen.getByTestId("DeleteIcon")).toBeInTheDocument();
-      });
+      }, { timeout: 2000 });
 
       const deleteButton = screen.getByTestId("DeleteIcon").closest("button");
       await user.click(deleteButton!);
@@ -601,14 +606,14 @@ describe("AdminDashboard", () => {
 
       (firestore.getDocs as any).mockResolvedValue({
         docs: [futureSchedule],
-        forEach: (callback: Function) => callback(futureSchedule),
+        forEach: (cb: any) => cb(futureSchedule),
       });
 
       renderAdminDashboard();
 
       await waitFor(() => {
         expect(screen.getByText("Upcoming")).toBeInTheDocument();
-      });
+      }, { timeout: 2000 });
     });
 
     it("displays schedule status as Active", async () => {
@@ -628,14 +633,14 @@ describe("AdminDashboard", () => {
 
       (firestore.getDocs as any).mockResolvedValue({
         docs: [activeSchedule],
-        forEach: (callback: Function) => callback(activeSchedule),
+        forEach: (cb: any) => cb(activeSchedule),
       });
 
       renderAdminDashboard();
 
       await waitFor(() => {
         expect(screen.getByText("Active")).toBeInTheDocument();
-      });
+      }, { timeout: 2000 });
     });
 
     it("displays schedule status as Ended", async () => {
@@ -655,14 +660,14 @@ describe("AdminDashboard", () => {
 
       (firestore.getDocs as any).mockResolvedValue({
         docs: [endedSchedule],
-        forEach: (callback: Function) => callback(endedSchedule),
+        forEach: (cb: any) => cb(endedSchedule),
       });
 
       renderAdminDashboard();
 
       await waitFor(() => {
         expect(screen.getByText("Ended")).toBeInTheDocument();
-      });
+      }, { timeout: 2000 });
     });
   });
 

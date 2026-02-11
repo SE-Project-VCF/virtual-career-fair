@@ -1,6 +1,8 @@
+/// <reference types="vitest/globals" />
+import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import { BrowserRouter } from "react-router-dom";
 import ChatPage from "../ChatPage";
 import * as authUtils from "../../utils/auth";
@@ -15,7 +17,7 @@ const mockChannel = {
 };
 
 const mockStreamClient = {
-  userID: null,
+  userID: null as string | null,
   user: { total_unread_count: 0 },
   disconnectUser: vi.fn().mockResolvedValue({}),
   connectUser: vi.fn().mockResolvedValue({}),
@@ -51,14 +53,14 @@ vi.mock("../../config", () => ({
 }));
 
 vi.mock("stream-chat-react", () => ({
-  Chat: ({ children }: any) => <div data-testid="stream-chat">{children}</div>,
-  Channel: ({ children }: any) => <div data-testid="stream-channel">{children}</div>,
-  Window: ({ children }: any) => <div data-testid="stream-window">{children}</div>,
+  Chat: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-chat">{children}</div>,
+  Channel: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-channel">{children}</div>,
+  Window: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-window">{children}</div>,
   MessageList: () => <div data-testid="message-list">Message List</div>,
 }));
 
 vi.mock("../../components/chat/ChatHeader", () => ({
-  default: ({ title, onNewChat, onBack }: any) => (
+  default: ({ title, onNewChat, onBack }: { title: string; onNewChat: () => void; onBack: () => void }) => (
     <div data-testid="chat-header">
       <span>{title}</span>
       <button onClick={onNewChat}>New Chat</button>
@@ -68,7 +70,7 @@ vi.mock("../../components/chat/ChatHeader", () => ({
 }));
 
 vi.mock("../../components/chat/ChatSidebar", () => ({
-  default: ({ onSelectChannel }: any) => {
+  default: ({ onSelectChannel }: { onSelectChannel: (channel: Record<string, unknown>) => void }) => {
     const mockChan = {
       watch: vi.fn().mockResolvedValue({}),
       sendMessage: vi.fn().mockResolvedValue({}),
@@ -82,7 +84,7 @@ vi.mock("../../components/chat/ChatSidebar", () => ({
 }));
 
 vi.mock("../../components/chat/NewChatDialog", () => ({
-  default: ({ open, onClose }: any) =>
+  default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
     open ? (
       <div data-testid="new-chat-dialog">
         <button onClick={onClose}>Close Dialog</button>
@@ -112,7 +114,7 @@ describe("ChatPage", () => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
 
-    (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+    (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
       uid: "user-1",
       email: "test@example.com",
       firstName: "Test",
@@ -131,7 +133,7 @@ describe("ChatPage", () => {
 
   describe("Authentication", () => {
     it("redirects to home if user is not authenticated", () => {
-      (authUtils.authUtils.getCurrentUser as any).mockReturnValue(null);
+      (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue(null);
       renderChatPage();
 
       expect(mockNavigate).toHaveBeenCalledWith("/");
@@ -203,7 +205,7 @@ describe("ChatPage", () => {
     });
 
     it("handles user with missing firstName/lastName", async () => {
-      (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+      (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
         uid: "user-1",
         email: "test@example.com",
       });
@@ -415,7 +417,6 @@ describe("ChatPage", () => {
         expect(screen.getByPlaceholderText(/Begin typing to send a message/)).toBeInTheDocument();
       });
 
-      const textarea = screen.getByPlaceholderText(/Begin typing to send a message/);
       await user.keyboard("{Enter}");
 
       expect(mockChannel.sendMessage).not.toHaveBeenCalled();
@@ -439,12 +440,12 @@ describe("ChatPage", () => {
         expect(screen.getByPlaceholderText(/Begin typing to send a message/)).toBeInTheDocument();
       });
 
-      const textarea = screen.getByPlaceholderText(/Begin typing to send a message/) as HTMLTextAreaElement;
-      await user.type(textarea, "Line 1");
+      const textareaElement = screen.getByPlaceholderText(/Begin typing to send a message/) as HTMLTextAreaElement;
+      await user.type(textareaElement, "Line 1");
       await user.keyboard("{Alt>}{Enter}{/Alt}");
 
       // Should have newline without sending
-      expect(textarea.value).toContain("\n");
+      expect(textareaElement.value).toContain("\n");
       expect(mockChannel.sendMessage).not.toHaveBeenCalled();
     });
   });

@@ -45,7 +45,7 @@ vi.mock("../../firebase", () => ({
 // Import after mocking
 import { authUtils } from "../../utils/auth";
 import * as firestore from "firebase/firestore";
-import * as storage from "firebase/storage";
+
 
 const renderStudentProfile = () => {
   return render(
@@ -273,7 +273,7 @@ describe("StudentProfilePage", () => {
     renderStudentProfile();
 
     const file = new File(["resume content"], "resume.pdf", { type: "application/pdf" });
-    const uploadInput = screen.getByRole("button", { name: /Upload Resume/ }).querySelector('input[type="file"]');
+    const uploadInput = screen.getByRole("button", { name: /Upload Resume/ }).querySelector('input[type="file"]') as HTMLInputElement;
 
     if (uploadInput) {
       await user.upload(uploadInput, file);
@@ -289,7 +289,7 @@ describe("StudentProfilePage", () => {
 
     const file = new File(["resume content"], "resume.txt", { type: "text/plain" });
     const uploadButton = screen.getByRole("button", { name: /Upload Resume/ });
-    const uploadInput = uploadButton.querySelector('input[type="file"]');
+    const uploadInput = uploadButton.querySelector('input[type="file"]') as HTMLInputElement;
 
     if (uploadInput) {
       await user.upload(uploadInput, file);
@@ -306,7 +306,7 @@ describe("StudentProfilePage", () => {
     const largeContent = new Array(6 * 1024 * 1024).fill("a").join("");
     const file = new File([largeContent], "large.pdf", { type: "application/pdf" });
     const uploadButton = screen.getByRole("button", { name: /Upload Resume/ });
-    const uploadInput = uploadButton.querySelector('input[type="file"]');
+    const uploadInput = uploadButton.querySelector('input[type="file"]') as HTMLInputElement;
 
     if (uploadInput) {
       await user.upload(uploadInput, file);

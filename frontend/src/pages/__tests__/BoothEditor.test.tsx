@@ -24,7 +24,18 @@ vi.mock("../../utils/auth", () => ({
   },
 }));
 
-vi.mock("firebase/firestore");
+vi.mock("firebase/firestore", () => ({
+  collection: vi.fn(),
+  getDocs: vi.fn(),
+  doc: vi.fn((_db, collectionName, docId) => ({ _collection: collectionName, _id: docId })),
+  getDoc: vi.fn(),
+  addDoc: vi.fn(),
+  updateDoc: vi.fn(),
+  setDoc: vi.fn(),
+  where: vi.fn(),
+  query: vi.fn(),
+}));
+
 vi.mock("../../firebase", () => ({
   db: {},
 }));
@@ -185,7 +196,7 @@ describe("BoothEditor", () => {
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         // First call is for company, second is for booth
         return Promise.resolve(
-          ref.id === "company-1"
+          ref._id === "company-1"
             ? { ...mockCompanyDoc, data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" }) }
             : mockBoothDoc
         );
@@ -244,7 +255,7 @@ describe("BoothEditor", () => {
     it("loads and displays existing booth data when editing", async () => {
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         return Promise.resolve(
-          ref.id === "company-1"
+          ref._id === "company-1"
             ? { ...mockCompanyDoc, data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" }) }
             : mockBoothDoc
         );
@@ -436,7 +447,7 @@ describe("BoothEditor", () => {
       const user = userEvent.setup();
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         return Promise.resolve(
-          ref.id === "company-1"
+          ref._id === "company-1"
             ? { ...mockCompanyDoc, data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" }) }
             : mockBoothDoc
         );
