@@ -1,34 +1,37 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route } from "react-router-dom"
+import StudentProfilePage from "./pages/StudentProfilePage"
+import RoleSelection from "./pages/RoleSelection"
+import Register from "./pages/Register"
+import Login from "./pages/Login"
+import Dashboard from "./pages/Dashboard"
+import CompanyManagement from "./pages/CompanyManagement"
+import Company from "./pages/Company"
+import BoothEditor from "./pages/BoothEditor"
+import Booths from "./pages/Booths"
+import BoothView from "./pages/BoothView"
+import EmailVerificationPending from "./pages/EmailVerificationPending"
+import VerifyEmail from "./pages/VerifyEmail"
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<RoleSelection />} />
+
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
+
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/companies" element={<CompanyManagement />} />
+        <Route path="/company/:id" element={<Company />} />
+        <Route path="/company/:companyId/booth" element={<BoothEditor />} />
+        <Route path="/booths" element={<Booths />} />
+        <Route path="/booth/:boothId" element={<BoothView />} />
+        <Route path="/verification-pending" element={<EmailVerificationPending />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/profile" element={<StudentProfilePage />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 

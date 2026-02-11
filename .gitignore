@@ -119,6 +119,10 @@ dist
 # Firebase cache directory
 .firebase/
 
+# Firebase configuration files (should not be committed)
+firestore.rules
+firebase.json
+
 # TernJS port file
 .tern-port
 
@@ -137,3 +141,4 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+backend/privateKey.json
