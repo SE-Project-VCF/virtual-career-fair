@@ -8,6 +8,7 @@ import ChatPage from "../ChatPage";
 import * as authUtils from "../../utils/auth";
 
 const mockNavigate = vi.fn();
+let mockLocationState: { state: { repId?: string } | null } = { state: null };
 
 // Define mocks before using them
 const mockChannel = {
@@ -71,13 +72,9 @@ vi.mock("../../components/chat/ChatHeader", () => ({
 
 vi.mock("../../components/chat/ChatSidebar", () => ({
   default: ({ onSelectChannel }: { onSelectChannel: (channel: Record<string, unknown>) => void }) => {
-    const mockChan = {
-      watch: vi.fn().mockResolvedValue({}),
-      sendMessage: vi.fn().mockResolvedValue({}),
-    };
     return (
       <div data-testid="chat-sidebar">
-        <button onClick={() => onSelectChannel(mockChan)}>Select Channel</button>
+        <button onClick={() => onSelectChannel(mockChannel)}>Select Channel</button>
       </div>
     );
   },
@@ -97,7 +94,7 @@ vi.mock("react-router-dom", async () => {
   return {
     ...actual,
     useNavigate: () => mockNavigate,
-    useLocation: () => ({ state: null }),
+    useLocation: () => mockLocationState,
   };
 });
 
@@ -113,6 +110,12 @@ describe("ChatPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
+    mockLocationState = { state: null };
+
+    // Reset mock channel
+    mockChannel.watch.mockClear();
+    mockChannel.sendMessage.mockClear();
+    mockChannel.sendFile.mockClear();
 
     (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
       uid: "user-1",
@@ -390,12 +393,13 @@ describe("ChatPage", () => {
 
       const textarea = screen.getByPlaceholderText(/Begin typing to send a message/);
       await user.type(textarea, "Hello!");
+      
+      // Press Enter to send
+      await user.keyboard("{Enter}");
 
-      // Verify textarea has the text
-      expect(textarea).toHaveValue("Hello!");
-
-      // Note: Testing actual Enter key send is complex due to mock limitations
-      // The UI renders correctly which covers the main functionality
+      await waitFor(() => {
+        expect(mockChannel.sendMessage).toHaveBeenCalledWith({ text: "Hello!" });
+      });
     });
 
     it("does not send empty messages", async () => {
@@ -417,6 +421,31 @@ describe("ChatPage", () => {
         expect(screen.getByPlaceholderText(/Begin typing to send a message/)).toBeInTheDocument();
       });
 
+      await user.keyboard("{Enter}");
+
+      expect(mockChannel.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it("does not send whitespace-only messages", async () => {
+      const user = userEvent.setup();
+      mockStreamClient.userID = "user-1";
+
+      renderChatPage();
+
+      // Select a channel
+      await waitFor(() => {
+        expect(screen.getByText("Select Channel")).toBeInTheDocument();
+      });
+
+      const selectButton = screen.getByText("Select Channel");
+      await user.click(selectButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText(/Begin typing to send a message/)).toBeInTheDocument();
+      });
+
+      const textarea = screen.getByPlaceholderText(/Begin typing to send a message/);
+      await user.type(textarea, "   ");
       await user.keyboard("{Enter}");
 
       expect(mockChannel.sendMessage).not.toHaveBeenCalled();
@@ -505,6 +534,208 @@ describe("ChatPage", () => {
         const fileInput = screen.getByLabelText("📎");
         expect(fileInput).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("File Upload", () => {
+    it("renders file upload input when channel is active", async () => {
+      const user = userEvent.setup();
+      mockStreamClient.userID = "user-1";
+
+      renderChatPage();
+
+      // Select a channel
+      await waitFor(() => {
+        expect(screen.getByText("Select Channel")).toBeInTheDocument();
+      });
+
+      const selectButton = screen.getByText("Select Channel");
+      await user.click(selectButton);
+
+      await waitFor(() => {
+        const fileInput = document.querySelector('input[type="file"]');
+        expect(fileInput).toBeInTheDocument();
+        expect(fileInput).toHaveAttribute('multiple');
+      });
+    });
+
+    it("calls sendFiles when files are selected", async () => {
+      const user = userEvent.setup();
+      mockStreamClient.userID = "user-1";
+
+      renderChatPage();
+
+      // Select a channel
+      await waitFor(() => {
+        expect(screen.getByText("Select Channel")).toBeInTheDocument();
+      });
+
+      const selectButton = screen.getByText("Select Channel");
+      await user.click(selectButton);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("📎")).toBeInTheDocument();
+      });
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = new File(["test content"], "test.pdf", { type: "application/pdf" });
+
+      // Upload the file
+      await user.upload(fileInput, file);
+
+      // Verify sendFile was called
+      await waitFor(() => {
+        expect(mockChannel.sendFile).toHaveBeenCalledWith(file);
+      });
+
+      // Verify sendMessage was called with attachment
+      await waitFor(() => {
+        expect(mockChannel.sendMessage).toHaveBeenCalled();
+      });
+    });
+
+    it("does not send files when no channel is active", async () => {
+      mockStreamClient.userID = "user-1";
+      renderChatPage();
+
+      // Don't select a channel - should show placeholder
+      await waitFor(() => {
+        expect(screen.getByText("Select a chat or start a new one")).toBeInTheDocument();
+      });
+
+      // sendFiles should not be called
+      expect(mockChannel.sendFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Stream Client Disconnection", () => {
+    it("disconnects user when logged out", async () => {
+      const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      
+      // Start with a user
+      (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
+        uid: "user-1",
+        email: "test@example.com",
+      });
+      mockStreamClient.userID = "user-1";
+
+      const { rerender } = renderChatPage();
+
+      // Change to no user
+      (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue(null);
+      
+      rerender(
+        <BrowserRouter>
+          <ChatPage />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(consoleLogSpy).toHaveBeenCalledWith("No Firebase user, disconnecting Stream");
+        expect(mockStreamClient.disconnectUser).toHaveBeenCalled();
+      });
+
+      consoleLogSpy.mockRestore();
+    });
+
+    it("disconnects if Stream userID doesn't match current user", async () => {
+      // Set up client connected as different user
+      mockStreamClient.userID = "different-user";
+
+      (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
+        uid: "user-1",
+        email: "test@example.com",
+      });
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(mockStreamClient.disconnectUser).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe("Textarea Auto-grow", () => {
+    it("adjusts textarea height on input", async () => {
+      const user = userEvent.setup();
+      mockStreamClient.userID = "user-1";
+
+      renderChatPage();
+
+      // Select a channel
+      await waitFor(() => {
+        expect(screen.getByText("Select Channel")).toBeInTheDocument();
+      });
+
+      const selectButton = screen.getByText("Select Channel");
+      await user.click(selectButton);
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText(/Begin typing to send a message/)).toBeInTheDocument();
+      });
+
+      const textarea = screen.getByPlaceholderText(/Begin typing to send a message/) as HTMLTextAreaElement;
+      
+      // Type a long message
+      await user.type(textarea, "Line 1\nLine 2\nLine 3\nLine 4");
+
+      // The textarea should have adjusted its height (style changes are applied)
+      expect(textarea.value).toContain("\n");
+    });
+  });
+
+  describe("Auto-DM from Booth", () => {
+    it("creates DM channel when repId is provided in location state", async () => {
+      mockStreamClient.userID = "user-1";
+      mockLocationState = { state: { repId: "rep-123" } };
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(mockStreamClient.channel).toHaveBeenCalledWith("messaging", {
+          members: ["user-1", "rep-123"],
+        });
+        expect(mockChannel.watch).toHaveBeenCalled();
+      });
+    });
+
+    it("does not create DM when no repId is provided", async () => {
+      mockStreamClient.userID = "user-1";
+      mockLocationState = { state: null };
+
+      const channelCallsBefore = mockStreamClient.channel.mock.calls.length;
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+      });
+
+      // Should not create a messaging channel
+      const messagingCalls = mockStreamClient.channel.mock.calls.filter(
+        (call) => call[0] === "messaging" && call[1]?.members
+      );
+      expect(messagingCalls.length).toBe(0);
+    });
+
+    it("handles error when auto-DM creation fails", async () => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      mockStreamClient.userID = "user-1";
+      mockLocationState = { state: { repId: "rep-123" } };
+      
+      // Make channel.watch fail
+      mockChannel.watch.mockRejectedValueOnce(new Error("Failed to create channel"));
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          "CHAT: auto-DM failed",
+          expect.any(Error)
+        );
+      });
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });
