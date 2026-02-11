@@ -77,6 +77,8 @@ describe("ChatSidebar", () => {
 
   it("calls onSelectChannel when a channel is selected", () => {
     const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
+    const mockSetActiveChannel = vi.fn();
+    
     render(
       <ChatSidebar
         client={mockClient}
@@ -87,15 +89,22 @@ describe("ChatSidebar", () => {
 
     const preview = channelListSpy.mock.calls[0]?.[0]?.Preview as any;
     if (preview) {
-      const mockSetActiveChannel = vi.fn();
       const result = preview({
         channel: mockChannel,
         setActiveChannel: mockSetActiveChannel,
+        latestMessagePreview: { text: "Latest message" },
+        Avatar: () => null,
       });
-      // Simulate click
-      if (result && result.props?.onClick) {
-        result.props.onClick();
+      
+      // Get the onSelect callback from ChannelPreviewMessenger props
+      const onSelect = result?.props?.onSelect;
+      if (onSelect) {
+        onSelect();
       }
+      
+      // Verify both callbacks are called
+      expect(mockSetActiveChannel).toHaveBeenCalledWith(mockChannel);
+      expect(mockOnSelectChannel).toHaveBeenCalledWith(mockChannel);
     }
 
     channelListSpy.mockRestore();
@@ -142,6 +151,66 @@ describe("ChatSidebar", () => {
     const call = channelListSpy.mock.calls[0]?.[0];
     const filters = call?.filters as any;
     expect(filters?.members?.$in).toContain("custom-user-123");
+
+    channelListSpy.mockRestore();
+  });
+
+  it("passes all required props to ChannelPreviewMessenger", () => {
+    const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
+    const mockLatestMessage = { text: "Hello world" };
+    const mockAvatar = () => null;
+    const mockSetActiveChannel = vi.fn();
+    
+    render(
+      <ChatSidebar
+        client={mockClient}
+        onSelectChannel={mockOnSelectChannel}
+        activeChannel={null}
+      />
+    );
+
+    const preview = channelListSpy.mock.calls[0]?.[0]?.Preview as any;
+    if (preview) {
+      const result = preview({
+        channel: mockChannel,
+        setActiveChannel: mockSetActiveChannel,
+        latestMessagePreview: mockLatestMessage,
+        Avatar: mockAvatar,
+      });
+      
+      expect(result?.props?.channel).toBe(mockChannel);
+      expect(result?.props?.latestMessagePreview).toBe(mockLatestMessage);
+      expect(result?.props?.Avatar).toBe(mockAvatar);
+      expect(result?.props?.active).toBe(false);
+    }
+
+    channelListSpy.mockRestore();
+  });
+
+  it("shows inactive state for non-matching channel", () => {
+    const differentChannel = {
+      cid: "different-channel",
+      name: "Different Channel",
+    } as any;
+    
+    const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
+    render(
+      <ChatSidebar
+        client={mockClient}
+        onSelectChannel={mockOnSelectChannel}
+        activeChannel={differentChannel}
+      />
+    );
+
+    const preview = channelListSpy.mock.calls[0]?.[0]?.Preview as any;
+    if (preview) {
+      const result = preview({
+        channel: mockChannel,
+        setActiveChannel: vi.fn(),
+      });
+      
+      expect(result?.props?.active).toBe(false);
+    }
 
     channelListSpy.mockRestore();
   });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
@@ -37,6 +37,11 @@ vi.mock("../../firebase", () => ({
   },
 }));
 
+vi.mock("firebase/firestore", () => ({
+  doc: vi.fn(() => "doc-ref"),
+  setDoc: vi.fn(),
+}));
+
 // Mock config
 vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
@@ -44,6 +49,7 @@ vi.mock("../../config", () => ({
 
 // Import after mocks
 import { authUtils } from "../../utils/auth";
+import { setDoc } from "firebase/firestore";
 
 const renderRegister = () => {
   return render(
@@ -224,6 +230,55 @@ describe("Register", () => {
     renderRegister();
     const googleButton = screen.getByRole("button", { name: /register with google/i });
     expect(googleButton).toBeDisabled();
+  });
+
+  it("shows an error when submitting without a role", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/please select a role/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows an error when required fields are missing", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/email, password, and confirm password are required/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows an error when first or last name is missing", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    const passwordInputs = document.querySelectorAll('input[type="password"]');
+    await user.type(screen.getByLabelText(/email address/i), "test@example.com");
+    await user.type(passwordInputs[0], "password123");
+    await user.type(passwordInputs[1], "password123");
+
+    const submitButton = screen.getByRole("button", { name: /create account/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/first name and last name are required/i)).toBeInTheDocument();
+    });
   });
 
   it("enables Google register button when role is selected", async () => {
@@ -633,6 +688,111 @@ describe("Register", () => {
 
     await waitFor(() => {
       expect(authUtils.loginWithGoogle).toHaveBeenCalled();
+    });
+  });
+
+  it("opens profile dialog and saves Google profile details", async () => {
+    const user = userEvent.setup();
+    (authUtils.loginWithGoogle as any).mockResolvedValue({
+      success: true,
+      needsProfile: true,
+    });
+    (global.fetch as any).mockResolvedValue({
+      status: 200,
+      json: async () => ({}),
+    });
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    const googleButton = screen.getByRole("button", { name: /register with google/i });
+    await user.click(googleButton);
+
+    const dialog = await screen.findByRole("dialog");
+    const dialogScope = within(dialog);
+
+    await user.clear(dialogScope.getByLabelText(/first name/i));
+    await user.type(dialogScope.getByLabelText(/first name/i), "Gina");
+    await user.clear(dialogScope.getByLabelText(/last name/i));
+    await user.type(dialogScope.getByLabelText(/last name/i), "Lopez");
+    await user.type(dialogScope.getByLabelText(/school/i), "UCLA");
+    await user.type(dialogScope.getByLabelText(/major/i), "Engineering");
+
+    const saveButton = dialogScope.getByRole("button", { name: /save/i });
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(setDoc).toHaveBeenCalledWith(
+        "doc-ref",
+        expect.objectContaining({
+          uid: "test-user",
+          email: "test@example.com",
+          role: "student",
+          firstName: "Gina",
+          lastName: "Lopez",
+          school: "UCLA",
+          major: "Engineering",
+          provider: "google",
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/sync-stream-user"),
+        expect.objectContaining({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(setItemSpy).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
+  it("shows an error when Google registration fails", async () => {
+    const user = userEvent.setup();
+    (authUtils.loginWithGoogle as any).mockResolvedValue({
+      success: false,
+      error: "Google auth failed",
+    });
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    const googleButton = screen.getByRole("button", { name: /register with google/i });
+    await user.click(googleButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/google auth failed/i)).toBeInTheDocument();
+    });
+  });
+
+  it("handles Google registration exceptions", async () => {
+    const user = userEvent.setup();
+    (authUtils.loginWithGoogle as any).mockRejectedValue(new Error("network"));
+
+    renderRegister();
+
+    const roleSelect = screen.getByRole("combobox", { name: /account type/i });
+    await user.click(roleSelect);
+    await user.click(screen.getByText("Student"));
+
+    const googleButton = screen.getByRole("button", { name: /register with google/i });
+    await user.click(googleButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to register with google/i)).toBeInTheDocument();
     });
   });
 

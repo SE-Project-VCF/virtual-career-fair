@@ -703,8 +703,6 @@ describe("ChatPage", () => {
       mockStreamClient.userID = "user-1";
       mockLocationState = { state: null };
 
-      const channelCallsBefore = mockStreamClient.channel.mock.calls.length;
-
       renderChatPage();
 
       await waitFor(() => {
@@ -713,7 +711,7 @@ describe("ChatPage", () => {
 
       // Should not create a messaging channel
       const messagingCalls = mockStreamClient.channel.mock.calls.filter(
-        (call) => call[0] === "messaging" && call[1]?.members
+        (call: any) => call[0] === "messaging" && call[1]?.members
       );
       expect(messagingCalls.length).toBe(0);
     });
