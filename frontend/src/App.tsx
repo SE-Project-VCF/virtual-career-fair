@@ -13,6 +13,7 @@ import EmailVerificationPending from "./pages/EmailVerificationPending"
 import VerifyEmail from "./pages/VerifyEmail"
 import ChatPage from "./pages/ChatPage" // ✅ added import
 import AdminDashboard from "./pages/AdminDashboard"
+import BoothHistoryPage from "./pages/BoothHistoryPage" // ✅ added import
 
 function App() {
   return (
@@ -25,6 +26,8 @@ function App() {
 
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/dashboard/chat" element={<ChatPage />} /> {/* ✅ added route */}
+        <Route path="/dashboard/booth-history" element={<BoothHistoryPage />} /> {/* ✅ added route */}
+
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />

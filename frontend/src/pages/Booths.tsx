@@ -76,25 +76,16 @@ export default function Booths() {
 
       const counts: Record<string, number> = {}
       let total = 0
-
-      // Firestore "in" queries support max 30 values, batch if needed
-      const batches = []
-      for (let i = 0; i < companyIds.length; i += 30) {
-        batches.push(companyIds.slice(i, i + 30))
-      }
-
-      for (const batch of batches) {
-        const q = query(collection(db, "jobs"), where("companyId", "in", batch))
-        const jobsSnapshot = await getDocs(q)
-        jobsSnapshot.forEach((doc) => {
-          const companyId = doc.data().companyId
-          if (companyId) {
-            counts[companyId] = (counts[companyId] || 0) + 1
-            total++
-          }
-        })
-      }
-
+      
+      jobsSnapshot.forEach((doc) => {
+        const jobData = doc.data()
+        const companyId = jobData.companyId
+        if (companyId) {
+          counts[companyId] = (counts[companyId] || 0) + 1
+          total++
+        }
+      })
+      
       setJobCounts(counts)
       setTotalJobs(total)
     } catch (err) {
@@ -120,7 +111,7 @@ export default function Booths() {
         // Fair is live - show all booths
         const q = query(collection(db, "booths"), orderBy("companyName"))
         const querySnapshot = await getDocs(q)
-        
+
         // Also fetch companies to map boothId to companyId
         const companiesSnapshot = await getDocs(collection(db, "companies"))
         const boothIdToCompanyId: Record<string, string> = {}
@@ -130,7 +121,7 @@ export default function Booths() {
             boothIdToCompanyId[companyData.boothId] = companyDoc.id
           }
         })
-        
+
         querySnapshot.forEach((doc) => {
           const boothData = doc.data()
           boothsList.push({
@@ -252,21 +243,43 @@ export default function Booths() {
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               {user && (
-                <Button
-                  variant="outlined"
-                  onClick={() => navigate("/dashboard")}
-                  sx={{
-                    color: "white",
-                    borderColor: "white",
-                    "&:hover": {
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  {/* Dashboard button (existing) */}
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate("/dashboard")}
+                    sx={{
+                      color: "white",
                       borderColor: "white",
-                      bgcolor: "rgba(255,255,255,0.1)",
-                    },
-                  }}
-                >
-                  Dashboard
-                </Button>
+                      "&:hover": {
+                        borderColor: "white",
+                        bgcolor: "rgba(255,255,255,0.1)",
+                      },
+                    }}
+                  >
+                    Dashboard
+                  </Button>
+
+                  {/* Booth History button (NEW) - only for students, ALWAYS enabled */}
+                  {user.role === "student" && (
+                    <Button
+                      variant="outlined"
+                      onClick={() => navigate("/dashboard/booth-history")}
+                      sx={{
+                        color: "white",
+                        borderColor: "white",
+                        "&:hover": {
+                          borderColor: "white",
+                          bgcolor: "rgba(255,255,255,0.1)",
+                        },
+                      }}
+                    >
+                      Booth History
+                    </Button>
+                  )}
+                </Box>
               )}
+
               <ProfileMenu />
             </Box>
           </Box>
@@ -276,10 +289,10 @@ export default function Booths() {
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Fair Name and Description Banner - Show when active */}
         {isLive && (scheduleName || scheduleDescription) && (
-          <Alert 
-            severity="success" 
-            sx={{ 
-              mb: 4, 
+          <Alert
+            severity="success"
+            sx={{
+              mb: 4,
               borderRadius: 2,
               bgcolor: "rgba(56, 133, 96, 0.1)",
               border: "1px solid rgba(56, 133, 96, 0.3)",
@@ -383,8 +396,8 @@ export default function Booths() {
                       {isLive ? (scheduleName || "Live Now") : "Not Live"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      {isLive && scheduleDescription 
-                        ? scheduleDescription 
+                      {isLive && scheduleDescription
+                        ? scheduleDescription
                         : "Event Status"}
                     </Typography>
                   </Box>
@@ -411,7 +424,7 @@ export default function Booths() {
               {isLive ? "No booths available" : "Career Fair Not Live"}
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              {isLive 
+              {isLive
                 ? "Companies are setting up their booths. Check back soon!"
                 : "The career fair is not currently live. You can only view and edit your own booth."}
             </Typography>

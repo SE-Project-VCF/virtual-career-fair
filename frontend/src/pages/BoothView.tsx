@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { trackBoothView } from "../utils/boothHistory";
 import {
   Container,
   Box,
@@ -185,7 +186,26 @@ export default function BoothView() {
       }
 
       setBooth(boothData)
-      
+
+      // ✅ Track booth views for the student's History tab
+      // We only record history for authenticated students.
+      // (Company reps/owners viewing booths shouldn't clutter student history.)
+      try {
+        if (user?.uid && user.role === "student") {
+          await trackBoothView(user.uid, {
+            boothId: boothData.id,
+            companyName: boothData.companyName,
+            industry: boothData.industry,
+            location: boothData.location,
+            logoUrl: boothData.logoUrl,
+          });
+        }
+      } catch (err) {
+        // If history fails, we don't want the whole Booth page to fail.
+        console.warn("History tracking failed:", err);
+      }
+
+
       // Get companyId from booth or look it up from companies
       let companyId = boothData.companyId
       if (!companyId) {
@@ -199,7 +219,7 @@ export default function BoothView() {
           }
         })
       }
-      
+
       // Fetch jobs for this company if companyId is available
       if (companyId) {
         fetchJobs(companyId)
