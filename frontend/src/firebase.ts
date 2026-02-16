@@ -9,7 +9,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDe9f6r1B4SsgINjxaTJBHbEDRBSLkFnYs",
   authDomain: "careerfairdb-48105.firebaseapp.com",
   projectId: "careerfairdb-48105",
-  storageBucket: "careerfairdb-48105.appspot.com",
+  storageBucket: "careerfairdb-48105.firebasestorage.app",
   messagingSenderId: "427612226177",
   appId: "1:427612226177:web:f00d7f82c10ab89e9a0380",
 };

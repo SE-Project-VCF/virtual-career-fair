@@ -17,7 +17,6 @@ import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu"
 import EventList from "../components/EventList"
 
-
 export default function Dashboard() {
   const navigate = useNavigate()
   const [user, setUser] = useState(authUtils.getCurrentUser())
@@ -106,8 +105,6 @@ export default function Dashboard() {
     };
   }, [user]);
 
-
-
   // Fetch total representatives count for company owners
   useEffect(() => {
     const fetchTotalRepresentatives = async () => {
@@ -139,7 +136,7 @@ export default function Dashboard() {
     const fetchStats = async () => {
       try {
         setLoadingStats(true)
-        
+
         // Fetch upcoming events count (schedules that haven't ended)
         const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
         const now = Date.now()
@@ -332,10 +329,10 @@ export default function Dashboard() {
 
           {/* Fair Status Alert */}
           {!loadingFairStatus && !isLive && (
-            <Alert 
-              severity="info" 
-              sx={{ 
-                mb: 3, 
+            <Alert
+              severity="info"
+              sx={{
+                mb: 3,
                 borderRadius: 2,
                 bgcolor: "rgba(56, 133, 96, 0.1)",
                 border: "1px solid rgba(56, 133, 96, 0.3)",
@@ -345,11 +342,11 @@ export default function Dashboard() {
                 Career Fair is Not Currently Live
               </Typography>
               <Typography variant="body2">
-                {user?.role === "student" 
+                {user?.role === "student"
                   ? "The career fair is not currently live. You will be able to browse all company booths once the fair goes live."
                   : user?.role === "representative" || user?.role === "companyOwner"
-                  ? "The career fair is not currently live. You can still view and edit your own booth, but you cannot browse other companies' booths until the fair goes live."
-                  : "The career fair is not currently live. Only company owners and representatives can view their own booths."}
+                    ? "The career fair is not currently live. You can still view and edit your own booth, but you cannot browse other companies' booths until the fair goes live."
+                    : "The career fair is not currently live. Only company owners and representatives can view their own booths."}
               </Typography>
             </Alert>
           )}
@@ -446,32 +443,56 @@ export default function Dashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {isLive 
+                        {isLive
                           ? "Explore other companies' booths at the virtual career fair."
                           : "The career fair is not currently live. You can only view your own company's booth."}
                       </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => navigate("/booths")}
-                        disabled={!isLive}
-                        sx={{
-                          background: isLive 
-                            ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
-                            : "rgba(0, 0, 0, 0.12)",
-                          color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
-                          "&:hover": {
-                            background: isLive 
-                              ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+
+                      {/* Two-button row: keep the existing button, add a second beside it */}
+                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                        <Button
+                          variant="contained"
+                          onClick={() => navigate("/booths")}
+                          disabled={!isLive}
+                          sx={{
+                            background: isLive
+                              ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
                               : "rgba(0, 0, 0, 0.12)",
-                          },
-                          "&:disabled": {
-                            background: "rgba(0, 0, 0, 0.12)",
-                            color: "rgba(0, 0, 0, 0.26)",
-                          },
-                        }}
-                      >
-                        View All Booths
-                      </Button>
+                            color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              background: isLive
+                                ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+                                : "rgba(0, 0, 0, 0.12)",
+                            },
+                            "&:disabled": {
+                              background: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View All Booths
+                        </Button>
+
+                        <Button
+                          variant="outlined"
+                          onClick={() => navigate("/dashboard/booth-history")}
+                          disabled={!isLive}
+                          sx={{
+                            borderColor: "rgba(56, 133, 96, 0.6)",
+                            color: isLive ? "#388560" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              borderColor: "#388560",
+                              backgroundColor: "rgba(56, 133, 96, 0.08)",
+                            },
+                            "&:disabled": {
+                              borderColor: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View Booth History
+                        </Button>
+                      </Box>
                     </CardContent>
                   </Card>
                 </Grid>
@@ -591,7 +612,7 @@ export default function Dashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {isLive 
+                        {isLive
                           ? "Explore other companies' booths at the virtual career fair."
                           : "The career fair is not currently live. You can only view your own company's booth."}
                       </Typography>
@@ -600,12 +621,12 @@ export default function Dashboard() {
                         onClick={() => navigate("/booths")}
                         disabled={!isLive}
                         sx={{
-                          background: isLive 
+                          background: isLive
                             ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
                             : "rgba(0, 0, 0, 0.12)",
                           color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
                           "&:hover": {
-                            background: isLive 
+                            background: isLive
                               ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
                               : "rgba(0, 0, 0, 0.12)",
                           },
@@ -699,35 +720,60 @@ export default function Dashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {isLive 
+                        {isLive
                           ? "Explore opportunities from top companies at the virtual career fair."
                           : "The career fair is not currently live. Check back later to browse company booths."}
                       </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => navigate("/booths")}
-                        disabled={!isLive}
-                        sx={{
-                          background: isLive 
-                            ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
-                            : "rgba(0, 0, 0, 0.12)",
-                          color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
-                          "&:hover": {
-                            background: isLive 
-                              ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+
+                      {/* Two-button row: View All Booths + View Booth History */}
+                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                        <Button
+                          variant="contained"
+                          onClick={() => navigate("/booths")}
+                          disabled={!isLive}
+                          sx={{
+                            background: isLive
+                              ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
                               : "rgba(0, 0, 0, 0.12)",
-                          },
-                          "&:disabled": {
-                            background: "rgba(0, 0, 0, 0.12)",
-                            color: "rgba(0, 0, 0, 0.26)",
-                          },
-                        }}
-                      >
-                        View All Booths
-                      </Button>
+                            color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              background: isLive
+                                ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+                                : "rgba(0, 0, 0, 0.12)",
+                            },
+                            "&:disabled": {
+                              background: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View All Booths
+                        </Button>
+
+                        <Button
+                          variant="outlined"
+                          onClick={() => navigate("/dashboard/booth-history")}
+                          disabled={!isLive}
+                          sx={{
+                            borderColor: "rgba(176, 58, 108, 0.6)",
+                            color: isLive ? "#b03a6c" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              borderColor: "#b03a6c",
+                              backgroundColor: "rgba(176, 58, 108, 0.08)",
+                            },
+                            "&:disabled": {
+                              borderColor: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View Booth History
+                        </Button>
+                      </Box>
                     </CardContent>
                   </Card>
                 </Grid>
+
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Card
                     sx={{
