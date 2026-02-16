@@ -76,16 +76,25 @@ export default function Booths() {
 
       const counts: Record<string, number> = {}
       let total = 0
-      
-      jobsSnapshot.forEach((doc) => {
-        const jobData = doc.data()
-        const companyId = jobData.companyId
-        if (companyId) {
-          counts[companyId] = (counts[companyId] || 0) + 1
-          total++
-        }
-      })
-      
+
+      // Firestore "in" queries support max 30 values, batch if needed
+      const batches = []
+      for (let i = 0; i < companyIds.length; i += 30) {
+        batches.push(companyIds.slice(i, i + 30))
+      }
+
+      for (const batch of batches) {
+        const q = query(collection(db, "jobs"), where("companyId", "in", batch))
+        const jobsSnapshot = await getDocs(q)
+        jobsSnapshot.forEach((doc) => {
+          const companyId = doc.data().companyId
+          if (companyId) {
+            counts[companyId] = (counts[companyId] || 0) + 1
+            total++
+          }
+        })
+      }
+
       setJobCounts(counts)
       setTotalJobs(total)
     } catch (err) {
