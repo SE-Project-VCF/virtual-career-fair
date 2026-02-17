@@ -14,6 +14,7 @@ import VerifyEmail from "./pages/VerifyEmail"
 import ChatPage from "./pages/ChatPage" // ✅ added import
 import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage" // ✅ added import
+import JobInvitations from "./pages/JobInvitations"
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/dashboard/chat" element={<ChatPage />} /> {/* ✅ added route */}
         <Route path="/dashboard/booth-history" element={<BoothHistoryPage />} /> {/* ✅ added route */}
+        <Route path="/dashboard/job-invitations" element={<JobInvitations />} />
 
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/companies" element={<CompanyManagement />} />

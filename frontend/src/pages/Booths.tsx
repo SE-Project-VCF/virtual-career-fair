@@ -25,6 +25,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import WorkIcon from "@mui/icons-material/Work"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import ProfileMenu from "./ProfileMenu"
+import NotificationBell from "../components/NotificationBell"
 
 interface Booth {
   id: string
@@ -288,6 +289,8 @@ export default function Booths() {
                   )}
                 </Box>
               )}
+
+              <NotificationBell />
 
               <ProfileMenu />
             </Box>

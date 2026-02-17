@@ -31,6 +31,7 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import NotificationBell from "../components/NotificationBell"
 
 interface Booth {
   id: string
@@ -302,6 +303,7 @@ export default function BoothView() {
               </Typography>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <NotificationBell />
               <ProfileMenu />
             </Box>
           </Box>

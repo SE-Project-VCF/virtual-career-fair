@@ -33,7 +33,10 @@ import CancelIcon from "@mui/icons-material/Cancel"
 import WorkIcon from "@mui/icons-material/Work"
 import AddIcon from "@mui/icons-material/Add"
 import LaunchIcon from "@mui/icons-material/Launch"
+import SendIcon from "@mui/icons-material/Send"
+import BarChartIcon from "@mui/icons-material/BarChart"
 import ProfileMenu from "./ProfileMenu"
+import JobInviteDialog from "../components/JobInviteDialog"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -69,6 +72,14 @@ interface Job {
   createdAt: number | null
 }
 
+interface JobInvitationStats {
+  totalSent: number
+  totalViewed: number
+  totalClicked: number
+  viewRate: string
+  clickRate: string
+}
+
 export default function Company() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
@@ -98,6 +109,9 @@ export default function Company() {
   const [jobErrors, setJobErrors] = useState<{title?: string; description?: string; skills?: string}>({})
   const [savingJob, setSavingJob] = useState(false)
   const [deleteJobDialogOpen, setDeleteJobDialogOpen] = useState(false)
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [selectedJobForInvite, setSelectedJobForInvite] = useState<Job | null>(null)
+  const [jobStats, setJobStats] = useState<Record<string, JobInvitationStats>>({})
   const [jobToDelete, setJobToDelete] = useState<Job | null>(null)
   const [deletingJob, setDeletingJob] = useState(false)
 
@@ -233,11 +247,51 @@ export default function Company() {
       
       console.log("Fetched jobs:", jobsList.length, "jobs")
       setJobs(jobsList)
+      
+      // Fetch stats for each job
+      if (user) {
+        jobsList.forEach((job) => {
+          fetchJobStats(job.id)
+        })
+      }
     } catch (err) {
       console.error("Error fetching jobs:", err)
       setError(`Failed to load job postings: ${err instanceof Error ? err.message : "Unknown error"}`)
     } finally {
       setLoadingJobs(false)
+    }
+  }
+
+  const fetchJobStats = async (jobId: string) => {
+    if (!user) return
+    
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/job-invitations/stats/${jobId}?userId=${user.uid}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      )
+
+      if (response.ok) {
+        const stats = await response.json()
+        setJobStats((prev) => ({ ...prev, [jobId]: stats }))
+      }
+    } catch (err) {
+      console.error(`Error fetching stats for job ${jobId}:`, err)
+    }
+  }
+
+  const handleInviteStudentsClick = (job: Job) => {
+    setSelectedJobForInvite(job)
+    setInviteDialogOpen(true)
+  }
+
+  const handleInviteSuccess = () => {
+    // Refresh stats after sending invitations
+    if (selectedJobForInvite) {
+      fetchJobStats(selectedJobForInvite.id)
     }
   }
 
@@ -898,27 +952,82 @@ export default function Company() {
                                 />
                               )}
                             </Box>
-                            <Box sx={{ display: "flex", gap: 1, ml: 2 }}>
-                              <Tooltip title="Edit job posting">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleEditJobClick(job)}
-                                  sx={{ color: "#388560" }}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Delete job posting">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleDeleteJobClick(job)}
-                                  sx={{ color: "#d32f2f" }}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
+                            <Box sx={{ display: "flex", gap: 1, ml: 2, flexDirection: "column" }}>
+                              <Box sx={{ display: "flex", gap: 1 }}>
+                                <Tooltip title="Invite students to apply">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleInviteStudentsClick(job)}
+                                    sx={{ 
+                                      color: "#388560",
+                                      bgcolor: "rgba(56, 133, 96, 0.08)",
+                                      "&:hover": {
+                                        bgcolor: "rgba(56, 133, 96, 0.15)",
+                                      }
+                                    }}
+                                  >
+                                    <SendIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Edit job posting">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleEditJobClick(job)}
+                                    sx={{ color: "#388560" }}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete job posting">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleDeleteJobClick(job)}
+                                    sx={{ color: "#d32f2f" }}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
                             </Box>
                           </Box>
+                          
+                          {/* Job Invitation Stats */}
+                          {jobStats[job.id] && jobStats[job.id].totalSent > 0 && (
+                            <Box 
+                              sx={{ 
+                                mt: 2, 
+                                pt: 2, 
+                                borderTop: "1px solid rgba(56, 133, 96, 0.15)",
+                                display: "flex",
+                                gap: 3,
+                                alignItems: "center"
+                              }}
+                            >
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                <BarChartIcon sx={{ fontSize: 18, color: "#388560" }} />
+                                <Typography variant="caption" fontWeight="600" color="text.secondary">
+                                  Invitation Stats:
+                                </Typography>
+                              </Box>
+                              <Box sx={{ display: "flex", gap: 2 }}>
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Sent: <strong>{jobStats[job.id].totalSent}</strong>
+                                  </Typography>
+                                </Box>
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Viewed: <strong>{jobStats[job.id].totalViewed}</strong> ({jobStats[job.id].viewRate}%)
+                                  </Typography>
+                                </Box>
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Clicked: <strong>{jobStats[job.id].totalClicked}</strong> ({jobStats[job.id].clickRate}%)
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </Box>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -1187,6 +1296,20 @@ export default function Company() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Job Invite Dialog */}
+      {selectedJobForInvite && (
+        <JobInviteDialog
+          open={inviteDialogOpen}
+          onClose={() => {
+            setInviteDialogOpen(false)
+            setSelectedJobForInvite(null)
+          }}
+          jobId={selectedJobForInvite.id}
+          jobTitle={selectedJobForInvite.name}
+          onSuccess={handleInviteSuccess}
+        />
+      )}
     </Box>
   )
 }

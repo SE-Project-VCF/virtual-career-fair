@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { authUtils } from "../utils/auth"
@@ -12,10 +12,12 @@ import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
+import MailIcon from "@mui/icons-material/Mail"
 import { Badge, Tooltip } from "@mui/material"
 import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu"
 import EventList from "../components/EventList"
+import NotificationBell from "../components/NotificationBell"
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -32,6 +34,9 @@ export default function Dashboard() {
   const [totalCompaniesCount, setTotalCompaniesCount] = useState(0)
   const [totalJobOpenings, setTotalJobOpenings] = useState(0)
   const [loadingStats, setLoadingStats] = useState(true)
+  const [jobInvitationsCount, setJobInvitationsCount] = useState(0)
+  const [newInvitationsCount, setNewInvitationsCount] = useState(0)
+  const [loadingInvitations, setLoadingInvitations] = useState(false)
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -130,6 +135,43 @@ export default function Dashboard() {
 
     fetchTotalRepresentatives()
   }, [user])
+
+  const fetchJobInvitations = useCallback(async () => {
+    if (!user || user.role !== "student") return;
+
+    try {
+      setLoadingInvitations(true);
+      const response = await fetch(
+        `http://localhost:5000/api/job-invitations/received?userId=${user.uid}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const invitations = data.invitations || [];
+        setJobInvitationsCount(invitations.length);
+        setNewInvitationsCount(invitations.filter((inv: any) => inv.status === "sent").length);
+      }
+    } catch (err) {
+      console.error("Error fetching job invitations:", err);
+    } finally {
+      setLoadingInvitations(false);
+    }
+  }, [user]);
+
+  // Fetch job invitations for students
+  useEffect(() => {
+    if (user && user.role === "student") {
+      fetchJobInvitations();
+      
+      // Poll for new invitations every 30 seconds
+      const interval = setInterval(fetchJobInvitations, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user, fetchJobInvitations]);
 
   // Fetch dashboard statistics
   useEffect(() => {
@@ -257,6 +299,8 @@ export default function Dashboard() {
                   </Button>
                 </Badge>
               </Tooltip>
+
+              <NotificationBell />
 
               <ProfileMenu />
             </Box>
@@ -778,7 +822,9 @@ export default function Dashboard() {
                   <Card
                     sx={{
                       bgcolor: "white",
-                      border: "1px solid rgba(176, 58, 108, 0.3)",
+                      border: newInvitationsCount > 0 
+                        ? "2px solid rgba(176, 58, 108, 0.5)" 
+                        : "1px solid rgba(176, 58, 108, 0.3)",
                       transition: "transform 0.2s, box-shadow 0.2s",
                       "&:hover": {
                         transform: "translateY(-4px)",
@@ -787,18 +833,47 @@ export default function Dashboard() {
                     }}
                   >
                     <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <WorkIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Job Opportunities
-                        </Typography>
+                      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <MailIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            Job Invitations
+                          </Typography>
+                        </Box>
+                        {newInvitationsCount > 0 && (
+                          <Badge badgeContent={newInvitationsCount} color="error" />
+                        )}
                       </Box>
                       <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                        0
+                        {loadingInvitations ? "..." : jobInvitationsCount}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Available positions
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        {newInvitationsCount > 0 
+                          ? `${newInvitationsCount} new invitation${newInvitationsCount !== 1 ? "s" : ""}`
+                          : "Companies have invited you to apply"}
                       </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/dashboard/job-invitations")}
+                        disabled={jobInvitationsCount === 0}
+                        sx={{
+                          background: jobInvitationsCount > 0
+                            ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+                            : "rgba(0, 0, 0, 0.12)",
+                          color: jobInvitationsCount > 0 ? "white" : "rgba(0, 0, 0, 0.26)",
+                          "&:hover": {
+                            background: jobInvitationsCount > 0
+                              ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                          },
+                          "&:disabled": {
+                            background: "rgba(0, 0, 0, 0.12)",
+                            color: "rgba(0, 0, 0, 0.26)",
+                          },
+                        }}
+                      >
+                        View Invitations
+                      </Button>
                     </CardContent>
                   </Card>
                 </Grid>
