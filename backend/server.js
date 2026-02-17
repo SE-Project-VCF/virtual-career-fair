@@ -1015,7 +1015,7 @@ app.patch("/api/job-invitations/:id/status", async (req, res) => {
 ---------------------------------------------------- */
 app.get("/api/students", async (req, res) => {
   try {
-    const { userId, search, major } = req.query;
+    const { userId, search, major, boothId } = req.query;
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
@@ -1027,20 +1027,57 @@ app.get("/api/students", async (req, res) => {
       return res.status(authCheck.status).json({ error: authCheck.error });
     }
 
-    // Get all students
-    let query = db.collection("users").where("role", "==", "student");
-    const studentsSnapshot = await query.get();
+    let students = [];
 
-    let students = studentsSnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        firstName: data.firstName || "",
-        lastName: data.lastName || "",
-        email: data.email || "",
-        major: data.major || "",
-      };
-    });
+    if (boothId) {
+      // Find students who visited this specific booth
+      console.log(`Filtering students who visited booth: ${boothId}`);
+      
+      // Get all students first
+      const allStudentsQuery = db.collection("users").where("role", "==", "student");
+      const studentsSnapshot = await allStudentsQuery.get();
+      
+      // Check each student to see if they have a boothHistory document for this booth
+      const studentPromises = studentsSnapshot.docs.map(async (studentDoc) => {
+        const studentData = studentDoc.data();
+        
+        // Check if this student has visited the booth
+        const boothHistoryDoc = await db.collection("users")
+          .doc(studentDoc.id)
+          .collection("boothHistory")
+          .doc(boothId)
+          .get();
+        
+        if (boothHistoryDoc.exists) {
+          return {
+            id: studentDoc.id,
+            firstName: studentData.firstName || "",
+            lastName: studentData.lastName || "",
+            email: studentData.email || "",
+            major: studentData.major || "",
+          };
+        }
+        return null;
+      });
+      
+      students = (await Promise.all(studentPromises)).filter(s => s !== null);
+      console.log(`Found ${students.length} students who visited booth ${boothId}`);
+    } else {
+      // Get all students (existing logic)
+      let query = db.collection("users").where("role", "==", "student");
+      const studentsSnapshot = await query.get();
+
+      students = studentsSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          firstName: data.firstName || "",
+          lastName: data.lastName || "",
+          email: data.email || "",
+          major: data.major || "",
+        };
+      });
+    }
 
     // Apply search filter if provided
     if (search && search.trim()) {
@@ -1062,6 +1099,7 @@ app.get("/api/students", async (req, res) => {
       );
     }
 
+    console.log(`Returning ${students.length} students`);
     return res.json({ students });
   } catch (err) {
     console.error("Error fetching students:", err);

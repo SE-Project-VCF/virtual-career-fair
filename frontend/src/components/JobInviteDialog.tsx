@@ -37,6 +37,7 @@ interface JobInviteDialogProps {
   onClose: () => void;
   jobId: string;
   jobTitle: string;
+  boothId?: string;
   onSuccess?: () => void;
 }
 
@@ -45,6 +46,7 @@ export default function JobInviteDialog({
   onClose,
   jobId,
   jobTitle,
+  boothId,
   onSuccess,
 }: JobInviteDialogProps) {
   const [students, setStudents] = useState<Student[]>([]);
@@ -99,8 +101,16 @@ export default function JobInviteDialog({
         return;
       }
 
+      const params = new URLSearchParams({
+        userId: currentUser.uid,
+      });
+      
+      if (boothId) {
+        params.append("boothId", boothId);
+      }
+
       const response = await fetch(
-        `http://localhost:5000/api/students?userId=${currentUser.uid}`,
+        `http://localhost:5000/api/students?${params}`,
         {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -235,7 +245,9 @@ export default function JobInviteDialog({
             )}
 
             <Alert severity="info" sx={{ mb: 3 }}>
-              Invitations will be sent to students' dashboards as notifications.
+              {boothId 
+                ? `Showing ${students.length} student${students.length !== 1 ? 's' : ''} who visited your booth. Invitations will be sent to their dashboards.`
+                : "Invitations will be sent to students' dashboards as notifications."}
             </Alert>
 
             {/* Optional Message */}

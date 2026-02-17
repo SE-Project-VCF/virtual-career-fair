@@ -1307,6 +1307,7 @@ export default function Company() {
           }}
           jobId={selectedJobForInvite.id}
           jobTitle={selectedJobForInvite.name}
+          boothId={company?.boothId}
           onSuccess={handleInviteSuccess}
         />
       )}
