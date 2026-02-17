@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import {
@@ -588,14 +586,14 @@ export default function AdminDashboard() {
                               onClick={() => handleOpenScheduleDialog(schedule)}
                               sx={{ color: "#b03a6c" }}
                             >
-                              <EditIcon />
+                              <EditIcon data-testid="EditIcon" />
                             </IconButton>
                             <IconButton
                               size="small"
                               onClick={() => handleDeleteSchedule(schedule.id)}
                               sx={{ color: "#d32f2f" }}
                             >
-                              <DeleteIcon />
+                              <DeleteIcon data-testid="DeleteIcon" />
                             </IconButton>
                           </TableCell>
                         </TableRow>
@@ -616,7 +614,7 @@ export default function AdminDashboard() {
 
         {/* Schedule Dialog */}
         <Dialog open={scheduleDialogOpen} onClose={handleCloseScheduleDialog} maxWidth="md" fullWidth>
-          <DialogTitle>
+          <DialogTitle id="schedule-dialog-title">
             {editingSchedule ? "Edit Career Fair Schedule" : "Schedule Career Fair"}
           </DialogTitle>
           <DialogContent>

@@ -1,13 +1,11 @@
-"use client"
-
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { 
-  Container, 
-  Box, 
-  Typography, 
-  Button, 
-  Card, 
+import {
+  Container,
+  Box,
+  Typography,
+  Button,
+  Card,
   CardContent,
   TextField,
   Alert,
@@ -75,14 +73,14 @@ export default function CompanyManagement() {
     try {
       setLoading(true)
       setError("")
-      
+
       // Query companies where ownerId matches current user
       const q = query(
         collection(db, "companies"),
         where("ownerId", "==", userId)
       )
       const querySnapshot = await getDocs(q)
-      
+
       const companiesList: Company[] = []
       querySnapshot.forEach((doc) => {
         companiesList.push({
@@ -90,7 +88,7 @@ export default function CompanyManagement() {
           ...doc.data()
         } as Company)
       })
-      
+
       setCompanies(companiesList)
     } catch (err) {
       console.error("Error fetching companies:", err)
@@ -126,9 +124,9 @@ export default function CompanyManagement() {
     try {
       setCreating(true)
       setError("")
-      
+
       const result = await authUtils.createCompany(newCompanyName.trim(), userId ?? "")
-      
+
       if (result.success) {
         setSuccess(`Company "${newCompanyName}" created successfully!`)
         setNewCompanyName("")
@@ -166,9 +164,9 @@ export default function CompanyManagement() {
     try {
       setDeleting(true)
       setError("")
-      
+
       const result = await authUtils.deleteCompany(companyToDelete.id, userId)
-      
+
       if (result.success) {
         setSuccess(`Company "${companyToDelete.companyName}" has been deleted successfully.`)
         setDeleteDialogOpen(false)
@@ -192,9 +190,9 @@ export default function CompanyManagement() {
     try {
       setUpdatingInviteCode(true)
       setError("")
-      
+
       const result = await authUtils.updateInviteCode(companyId, userId)
-      
+
       if (result.success && result.inviteCode) {
         setSuccess("Invite code regenerated successfully!")
         fetchCompanies() // Refresh the list
@@ -222,9 +220,9 @@ export default function CompanyManagement() {
     try {
       setUpdatingInviteCode(true)
       setError("")
-      
+
       const result = await authUtils.updateInviteCode(companyId, userId, trimmedCode)
-      
+
       if (result.success && result.inviteCode) {
         setSuccess("Invite code updated successfully!")
         setEditingInviteCode(null)
@@ -494,8 +492,8 @@ export default function CompanyManagement() {
       </Container>
 
       {/* Delete Company Confirmation Dialog */}
-      <Dialog 
-        open={deleteDialogOpen} 
+      <Dialog
+        open={deleteDialogOpen}
         onClose={() => !deleting && setDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
@@ -518,7 +516,7 @@ export default function CompanyManagement() {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setDeleteDialogOpen(false)
               setCompanyToDelete(null)

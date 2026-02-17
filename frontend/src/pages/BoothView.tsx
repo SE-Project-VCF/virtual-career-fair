@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { trackBoothView } from "../utils/boothHistory";
@@ -31,6 +29,7 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import { API_URL } from "../config"
 import NotificationBell from "../components/NotificationBell"
 
 interface Booth {
@@ -82,10 +81,12 @@ export default function BoothView() {
   const [loading, setLoading] = useState(true)
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
+  const [startingChat, setStartingChat] = useState(false)
 
   const handleStartChat = async () => {
     try {
-      if (!booth) return;
+      if (!booth || startingChat) return;
+      setStartingChat(true);
 
       // Query Firestore for representative user
       const usersRef = collection(db, "users");
@@ -107,6 +108,8 @@ export default function BoothView() {
       });
     } catch (err) {
       console.error("Chat: failed to initialize");
+    } finally {
+      setStartingChat(false);
     }
   };
 
@@ -233,7 +236,7 @@ export default function BoothView() {
   const fetchJobs = async (companyId: string) => {
     try {
       setLoadingJobs(true)
-      const response = await fetch(`http://localhost:5000/api/jobs?companyId=${companyId}`)
+      const response = await fetch(`${API_URL}/api/jobs?companyId=${companyId}`)
       if (!response.ok) {
         throw new Error("Failed to fetch jobs")
       }
@@ -241,7 +244,7 @@ export default function BoothView() {
       setJobs(data.jobs || [])
     } catch (err) {
       console.error("Error fetching jobs:", err)
-      // Don't show error to user, just log it
+      setError("Failed to load job postings.")
     } finally {
       setLoadingJobs(false)
     }
@@ -552,6 +555,7 @@ export default function BoothView() {
                     <Button
                       variant="contained"
                       fullWidth
+                      disabled={startingChat}
                       onClick={handleStartChat}
                       sx={{
                         mt: 2,
@@ -564,7 +568,7 @@ export default function BoothView() {
                         },
                       }}
                     >
-                      Message Representative
+                      {startingChat ? "Connecting..." : "Message Representative"}
                     </Button>
 
                   </Box>

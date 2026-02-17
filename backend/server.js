@@ -2,8 +2,21 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
+const { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin } = require("./helpers");
+
+// --------------------------
+// ENVIRONMENT VALIDATION
+// --------------------------
+const requiredEnvVars = ["STREAM_API_KEY", "STREAM_API_SECRET"];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`Missing required environment variable: ${envVar}`);
+    process.exit(1);
+  }
+}
 
 // --------------------------
 // STREAM CHAT SERVER CLIENT
@@ -16,7 +29,7 @@ const streamServer = StreamChat.getInstance(
 );
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // CORS configuration - allow multiple origins
 const allowedOrigins = [
@@ -30,85 +43,60 @@ app.use(
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-      
+
       // Check if origin is in allowed list
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
-      } 
-      // Allow all Vercel deployment URLs (for flexibility during development/deployment)
-      else if (origin.includes(".vercel.app")) {
-        callback(null, true);
-      } 
-      // Allow localhost on any port (for development)
-      else if (origin.startsWith("http://localhost:") || origin.startsWith("https://localhost:")) {
-        callback(null, true);
-      }
-      else {
+      } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
-function removeUndefined(obj) {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([_, v]) => v !== undefined)
-  );
+// Rate limiting - 100 requests per 15 minutes per IP
+if (process.env.NODE_ENV !== "test") {
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  }));
 }
 
 /* ----------------------------------------------------
-   HELPER: Parse datetime string as UTC and return Firestore Timestamp
-   Ensures all dates are stored as UTC in the database
+   FIREBASE AUTH MIDDLEWARE
+   Verifies Firebase ID token from Authorization header
 ---------------------------------------------------- */
-function parseUTCToTimestamp(dateTimeString) {
-  if (!dateTimeString) {
-    throw new Error("Date string is required");
+async function verifyFirebaseToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid Authorization header" });
   }
-  
-  let date;
-  
-  // Check if it's already a full ISO string with timezone (ends with Z or has timezone offset)
-  if (dateTimeString.includes('Z') || dateTimeString.match(/[+-]\d{2}:\d{2}$/)) {
-    // Already has timezone info, parse directly
-    date = new Date(dateTimeString);
-  } else if (dateTimeString.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
-    // ISO format without timezone - treat as UTC by appending Z
-    date = new Date(dateTimeString + 'Z');
-  } else if (dateTimeString.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)) {
-    // datetime-local format (YYYY-MM-DDTHH:mm) - treat as UTC by appending Z
-    date = new Date(dateTimeString + 'Z');
-  } else {
-    // Try parsing as-is (will use local timezone, then we convert)
-    date = new Date(dateTimeString);
+
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await auth.verifyIdToken(idToken);
+    req.user = { uid: decodedToken.uid, email: decodedToken.email };
+    next();
+  } catch (err) {
+    console.error("Token verification failed:", err.message);
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
-  
-  // Validate the date
-  if (isNaN(date.getTime())) {
-    throw new Error(`Invalid date string: ${dateTimeString}`);
-  }
-  
-  // Firestore Timestamp stores UTC internally, so we use the UTC milliseconds
-  // This ensures consistent UTC storage regardless of server timezone
-  return admin.firestore.Timestamp.fromMillis(date.getTime());
 }
+
 
 /* ----------------------------------------------------
    STREAM TOKEN ENDPOINT
 ---------------------------------------------------- */
-app.get("/api/stream-token", (req, res) => {
-  const userId = req.query.userId;
-
-  if (!userId) {
-    return res.status(400).json({ error: "Missing userId" });
-  }
-
+app.get("/api/stream-token", verifyFirebaseToken, (req, res) => {
   try {
-    const token = streamServer.createToken(userId);
-    return res.json({ token });
+    const token = streamServer.createToken(req.user.uid);
+    return res.json({ success: true, token });
   } catch (err) {
-    console.error("Stream token error:");
+    console.error("Stream token error:", err);
     return res.status(500).json({ error: "Unable to create token" });
   }
 });
@@ -116,12 +104,8 @@ app.get("/api/stream-token", (req, res) => {
 /* ----------------------------------------------------
    NEW: GET UNREAD COUNT FOR A USER (server-side)
 ---------------------------------------------------- */
-app.get("/api/stream-unread", async (req, res) => {
-  const userId = req.query.userId;
-
-  if (!userId) {
-    return res.status(400).json({ error: "Missing userId" });
-  }
+app.get("/api/stream-unread", verifyFirebaseToken, async (req, res) => {
+  const userId = req.user.uid;
 
   try {
     // 1) Get all channels the user is a member of
@@ -155,10 +139,10 @@ app.get("/api/stream-unread", async (req, res) => {
       unread += unreadInThisChannel;
     }
 
-    return res.json({ unread });
+    return res.json({ success: true, unread });
 
   } catch (err) {
-    console.error("Unread calc error:");
+    console.error("Unread calc error:", err);
     return res.status(500).json({ error: "Failed to compute unread" });
   }
 });
@@ -201,7 +185,7 @@ app.post("/api/sync-stream-user", async (req, res) => {
 /* ----------------------------------------------------
    REGISTER USER (Firestore + Stream upsert)
 ---------------------------------------------------- */
-app.post("/register-user", async (req, res) => {
+app.post("/api/register-user", async (req, res) => {
   try {
     const { firstName, lastName, email, password, role, companyName } = req.body;
 
@@ -230,7 +214,7 @@ app.post("/register-user", async (req, res) => {
 
     // Company owner setup
     if (role === "companyOwner") {
-      inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      inviteCode = generateInviteCode();
 
       const companyRef = db.collection("companies").doc();
       companyId = companyRef.id;
@@ -280,7 +264,7 @@ app.post("/register-user", async (req, res) => {
       });
 
     } catch (streamErr) {
-      console.error("STREAM UPSERT ERROR:");
+      console.error("Stream upsert error:", streamErr);
     }
 
     res.send({
@@ -293,7 +277,7 @@ app.post("/register-user", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Error registering user:");
+    console.error("Error registering user:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });
@@ -301,8 +285,14 @@ app.post("/register-user", async (req, res) => {
 /* ----------------------------------------------------
    SYNC ALL FIRESTORE USERS TO STREAM
 ---------------------------------------------------- */
-app.post("/api/sync-stream-users", async (req, res) => {
+app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
   try {
+    // Verify the user is an administrator
+    const userDoc = await db.collection("users").doc(req.user.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== "administrator") {
+      return res.status(403).json({ success: false, error: "Admin access required" });
+    }
+
     console.log("Starting Stream user sync...");
     const snapshot = await db.collection("users").get();
     const users = snapshot.docs.map((d) => d.data());
@@ -342,7 +332,7 @@ app.post("/api/sync-stream-users", async (req, res) => {
       count,
     });
   } catch (err) {
-    console.error("Stream user sync failed");
+    console.error("Stream user sync failed:", err);
     return res.status(500).json({
       success: false,
       error: err.message,
@@ -353,7 +343,7 @@ app.post("/api/sync-stream-users", async (req, res) => {
 /* ----------------------------------------------------
    ADD JOB
 ---------------------------------------------------- */
-app.post("/add-job", async (req, res) => {
+app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
   try {
     const {
       companyId,
@@ -402,8 +392,15 @@ app.post("/add-job", async (req, res) => {
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) {
       return res
-        .status(403)
+        .status(404)
         .send({ success: false, error: "Invalid company ID" });
+    }
+
+    // Verify the user is the company owner or a representative
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).send({ success: false, error: "Not authorized for this company" });
     }
 
     const jobRef = await db.collection("jobs").add(
@@ -463,7 +460,7 @@ app.get("/api/jobs", async (req, res) => {
       return b.createdAt - a.createdAt;
     });
 
-    return res.json({ jobs });
+    return res.json({ success: true, jobs });
   } catch (err) {
     console.error("Error fetching jobs:", err);
     return res.status(500).json({ error: "Failed to fetch jobs", details: err.message });
@@ -473,7 +470,7 @@ app.get("/api/jobs", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE JOB
 ---------------------------------------------------- */
-app.put("/api/jobs/:id", async (req, res) => {
+app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, majorsAssociated, applicationLink } = req.body;
@@ -507,6 +504,17 @@ app.put("/api/jobs/:id", async (req, res) => {
       return res.status(404).json({ success: false, error: "Job not found" });
     }
 
+    // Verify the user is authorized for this job's company
+    const jobData = jobDoc.data();
+    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
+    if (companyDoc.exists) {
+      const companyData = companyDoc.data();
+      const reps = companyData.representativeIDs || [];
+      if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+        return res.status(403).json({ success: false, error: "Not authorized for this company" });
+      }
+    }
+
     await jobRef.update(
       removeUndefined({
         name: name.trim(),
@@ -527,7 +535,7 @@ app.put("/api/jobs/:id", async (req, res) => {
 /* ----------------------------------------------------
    DELETE JOB
 ---------------------------------------------------- */
-app.delete("/api/jobs/:id", async (req, res) => {
+app.delete("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -536,6 +544,17 @@ app.delete("/api/jobs/:id", async (req, res) => {
 
     if (!jobDoc.exists) {
       return res.status(404).json({ success: false, error: "Job not found" });
+    }
+
+    // Verify the user is authorized for this job's company
+    const jobData = jobDoc.data();
+    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
+    if (companyDoc.exists) {
+      const companyData = companyDoc.data();
+      const reps = companyData.representativeIDs || [];
+      if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+        return res.status(403).json({ success: false, error: "Not authorized for this company" });
+      }
     }
 
     await jobRef.delete();
@@ -1166,7 +1185,7 @@ app.get("/api/job-invitations/stats/:jobId", async (req, res) => {
 /* ----------------------------------------------------
    ADD BOOTH
 ---------------------------------------------------- */
-app.post("/add-booth", async (req, res) => {
+app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
   try {
     const { companyId, boothName, location, description, representatives } =
       req.body;
@@ -1180,8 +1199,15 @@ app.post("/add-booth", async (req, res) => {
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) {
       return res
-        .status(403)
+        .status(404)
         .send({ success: false, error: "Invalid company ID" });
+    }
+
+    // Verify the user is the company owner or a representative
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).send({ success: false, error: "Not authorized for this company" });
     }
 
     const boothRef = await db.collection("booths").add(
@@ -1197,7 +1223,7 @@ app.post("/add-booth", async (req, res) => {
 
     res.send({ success: true, boothId: boothRef.id });
   } catch (err) {
-    console.error("Error adding booth:");
+    console.error("Error adding booth:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });
@@ -1325,27 +1351,6 @@ app.post("/api/toggle-fair-status", async (req, res) => {
     return res.status(500).json({ error: "Failed to toggle fair status" });
   }
 });
-
-/* ----------------------------------------------------
-   HELPER: Verify user is administrator
----------------------------------------------------- */
-async function verifyAdmin(userId) {
-  if (!userId) {
-    return { error: "Missing userId", status: 400 };
-  }
-
-  const userDoc = await db.collection("users").doc(userId).get();
-  if (!userDoc.exists) {
-    return { error: "User not found", status: 404 };
-  }
-
-  const userData = userDoc.data();
-  if (userData.role !== "administrator") {
-    return { error: "Only administrators can manage schedules", status: 403 };
-  }
-
-  return null;
-}
 
 /* ----------------------------------------------------
    GET ALL FAIR SCHEDULES (Admin only)
@@ -1611,26 +1616,31 @@ app.post("/api/update-invite-code", async (req, res) => {
       inviteCode = newInviteCode.toUpperCase();
     } else {
       // Generate random 8-character code
-      inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      inviteCode = generateInviteCode();
     }
 
-    // Check if invite code is already in use by another company
-    const companiesSnapshot = await db.collection("companies").get();
-    let codeInUse = false;
-    companiesSnapshot.forEach((doc) => {
-      if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
-        codeInUse = true;
-      }
-    });
+    // Check if invite code is already in use by another company using a query
+    const existing = await db.collection("companies")
+      .where("inviteCode", "==", inviteCode)
+      .get();
+    const codeInUse = existing.docs.some((doc) => doc.id !== companyId);
 
     if (codeInUse) {
       return res.status(400).json({ error: "This invite code is already in use by another company" });
     }
 
-    // Update the invite code
-    await db.collection("companies").doc(companyId).update({
-      inviteCode: inviteCode,
-      inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
+    // Update the invite code using a transaction to prevent race conditions
+    await db.runTransaction(async (transaction) => {
+      const recheck = await transaction.get(
+        db.collection("companies").where("inviteCode", "==", inviteCode)
+      );
+      if (recheck.docs.some((doc) => doc.id !== companyId)) {
+        throw new Error("Invite code taken");
+      }
+      transaction.update(db.collection("companies").doc(companyId), {
+        inviteCode: inviteCode,
+        inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
+      });
     });
 
     return res.json({ success: true, inviteCode });
@@ -1749,6 +1759,10 @@ app.post("/api/create-admin", async (req, res) => {
 /* ----------------------------------------------------
    START SERVER
 ---------------------------------------------------- */
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

@@ -1,25 +1,5 @@
 "use client"
 
-/**
- * BoothEditor.tsx
- * Purpose:
- * - Allows a company owner or representative to create or edit a booth.
- * - Saves booth data to Firestore collection: booths
- * - Links a booth to a company via companies/{companyId}.boothId
- *
- * Logo Upload:
- * - Uploads the selected logo image to Firebase Storage at:
- *     boothLogos/{companyId}/{uploaderUid}/{timestamp}-{originalFileName}
- * - Gets a public download URL from Storage
- * - Saves that URL into Firestore as booths/{boothId}.logoUrl
- *
- * Why Storage + URL in Firestore?
- * - Firestore is great for structured data, but not for storing binary files.
- * - Firebase Storage stores the actual image.
- * - Firestore stores the download URL so your UI can display it everywhere.
- */
-
-import type React from "react"
 import { useState, useEffect, useMemo } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
@@ -428,7 +408,7 @@ export default function BoothEditor() {
       }, 1500)
     } catch (err: any) {
       console.error("Error saving booth:", err)
-      setError(err.message || "Failed to save booth")
+      setError("Failed to save booth")
     } finally {
       setSaving(false)
       setLogoUploading(false)
@@ -449,7 +429,18 @@ export default function BoothEditor() {
     return (
       <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Card sx={{ p: 4, maxWidth: 500 }}>
-          <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+          <Alert 
+            severity="error" 
+            sx={{ mb: 2 }}
+            onClose={() => setError("")}
+            slotProps={{
+              closeButton: {
+                title: "Close"
+              }
+            }}
+          >
+            {error}
+          </Alert>
           <Button onClick={() => navigate("/companies")} variant="contained">
             Go Back
           </Button>
@@ -496,16 +487,34 @@ export default function BoothEditor() {
 
       <Container maxWidth="md" sx={{ py: 4 }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError("")}>
+          <Alert 
+            severity="error" 
+            sx={{ mb: 3, borderRadius: 2 }} 
+            onClose={() => setError("")}
+            slotProps={{
+              closeButton: {
+                title: "Close"
+              }
+            }}
+          >
             {error}
           </Alert>
         )}
 
         {success && (
-          <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setSuccess("")}>
+          <Alert 
+            severity="success" 
+            sx={{ mb: 3, borderRadius: 2 }} 
+            onClose={() => setSuccess("")}
+            slotProps={{
+              closeButton: {
+                title: "Close"
+              }
+            }}
+          >
             {success}
           </Alert>
-        )}
+        )}  
 
         <Card sx={{ p: 4 }}>
           <form onSubmit={handleSubmit}>
@@ -532,8 +541,10 @@ export default function BoothEditor() {
 
                 <Grid size={{ xs: 12, md: 6 }}>
                   <FormControl fullWidth required>
-                    <InputLabel>Industry</InputLabel>
+                    <InputLabel id="industry-label">Industry</InputLabel>
                     <Select
+                      labelId="industry-label"
+                      id="industry-select"
                       value={formData.industry}
                       label="Industry"
                       onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
@@ -549,8 +560,10 @@ export default function BoothEditor() {
 
                 <Grid size={{ xs: 12, md: 6 }}>
                   <FormControl fullWidth required>
-                    <InputLabel>Company Size</InputLabel>
+                    <InputLabel id="company-size-label">Company Size</InputLabel>
                     <Select
+                      labelId="company-size-label"
+                      id="company-size-select"
                       value={formData.companySize}
                       label="Company Size"
                       onChange={(e) => setFormData({ ...formData, companySize: e.target.value })}

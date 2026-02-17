@@ -8,10 +8,11 @@ import {
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { API_URL } from "../config";
 
 async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
   try {
-    await fetch("http://localhost:5000/api/sync-stream-user", {
+    await fetch(`${API_URL}/api/sync-stream-user`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -22,7 +23,8 @@ async function syncStreamUser(uid: string, email: string, firstName?: string, la
       }),
     });
   } catch (err) {
-    console.error("STREAM SYNC FAILED:", err);
+    console.error("Stream sync failed:", err);
+    throw new Error("Failed to sync chat user. Chat features may not work properly.");
   }
 }
 
@@ -319,7 +321,12 @@ export const authUtils = {
 
   getCurrentUser: (): User | null => {
     const userStr = localStorage.getItem("currentUser");
-    return userStr ? JSON.parse(userStr) : null;
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
   },
 
   isAuthenticated: (): boolean => {
@@ -336,7 +343,7 @@ export const authUtils = {
     try {
       const companyRef = doc(collection(db, "companies"));
       const companyId = companyRef.id;
-      const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
 
       await setDoc(companyRef, {
         companyId,
@@ -557,7 +564,7 @@ export const authUtils = {
         inviteCode = trimmedCode;
       } else {
         // Generate random 8-character code
-        inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+        inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
       }
 
       // Check if invite code is already in use by another company
@@ -576,7 +583,7 @@ export const authUtils = {
         if (!newInviteCode) {
           let attempts = 0;
           while (codeInUse && attempts < 5) {
-            inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+            inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
             codeInUse = false;
             companiesSnapshot.forEach((doc) => {
               if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {

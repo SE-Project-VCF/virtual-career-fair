@@ -1,9 +1,8 @@
-"use client"
-
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { API_URL } from "../config"
 import PersonAddIcon from "@mui/icons-material/PersonAdd"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
@@ -118,7 +117,7 @@ export default function Register() {
 
     if (result.success) {
       // 🔥 Sync new user to Stream Chat
-      await fetch("http://localhost:5000/api/sync-stream-user", {
+      await fetch(`${API_URL}/api/sync-stream-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -723,7 +722,7 @@ export default function Register() {
               await setDoc(userRef, userData);
 
               // 🔥 Sync Google user to Stream Chat
-              await fetch("http://localhost:5000/api/sync-stream-user", {
+              await fetch(`${API_URL}/api/sync-stream-user`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

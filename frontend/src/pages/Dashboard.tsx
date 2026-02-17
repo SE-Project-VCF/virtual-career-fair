@@ -1,12 +1,11 @@
-"use client"
-
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { collection, query, where, getDocs, Timestamp } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
 import { evaluateFairStatus } from "../utils/fairStatus"
+import { API_URL } from "../config"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
@@ -78,12 +77,16 @@ export default function Dashboard() {
     const fetchUnread = async () => {
 
       try {
+        const idToken = await auth.currentUser?.getIdToken();
         const res = await fetch(
-          `http://localhost:5000/api/stream-unread?userId=${user.uid}`
+          `${API_URL}/api/stream-unread`,
+          {
+            headers: { Authorization: `Bearer ${idToken}` },
+          }
         );
 
         if (!res.ok) {
-          console.error("Unread API error");
+          console.error("Unread API error:", res.status);
           return;
         }
 

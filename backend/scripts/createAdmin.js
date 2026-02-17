@@ -127,8 +127,7 @@ async function createAdmin() {
     console.log("✅ Administrator account created successfully!");
     console.log(`   Email: ${email}`);
     console.log(`   UID: ${userRecord.uid}`);
-    console.log(`   Password: ${password}`);
-    console.log("\n⚠️  IMPORTANT: Save the password securely. It won't be shown again.");
+    console.log("\n⚠️  IMPORTANT: Save the password you entered securely.");
   } catch (err) {
     console.error("❌ Failed to create admin:", err.message);
     if (err.code === "auth/email-already-exists") {
