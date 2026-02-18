@@ -1183,6 +1183,89 @@ app.get("/api/job-invitations/stats/:jobId", async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   GET DETAILED INVITATION DATA FOR A JOB
+---------------------------------------------------- */
+app.get("/api/job-invitations/details/:jobId", async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
+    // Get the job to verify it exists and get company info
+    const jobDoc = await db.collection("jobs").doc(jobId).get();
+    if (!jobDoc.exists) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    const jobData = jobDoc.data();
+    const companyId = jobData.companyId;
+
+    // Verify user has permission
+    const authCheck = await verifyRepOrOwner(userId, companyId);
+    if (authCheck) {
+      return res.status(authCheck.status).json({ error: authCheck.error });
+    }
+
+    // Get all invitations for this job with student details
+    const invitationsSnapshot = await db
+      .collection("jobInvitations")
+      .where("jobId", "==", jobId)
+      .get();
+
+    const invitations = await Promise.all(
+      invitationsSnapshot.docs.map(async (doc) => {
+        const invData = doc.data();
+        
+        // Get student details
+        let studentDetails = null;
+        try {
+          const studentDoc = await db.collection("users").doc(invData.studentId).get();
+          if (studentDoc.exists) {
+            const studentData = studentDoc.data();
+            studentDetails = {
+              id: studentDoc.id,
+              firstName: studentData.firstName || "",
+              lastName: studentData.lastName || "",
+              email: studentData.email || "",
+              major: studentData.major || "",
+            };
+          }
+        } catch (err) {
+          console.error(`Error fetching student ${invData.studentId}:`, err);
+        }
+
+        return {
+          id: doc.id,
+          studentId: invData.studentId,
+          student: studentDetails,
+          status: invData.status,
+          sentAt: invData.sentAt ? invData.sentAt.toMillis() : null,
+          viewedAt: invData.viewedAt ? invData.viewedAt.toMillis() : null,
+          clickedAt: invData.clickedAt ? invData.clickedAt.toMillis() : null,
+          message: invData.message || null,
+        };
+      })
+    );
+
+    // Sort by sentAt descending (newest first)
+    invitations.sort((a, b) => {
+      if (!a.sentAt && !b.sentAt) return 0;
+      if (!a.sentAt) return 1;
+      if (!b.sentAt) return -1;
+      return b.sentAt - a.sentAt;
+    });
+
+    return res.json({ invitations });
+  } catch (err) {
+    console.error("Error fetching detailed invitations:", err);
+    return res.status(500).json({ error: "Failed to fetch invitation details", details: err.message });
+  }
+});
+
+/* ----------------------------------------------------
    ADD BOOTH
 ---------------------------------------------------- */
 app.post("/api/booths", verifyFirebaseToken, async (req, res) => {

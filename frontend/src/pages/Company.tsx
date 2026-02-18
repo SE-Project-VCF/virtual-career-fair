@@ -35,6 +35,7 @@ import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
 import ProfileMenu from "./ProfileMenu"
 import JobInviteDialog from "../components/JobInviteDialog"
+import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -112,6 +113,8 @@ export default function Company() {
   const [jobStats, setJobStats] = useState<Record<string, JobInvitationStats>>({})
   const [jobToDelete, setJobToDelete] = useState<Job | null>(null)
   const [deletingJob, setDeletingJob] = useState(false)
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false)
+  const [selectedJobForStats, setSelectedJobForStats] = useState<Job | null>(null)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -291,6 +294,11 @@ export default function Company() {
     if (selectedJobForInvite) {
       fetchJobStats(selectedJobForInvite.id)
     }
+  }
+
+  const handleViewStatsClick = (job: Job) => {
+    setSelectedJobForStats(job)
+    setStatsDialogOpen(true)
   }
 
   const handleCreateJobClick = () => {
@@ -1005,32 +1013,51 @@ export default function Company() {
                                 borderTop: "1px solid rgba(56, 133, 96, 0.15)",
                                 display: "flex",
                                 gap: 3,
-                                alignItems: "center"
+                                alignItems: "center",
+                                justifyContent: "space-between"
                               }}
                             >
-                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                <BarChartIcon sx={{ fontSize: 18, color: "#388560" }} />
-                                <Typography variant="caption" fontWeight="600" color="text.secondary">
-                                  Invitation Stats:
-                                </Typography>
+                              <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                  <BarChartIcon sx={{ fontSize: 18, color: "#388560" }} />
+                                  <Typography variant="caption" fontWeight="600" color="text.secondary">
+                                    Invitation Stats:
+                                  </Typography>
+                                </Box>
+                                <Box sx={{ display: "flex", gap: 2 }}>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                      Sent: <strong>{jobStats[job.id].totalSent}</strong>
+                                    </Typography>
+                                  </Box>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                      Viewed: <strong>{jobStats[job.id].totalViewed}</strong> ({jobStats[job.id].viewRate}%)
+                                    </Typography>
+                                  </Box>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                      Clicked: <strong>{jobStats[job.id].totalClicked}</strong> ({jobStats[job.id].clickRate}%)
+                                    </Typography>
+                                  </Box>
+                                </Box>
                               </Box>
-                              <Box sx={{ display: "flex", gap: 2 }}>
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Sent: <strong>{jobStats[job.id].totalSent}</strong>
-                                  </Typography>
-                                </Box>
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Viewed: <strong>{jobStats[job.id].totalViewed}</strong> ({jobStats[job.id].viewRate}%)
-                                  </Typography>
-                                </Box>
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Clicked: <strong>{jobStats[job.id].totalClicked}</strong> ({jobStats[job.id].clickRate}%)
-                                  </Typography>
-                                </Box>
-                              </Box>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => handleViewStatsClick(job)}
+                                sx={{
+                                  borderColor: "#388560",
+                                  color: "#388560",
+                                  fontSize: "0.75rem",
+                                  "&:hover": {
+                                    borderColor: "#2d6b4d",
+                                    bgcolor: "rgba(56, 133, 96, 0.05)",
+                                  },
+                                }}
+                              >
+                                View Details
+                              </Button>
                             </Box>
                           )}
                         </CardContent>
@@ -1320,6 +1347,19 @@ export default function Company() {
           jobTitle={selectedJobForInvite.name}
           boothId={company?.boothId}
           onSuccess={handleInviteSuccess}
+        />
+      )}
+
+      {/* Job Invite Stats Dialog */}
+      {selectedJobForStats && (
+        <JobInviteStatsDialog
+          open={statsDialogOpen}
+          onClose={() => {
+            setStatsDialogOpen(false)
+            setSelectedJobForStats(null)
+          }}
+          jobId={selectedJobForStats.id}
+          jobTitle={selectedJobForStats.name}
         />
       )}
     </Box>
