@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
   Container,
@@ -117,6 +117,9 @@ export default function BoothEditor() {
   const userId = useMemo(() => user?.uid ?? null, [user?.uid])
   const userRole = useMemo(() => user?.role ?? null, [user?.role])
 
+  // Track if component is mounted to prevent setState after unmount
+  const isMountedRef = useRef(true)
+
   useEffect(() => {
     // Auth guard
     if (!authUtils.isAuthenticated()) {
@@ -137,10 +140,19 @@ export default function BoothEditor() {
 
   useEffect(() => {
     // Cleanup preview object URLs to avoid memory leaks
+    // This will run whenever logoPreviewUrl changes or on unmount
     return () => {
-      if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl)
+      }
     }
   }, [logoPreviewUrl])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   /**
    * Fetch the company doc and validate access.
@@ -288,6 +300,7 @@ export default function BoothEditor() {
       uploadTask.on(
         "state_changed",
         (snapshot) => {
+          if (!isMountedRef.current) return
           const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
           setLogoUploadProgress(pct)
         },
@@ -299,7 +312,9 @@ export default function BoothEditor() {
       )
     })
 
-    setLogoUploading(false)
+    if (isMountedRef.current) {
+      setLogoUploading(false)
+    }
     return url
   }
 

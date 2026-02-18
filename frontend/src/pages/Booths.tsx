@@ -54,6 +54,9 @@ const INDUSTRY_LABELS: Record<string, string> = {
   other: "Other",
 }
 
+// Firestore 'in' queries support a maximum of 30 values per query
+const FIRESTORE_IN_QUERY_LIMIT = 30
+
 export default function Booths() {
   const navigate = useNavigate()
   const user = authUtils.getCurrentUser()
@@ -77,10 +80,10 @@ export default function Booths() {
       const counts: Record<string, number> = {}
       let total = 0
 
-      // Firestore "in" queries support max 30 values, batch if needed
+      // Firestore "in" queries support max FIRESTORE_IN_QUERY_LIMIT values, batch if needed
       const batches = []
-      for (let i = 0; i < companyIds.length; i += 30) {
-        batches.push(companyIds.slice(i, i + 30))
+      for (let i = 0; i < companyIds.length; i += FIRESTORE_IN_QUERY_LIMIT) {
+        batches.push(companyIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT))
       }
 
       for (const batch of batches) {
@@ -133,10 +136,11 @@ export default function Booths() {
 
         querySnapshot.forEach((doc) => {
           const boothData = doc.data()
+          const companyId = boothData.companyId || boothIdToCompanyId[doc.id] || undefined
           boothsList.push({
             id: doc.id,
             ...boothData,
-            companyId: boothData.companyId || boothIdToCompanyId[doc.id],
+            companyId,
           } as Booth)
         })
       } else {
@@ -160,46 +164,40 @@ export default function Booths() {
 
           // Get booths for these companies
           if (companyIds.length > 0) {
-            // Get companies to find boothIds
+            // Batch fetch all companies to avoid N+1 queries
+            const companyDocsPromises = companyIds.map(companyId => getDoc(doc(db, "companies", companyId)))
+            const companyDocs = await Promise.all(companyDocsPromises)
+
+            // Build mapping of boothId -> companyId
+            const boothIdToCompanyIdMap: Record<string, string> = {}
             const boothIds: string[] = []
-            for (const companyId of companyIds) {
-              const companyDoc = await getDoc(doc(db, "companies", companyId))
+
+            companyDocs.forEach((companyDoc, index) => {
               if (companyDoc.exists()) {
                 const companyData = companyDoc.data()
                 if (companyData.boothId) {
                   boothIds.push(companyData.boothId)
+                  boothIdToCompanyIdMap[companyData.boothId] = companyIds[index]
                 }
               }
-            }
+            })
 
-            // Get booths by boothId
+            // Batch fetch all booths
             if (boothIds.length > 0) {
-              for (const boothId of boothIds) {
-                const boothDoc = await getDoc(doc(db, "booths", boothId))
+              const boothDocsPromises = boothIds.map(boothId => getDoc(doc(db, "booths", boothId)))
+              const boothDocs = await Promise.all(boothDocsPromises)
+
+              boothDocs.forEach((boothDoc) => {
                 if (boothDoc.exists()) {
                   const boothData = boothDoc.data()
-                  // Find companyId for this booth
-                  let boothCompanyId: string | undefined = boothData.companyId
-                  if (!boothCompanyId) {
-                    // Look up companyId from companies collection
-                    for (const companyId of companyIds) {
-                      const companyDoc = await getDoc(doc(db, "companies", companyId))
-                      if (companyDoc.exists()) {
-                        const companyData = companyDoc.data()
-                        if (companyData.boothId === boothId) {
-                          boothCompanyId = companyId
-                          break
-                        }
-                      }
-                    }
-                  }
+                  const boothCompanyId = boothData.companyId || boothIdToCompanyIdMap[boothDoc.id]
                   boothsList.push({
                     id: boothDoc.id,
                     ...boothData,
                     companyId: boothCompanyId,
                   } as Booth)
                 }
-              }
+              })
             }
           }
         }

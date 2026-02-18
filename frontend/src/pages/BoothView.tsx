@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { trackBoothView } from "../utils/boothHistory";
 import {
@@ -82,9 +82,19 @@ export default function BoothView() {
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
 
+  // Track if component is mounted to prevent setState after unmount
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
   const handleStartChat = async () => {
     try {
       if (!booth || startingChat) return;
+      if (!isMountedRef.current) return;
       setStartingChat(true);
 
       // Query Firestore for representative user
@@ -106,9 +116,11 @@ export default function BoothView() {
         state: { repId: representativeId },
       });
     } catch (err) {
-      console.error("Chat: failed to initialize");
+      console.error("Chat: failed to initialize", err);
     } finally {
-      setStartingChat(false);
+      if (isMountedRef.current) {
+        setStartingChat(false);
+      }
     }
   };
 
@@ -124,14 +136,17 @@ export default function BoothView() {
     if (!boothId) return
 
     try {
+      if (!isMountedRef.current) return
       setLoading(true)
       setError("")
 
       // Check if fair is live
       const status = await evaluateFairStatus()
+      if (!isMountedRef.current) return
       const fairIsLive = status.isLive
 
       const boothDoc = await getDoc(doc(db, "booths", boothId))
+      if (!isMountedRef.current) return
 
       if (!boothDoc.exists()) {
         setError("Booth not found")
@@ -179,12 +194,15 @@ export default function BoothView() {
         }
 
         if (!hasAccess) {
-          setError("You don't have access to view this booth. The career fair is not currently live.")
-          setLoading(false)
+          if (isMountedRef.current) {
+            setError("You don't have access to view this booth. The career fair is not currently live.")
+            setLoading(false)
+          }
           return
         }
       }
 
+      if (!isMountedRef.current) return
       setBooth(boothData)
 
       // ✅ Track booth views for the student's History tab
@@ -226,26 +244,37 @@ export default function BoothView() {
       }
     } catch (err) {
       console.error("Error fetching booth:", err)
-      setError("Failed to load booth")
+      if (isMountedRef.current) {
+        setError("Failed to load booth")
+      }
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
   const fetchJobs = async (companyId: string) => {
     try {
+      if (!isMountedRef.current) return
       setLoadingJobs(true)
       const response = await fetch(`${API_URL}/api/jobs?companyId=${companyId}`)
+      if (!isMountedRef.current) return
       if (!response.ok) {
         throw new Error("Failed to fetch jobs")
       }
       const data = await response.json()
+      if (!isMountedRef.current) return
       setJobs(data.jobs || [])
     } catch (err) {
       console.error("Error fetching jobs:", err)
-      setError("Failed to load job postings.")
+      if (isMountedRef.current) {
+        setError("Failed to load job postings.")
+      }
     } finally {
-      setLoadingJobs(false)
+      if (isMountedRef.current) {
+        setLoadingJobs(false)
+      }
     }
   }
 

@@ -92,15 +92,21 @@ export default function Dashboard() {
           setUnreadCount(data.unread);
         }
       } catch (err) {
-        console.error("Failed to fetch unread count");
+        console.error("Failed to fetch unread count:", err);
       }
     };
 
     // initial load
-    fetchUnread();
+    void fetchUnread().catch((err) => {
+      console.error("Initial unread count fetch failed:", err);
+    });
 
     // poll every 10s
-    const interval = setInterval(fetchUnread, 10000);
+    const interval = setInterval(() => {
+      void fetchUnread().catch((err) => {
+        console.error("Periodic unread count fetch failed:", err);
+      });
+    }, 10000);
 
     return () => {
       cancelled = true;
@@ -126,7 +132,7 @@ export default function Dashboard() {
 
           setTotalRepresentatives(totalCount)
         } catch (err) {
-          console.error("Error fetching representatives count");
+          console.error("Error fetching representatives count:", err);
         }
       }
     }

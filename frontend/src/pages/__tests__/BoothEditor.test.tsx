@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import BoothEditor from "../BoothEditor";
 import * as authUtils from "../../utils/auth";
 import * as firestore from "firebase/firestore";
+import * as storage from "firebase/storage";
 
 const mockNavigate = vi.fn();
 
@@ -36,8 +37,15 @@ vi.mock("firebase/firestore", () => ({
   query: vi.fn(),
 }));
 
+vi.mock("firebase/storage", () => ({
+  ref: vi.fn(),
+  uploadBytesResumable: vi.fn(),
+  getDownloadURL: vi.fn(),
+}));
+
 vi.mock("../../firebase", () => ({
   db: {},
+  storage: {},
 }));
 
 vi.mock("../ProfileMenu", () => ({
@@ -660,6 +668,680 @@ describe("BoothEditor", () => {
       await waitFor(() => {
         expect(screen.queryByText("Company not found")).not.toBeInTheDocument();
       });
+    });
+
+    it("allows user to close success alerts", async () => {
+      const user = userEvent.setup();
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Fill in form and submit
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /location/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
+      });
+
+      // Close the success alert
+      const closeButtons = screen.getAllByTitle("Close");
+      const successAlertCloseButton = closeButtons.find(btn =>
+        btn.closest('[class*="MuiAlert-standardSuccess"]')
+      );
+      if (successAlertCloseButton) {
+        await user.click(successAlertCloseButton);
+        await waitFor(() => {
+          expect(screen.queryByText("Booth created successfully!")).not.toBeInTheDocument();
+        });
+      }
+    });
+
+    it("shows go back button on fatal error", async () => {
+      const user = userEvent.setup();
+      (firestore.getDoc as any).mockResolvedValue({
+        exists: () => false,
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByText("Company not found")).toBeInTheDocument();
+      });
+
+      const goBackButton = screen.getByRole("button", { name: /go back/i });
+      expect(goBackButton).toBeInTheDocument();
+
+      await user.click(goBackButton);
+      expect(mockNavigate).toHaveBeenCalledWith("/companies");
+    });
+  });
+
+  // File Upload Tests
+  describe("File Upload", () => {
+    it("validates file type and rejects non-image files", async () => {
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      const file = new File(["content"], "document.pdf", { type: "application/pdf" });
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      // Simulate file change event
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      });
+
+      const changeEvent = new Event('change', { bubbles: true });
+      input.dispatchEvent(changeEvent);
+
+      await waitFor(() => {
+        expect(screen.getByText("Only PNG or JPG images are allowed.")).toBeInTheDocument();
+      });
+    });
+
+    it("validates file size and rejects files over 5MB", async () => {
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Create a large file (6MB)
+      const largeContent = new Array(6 * 1024 * 1024).fill("a").join("");
+      const file = new File([largeContent], "large-logo.png", { type: "image/png" });
+      Object.defineProperty(file, 'size', { value: 6 * 1024 * 1024 });
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      });
+
+      const changeEvent = new Event('change', { bubbles: true });
+      input.dispatchEvent(changeEvent);
+
+      await waitFor(() => {
+        expect(screen.getByText("Logo file must be under 5MB.")).toBeInTheDocument();
+      });
+    });
+
+    it("accepts valid PNG file and shows preview", async () => {
+      const user = userEvent.setup();
+      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+      global.URL.revokeObjectURL = vi.fn();
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      const file = new File(["content"], "logo.png", { type: "image/png" });
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      await user.upload(input, file);
+
+      await waitFor(() => {
+        expect(screen.getByAltText("Selected logo preview")).toBeInTheDocument();
+        expect(screen.getByText(/Selected: logo.png/i)).toBeInTheDocument();
+      });
+
+      expect(global.URL.createObjectURL).toHaveBeenCalledWith(file);
+    });
+
+    it("accepts valid JPG file", async () => {
+      const user = userEvent.setup();
+      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      const file = new File(["content"], "logo.jpg", { type: "image/jpeg" });
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      await user.upload(input, file);
+
+      await waitFor(() => {
+        expect(screen.getByAltText("Selected logo preview")).toBeInTheDocument();
+      });
+    });
+
+    it("displays existing logo when booth has logoUrl", async () => {
+      (firestore.getDoc as any).mockImplementation((ref: any) => {
+        return Promise.resolve(
+          ref._id === "company-1"
+            ? { ...mockCompanyDoc, data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" }) }
+            : { ...mockBoothDoc, data: () => ({ ...mockBoothDoc.data(), logoUrl: "https://example.com/logo.png" }) }
+        );
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByAltText("Current logo")).toBeInTheDocument();
+        expect(screen.getByText(/Current logo is saved and will display on booth pages/i)).toBeInTheDocument();
+      });
+    });
+
+    it("displays placeholder when no logo is selected or exists", async () => {
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Check for the placeholder icon (BusinessIcon)
+      const placeholders = document.querySelectorAll('[data-testid="BusinessIcon"]');
+      expect(placeholders.length).toBeGreaterThan(0);
+    });
+
+    it("uploads logo file during form submission", async () => {
+      const user = userEvent.setup();
+      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+      global.URL.revokeObjectURL = vi.fn();
+
+      const mockUploadTask = {
+        on: vi.fn((_event, onProgress, _onError, onComplete) => {
+          // Simulate progress
+          onProgress({ bytesTransferred: 50, totalBytes: 100 });
+          // Simulate completion
+          setTimeout(() => onComplete(), 0);
+        }),
+        snapshot: { ref: {} },
+      };
+
+      (storage.uploadBytesResumable as any).mockReturnValue(mockUploadTask);
+      (storage.getDownloadURL as any).mockResolvedValue("https://example.com/uploaded-logo.png");
+      (storage.ref as any).mockReturnValue({});
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Upload a file
+      const file = new File(["content"], "logo.png", { type: "image/png" });
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(input, file);
+
+      await waitFor(() => {
+        expect(screen.getByAltText("Selected logo preview")).toBeInTheDocument();
+      });
+
+      // Fill in form and submit
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /location/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        expect(storage.uploadBytesResumable).toHaveBeenCalled();
+        expect(storage.getDownloadURL).toHaveBeenCalled();
+      });
+    });
+
+    it("shows error when logo upload fails", async () => {
+      const user = userEvent.setup();
+      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+
+      const mockUploadTask = {
+        on: vi.fn((_event, _onProgress, onError) => {
+          // Simulate upload error
+          setTimeout(() => onError(new Error("Upload failed")), 0);
+        }),
+        snapshot: { ref: {} },
+      };
+
+      (storage.uploadBytesResumable as any).mockReturnValue(mockUploadTask);
+      (storage.ref as any).mockReturnValue({});
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Upload a file
+      const file = new File(["content"], "logo.png", { type: "image/png" });
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(input, file);
+
+      // Fill in form and submit
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /location/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Logo upload failed. Please try again.")).toBeInTheDocument();
+      });
+    });
+
+    it("disables upload button while saving", async () => {
+      const user = userEvent.setup();
+      let resolveSubmit: any;
+      (firestore.addDoc as any).mockImplementation(() => new Promise(resolve => { resolveSubmit = resolve; }));
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /location/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        const uploadButton = screen.getByRole("button", { name: /upload logo/i });
+        expect(uploadButton).toHaveAttribute('aria-disabled', 'true');
+      });
+
+      if (resolveSubmit) resolveSubmit({ id: "booth-1" });
+    });
+  });
+
+  // Additional Form Field Tests
+  describe("Additional Form Fields", () => {
+    it("allows user to fill in website URL", async () => {
+      const user = userEvent.setup();
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company website/i })).toBeInTheDocument();
+      });
+
+      const websiteInput = screen.getByRole("textbox", { name: /company website/i });
+      await user.type(websiteInput, "https://example.com");
+
+      expect((websiteInput as HTMLInputElement).value).toBe("https://example.com");
+    });
+
+    it("allows user to fill in careers page URL", async () => {
+      const user = userEvent.setup();
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /careers page/i })).toBeInTheDocument();
+      });
+
+      const careersInput = screen.getByRole("textbox", { name: /careers page/i });
+      await user.type(careersInput, "https://example.com/careers");
+
+      expect((careersInput as HTMLInputElement).value).toBe("https://example.com/careers");
+    });
+
+    it("allows user to fill in contact phone", async () => {
+      const user = userEvent.setup();
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /contact phone/i })).toBeInTheDocument();
+      });
+
+      const phoneInput = screen.getByRole("textbox", { name: /contact phone/i });
+      await user.type(phoneInput, "+1 (555) 123-4567");
+
+      expect((phoneInput as HTMLInputElement).value).toBe("+1 (555) 123-4567");
+    });
+
+    it("includes optional fields in booth creation", async () => {
+      const user = userEvent.setup();
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Fill in all fields including optional ones
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco");
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
+      await user.type(screen.getByRole("textbox", { name: /company website/i }), "https://example.com");
+      await user.type(screen.getByRole("textbox", { name: /careers page/i }), "https://example.com/careers");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test User");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+      await user.type(screen.getByRole("textbox", { name: /contact phone/i }), "+1 555-1234");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        expect(firestore.addDoc).toHaveBeenCalled();
+        const callArgs = (firestore.addDoc as any).mock.calls[0];
+        const boothData = callArgs[1];
+        expect(boothData.website).toBe("https://example.com");
+        expect(boothData.careersPage).toBe("https://example.com/careers");
+        expect(boothData.contactPhone).toBe("+1 555-1234");
+      });
+    });
+  });
+
+  // Representative Access Tests
+  describe("Representative Access", () => {
+    it("allows representative to edit company booth", async () => {
+      (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "rep-1",
+        role: "representative",
+      });
+
+      (firestore.getDoc as any).mockResolvedValue({
+        exists: () => true,
+        id: "company-1",
+        data: () => ({
+          companyName: "Tech Company",
+          ownerId: "owner-1",
+          representativeIDs: ["rep-1"],
+        }),
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByText("Company Information")).toBeInTheDocument();
+      });
+    });
+
+    it("allows contact email to be representative", async () => {
+      const user = userEvent.setup();
+
+      (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "user-1",
+        role: "companyOwner",
+      });
+
+      (firestore.getDoc as any).mockResolvedValue({
+        exists: () => true,
+        id: "company-1",
+        data: () => ({
+          companyName: "Tech Company",
+          ownerId: "user-1",
+          representativeIDs: ["rep-1"],
+        }),
+      });
+
+      (firestore.getDocs as any).mockResolvedValue({
+        empty: false,
+        docs: [{
+          data: () => ({ uid: "rep-1", email: "rep@company.com" }),
+        }],
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Fill in form with representative as contact
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /location/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Rep User");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "rep@company.com");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
+      });
+    });
+  });
+
+  // Missing Auth State Tests
+  describe("Authentication State Edge Cases", () => {
+    it("redirects when user is not authenticated or has no userId", async () => {
+      (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+        uid: null,
+        role: "companyOwner",
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith("/login");
+      });
+    });
+
+    it("redirects when user has no role", async () => {
+      (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "user-1",
+        role: null,
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith("/login");
+      });
+    });
+
+    it("redirects admin users to dashboard", async () => {
+      (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "admin-1",
+        role: "admin",
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+      });
+    });
+  });
+
+  // Edge Cases for Booth Loading
+  describe("Booth Loading Edge Cases", () => {
+    it("handles error when loading booth fails", async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      (firestore.getDoc as any).mockImplementation((ref: any) => {
+        if (ref._id === "company-1") {
+          return Promise.resolve({
+            ...mockCompanyDoc,
+            data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" })
+          });
+        }
+        // Booth fetch fails
+        return Promise.reject(new Error("Booth load error"));
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith("Error loading booth:", expect.any(Error));
+      consoleErrorSpy.mockRestore();
+    });
+
+    it("handles missing booth data gracefully", async () => {
+      (firestore.getDoc as any).mockImplementation((ref: any) => {
+        if (ref._id === "company-1") {
+          return Promise.resolve({
+            ...mockCompanyDoc,
+            data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" })
+          });
+        }
+        // Booth doesn't exist
+        return Promise.resolve({ exists: () => false });
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+    });
+
+    it("handles booth with missing optional fields", async () => {
+      (firestore.getDoc as any).mockImplementation((ref: any) => {
+        if (ref._id === "company-1") {
+          return Promise.resolve({
+            ...mockCompanyDoc,
+            data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" })
+          });
+        }
+        return Promise.resolve({
+          exists: () => true,
+          data: () => ({
+            companyName: "Minimal Company",
+            // All other fields missing
+          })
+        });
+      });
+
+      renderBoothEditor();
+
+      await waitFor(() => {
+        const nameInput = screen.getByRole("textbox", { name: /company name/i }) as HTMLInputElement;
+        expect(nameInput.value).toBe("Minimal Company");
+      });
+    });
+  });
+
+  // Alert Dismissal Tests
+  describe("Alert Dismissal", () => {
+    it("allows dismissing regular error alerts", async () => {
+      const user = userEvent.setup();
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      });
+
+      // Trigger a validation error
+      const file = new File(["content"], "document.pdf", { type: "application/pdf" });
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(input, 'files', {
+        value: [file],
+        writable: false,
+      });
+
+      const changeEvent = new Event('change', { bubbles: true });
+      input.dispatchEvent(changeEvent);
+
+      await waitFor(() => {
+        expect(screen.getByText("Only PNG or JPG images are allowed.")).toBeInTheDocument();
+      });
+
+      // Close the error alert
+      const closeButtons = screen.getAllByTitle("Close");
+      const errorAlertCloseButton = closeButtons.find(btn =>
+        btn.closest('[class*="MuiAlert-standardError"]')
+      );
+
+      if (errorAlertCloseButton) {
+        await user.click(errorAlertCloseButton);
+        await waitFor(() => {
+          expect(screen.queryByText("Only PNG or JPG images are allowed.")).not.toBeInTheDocument();
+        });
+      }
     });
   });
 });

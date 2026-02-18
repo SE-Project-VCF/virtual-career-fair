@@ -114,7 +114,8 @@ export default function Company() {
     }
 
     fetchCompany()
-  }, [navigate, id, userId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate, id, user])
 
   const fetchCompany = async () => {
     if (!id) return

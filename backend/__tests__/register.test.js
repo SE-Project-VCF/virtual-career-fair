@@ -266,4 +266,258 @@ describe("POST /api/create-admin", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.user.role).toBe("administrator");
   });
+
+  describe("Stream Chat Integration", () => {
+    it("handles Stream upsert failure gracefully and still creates admin", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+      setupDbMock({ users: {} });
+
+      const mockUpsertUser = require("stream-chat").StreamChat.getInstance().upsertUser;
+      mockUpsertUser.mockRejectedValueOnce(new Error("Stream error"));
+
+      const res = await request(app)
+        .post("/api/create-admin")
+        .send({
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+
+    it("generates username from email for Stream", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+      setupDbMock({ users: {} });
+
+      const mockUpsertUser = require("stream-chat").StreamChat.getInstance().upsertUser;
+
+      await request(app)
+        .post("/api/create-admin")
+        .send({
+          firstName: "John",
+          lastName: "Doe",
+          email: "john.doe@example.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(mockUpsertUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          username: "john.doe",
+          email: "john.doe@example.com",
+        })
+      );
+    });
+  });
+
+  describe("Name Handling", () => {
+    it("uses email as displayName when names are missing", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+      setupDbMock({ users: {} });
+
+      await request(app)
+        .post("/api/create-admin")
+        .send({
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(auth.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: "admin@test.com",
+          displayName: "",
+        })
+      );
+    });
+
+    it("creates displayName from firstName only", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+      setupDbMock({ users: {} });
+
+      await request(app)
+        .post("/api/create-admin")
+        .send({
+          firstName: "John",
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(auth.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: "John",
+        })
+      );
+    });
+
+    it("creates displayName from lastName only", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+      setupDbMock({ users: {} });
+
+      await request(app)
+        .post("/api/create-admin")
+        .send({
+          lastName: "Doe",
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(auth.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: "Doe",
+        })
+      );
+    });
+
+    it("creates displayName from both firstName and lastName", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+      setupDbMock({ users: {} });
+
+      await request(app)
+        .post("/api/create-admin")
+        .send({
+          firstName: "John",
+          lastName: "Doe",
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(auth.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: "John Doe",
+        })
+      );
+    });
+  });
+
+  describe("Error Scenarios", () => {
+    it("returns 500 when auth.getUserByEmail throws unexpected error", async () => {
+      auth.getUserByEmail.mockRejectedValue(new Error("Unexpected auth error"));
+
+      const res = await request(app)
+        .post("/api/create-admin")
+        .send({
+          email: "test@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(res.status).toBe(500);
+    });
+
+    it("returns 500 when Firestore set fails", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+
+      const docRef = {
+        set: jest.fn().mockRejectedValue(new Error("Firestore error")),
+      };
+      db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
+
+      const res = await request(app)
+        .post("/api/create-admin")
+        .send({
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(res.status).toBe(500);
+    });
+
+    it("returns 500 when createUser fails", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockRejectedValue(new Error("Failed to create user"));
+      setupDbMock({ users: {} });
+
+      const res = await request(app)
+        .post("/api/create-admin")
+        .send({
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(res.status).toBe(500);
+      expect(res.body.error).toBeDefined();
+    });
+  });
+
+  describe("Email Verification", () => {
+    it("sets emailVerified to true for new admin", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+      setupDbMock({ users: {} });
+
+      await request(app)
+        .post("/api/create-admin")
+        .send({
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(auth.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          emailVerified: true,
+        })
+      );
+    });
+
+    it("saves emailVerified to Firestore for new admin", async () => {
+      const authError = new Error("User not found");
+      authError.code = "auth/user-not-found";
+      auth.getUserByEmail.mockRejectedValue(authError);
+      auth.createUser.mockResolvedValue({ uid: "new-uid" });
+
+      const docRef = {
+        set: jest.fn().mockResolvedValue(undefined),
+      };
+      db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
+
+      await request(app)
+        .post("/api/create-admin")
+        .send({
+          email: "admin@test.com",
+          password: "pass",
+          adminSecret: "test-admin-secret",
+        });
+
+      expect(docRef.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          emailVerified: true,
+        }),
+        { merge: true }
+      );
+    });
+  });
 });

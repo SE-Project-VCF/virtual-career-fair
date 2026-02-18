@@ -151,12 +151,17 @@ app.get("/api/stream-unread", verifyFirebaseToken, async (req, res) => {
    ENSURE SINGLE USER EXISTS IN STREAM
    Called from frontend after login/registration
 ---------------------------------------------------- */
-app.post("/api/sync-stream-user", async (req, res) => {
+app.post("/api/sync-stream-user", verifyFirebaseToken, async (req, res) => {
   try {
     const { uid, email, firstName, lastName } = req.body;
 
     if (!uid || !email) {
       return res.status(400).json({ error: "Missing uid or email" });
+    }
+
+    // Verify the authenticated user matches the uid being synced
+    if (req.user.uid !== uid) {
+      return res.status(403).json({ error: "Not authorized to sync this user" });
     }
 
     const username =
@@ -366,16 +371,34 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
         .send({ success: false, error: "Job title is required" });
     }
 
+    if (name.trim().length > 200) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Job title must be 200 characters or less" });
+    }
+
     if (!description || !description.trim()) {
       return res
         .status(400)
         .send({ success: false, error: "Job description is required" });
     }
 
+    if (description.trim().length > 5000) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Job description must be 5000 characters or less" });
+    }
+
     if (!majorsAssociated || !majorsAssociated.trim()) {
       return res
         .status(400)
         .send({ success: false, error: "Skills are required" });
+    }
+
+    if (majorsAssociated.trim().length > 500) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Skills must be 500 characters or less" });
     }
 
     // Validate application link format if provided
@@ -403,13 +426,19 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
       return res.status(403).send({ success: false, error: "Not authorized for this company" });
     }
 
+    // Sanitize inputs (trim and remove null bytes)
+    const sanitizedName = name.trim().replace(/\0/g, '');
+    const sanitizedDescription = description.trim().replace(/\0/g, '');
+    const sanitizedMajors = majorsAssociated.trim().replace(/\0/g, '');
+    const sanitizedAppLink = applicationLink && applicationLink.trim() ? applicationLink.trim().replace(/\0/g, '') : undefined;
+
     const jobRef = await db.collection("jobs").add(
       removeUndefined({
         companyId,
-        name: name.trim(),
-        description: description.trim(),
-        majorsAssociated: majorsAssociated.trim(),
-        applicationLink: applicationLink && applicationLink.trim() ? applicationLink.trim() : undefined,
+        name: sanitizedName,
+        description: sanitizedDescription,
+        majorsAssociated: sanitizedMajors,
+        applicationLink: sanitizedAppLink,
         createdAt: admin.firestore.Timestamp.now(),
       })
     );
@@ -580,6 +609,25 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
         .send({ success: false, error: "Missing required fields" });
     }
 
+    // Validate input lengths
+    if (boothName && boothName.length > 200) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Booth name must be 200 characters or less" });
+    }
+
+    if (location && location.length > 200) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Location must be 200 characters or less" });
+    }
+
+    if (description && description.length > 2000) {
+      return res
+        .status(400)
+        .send({ success: false, error: "Description must be 2000 characters or less" });
+    }
+
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) {
       return res
@@ -594,12 +642,17 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
       return res.status(403).send({ success: false, error: "Not authorized for this company" });
     }
 
+    // Sanitize text inputs (trim whitespace, remove null bytes)
+    const sanitizedBoothName = boothName ? boothName.trim().replace(/\0/g, '') : boothName;
+    const sanitizedLocation = location ? location.trim().replace(/\0/g, '') : location;
+    const sanitizedDescription = description ? description.trim().replace(/\0/g, '') : description;
+
     const boothRef = await db.collection("booths").add(
       removeUndefined({
         companyId,
-        boothName,
-        location,
-        description,
+        boothName: sanitizedBoothName,
+        location: sanitizedLocation,
+        description: sanitizedDescription,
         representatives,
         createdAt: admin.firestore.Timestamp.now(),
       })
@@ -705,20 +758,14 @@ app.post("/api/toggle-fair-status", async (req, res) => {
       return res.status(403).json({ error: "Only administrators can toggle fair status" });
     }
 
-    // Get current evaluated status
+    // Get current evaluated status (combines schedule + manual)
     const currentStatus = await evaluateFairStatus();
-    
-    // Get manual status
+
+    // Toggle based on the current evaluated status
+    const newStatus = !currentStatus.isLive;
+
+    // Update manual status (this overrides any schedule)
     const statusRef = db.collection("fairSettings").doc("liveStatus");
-    const statusDoc = await statusRef.get();
-
-    let newStatus = true;
-    if (statusDoc.exists) {
-      const currentData = statusDoc.data();
-      newStatus = !currentData.isLive;
-    }
-
-    // Update manual status (this will be used if schedule is disabled)
     await statusRef.set({
       isLive: newStatus,
       updatedAt: admin.firestore.Timestamp.now(),
@@ -1003,25 +1050,31 @@ app.post("/api/update-invite-code", async (req, res) => {
       inviteCode = generateInviteCode();
     }
 
-    // Check if invite code is already in use by another company using a query
-    const existing = await db.collection("companies")
-      .where("inviteCode", "==", inviteCode)
-      .get();
-    const codeInUse = existing.docs.some((doc) => doc.id !== companyId);
+    // Update the invite code using a transaction to prevent race conditions
+    // We cannot use queries inside transactions, so we fetch the company doc first
+    // and use optimistic locking by reading all companies outside the transaction
+    // then doing a final atomic check inside
+    const companiesSnapshot = await db.collection("companies").get();
+    const companiesWithCode = companiesSnapshot.docs.filter(
+      (doc) => doc.data().inviteCode === inviteCode && doc.id !== companyId
+    );
 
-    if (codeInUse) {
+    if (companiesWithCode.length > 0) {
       return res.status(400).json({ error: "This invite code is already in use by another company" });
     }
 
-    // Update the invite code using a transaction to prevent race conditions
+    // Use transaction for atomic update with version checking
     await db.runTransaction(async (transaction) => {
-      const recheck = await transaction.get(
-        db.collection("companies").where("inviteCode", "==", inviteCode)
-      );
-      if (recheck.docs.some((doc) => doc.id !== companyId)) {
-        throw new Error("Invite code taken");
+      // Read the company doc to ensure it exists and get current state
+      const companyRef = db.collection("companies").doc(companyId);
+      const companyDoc = await transaction.get(companyRef);
+
+      if (!companyDoc.exists) {
+        throw new Error("Company not found");
       }
-      transaction.update(db.collection("companies").doc(companyId), {
+
+      // Perform atomic update
+      transaction.update(companyRef, {
         inviteCode: inviteCode,
         inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
       });

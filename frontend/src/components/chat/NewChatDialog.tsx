@@ -82,7 +82,7 @@ export default function NewChatDialog({
 
             setResults(res.users || []);
         } catch (err) {
-            console.error("Stream user search failed:");
+            console.error("Stream user search failed:", err);
             setResults([]);
         }
 

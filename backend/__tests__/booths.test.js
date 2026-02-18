@@ -114,6 +114,48 @@ describe("POST /api/booths", () => {
     expect(res.status).toBe(403);
   });
 
+  it("returns 400 when booth name exceeds 200 characters", async () => {
+    setupDbMock({
+      companies: { docData: { ownerId: "test-uid", representativeIDs: [] }, docExists: true },
+    });
+
+    const longName = "A".repeat(201);
+    const res = await request(app)
+      .post("/api/booths")
+      .set("Authorization", authHeader())
+      .send({ companyId: "c1", boothName: longName });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("200 characters");
+  });
+
+  it("returns 400 when location exceeds 200 characters", async () => {
+    setupDbMock({
+      companies: { docData: { ownerId: "test-uid", representativeIDs: [] }, docExists: true },
+    });
+
+    const longLocation = "A".repeat(201);
+    const res = await request(app)
+      .post("/api/booths")
+      .set("Authorization", authHeader())
+      .send({ companyId: "c1", boothName: "Valid Name", location: longLocation });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("200 characters");
+  });
+
+  it("returns 400 when description exceeds 2000 characters", async () => {
+    setupDbMock({
+      companies: { docData: { ownerId: "test-uid", representativeIDs: [] }, docExists: true },
+    });
+
+    const longDesc = "A".repeat(2001);
+    const res = await request(app)
+      .post("/api/booths")
+      .set("Authorization", authHeader())
+      .send({ companyId: "c1", boothName: "Valid Name", description: longDesc });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("2000 characters");
+  });
+
   it("creates booth successfully", async () => {
     setupDbMock({
       companies: { docData: { ownerId: "test-uid", representativeIDs: [] }, docExists: true },

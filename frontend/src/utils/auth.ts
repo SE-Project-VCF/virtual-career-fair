@@ -412,19 +412,12 @@ export const authUtils = {
         }
       }
 
-      // Add user to company's representativeIDs array (if not already there)
+      // Add user to company's representativeIDs array
+      // arrayUnion is atomic and won't add duplicates, so no need to check first
       const companyRef = doc(db, "companies", companyId);
-      const companyData = await getDoc(companyRef);
-
-      if (companyData.exists()) {
-        const currentReps = companyData.data().representativeIDs || [];
-        if (!currentReps.includes(userId)) {
-          // Use arrayUnion to add the user ID - this is safer and works better with security rules
-          await updateDoc(companyRef, {
-            representativeIDs: arrayUnion(userId),
-          });
-        }
-      }
+      await updateDoc(companyRef, {
+        representativeIDs: arrayUnion(userId),
+      });
 
       // Update user document with companyId and companyName
       await setDoc(userRef, {
@@ -567,45 +560,29 @@ export const authUtils = {
         inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
       }
 
-      // Check if invite code is already in use by another company
-      const companiesRef = collection(db, "companies");
-      const companiesSnapshot = await getDocs(companiesRef);
-      let codeInUse = false;
-
-      companiesSnapshot.forEach((doc) => {
-        if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
-          codeInUse = true;
-        }
+      // Use backend API to ensure atomic update and prevent race conditions
+      const idToken = await user.getIdToken();
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5002"}/api/update-invite-code`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          companyId,
+          userId: user.uid,
+          newInviteCode: inviteCode,
+        }),
       });
 
-      if (codeInUse) {
-        // If regenerating, try again (up to 5 times)
-        if (!newInviteCode) {
-          let attempts = 0;
-          while (codeInUse && attempts < 5) {
-            inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
-            codeInUse = false;
-            companiesSnapshot.forEach((doc) => {
-              if (doc.id !== companyId && doc.data().inviteCode === inviteCode) {
-                codeInUse = true;
-              }
-            });
-            attempts++;
-          }
+      const data = await response.json();
 
-          if (codeInUse) {
-            return { success: false, error: "Failed to generate unique invite code. Please try again." };
-          }
-        } else {
-          return { success: false, error: "This invite code is already in use by another company" };
-        }
+      if (!response.ok) {
+        return { success: false, error: data.error || "Failed to update invite code" };
       }
 
-      // Update the invite code
-      await updateDoc(companyRef, {
-        inviteCode: inviteCode,
-        inviteCodeUpdatedAt: new Date().toISOString(),
-      });
+      // Backend returns the final invite code (useful if it was generated)
+      inviteCode = data.inviteCode;
 
       return { success: true, inviteCode };
     } catch (err: any) {

@@ -150,6 +150,44 @@ describe("POST /api/jobs", () => {
     expect(res.status).toBe(403);
   });
 
+  it("returns 400 when job title exceeds 200 characters", async () => {
+    setupDbMock({
+      companies: { docData: { ownerId: "test-uid", representativeIDs: [] }, docExists: true },
+    });
+
+    const longTitle = "A".repeat(201);
+    const res = await request(app)
+      .post("/api/jobs")
+      .set("Authorization", authHeader())
+      .send({
+        companyId: "c1",
+        name: longTitle,
+        description: "Valid description",
+        majorsAssociated: "CS",
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("200 characters");
+  });
+
+  it("returns 400 when description exceeds 5000 characters", async () => {
+    setupDbMock({
+      companies: { docData: { ownerId: "test-uid", representativeIDs: [] }, docExists: true },
+    });
+
+    const longDesc = "A".repeat(5001);
+    const res = await request(app)
+      .post("/api/jobs")
+      .set("Authorization", authHeader())
+      .send({
+        companyId: "c1",
+        name: "Developer",
+        description: longDesc,
+        majorsAssociated: "CS",
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("5000 characters");
+  });
+
   it("creates job successfully", async () => {
     setupDbMock({
       companies: { docData: { ownerId: "test-uid", representativeIDs: [] }, docExists: true },

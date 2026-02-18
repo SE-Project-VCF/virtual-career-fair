@@ -61,6 +61,8 @@ export default function ChatPage() {
       return;
     }
 
+    let updateUnread: (() => void) | null = null;
+
     const init = async () => {
       try {
         // If Stream is connected as someone else → disconnect
@@ -104,7 +106,7 @@ export default function ChatPage() {
         setClientReady(true);
 
         // Unread count tracking
-        const updateUnread = () => {
+        updateUnread = () => {
           const count = (client.user as any)?.total_unread_count ?? 0;
           setUnreadCount(count);
         };
@@ -112,17 +114,23 @@ export default function ChatPage() {
         updateUnread();
         client.on("notification.message_new", updateUnread);
         client.on("notification.mark_read", updateUnread);
-
-        return () => {
-          client.off("notification.message_new", updateUnread);
-          client.off("notification.mark_read", updateUnread);
-        };
       } catch (err) {
-        console.error("STREAM INIT ERROR");
+        console.error("STREAM INIT ERROR:", err);
+        // Set error state to prevent infinite loading
+        setClientReady(false);
+        // You could also set a specific error state here to show an error message to users
+        // setStreamError(err instanceof Error ? err.message : "Failed to connect to chat");
       }
     };
 
     void init();
+
+    return () => {
+      if (updateUnread) {
+        client.off("notification.message_new", updateUnread);
+        client.off("notification.mark_read", updateUnread);
+      }
+    };
   }, [user, client]);
 
   /*
