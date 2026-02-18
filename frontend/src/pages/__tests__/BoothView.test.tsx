@@ -706,7 +706,7 @@ describe("BoothView", () => {
     await user.click(messageButton);
 
     await waitFor(() => {
-      expect(consoleError).toHaveBeenCalledWith("Chat: failed to initialize");
+      expect(consoleError).toHaveBeenCalledWith("Chat: failed to initialize", expect.any(Error));
     });
 
     consoleError.mockRestore();

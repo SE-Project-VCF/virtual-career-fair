@@ -117,8 +117,7 @@ describe("useJobs", () => {
 
     expect(result.current.data).toEqual(mockJobs);
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/jobs?companyId=comp1"),
-      undefined
+      expect.stringContaining("/api/jobs?companyId=comp1")
     );
   });
 
@@ -164,8 +163,7 @@ describe("useFairStatus", () => {
 
     expect(result.current.data).toEqual(mockStatus);
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/fair-status"),
-      undefined
+      expect.stringContaining("/api/fair-status")
     );
   });
 
@@ -205,8 +203,7 @@ describe("useFairSchedules", () => {
 
     expect(result.current.data).toEqual(mockSchedules);
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/public/fair-schedules"),
-      undefined
+      expect.stringContaining("/api/public/fair-schedules")
     );
   });
 });

@@ -53,9 +53,17 @@ function authHeader() {
 describe("POST /api/sync-stream-user", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 401 without auth header", async () => {
+    const res = await request(app)
+      .post("/api/sync-stream-user")
+      .send({ email: "test@test.com" });
+    expect(res.status).toBe(401);
+  });
+
   it("returns 400 when uid is missing", async () => {
     const res = await request(app)
       .post("/api/sync-stream-user")
+      .set("Authorization", authHeader())
       .send({ email: "test@test.com" });
     expect(res.status).toBe(400);
   });
@@ -63,24 +71,36 @@ describe("POST /api/sync-stream-user", () => {
   it("returns 400 when email is missing", async () => {
     const res = await request(app)
       .post("/api/sync-stream-user")
+      .set("Authorization", authHeader())
       .send({ uid: "user1" });
     expect(res.status).toBe(400);
   });
 
   it("returns 200 on valid input", async () => {
+    // uid in body must match the authenticated user's uid ("test-uid" from authHeader mock)
     const res = await request(app)
       .post("/api/sync-stream-user")
-      .send({ uid: "user1", email: "user@test.com", firstName: "John", lastName: "Doe" });
+      .set("Authorization", authHeader())
+      .send({ uid: "test-uid", email: "user@test.com", firstName: "John", lastName: "Doe" });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(mockUpsertUser).toHaveBeenCalled();
+  });
+
+  it("returns 403 when uid does not match authenticated user", async () => {
+    const res = await request(app)
+      .post("/api/sync-stream-user")
+      .set("Authorization", authHeader())
+      .send({ uid: "different-user", email: "user@test.com" });
+    expect(res.status).toBe(403);
   });
 
   it("returns 500 when upsertUser throws", async () => {
     mockUpsertUser.mockRejectedValueOnce(new Error("Stream error"));
     const res = await request(app)
       .post("/api/sync-stream-user")
-      .send({ uid: "user1", email: "user@test.com" });
+      .set("Authorization", authHeader())
+      .send({ uid: "test-uid", email: "user@test.com" });
     expect(res.status).toBe(500);
   });
 });
@@ -145,29 +165,26 @@ describe("POST /api/sync-stream-users", () => {
   });
 
   it("syncs users successfully", async () => {
-    const users = [
-      mockDocSnap({ uid: "u1", email: "a@b.com", firstName: "A", lastName: "B" }),
-      mockDocSnap({ uid: "u2", email: "c@d.com", firstName: "C", lastName: "D" }),
+    const userDocs = [
+      { uid: "u1", email: "a@b.com", firstName: "A", lastName: "B" },
+      { uid: "u2", email: "c@d.com", firstName: "C", lastName: "D" },
     ];
 
-    // First call: get user doc for admin check; second call: get all users
-    let callCount = 0;
-    db.collection.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        // Admin check
+    // The route calls db.collection("users") twice:
+    // 1. .doc(req.user.uid).get()  → admin check
+    // 2. .get()                    → fetch all users
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
         return {
           doc: jest.fn(() => ({
             get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
           })),
+          get: jest.fn().mockResolvedValue({
+            docs: userDocs.map((u) => ({ data: () => u })),
+          }),
         };
       }
-      // Get all users
-      return {
-        get: jest.fn().mockResolvedValue({
-          docs: users.map((u) => ({ data: () => u.data() })),
-        }),
-      };
+      return { doc: jest.fn(), get: jest.fn() };
     });
 
     const res = await request(app)

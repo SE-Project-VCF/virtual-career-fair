@@ -81,8 +81,11 @@ describe("AuthProvider", () => {
       // Set localStorage before rendering
       localStorageStore["currentUser"] = JSON.stringify(storedUser);
 
+      const mockFirebaseUser = { uid: "user123", email: "test@example.com" } as FirebaseUser;
+
+      // Fire with a Firebase user so onAuthStateChanged doesn't clear currentUser
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        callback(mockFirebaseUser);
         return vi.fn();
       });
 
@@ -145,10 +148,13 @@ describe("AuthProvider", () => {
       // Set localStorage before rendering
       localStorageStore["currentUser"] = JSON.stringify(storedUser);
 
+      const mockFirebaseUser = { uid: "user123", email: "test@example.com" } as FirebaseUser;
       let authCallback: ((user: FirebaseUser | null) => void) | null = null;
+
+      // Initially fire with a Firebase user so currentUser is preserved
       mockOnAuthStateChanged.mockImplementation((callback) => {
         authCallback = callback;
-        callback(null);
+        callback(mockFirebaseUser);
         return vi.fn();
       });
 
@@ -160,7 +166,7 @@ describe("AuthProvider", () => {
         expect(result.current.currentUser).toEqual(storedUser);
       });
 
-      // Simulate logout
+      // Simulate logout by firing auth callback with null
       act(() => {
         if (authCallback) authCallback(null);
       });
@@ -236,7 +242,7 @@ describe("AuthProvider", () => {
         role: "student",
       };
 
-      localStorageMock.getItem.mockReturnValue(JSON.stringify(storedUser));
+      localStorageStore["currentUser"] = JSON.stringify(storedUser);
       mockOnAuthStateChanged.mockImplementation((callback) => {
         callback(null);
         return vi.fn();
@@ -267,8 +273,11 @@ describe("AuthProvider", () => {
 
       localStorageStore["currentUser"] = JSON.stringify(user);
 
+      const mockFirebaseUser = { uid: "123", email: "test@test.com" } as FirebaseUser;
+
+      // Fire with a Firebase user so onAuthStateChanged doesn't clear currentUser
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        callback(mockFirebaseUser);
         return vi.fn();
       });
 

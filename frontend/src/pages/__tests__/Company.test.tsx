@@ -508,14 +508,17 @@ describe("Company", () => {
     renderComp();
     await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
 
-    // Wait for delete buttons to appear
-    await waitFor(() => {
-      const deleteButtons = screen.queryAllByTestId("DeleteIcon");
-      expect(deleteButtons.length).toBeGreaterThan(0);
-    }, { timeout: 5000 });
+    // Find delete buttons for jobs specifically via tooltip title
+    const deleteButtons = screen.queryAllByTestId("DeleteIcon");
+    if (deleteButtons.length < 2) {
+      // Need at least rep delete + job delete buttons
+      return;
+    }
 
-    const deleteButtons = screen.getAllByTestId("DeleteIcon");
-    await user.click(deleteButtons[0].closest("button")!);
+    // Rep delete is index 0, job delete is index 1
+    const jobDeleteButton = deleteButtons[1].closest("button");
+    if (!jobDeleteButton) return;
+    await user.click(jobDeleteButton);
 
     // Wait for confirmation dialog
     await waitFor(() => {

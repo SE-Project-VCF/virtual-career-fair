@@ -368,8 +368,9 @@ describe("Register User Branch Coverage", () => {
   it("handles email without @ symbol in sync-stream-user", async () => {
     const res = await request(app)
       .post("/api/sync-stream-user")
+      .set("Authorization", authHeader())
       .send({
-        uid: "user123",
+        uid: "test-uid",
         email: "justausername",
         firstName: "John",
       });

@@ -108,15 +108,23 @@ describe("POST /api/update-invite-code", () => {
   });
 
   it("returns 400 when invite code is already in use", async () => {
+    // The server calls: db.collection("companies").doc(companyId).get()
+    // then: db.collection("companies").get()  (to check for duplicates)
+    let callCount = 0;
     db.collection.mockImplementation(() => ({
       doc: jest.fn(() => ({
         get: jest.fn().mockResolvedValue(
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
-      where: jest.fn().mockReturnThis(),
-      get: jest.fn().mockResolvedValue({
-        docs: [{ id: "other-company-id" }], // different company uses this code
+      get: jest.fn().mockImplementation(() => {
+        callCount++;
+        // Second .get() is the companies snapshot for duplicate checking
+        return Promise.resolve({
+          docs: [
+            { id: "other-company-id", data: () => ({ inviteCode: "TAKEN123" }) },
+          ],
+        });
       }),
     }));
 
@@ -124,6 +132,7 @@ describe("POST /api/update-invite-code", () => {
       .post("/api/update-invite-code")
       .send({ companyId: "c1", userId: "user1", newInviteCode: "TAKEN123" });
     expect(res.status).toBe(400);
+    expect(res.body.error).toContain("already in use");
   });
 
   it("updates invite code successfully with custom code", async () => {
@@ -133,13 +142,13 @@ describe("POST /api/update-invite-code", () => {
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
-      where: jest.fn().mockReturnThis(),
-      get: jest.fn().mockResolvedValue({ docs: [] }),
+      get: jest.fn().mockResolvedValue({ docs: [] }), // no duplicate codes
     }));
 
     db.runTransaction.mockImplementation(async (callback) => {
+      const companyRef = { exists: true };
       const transaction = {
-        get: jest.fn().mockResolvedValue({ docs: [] }),
+        get: jest.fn().mockResolvedValue({ exists: true }),
         update: jest.fn(),
       };
       await callback(transaction);
@@ -161,13 +170,12 @@ describe("POST /api/update-invite-code", () => {
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
-      where: jest.fn().mockReturnThis(),
-      get: jest.fn().mockResolvedValue({ docs: [] }),
+      get: jest.fn().mockResolvedValue({ docs: [] }), // no duplicate codes
     }));
 
     db.runTransaction.mockImplementation(async (callback) => {
       const transaction = {
-        get: jest.fn().mockResolvedValue({ docs: [] }),
+        get: jest.fn().mockResolvedValue({ exists: true }),
         update: jest.fn(),
       };
       await callback(transaction);
@@ -179,7 +187,7 @@ describe("POST /api/update-invite-code", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.inviteCode).toMatch(/^[A-F0-9]{8}$/);
+    expect(res.body.inviteCode).toMatch(/^[A-Z0-9]{8}$/);
   });
 
   it("returns 500 when database operation fails", async () => {

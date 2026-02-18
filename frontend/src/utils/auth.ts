@@ -561,7 +561,8 @@ export const authUtils = {
       }
 
       // Use backend API to ensure atomic update and prevent race conditions
-      const idToken = await user.getIdToken();
+      const currentUser = auth.currentUser;
+      const idToken = await currentUser?.getIdToken();
       const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5002"}/api/update-invite-code`, {
         method: "POST",
         headers: {
@@ -570,7 +571,7 @@ export const authUtils = {
         },
         body: JSON.stringify({
           companyId,
-          userId: user.uid,
+          userId: currentUser?.uid,
           newInviteCode: inviteCode,
         }),
       });

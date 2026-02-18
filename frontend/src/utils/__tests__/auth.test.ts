@@ -302,18 +302,16 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner-1" }),
     } as any)
-    const mockForEach = vi.fn()
-    vi.mocked(getDocs).mockResolvedValue({
-      empty: true,
-      forEach: mockForEach,
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, inviteCode: "RAND1234" }),
     } as any)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
 
     const result = await authUtils.updateInviteCode("company-1", "owner-1")
 
     expect(result.success).toBe(true)
     expect(result.inviteCode).toBeDefined()
-    expect(updateDoc).toHaveBeenCalled()
+    expect(global.fetch).toHaveBeenCalled()
   })
 
   it("validates custom invite code", async () => {
@@ -321,12 +319,10 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner-1" }),
     } as any)
-    const mockForEach = vi.fn()
-    vi.mocked(getDocs).mockResolvedValue({
-      empty: true,
-      forEach: mockForEach,
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, inviteCode: "CUSTOM123" }),
     } as any)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
 
     const result = await authUtils.updateInviteCode("company-1", "owner-1", "CUSTOM123")
 
@@ -339,14 +335,10 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner-1" }),
     } as any)
-    
-    const mockForEach = vi.fn((callback: any) => {
-      callback({ id: "other-company", data: () => ({ inviteCode: "EXISTING" }) })
-    })
-    
-    vi.mocked(getDocs).mockResolvedValue({
-      empty: false,
-      forEach: mockForEach,
+    // Backend returns 400 when invite code is already in use
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Invite code already in use" }),
     } as any)
 
     const result = await authUtils.updateInviteCode("company-1", "owner-1", "EXISTING")
@@ -734,10 +726,10 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1", inviteCode: "OLD" }),
     } as any)
-    vi.mocked(getDocs).mockResolvedValue({
-      forEach: vi.fn(),
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, inviteCode: "NEWCODE1" }),
     } as any)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
 
     const result = await authUtils.updateInviteCode("comp1", "owner1", "NEWCODE1")
 
@@ -774,13 +766,10 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    
-    const mockForEach = vi.fn((callback: any) => {
-      callback({ id: "other-company", data: () => ({ inviteCode: "TAKEN" }) })
-    })
-    
-    vi.mocked(getDocs).mockResolvedValue({
-      forEach: mockForEach,
+    // Backend returns 400 when invite code is already in use
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Invite code already in use" }),
     } as any)
 
     const result = await authUtils.updateInviteCode("comp1", "owner1", "TAKEN")
@@ -794,11 +783,10 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    
-    vi.mocked(getDocs).mockResolvedValue({
-      forEach: vi.fn(),
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, inviteCode: "RAND1234" }),
     } as any)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
 
     const result = await authUtils.updateInviteCode("comp1", "owner1")
 
@@ -808,16 +796,14 @@ describe("authUtils.updateInviteCode", () => {
   })
 
   it("retries when generated code is in use", async () => {
-    vi.clearAllMocks()
     vi.mocked(getDoc).mockResolvedValue({
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    
-    vi.mocked(getDocs).mockResolvedValue({
-      forEach: vi.fn(),
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, inviteCode: "RAND5678" }),
     } as any)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
 
     const result = await authUtils.updateInviteCode("comp1", "owner1")
 
@@ -830,11 +816,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    
-    vi.mocked(getDocs).mockResolvedValue({
-      forEach: vi.fn(),
-    } as any)
-    vi.mocked(updateDoc).mockRejectedValue(new Error("Update failed"))
+    global.fetch = vi.fn().mockRejectedValue(new Error("Update failed"))
 
     const result = await authUtils.updateInviteCode("comp1", "owner1", "NEWCODE")
 
@@ -858,11 +840,10 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    
-    vi.mocked(getDocs).mockResolvedValue({
-      forEach: vi.fn(),
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, inviteCode: "CUSTOM123" }),
     } as any)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
 
     const result = await authUtils.updateInviteCode("comp1", "owner1", "  custom123  ")
 
@@ -981,12 +962,10 @@ describe("authUtils.linkRepresentativeToCompany", () => {
       }),
     }
     vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
+    // User not yet linked to any company (no companyId)
     vi.mocked(getDoc).mockResolvedValueOnce({
       exists: () => true,
       data: () => ({ role: "representative" }),
-    } as any).mockResolvedValueOnce({
-      exists: () => true,
-      data: () => ({ representativeIDs: [] }),
     } as any)
     vi.mocked(setDoc).mockResolvedValue(undefined)
     vi.mocked(updateDoc).mockResolvedValue(undefined)
@@ -1006,20 +985,20 @@ describe("authUtils.linkRepresentativeToCompany", () => {
       }),
     }
     vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
+    // User doc shows rep is already linked to this company
     vi.mocked(getDoc).mockResolvedValueOnce({
       exists: () => true,
-      data: () => ({ role: "representative" }),
-    } as any).mockResolvedValueOnce({
-      exists: () => true,
-      data: () => ({ representativeIDs: ["rep1"] }),
+      data: () => ({ companyId: "comp1", role: "representative" }),
     } as any)
-    vi.mocked(setDoc).mockResolvedValue(undefined)
 
     localStorage.setItem("currentUser", JSON.stringify({ uid: "rep1", email: "rep@test.com" }))
 
-    await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
+    const result = await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
 
-    // Should not call updateDoc if rep already exists
+    // Should return error when rep is already linked to this company
+    expect(result.success).toBe(false)
+    expect(result.error).toContain("already linked")
+    // Should not call updateDoc when rep is already linked
     expect(updateDoc).not.toHaveBeenCalled()
   })
 
@@ -1033,12 +1012,10 @@ describe("authUtils.linkRepresentativeToCompany", () => {
       }),
     }
     vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
+    // User not yet linked to any company (no companyId)
     vi.mocked(getDoc).mockResolvedValueOnce({
       exists: () => true,
       data: () => ({ role: "representative" }),
-    } as any).mockResolvedValueOnce({
-      exists: () => true,
-      data: () => ({ representativeIDs: [] }),
     } as any)
     vi.mocked(setDoc).mockResolvedValue(undefined)
     vi.mocked(updateDoc).mockResolvedValue(undefined)
