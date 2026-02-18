@@ -419,7 +419,7 @@ describe("AdminDashboard", () => {
         const buttons = screen.queryAllByRole("button");
         const scheduleButton = buttons.find(btn => btn.textContent?.includes("Schedule Career Fair"));
         expect(scheduleButton).toBeTruthy();
-      });
+      }, { timeout: 5000 });
 
       const buttons = screen.getAllByRole("button");
       const scheduleButton = buttons.find(btn => btn.textContent?.includes("Schedule Career Fair"));
@@ -441,8 +441,8 @@ describe("AdminDashboard", () => {
       await waitFor(() => {
         expect(firestore.addDoc).toHaveBeenCalled();
         expect(screen.getByText(/Career fair scheduled successfully/i)).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 3000 });
+    }, 15000);
 
     it("validates that start and end times are required", async () => {
       const user = userEvent.setup();

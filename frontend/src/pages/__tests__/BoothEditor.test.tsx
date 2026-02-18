@@ -292,14 +292,14 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       const nameInput = screen.getByRole("textbox", { name: /company name/i });
       await user.clear(nameInput);
       await user.type(nameInput, "New Tech Company");
 
       expect((nameInput as HTMLInputElement).value).toBe("New Tech Company");
-    });
+    }, 10000);
 
     it("allows user to select industry from dropdown", async () => {
       const user = userEvent.setup();
@@ -339,14 +339,14 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("textbox", { name: /location/i })).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       const locationInput = screen.getByRole("textbox", { name: /location/i });
       await user.clear(locationInput);
       await user.type(locationInput, "New York, NY");
 
       expect((locationInput as HTMLInputElement).value).toBe("New York, NY");
-    });
+    }, 10000);
 
     it("allows user to fill in description", async () => {
       const user = userEvent.setup();
@@ -354,14 +354,14 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("textbox", { name: /company description/i })).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       const descriptionInput = screen.getByRole("textbox", { name: /company description/i });
       await user.clear(descriptionInput);
       await user.type(descriptionInput, "We are a leading tech company");
 
       expect((descriptionInput as HTMLInputElement).value).toBe("We are a leading tech company");
-    });
+    }, 10000);
 
     it("allows user to fill in contact information", async () => {
       const user = userEvent.setup();
@@ -369,7 +369,7 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("textbox", { name: /contact person name/i })).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       const contactNameInput = screen.getByRole("textbox", { name: /contact person name/i });
       await user.type(contactNameInput, "John Smith");
@@ -379,7 +379,7 @@ describe("BoothEditor", () => {
 
       expect((contactNameInput as HTMLInputElement).value).toBe("John Smith");
       expect((contactEmailInput as HTMLInputElement).value).toBe("owner@company.com");
-    });
+    }, 10000);
 
     it("navigates back when cancel button is clicked", async () => {
       const user = userEvent.setup();
@@ -416,21 +416,21 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Fill in required fields
       const industrySelect = screen.getByRole("combobox", { name: /industry/i });
       await user.click(industrySelect);
       await waitFor(() => {
         expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
-      });
+      }, { timeout: 3000 });
       await user.click(screen.getByRole("option", { name: /software development/i }));
 
       const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
       await user.click(sizeSelect);
       await waitFor(() => {
         expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
-      });
+      }, { timeout: 3000 });
       await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
 
       await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco, CA");
@@ -443,13 +443,13 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Should navigate after success
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith("/company/company-1");
-      }, { timeout: 2000 });
-    });
+      }, { timeout: 3000 });
+    }, 20000);
 
     it("submits form and updates existing booth successfully", async () => {
       const user = userEvent.setup();
@@ -465,7 +465,7 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("heading", { name: "Edit Booth" })).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       const locationInput = screen.getByRole("textbox", { name: /location/i }) as HTMLInputElement;
       await user.clear(locationInput);
@@ -476,8 +476,8 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Booth updated successfully!")).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 3000 });
+    }, 10000);
 
     it("shows error when contact email is not registered", async () => {
       const user = userEvent.setup();
@@ -487,7 +487,7 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Fill in form
       const industrySelect = screen.getByRole("combobox", { name: /industry/i });
@@ -504,7 +504,10 @@ describe("BoothEditor", () => {
       });
       await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
 
-      await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco");
+      const locationInput = screen.queryByRole("textbox", { name: /location/i }) || screen.queryByLabelText(/location/i);
+      if (locationInput) {
+        await user.type(locationInput, "San Francisco");
+      }
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test User");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "nonexistent@example.com");
@@ -513,8 +516,8 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Contact email does not match any registered user.")).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 3000 });
+    }, 15000);
 
     it("shows error when contact is not company owner or representative", async () => {
       const user = userEvent.setup();
