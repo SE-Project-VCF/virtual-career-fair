@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Usage: ./generate-coverage-report.sh <SprintNumber>
+# Example: ./generate-coverage-report.sh 3
+set -e
+
+SPRINT="${1:?Usage: ./generate-coverage-report.sh <SprintNumber>}"
+REPORT="Sprint-${SPRINT}-Code-Coverage-Report.md"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+BACKEND="$ROOT/backend"
+SUMMARY="$BACKEND/coverage/coverage-summary.json"
+
+echo "Running tests..."
+cd "$BACKEND"
+npx jest --coverage --coverageReporters=text --coverageReporters=lcov --coverageReporters=json-summary --silent
+
+LINES=$(node -e "console.log(require('$SUMMARY').total.lines.pct)")
+BRANCHES=$(node -e "console.log(require('$SUMMARY').total.branches.pct)")
+FUNCTIONS=$(node -e "console.log(require('$SUMMARY').total.functions.pct)")
+STATEMENTS=$(node -e "console.log(require('$SUMMARY').total.statements.pct)")
+
+# Find the 3 lowest-covered files (excluding "total" key)
+WEAK=$(node -e "
+const s = require('$SUMMARY');
+Object.entries(s)
+  .filter(([k]) => k !== 'total')
+  .map(([k, v]) => ({ file: k.replace('$ROOT/', ''), pct: v.lines.pct }))
+  .sort((a, b) => a.pct - b.pct)
+  .slice(0, 3)
+  .forEach(f => console.log('| \`' + f.file + '\` | ' + f.pct + '% | |'));
+")
+
+DATE=$(date '+%Y-%m-%d')
+
+cat > "$ROOT/$REPORT" <<EOF
+# Sprint ${SPRINT} Code Coverage Report
+
+Generated: ${DATE}
+
+---
+
+## 1. Tool & Setup
+
+| Item | Value |
+|------|-------|
+| Language | JavaScript (Node.js) |
+| Tests | Jest 30 |
+| Coverage Tool | Istanbul (bundled with Jest) |
+
+---
+
+## 2. Coverage Metrics
+
+| Metric | Percentage |
+|--------|-----------|
+| Line coverage | ${LINES}% |
+| Branch coverage | ${BRANCHES}% |
+| Function / Method coverage | ${FUNCTIONS}% |
+| Statement coverage | ${STATEMENTS}% |
+
+---
+
+## 3. Scope of Coverage
+
+**Included:**
+- \`backend/server.js\` — core Express routes and business logic
+- \`backend/helpers.js\` — utility/helper functions
+
+**Excluded:**
+- \`frontend/\` — React UI components; tested separately with Vitest, not instrumented here
+- \`backend/firebase.js\` — Firebase SDK initialization; mocked in all tests, not meaningful to instrument
+- Third-party libraries in \`node_modules/\`
+
+---
+
+## 4. Coverage Trend
+
+| Sprint | Line Coverage |
+|--------|--------------|
+| Sprint $((SPRINT - 1)) | _(update manually)_ |
+| Sprint ${SPRINT} | ${LINES}% |
+
+---
+
+## 5. Weak Areas
+
+| File | Line Coverage | Reason |
+|------|--------------|--------|
+${WEAK}
+
+---
+
+## 6. Evidence
+
+- Coverage HTML report: [\`backend/coverage/lcov-report/index.html\`](backend/coverage/lcov-report/index.html)
+- Raw summary: [\`backend/coverage/coverage-summary.json\`](backend/coverage/coverage-summary.json)
+
+---
+
+## 7. Statement of Integrity
+
+This coverage was generated from automated tests executed during this sprint.
+EOF
+
+echo "Done → $REPORT"
