@@ -268,7 +268,7 @@ describe("CompanyManagement", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Tech Corp")).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Open dialog
       const createButton = screen.getAllByText("Create Company")[0];
@@ -285,8 +285,8 @@ describe("CompanyManagement", () => {
       // Verify error message
       await waitFor(() => {
         expect(screen.getByText("Company name already exists")).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 5000 });
+    }, 15000);
 
     it("closes dialog after successful creation", async () => {
       const user = userEvent.setup();

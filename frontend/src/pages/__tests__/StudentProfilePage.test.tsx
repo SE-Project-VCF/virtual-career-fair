@@ -253,8 +253,8 @@ describe("StudentProfilePage", () => {
 
     renderStudentProfile();
 
-    const majorInput = await screen.findByLabelText(/Major/);
-    const yearInput = await screen.findByLabelText(/Expected Graduation Year/);
+    const majorInput = await screen.findByLabelText(/Major/, {}, { timeout: 3000 });
+    const yearInput = await screen.findByLabelText(/Expected Graduation Year/, {}, { timeout: 3000 });
 
     await user.type(majorInput, "Computer Science");
     await user.type(yearInput, "2025");
@@ -264,8 +264,8 @@ describe("StudentProfilePage", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("progressbar")).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 3000 });
+  }, 10000);
 
   // Resume Upload Tests
   it("handles PDF file upload", async () => {

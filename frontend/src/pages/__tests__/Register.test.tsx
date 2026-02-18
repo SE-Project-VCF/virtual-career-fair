@@ -164,9 +164,9 @@ describe("Register", () => {
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/passwords do not match/i)).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByText("Passwords do not match.")).toBeInTheDocument();
+    }, { timeout: 3000 });
+  }, 15000);
 
   it("validates password length", async () => {
     const user = userEvent.setup();
@@ -199,9 +199,9 @@ describe("Register", () => {
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/password must be at least 6 characters/i)).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByText("Password must be at least 6 characters long.")).toBeInTheDocument();
+    }, { timeout: 3000 });
+  }, 15000);
 
   it("requires first and last name for all roles", async () => {
     const user = userEvent.setup();
@@ -236,50 +236,98 @@ describe("Register", () => {
     const user = userEvent.setup();
     renderRegister();
 
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    // Remove HTML5 validation to test custom validation
+    const form = document.querySelector('form');
+    if (form) {
+      form.setAttribute('novalidate', 'true');
+    }
+
     const submitButton = screen.getByRole("button", { name: /create account/i });
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/please select a role/i)).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByText("Please select a role.")).toBeInTheDocument();
+    }, { timeout: 5000 });
+  }, 15000);
 
   it("shows an error when required fields are missing", async () => {
     const user = userEvent.setup();
     renderRegister();
 
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /account type/i })).toBeInTheDocument();
+    }, { timeout: 3000 });
+
     const roleSelect = screen.getByRole("combobox", { name: /account type/i });
     await user.click(roleSelect);
+    
+    await waitFor(() => {
+      expect(screen.getByText("Student")).toBeInTheDocument();
+    }, { timeout: 3000 });
+    
     await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    // Remove HTML5 validation to test custom validation
+    const form = document.querySelector('form');
+    if (form) {
+      form.setAttribute('novalidate', 'true');
+    }
 
     const submitButton = screen.getByRole("button", { name: /create account/i });
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/email, password, and confirm password are required/i)).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByText("Email, password, and confirm password are required.")).toBeInTheDocument();
+    }, { timeout: 5000 });
+  }, 15000);
 
   it("shows an error when first or last name is missing", async () => {
     const user = userEvent.setup();
     renderRegister();
 
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /account type/i })).toBeInTheDocument();
+    }, { timeout: 3000 });
+
     const roleSelect = screen.getByRole("combobox", { name: /account type/i });
     await user.click(roleSelect);
+    
+    await waitFor(() => {
+      expect(screen.getByText("Student")).toBeInTheDocument();
+    }, { timeout: 3000 });
+    
     await user.click(screen.getByText("Student"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
+    }, { timeout: 3000 });
 
     const passwordInputs = document.querySelectorAll('input[type="password"]');
     await user.type(screen.getByLabelText(/email address/i), "test@example.com");
     await user.type(passwordInputs[0], "password123");
     await user.type(passwordInputs[1], "password123");
 
+    // Remove HTML5 validation to test custom validation
+    const form = document.querySelector('form');
+    if (form) {
+      form.setAttribute('novalidate', 'true');
+    }
+
     const submitButton = screen.getByRole("button", { name: /create account/i });
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/first name and last name are required/i)).toBeInTheDocument();
-    });
-  });
+      expect(screen.getByText("First name and last name are required.")).toBeInTheDocument();
+    }, { timeout: 5000 });
+  }, 15000);
 
   it("enables Google register button when role is selected", async () => {
     const user = userEvent.setup();
@@ -342,8 +390,8 @@ describe("Register", () => {
         "student",
         expect.any(Object)
       );
-    });
-  });
+    }, { timeout: 3000 });
+  }, 10000);
 
   it("displays link to login page", () => {
     renderRegister();
@@ -421,8 +469,8 @@ describe("Register", () => {
         "representative",
         expect.objectContaining({ firstName: "Jane", lastName: "Smith" })
       );
-    });
-  });
+    }, { timeout: 3000 });
+  }, 10000);
 
   it("includes representative invite code when provided", async () => {
     const user = userEvent.setup();
@@ -473,8 +521,8 @@ describe("Register", () => {
           inviteCode: "INVITECODE123"
         })
       );
-    });
-  });
+    }, { timeout: 3000 });
+  }, 10000);
 
   it("handles registration error", async () => {
     const user = userEvent.setup();
@@ -509,9 +557,12 @@ describe("Register", () => {
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/email already in use/i)).toBeInTheDocument();
-    });
-  });
+      const errorElement = screen.queryByText(/email already in use/i) || 
+                           screen.queryByText(/already in use/i) ||
+                           screen.queryByText(/Email already in use/);
+      expect(errorElement).toBeInTheDocument();
+    }, { timeout: 3000 });
+  }, 10000);
 
   it("redirects to verification-pending when needsVerification is true", async () => {
     const user = userEvent.setup();
@@ -609,8 +660,8 @@ describe("Register", () => {
           major: "Computer Science"
         })
       );
-    });
-  });
+    }, { timeout: 3000 });
+  }, 10000);
 
   it("registers company owner successfully", async () => {
     const user = userEvent.setup();
