@@ -14,6 +14,7 @@ import {
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import WorkIcon from "@mui/icons-material/Work";
 import { authUtils } from "../utils/auth";
+import { API_URL } from "../config";
 
 interface JobInvitation {
   id: string;
@@ -38,11 +39,12 @@ export default function NotificationBell() {
   const open = Boolean(anchorEl);
 
   const fetchInvitations = useCallback(async () => {
-    if (!user || user.role !== "student") return;
+    const currentUser = authUtils.getCurrentUser();
+    if (!currentUser || currentUser.role !== "student") return;
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/job-invitations/received?userId=${user.uid}&status=sent`,
+        `${API_URL}/api/job-invitations/received?userId=${currentUser.uid}&status=sent`,
         {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -58,17 +60,16 @@ export default function NotificationBell() {
     } catch (err) {
       console.error("Error fetching notifications:", err);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
-    if (user && user.role === "student") {
+    if (user?.uid && user?.role === "student") {
       fetchInvitations();
-      
-      // Poll for new invitations every 15 seconds
+
       const interval = setInterval(fetchInvitations, 15000);
       return () => clearInterval(interval);
     }
-  }, [user, fetchInvitations]);
+  }, [user?.uid, user?.role, fetchInvitations]);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);

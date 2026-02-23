@@ -17,6 +17,7 @@ import {
   Chip
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import BusinessIcon from "@mui/icons-material/Business"
@@ -132,7 +133,7 @@ export default function Company() {
 
     fetchCompany()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate, id, user])
+  }, [navigate, id, userId, userRole])
 
   const fetchCompany = async () => {
     if (!id) return
@@ -251,7 +252,7 @@ export default function Company() {
       setJobs(jobsList)
       
       // Fetch stats for each job
-      if (user) {
+      if (userId) {
         jobsList.forEach((job) => {
           fetchJobStats(job.id)
         })
@@ -265,11 +266,11 @@ export default function Company() {
   }
 
   const fetchJobStats = async (jobId: string) => {
-    if (!user) return
-    
+    if (!userId) return
+
     try {
       const response = await fetch(
-        `http://localhost:5000/api/job-invitations/stats/${jobId}?userId=${user.uid}`,
+        `${API_URL}/api/job-invitations/stats/${jobId}?userId=${userId}`,
         {
           method: "GET",
           headers: { "Content-Type": "application/json" },

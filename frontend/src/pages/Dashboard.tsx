@@ -65,17 +65,12 @@ export default function Dashboard() {
   }, [])
 
   // Fetch unread chat count and keep it updated
-  // Fetch unread chat count
   useEffect(() => {
-
-    if (!user || !user.uid) {
-      return;
-    }
+    if (!user?.uid) return;
 
     let cancelled = false;
 
     const fetchUnread = async () => {
-
       try {
         const idToken = await auth.currentUser?.getIdToken();
         const res = await fetch(
@@ -92,7 +87,6 @@ export default function Dashboard() {
 
         const data = await res.json();
 
-
         if (!cancelled && typeof data.unread === "number") {
           setUnreadCount(data.unread);
         }
@@ -101,12 +95,10 @@ export default function Dashboard() {
       }
     };
 
-    // initial load
     void fetchUnread().catch((err) => {
       console.error("Initial unread count fetch failed:", err);
     });
 
-    // poll every 10s
     const interval = setInterval(() => {
       void fetchUnread().catch((err) => {
         console.error("Periodic unread count fetch failed:", err);
@@ -117,7 +109,7 @@ export default function Dashboard() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [user]);
+  }, [user?.uid]);
 
   // Fetch total representatives count for company owners
   useEffect(() => {
@@ -143,15 +135,16 @@ export default function Dashboard() {
     }
 
     fetchTotalRepresentatives()
-  }, [user])
+  }, [user?.uid, user?.role])
 
   const fetchJobInvitations = useCallback(async () => {
-    if (!user || user.role !== "student") return;
+    const currentUser = authUtils.getCurrentUser();
+    if (!currentUser || currentUser.role !== "student") return;
 
     try {
       setLoadingInvitations(true);
       const response = await fetch(
-        `http://localhost:5000/api/job-invitations/received?userId=${user.uid}`,
+        `${API_URL}/api/job-invitations/received?userId=${currentUser.uid}`,
         {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -169,18 +162,17 @@ export default function Dashboard() {
     } finally {
       setLoadingInvitations(false);
     }
-  }, [user]);
+  }, []);
 
   // Fetch job invitations for students
   useEffect(() => {
-    if (user && user.role === "student") {
+    if (user?.uid && user?.role === "student") {
       fetchJobInvitations();
-      
-      // Poll for new invitations every 30 seconds
+
       const interval = setInterval(fetchJobInvitations, 30000);
       return () => clearInterval(interval);
     }
-  }, [user, fetchJobInvitations]);
+  }, [user?.uid, user?.role, fetchJobInvitations]);
 
   // Fetch dashboard statistics
   useEffect(() => {

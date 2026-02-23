@@ -56,11 +56,12 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" }));
 
-// Rate limiting - 100 requests per 15 minutes per IP
+// Rate limiting: per-IP. Higher limit when not production (dev or NODE_ENV unset) to avoid 429s from polling and booth/dashboard loads.
 if (process.env.NODE_ENV !== "test") {
+  const limit = process.env.NODE_ENV === "production" ? 100 : 1000;
   app.use(rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: limit,
     standardHeaders: true,
     legacyHeaders: false,
   }));
