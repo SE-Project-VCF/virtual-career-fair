@@ -11,35 +11,20 @@ on:
 jobs:
   frontend:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Setup Node
         uses: actions/setup-node@v4
-
+        with:
+          node-version: 18
       - name: Install & Build
         run: |
           cd frontend
           npm ci
           npm run build
-
-      - name: Run tests (if present)
-        run: |
-          cd frontend
-          npm test --if-present
-
-      # SonarCloud scan (this is what makes branches appear in SonarCloud)
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.branch.name=${{ github.head_ref || github.ref_name }}
       - name: Run tests with coverage
         run: |
           cd frontend
