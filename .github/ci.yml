@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-<<<<<<< austinmosercs-ux-patch-1
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -21,21 +20,12 @@ jobs:
 
       - name: Setup Node
         uses: actions/setup-node@v4
-=======
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
->>>>>>> dev
-        with:
-          node-version: 18
 
       - name: Install & Build
         run: |
           cd frontend
           npm ci
           npm run build
-<<<<<<< austinmosercs-ux-patch-1
 
       - name: Run tests (if present)
         run: |
@@ -50,7 +40,6 @@ jobs:
         with:
           args: >
             -Dsonar.branch.name=${{ github.head_ref || github.ref_name }}
-=======
       - name: Run tests with coverage
         run: |
           cd frontend
@@ -105,4 +94,3 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
->>>>>>> dev
