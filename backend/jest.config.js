@@ -1,0 +1,10 @@
+module.exports = {
+  testEnvironment: "node",
+  roots: ["<rootDir>/__tests__"],
+  testMatch: ["**/*.test.js"],
+  setupFiles: ["<rootDir>/jest.setup.js"],
+  clearMocks: true,
+  collectCoverageFrom: ["server.js", "helpers.js"],
+  coverageDirectory: "coverage",
+  coverageReporters: ["text", "lcov"],
+};

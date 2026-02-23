@@ -1,7 +1,6 @@
-"use client"
-
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { trackBoothView } from "../utils/boothHistory";
 import {
   Container,
   Box,
@@ -16,8 +15,10 @@ import {
   Divider,
   Link,
 } from "@mui/material"
-import { doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
+import { authUtils } from "../utils/auth"
+import { evaluateFairStatus } from "../utils/fairStatus"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -28,6 +29,8 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import { API_URL } from "../config"
+import NotificationBell from "../components/NotificationBell"
 
 interface Booth {
   id: string
@@ -44,6 +47,17 @@ interface Booth {
   contactName: string
   contactEmail: string
   contactPhone?: string
+  companyId?: string
+}
+
+interface Job {
+  id: string
+  companyId: string
+  name: string
+  description: string
+  majorsAssociated: string
+  applicationLink: string | null
+  createdAt: number | null
 }
 
 const INDUSTRY_LABELS: Record<string, string> = {
@@ -61,9 +75,55 @@ const INDUSTRY_LABELS: Record<string, string> = {
 export default function BoothView() {
   const navigate = useNavigate()
   const { boothId } = useParams<{ boothId: string }>()
+  const user = authUtils.getCurrentUser()
   const [booth, setBooth] = useState<Booth | null>(null)
+  const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
+  const [startingChat, setStartingChat] = useState(false)
+
+  // Track if component is mounted to prevent setState after unmount
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const handleStartChat = async () => {
+    try {
+      if (!booth || startingChat) return;
+      if (!isMountedRef.current) return;
+      setStartingChat(true);
+
+      // Query Firestore for representative user
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("email", "==", booth.contactEmail));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        console.warn("Chat: representative not found");
+        return;
+      }
+
+      const repDoc = snap.docs[0];
+      const repData = repDoc.data();
+      const representativeId = repData.uid;
+
+      // Navigate to chat page, passing repId so ChatPage can auto-create/select DM
+      navigate("/dashboard/chat", {
+        state: { repId: representativeId },
+      });
+    } catch (err) {
+      console.error("Chat: failed to initialize", err);
+    } finally {
+      if (isMountedRef.current) {
+        setStartingChat(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!boothId) {
@@ -77,10 +137,17 @@ export default function BoothView() {
     if (!boothId) return
 
     try {
+      if (!isMountedRef.current) return
       setLoading(true)
       setError("")
 
+      // Check if fair is live
+      const status = await evaluateFairStatus()
+      if (!isMountedRef.current) return
+      const fairIsLive = status.isLive
+
       const boothDoc = await getDoc(doc(db, "booths", boothId))
+      if (!isMountedRef.current) return
 
       if (!boothDoc.exists()) {
         setError("Booth not found")
@@ -88,15 +155,127 @@ export default function BoothView() {
         return
       }
 
-      setBooth({
+      const boothData = {
         id: boothDoc.id,
         ...boothDoc.data(),
-      } as Booth)
+      } as Booth
+
+      // If fair is not live, check if user has access
+      if (!fairIsLive) {
+        // Only company owners and representatives can view booths when not live
+        if (!user || (user.role !== "companyOwner" && user.role !== "representative")) {
+          setError("The career fair is not currently live. You can only view your own booth.")
+          setLoading(false)
+          return
+        }
+
+        // Check if this booth belongs to the user's company
+        let hasAccess = false
+        const companiesRef = collection(db, "companies")
+
+        if (user.role === "companyOwner") {
+          // Get all companies owned by this user
+          const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+          const ownerSnapshot = await getDocs(ownerQuery)
+          ownerSnapshot.forEach((doc) => {
+            const companyData = doc.data()
+            if (companyData.boothId === boothId) {
+              hasAccess = true
+            }
+          })
+        } else if (user.role === "representative" && user.companyId) {
+          // Check if the representative's company owns this booth
+          const companyDoc = await getDoc(doc(db, "companies", user.companyId))
+          if (companyDoc.exists()) {
+            const companyData = companyDoc.data()
+            if (companyData.boothId === boothId) {
+              hasAccess = true
+            }
+          }
+        }
+
+        if (!hasAccess) {
+          if (isMountedRef.current) {
+            setError("You don't have access to view this booth. The career fair is not currently live.")
+            setLoading(false)
+          }
+          return
+        }
+      }
+
+      if (!isMountedRef.current) return
+      setBooth(boothData)
+
+      // ✅ Track booth views for the student's History tab
+      // We only record history for authenticated students.
+      // (Company reps/owners viewing booths shouldn't clutter student history.)
+      try {
+        if (user?.uid && user.role === "student") {
+          await trackBoothView(user.uid, {
+            boothId: boothData.id,
+            companyName: boothData.companyName,
+            industry: boothData.industry,
+            location: boothData.location,
+            logoUrl: boothData.logoUrl,
+          });
+        }
+      } catch (err) {
+        // If history fails, we don't want the whole Booth page to fail.
+        console.warn("History tracking failed:", err);
+      }
+
+
+      // Get companyId from booth or look it up from companies
+      let companyId = boothData.companyId
+      if (!companyId) {
+        // Try to find companyId by looking up companies with this boothId
+        const companiesRef = collection(db, "companies")
+        const companiesSnapshot = await getDocs(companiesRef)
+        companiesSnapshot.forEach((doc) => {
+          const companyData = doc.data()
+          if (companyData.boothId === boothId) {
+            companyId = doc.id
+          }
+        })
+      }
+
+      // Fetch jobs for this company if companyId is available
+      if (companyId) {
+        fetchJobs(companyId)
+      }
     } catch (err) {
       console.error("Error fetching booth:", err)
-      setError("Failed to load booth")
+      if (isMountedRef.current) {
+        setError("Failed to load booth")
+      }
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+    }
+  }
+
+  const fetchJobs = async (companyId: string) => {
+    try {
+      if (!isMountedRef.current) return
+      setLoadingJobs(true)
+      const response = await fetch(`${API_URL}/api/jobs?companyId=${companyId}`)
+      if (!isMountedRef.current) return
+      if (!response.ok) {
+        throw new Error("Failed to fetch jobs")
+      }
+      const data = await response.json()
+      if (!isMountedRef.current) return
+      setJobs(data.jobs || [])
+    } catch (err) {
+      console.error("Error fetching jobs:", err)
+      if (isMountedRef.current) {
+        setError("Failed to load job postings.")
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoadingJobs(false)
+      }
     }
   }
 
@@ -156,6 +335,7 @@ export default function BoothView() {
               </Typography>
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <NotificationBell />
               <ProfileMenu />
             </Box>
           </Box>
@@ -241,30 +421,70 @@ export default function BoothView() {
                   </Typography>
                 </Box>
 
-                {/* Hiring Information */}
-                <Box sx={{ mb: 4 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
-                    <WorkIcon sx={{ color: "#388560" }} />
-                    Open Positions: {booth.openPositions}
-                  </Typography>
-                  {booth.hiringFor && (
-                    <Box
-                      sx={{
-                        p: 2,
-                        bgcolor: "rgba(56, 133, 96, 0.05)",
-                        borderRadius: 2,
-                        border: "1px solid rgba(56, 133, 96, 0.2)",
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, color: "#388560" }}>
-                        Currently Hiring For:
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
-                        {booth.hiringFor}
-                      </Typography>
+                {/* Job Postings */}
+                {loadingJobs ? (
+                  <Box sx={{ mb: 4, display: "flex", justifyContent: "center", alignItems: "center", py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : jobs.length > 0 ? (
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
+                      <WorkIcon sx={{ color: "#388560" }} />
+                      Job Openings ({jobs.length})
+                    </Typography>
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      {jobs.map((job) => (
+                        <Card
+                          key={job.id}
+                          sx={{
+                            border: "1px solid rgba(56, 133, 96, 0.2)",
+                            borderRadius: 2,
+                            transition: "box-shadow 0.2s",
+                            "&:hover": {
+                              boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                            },
+                          }}
+                        >
+                          <CardContent sx={{ p: 3 }}>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
+                                {job.name}
+                              </Typography>
+                              {job.applicationLink && (
+                                <Button
+                                  variant="contained"
+                                  href={job.applicationLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  sx={{
+                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                    "&:hover": {
+                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                                    },
+                                  }}
+                                >
+                                  Apply Now
+                                </Button>
+                              )}
+                            </Box>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
+                              {job.description}
+                            </Typography>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                                Required Skills:
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {job.majorsAssociated}
+                              </Typography>
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </Box>
-                  )}
-                </Box>
+                  </Box>
+                ) : null}
+
 
                 {/* Links */}
                 {(booth.website || booth.careersPage) && (
@@ -357,6 +577,32 @@ export default function BoothView() {
                     </Link>
                   </Box>
 
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+
+
+                    {/* ✅ INSERT THIS BUTTON RIGHT HERE */}
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      disabled={startingChat}
+                      onClick={handleStartChat}
+                      sx={{
+                        mt: 2,
+                        background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                        textTransform: "none",
+                        fontWeight: 600,
+                        borderRadius: 2,
+                        "&:hover": {
+                          background: "linear-gradient(135deg, #2d6b4d 0%, #1f523b 100%)",
+                        },
+                      }}
+                    >
+                      {startingChat ? "Connecting..." : "Message Representative"}
+                    </Button>
+
+                  </Box>
+
+
                   {booth.contactPhone && (
                     <Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -401,10 +647,10 @@ export default function BoothView() {
                   <WorkIcon sx={{ fontSize: 32, color: "#388560" }} />
                 </Box>
                 <Typography variant="h4" sx={{ fontWeight: 700, color: "#388560", mb: 1 }}>
-                  {booth.openPositions}
+                  {jobs.length}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Open Position{booth.openPositions !== 1 ? "s" : ""}
+                  Open Position{jobs.length !== 1 ? "s" : ""}
                 </Typography>
               </CardContent>
             </Card>
