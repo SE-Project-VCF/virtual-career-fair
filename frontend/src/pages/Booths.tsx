@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import {
@@ -15,8 +13,9 @@ import {
   Chip,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { collection, getDocs, query, orderBy } from "firebase/firestore"
+import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
+import { evaluateFairStatus } from "../utils/fairStatus"
 import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
@@ -24,6 +23,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import WorkIcon from "@mui/icons-material/Work"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import ProfileMenu from "./ProfileMenu"
+import NotificationBell from "../components/NotificationBell"
 
 interface Booth {
   id: string
@@ -34,6 +34,7 @@ interface Booth {
   description: string
   logoUrl?: string
   openPositions: number
+  companyId?: string
   hiringFor?: string
   website?: string
   careersPage?: string
@@ -54,34 +55,163 @@ const INDUSTRY_LABELS: Record<string, string> = {
   other: "Other",
 }
 
+// Firestore 'in' queries support a maximum of 30 values per query
+const FIRESTORE_IN_QUERY_LIMIT = 30
+
 export default function Booths() {
   const navigate = useNavigate()
   const user = authUtils.getCurrentUser()
   const [booths, setBooths] = useState<Booth[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [isLive, setIsLive] = useState(false)
+  const [scheduleName, setScheduleName] = useState<string | null>(null)
+  const [scheduleDescription, setScheduleDescription] = useState<string | null>(null)
+  const [jobCounts, setJobCounts] = useState<Record<string, number>>({})
+  const [totalJobs, setTotalJobs] = useState(0)
 
   useEffect(() => {
     fetchBooths()
   }, [])
+
+  const fetchJobCounts = async (companyIds: string[]) => {
+    try {
+      if (companyIds.length === 0) return
+
+      const counts: Record<string, number> = {}
+      let total = 0
+
+      // Firestore "in" queries support max FIRESTORE_IN_QUERY_LIMIT values, batch if needed
+      const batches = []
+      for (let i = 0; i < companyIds.length; i += FIRESTORE_IN_QUERY_LIMIT) {
+        batches.push(companyIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT))
+      }
+
+      for (const batch of batches) {
+        const q = query(collection(db, "jobs"), where("companyId", "in", batch))
+        const jobsSnapshot = await getDocs(q)
+        jobsSnapshot.forEach((doc) => {
+          const companyId = doc.data().companyId
+          if (companyId) {
+            counts[companyId] = (counts[companyId] || 0) + 1
+            total++
+          }
+        })
+      }
+
+      setJobCounts(counts)
+      setTotalJobs(total)
+    } catch (err) {
+      console.error("Error fetching job counts:", err)
+    }
+  }
 
   const fetchBooths = async () => {
     try {
       setLoading(true)
       setError("")
 
-      const q = query(collection(db, "booths"), orderBy("companyName"))
-      const querySnapshot = await getDocs(q)
+      // Check if fair is live
+      const status = await evaluateFairStatus()
+      const fairIsLive = status.isLive
+      setIsLive(status.isLive)
+      setScheduleName(status.scheduleName)
+      setScheduleDescription(status.scheduleDescription)
 
-      const boothsList: Booth[] = []
-      querySnapshot.forEach((doc) => {
-        boothsList.push({
-          id: doc.id,
-          ...doc.data(),
-        } as Booth)
-      })
+      let boothsList: Booth[] = []
+
+      if (fairIsLive) {
+        // Fair is live - show all booths
+        const q = query(collection(db, "booths"), orderBy("companyName"))
+        const querySnapshot = await getDocs(q)
+
+        // Also fetch companies to map boothId to companyId
+        const companiesSnapshot = await getDocs(collection(db, "companies"))
+        const boothIdToCompanyId: Record<string, string> = {}
+        companiesSnapshot.forEach((companyDoc) => {
+          const companyData = companyDoc.data()
+          if (companyData.boothId) {
+            boothIdToCompanyId[companyData.boothId] = companyDoc.id
+          }
+        })
+
+        querySnapshot.forEach((doc) => {
+          const boothData = doc.data()
+          const companyId = boothData.companyId || boothIdToCompanyId[doc.id] || undefined
+          boothsList.push({
+            id: doc.id,
+            ...boothData,
+            companyId,
+          } as Booth)
+        })
+      } else {
+        // Fair is not live - only show booths for company owners/representatives
+        if (user && (user.role === "companyOwner" || user.role === "representative")) {
+          // Get user's company IDs
+          const companiesRef = collection(db, "companies")
+          let companyIds: string[] = []
+
+          if (user.role === "companyOwner") {
+            // Get all companies owned by this user
+            const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+            const ownerSnapshot = await getDocs(ownerQuery)
+            ownerSnapshot.forEach((doc) => {
+              companyIds.push(doc.id)
+            })
+          } else if (user.role === "representative" && user.companyId) {
+            // Get the company the representative is linked to
+            companyIds.push(user.companyId)
+          }
+
+          // Get booths for these companies
+          if (companyIds.length > 0) {
+            // Batch fetch all companies to avoid N+1 queries
+            const companyDocsPromises = companyIds.map(companyId => getDoc(doc(db, "companies", companyId)))
+            const companyDocs = await Promise.all(companyDocsPromises)
+
+            // Build mapping of boothId -> companyId
+            const boothIdToCompanyIdMap: Record<string, string> = {}
+            const boothIds: string[] = []
+
+            companyDocs.forEach((companyDoc, index) => {
+              if (companyDoc.exists()) {
+                const companyData = companyDoc.data()
+                if (companyData.boothId) {
+                  boothIds.push(companyData.boothId)
+                  boothIdToCompanyIdMap[companyData.boothId] = companyIds[index]
+                }
+              }
+            })
+
+            // Batch fetch all booths
+            if (boothIds.length > 0) {
+              const boothDocsPromises = boothIds.map(boothId => getDoc(doc(db, "booths", boothId)))
+              const boothDocs = await Promise.all(boothDocsPromises)
+
+              boothDocs.forEach((boothDoc) => {
+                if (boothDoc.exists()) {
+                  const boothData = boothDoc.data()
+                  const boothCompanyId = boothData.companyId || boothIdToCompanyIdMap[boothDoc.id]
+                  boothsList.push({
+                    id: boothDoc.id,
+                    ...boothData,
+                    companyId: boothCompanyId,
+                  } as Booth)
+                }
+              })
+            }
+          }
+        }
+        // If user is student or not logged in, they see no booths when fair is not live
+      }
 
       setBooths(boothsList)
+
+      // Fetch job counts for the loaded booths' companies
+      const companyIds = boothsList
+        .map((b) => b.companyId)
+        .filter((id): id is string => !!id)
+      fetchJobCounts([...new Set(companyIds)])
     } catch (err) {
       console.error("Error fetching booths:", err)
       setError("Failed to load booths")
@@ -90,7 +220,13 @@ export default function Booths() {
     }
   }
 
-  const totalPositions = booths.reduce((sum, booth) => sum + (booth.openPositions || 0), 0)
+  // Get companyId for each booth and count jobs
+  const getJobCountForBooth = (booth: Booth): number => {
+    if (booth.companyId) {
+      return jobCounts[booth.companyId] || 0
+    }
+    return 0
+  }
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
@@ -115,21 +251,45 @@ export default function Booths() {
             </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               {user && (
-                <Button
-                  variant="outlined"
-                  onClick={() => navigate("/dashboard")}
-                  sx={{
-                    color: "white",
-                    borderColor: "white",
-                    "&:hover": {
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  {/* Dashboard button (existing) */}
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate("/dashboard")}
+                    sx={{
+                      color: "white",
                       borderColor: "white",
-                      bgcolor: "rgba(255,255,255,0.1)",
-                    },
-                  }}
-                >
-                  Dashboard
-                </Button>
+                      "&:hover": {
+                        borderColor: "white",
+                        bgcolor: "rgba(255,255,255,0.1)",
+                      },
+                    }}
+                  >
+                    Dashboard
+                  </Button>
+
+                  {/* Booth History button (NEW) - only for students, ALWAYS enabled */}
+                  {user.role === "student" && (
+                    <Button
+                      variant="outlined"
+                      onClick={() => navigate("/dashboard/booth-history")}
+                      sx={{
+                        color: "white",
+                        borderColor: "white",
+                        "&:hover": {
+                          borderColor: "white",
+                          bgcolor: "rgba(255,255,255,0.1)",
+                        },
+                      }}
+                    >
+                      Booth History
+                    </Button>
+                  )}
+                </Box>
               )}
+
+              <NotificationBell />
+
               <ProfileMenu />
             </Box>
           </Box>
@@ -137,6 +297,31 @@ export default function Booths() {
       </Box>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        {/* Fair Name and Description Banner - Show when active */}
+        {isLive && (scheduleName || scheduleDescription) && (
+          <Alert
+            severity="success"
+            sx={{
+              mb: 4,
+              borderRadius: 2,
+              bgcolor: "rgba(56, 133, 96, 0.1)",
+              border: "1px solid rgba(56, 133, 96, 0.3)",
+            }}
+          >
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
+              {scheduleName || "Career Fair is LIVE"}
+            </Typography>
+            {scheduleDescription && (
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                {scheduleDescription}
+              </Typography>
+            )}
+            <Typography variant="body2">
+              Browse and explore all company booths at the career fair.
+            </Typography>
+          </Alert>
+        )}
+
         {/* Stats Bar */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid size={{ xs: 12, md: 4 }}>
@@ -188,7 +373,7 @@ export default function Booths() {
                   </Box>
                   <Box>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
-                      {totalPositions}
+                      {totalJobs}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       Open Positions
@@ -214,14 +399,16 @@ export default function Booths() {
                       justifyContent: "center",
                     }}
                   >
-                    <EventIcon sx={{ fontSize: 28, color: "#388560" }} />
+                    <EventIcon sx={{ fontSize: 28, color: isLive ? "#388560" : "#ccc" }} />
                   </Box>
                   <Box>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
-                      Live Now
+                    <Typography variant="h4" sx={{ fontWeight: 700, color: isLive ? "#388560" : "#ccc" }}>
+                      {isLive ? (scheduleName || "Live Now") : "Not Live"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Event Status
+                      {isLive && scheduleDescription
+                        ? scheduleDescription
+                        : "Event Status"}
                     </Typography>
                   </Box>
                 </Box>
@@ -244,10 +431,12 @@ export default function Booths() {
           <Card sx={{ textAlign: "center", p: 6, border: "1px solid rgba(56, 133, 96, 0.3)" }}>
             <BusinessIcon sx={{ fontSize: 80, color: "#ccc", mb: 2 }} />
             <Typography variant="h5" sx={{ mb: 2, color: "text.secondary" }}>
-              No booths yet
+              {isLive ? "No booths available" : "Career Fair Not Live"}
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Companies are setting up their booths. Check back soon!
+              {isLive
+                ? "Companies are setting up their booths. Check back soon!"
+                : "The career fair is not currently live. You can only view and edit your own booth."}
             </Typography>
           </Card>
         ) : (
@@ -360,7 +549,7 @@ export default function Booths() {
                         }}
                       >
                         <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
-                          {booth.openPositions} open position{booth.openPositions !== 1 ? "s" : ""}
+                          {getJobCountForBooth(booth)} open position{getJobCountForBooth(booth) !== 1 ? "s" : ""}
                         </Typography>
                         <Button
                           variant="outlined"

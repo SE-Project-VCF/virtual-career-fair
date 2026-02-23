@@ -8,11 +8,31 @@ import {
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { API_URL } from "../config";
+
+async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
+  try {
+    await fetch(`${API_URL}/api/sync-stream-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uid,
+        email,
+        firstName: firstName || "",
+        lastName: lastName || "",
+      }),
+    });
+  } catch (err) {
+    console.error("Stream sync failed:", err);
+    throw new Error("Failed to sync chat user. Chat features may not work properly.");
+  }
+}
+
 
 export interface User {
   uid: string;
   email: string;
-  role: "student" | "representative" | "company" | "companyOwner";
+  role: "student" | "representative" | "company" | "companyOwner" | "administrator";
   [key: string]: any;
 }
 export const authUtils = {
@@ -22,7 +42,7 @@ export const authUtils = {
   registerUser: async (
     email: string,
     password: string,
-    role: "student" | "representative" | "companyOwner",
+    role: "student" | "representative" | "companyOwner" | "administrator",
     additionalData?: any
   ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
@@ -48,6 +68,13 @@ export const authUtils = {
 
       // Only send verification email after successful registration
       await sendEmailVerification(user);
+
+      await syncStreamUser(
+        user.uid,
+        email,
+        userData.firstName,
+        userData.lastName
+      );
 
       return { success: true, needsVerification: true };
     } catch (err: any) {
@@ -87,6 +114,14 @@ export const authUtils = {
 
       const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      await syncStreamUser(
+        user.uid,
+        user.email!,
+        userData.firstName,
+        userData.lastName
+      );
+
       return { success: true };
     } catch (err: any) {
       console.error("Error logging in:", err);
@@ -129,6 +164,14 @@ export const authUtils = {
 
       const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+      await syncStreamUser(
+        user.uid,
+        user.email!,
+        userData.firstName,
+        userData.lastName
+      );
+
       return { success: true };
     } catch (err: any) {
       console.error("Error logging in:", err);
@@ -136,63 +179,99 @@ export const authUtils = {
     }
   },
 
-  // ------------------------------
-  // ✅ Google Sign-In (creates user + company if missing)
-  // ------------------------------
+  // --------------------------------------------------------
+  // Google Sign-In (with optional creation)
+  // --------------------------------------------------------
   loginWithGoogle: async (
-    role: "student" | "representative" | "companyOwner"
-  ): Promise<{ success: boolean; error?: string }> => {
+    role: "student" | "representative" | "companyOwner" | "administrator",
+    createIfMissing: boolean
+  ): Promise<{
+    success: boolean;
+    exists?: boolean;
+    needsProfile?: boolean;
+    role?: string;
+    error?: string;
+  }> => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
       const userRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userRef);
+      const userSnap = await getDoc(userRef);
 
-      // --- Case 1: Existing user ---
-      if (userDoc.exists()) {
-        const existingUser = userDoc.data();
-        localStorage.setItem(
-          "currentUser",
-          JSON.stringify({
-            uid: user.uid,
-            email: user.email,
-            role: existingUser.role,
-            provider: "google",
-            ...existingUser,
-          })
+      // --------------------------------------------------------
+      // EXISTING USER FOUND
+      // --------------------------------------------------------
+      if (userSnap.exists()) {
+        const existingData = userSnap.data();
+
+        if (createIfMissing) {
+          // ❌ REGISTER SCREEN → blocking login here
+          return {
+            success: false,
+            exists: true,
+            error: "An account already exists with this Google email. Please sign in instead.",
+          };
+        }
+
+        // ✔ LOGIN SCREEN → allow login
+        const currentUser = {
+          uid: user.uid,
+          email: user.email!,
+          role: existingData.role,
+          ...existingData,
+        };
+
+        localStorage.setItem("currentUser", JSON.stringify(currentUser));
+
+        await syncStreamUser(
+          user.uid,
+          user.email!,
+          existingData.firstName,
+          existingData.lastName
         );
-        return { success: true };
+
+        return {
+          success: true,
+          exists: true,
+          needsProfile: false,
+          role: existingData.role,
+        };
       }
 
-      // --- Case 2: New user (create record) ---
-      // Create new user record in Firestore
-      await setDoc(userRef, {
-        uid: user.uid,
-        email: user.email,
+
+      // --------------------------------------------------------
+      // CASE 2: USER DOES NOT EXIST, AND THIS IS LOGIN MODE
+      // --------------------------------------------------------
+      if (!createIfMissing) {
+        return {
+          success: false,
+          exists: false,
+          needsProfile: false,
+          error: "No account found. Please register first.",
+        };
+      }
+
+      // --------------------------------------------------------
+      // CASE 3: USER DOES NOT EXIST — REGISTRATION MODE
+      // --------------------------------------------------------
+      
+      // Tell frontend to collect profile info
+      return {
+        success: true,
+        exists: false,
+        needsProfile: true,
         role,
-        provider: "google",
-        emailVerified: user.emailVerified,
-        createdAt: new Date().toISOString(),
-      });
+      };
 
-      // Store user in localStorage
-      localStorage.setItem(
-        "currentUser",
-        JSON.stringify({
-          uid: user.uid,
-          email: user.email,
-          role,
-          provider: "google",
-        })
-      );
-
-      return { success: true };
     } catch (err: any) {
       console.error("Google Sign-In failed:", err);
       return { success: false, error: err.message };
     }
   },
+
+
+
 
   // ------------------------------
   // Verify + Auto-login helper
@@ -242,7 +321,12 @@ export const authUtils = {
 
   getCurrentUser: (): User | null => {
     const userStr = localStorage.getItem("currentUser");
-    return userStr ? JSON.parse(userStr) : null;
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
   },
 
   isAuthenticated: (): boolean => {
@@ -259,7 +343,7 @@ export const authUtils = {
     try {
       const companyRef = doc(collection(db, "companies"));
       const companyId = companyRef.id;
-      const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
 
       await setDoc(companyRef, {
         companyId,
@@ -301,10 +385,10 @@ export const authUtils = {
       // Find company with matching invite code
       const companiesRef = collection(db, "companies");
       const companiesSnapshot = await getDocs(companiesRef);
-      
+
       let companyDoc: any = null;
       let companyId: string | null = null;
-      
+
       companiesSnapshot.forEach((doc) => {
         const data = doc.data();
         if (data.inviteCode === inviteCode.toUpperCase()) {
@@ -320,7 +404,7 @@ export const authUtils = {
       // Check if user is already linked to this company
       const userRef = doc(db, "users", userId);
       const userDoc = await getDoc(userRef);
-      
+
       if (userDoc.exists()) {
         const userData = userDoc.data();
         if (userData.companyId === companyId) {
@@ -328,19 +412,12 @@ export const authUtils = {
         }
       }
 
-      // Add user to company's representativeIDs array (if not already there)
+      // Add user to company's representativeIDs array
+      // arrayUnion is atomic and won't add duplicates, so no need to check first
       const companyRef = doc(db, "companies", companyId);
-      const companyData = await getDoc(companyRef);
-      
-      if (companyData.exists()) {
-        const currentReps = companyData.data().representativeIDs || [];
-        if (!currentReps.includes(userId)) {
-          // Use arrayUnion to add the user ID - this is safer and works better with security rules
-          await updateDoc(companyRef, {
-            representativeIDs: arrayUnion(userId),
-          });
-        }
-      }
+      await updateDoc(companyRef, {
+        representativeIDs: arrayUnion(userId),
+      });
 
       // Update user document with companyId and companyName
       await setDoc(userRef, {
@@ -361,10 +438,10 @@ export const authUtils = {
         );
       }
 
-      return { 
-        success: true, 
-        companyId, 
-        companyName: companyDoc.companyName 
+      return {
+        success: true,
+        companyId,
+        companyName: companyDoc.companyName
       };
     } catch (err: any) {
       console.error("Error linking representative to company:", err);
@@ -383,7 +460,7 @@ export const authUtils = {
       // Verify the company exists and user is the owner
       const companyRef = doc(db, "companies", companyId);
       const companyDoc = await getDoc(companyRef);
-      
+
       if (!companyDoc.exists()) {
         return { success: false, error: "Company not found." };
       }
@@ -441,6 +518,77 @@ export const authUtils = {
     } catch (err: any) {
       console.error("Error deleting company:", err);
       return { success: false, error: err.message };
+    }
+  },
+
+  // ------------------------------
+  // Update Company Invite Code (for company owners)
+  // ------------------------------
+  updateInviteCode: async (
+    companyId: string,
+    ownerId: string,
+    newInviteCode?: string
+  ): Promise<{ success: boolean; error?: string; inviteCode?: string }> => {
+    try {
+      // Verify the company exists and user is the owner
+      const companyRef = doc(db, "companies", companyId);
+      const companyDoc = await getDoc(companyRef);
+
+      if (!companyDoc.exists()) {
+        return { success: false, error: "Company not found" };
+      }
+
+      const companyData = companyDoc.data();
+      if (companyData.ownerId !== ownerId) {
+        return { success: false, error: "Only the company owner can update the invite code" };
+      }
+
+      // Generate new invite code if not provided, or validate provided one
+      let inviteCode: string;
+      if (newInviteCode) {
+        // Validate custom invite code (alphanumeric, 4-20 characters)
+        const trimmedCode = newInviteCode.trim().toUpperCase();
+        if (!/^[A-Z0-9]{4,20}$/.test(trimmedCode)) {
+          return {
+            success: false,
+            error: "Invite code must be 4-20 characters and contain only letters and numbers"
+          };
+        }
+        inviteCode = trimmedCode;
+      } else {
+        // Generate random 8-character code
+        inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+      }
+
+      // Use backend API to ensure atomic update and prevent race conditions
+      const currentUser = auth.currentUser;
+      const idToken = await currentUser?.getIdToken();
+      const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5002"}/api/update-invite-code`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          companyId,
+          userId: currentUser?.uid,
+          newInviteCode: inviteCode,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { success: false, error: data.error || "Failed to update invite code" };
+      }
+
+      // Backend returns the final invite code (useful if it was generated)
+      inviteCode = data.inviteCode;
+
+      return { success: true, inviteCode };
+    } catch (err: any) {
+      console.error("Error updating invite code:", err);
+      return { success: false, error: err.message || "Failed to update invite code" };
     }
   },
 };

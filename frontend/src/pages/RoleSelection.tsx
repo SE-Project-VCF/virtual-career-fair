@@ -1,5 +1,3 @@
-"use client"
-
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import PersonAddIcon from "@mui/icons-material/PersonAdd"
 import LoginIcon from "@mui/icons-material/Login"

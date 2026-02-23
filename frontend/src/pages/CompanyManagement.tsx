@@ -1,13 +1,11 @@
-"use client"
-
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { 
-  Container, 
-  Box, 
-  Typography, 
-  Button, 
-  Card, 
+import {
+  Container,
+  Box,
+  Typography,
+  Button,
+  Card,
   CardContent,
   TextField,
   Alert,
@@ -30,6 +28,10 @@ import PeopleIcon from "@mui/icons-material/People"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ProfileMenu from "./ProfileMenu"
 import DeleteIcon from "@mui/icons-material/Delete"
+import EditIcon from "@mui/icons-material/Edit"
+import RefreshIcon from "@mui/icons-material/Refresh"
+import SaveIcon from "@mui/icons-material/Save"
+import CancelIcon from "@mui/icons-material/Cancel"
 
 interface Company {
   id: string
@@ -53,6 +55,9 @@ export default function CompanyManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [editingInviteCode, setEditingInviteCode] = useState<string | null>(null)
+  const [editedInviteCode, setEditedInviteCode] = useState("")
+  const [updatingInviteCode, setUpdatingInviteCode] = useState(false)
 
   // Memoize user ID and role to prevent unnecessary re-renders
   const userId = useMemo(() => user?.uid, [user?.uid])
@@ -68,14 +73,14 @@ export default function CompanyManagement() {
     try {
       setLoading(true)
       setError("")
-      
+
       // Query companies where ownerId matches current user
       const q = query(
         collection(db, "companies"),
         where("ownerId", "==", userId)
       )
       const querySnapshot = await getDocs(q)
-      
+
       const companiesList: Company[] = []
       querySnapshot.forEach((doc) => {
         companiesList.push({
@@ -83,7 +88,7 @@ export default function CompanyManagement() {
           ...doc.data()
         } as Company)
       })
-      
+
       setCompanies(companiesList)
     } catch (err) {
       console.error("Error fetching companies:", err)
@@ -119,9 +124,9 @@ export default function CompanyManagement() {
     try {
       setCreating(true)
       setError("")
-      
+
       const result = await authUtils.createCompany(newCompanyName.trim(), userId ?? "")
-      
+
       if (result.success) {
         setSuccess(`Company "${newCompanyName}" created successfully!`)
         setNewCompanyName("")
@@ -159,9 +164,9 @@ export default function CompanyManagement() {
     try {
       setDeleting(true)
       setError("")
-      
+
       const result = await authUtils.deleteCompany(companyToDelete.id, userId)
-      
+
       if (result.success) {
         setSuccess(`Company "${companyToDelete.companyName}" has been deleted successfully.`)
         setDeleteDialogOpen(false)
@@ -176,6 +181,62 @@ export default function CompanyManagement() {
       setError("Failed to delete company")
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleRegenerateInviteCode = async (companyId: string) => {
+    if (!userId) return
+
+    try {
+      setUpdatingInviteCode(true)
+      setError("")
+
+      const result = await authUtils.updateInviteCode(companyId, userId)
+
+      if (result.success && result.inviteCode) {
+        setSuccess("Invite code regenerated successfully!")
+        fetchCompanies() // Refresh the list
+        setTimeout(() => setSuccess(""), 3000)
+      } else {
+        setError(result.error || "Failed to regenerate invite code")
+      }
+    } catch (err) {
+      console.error("Error regenerating invite code:", err)
+      setError("Failed to regenerate invite code")
+    } finally {
+      setUpdatingInviteCode(false)
+    }
+  }
+
+  const handleSaveInviteCode = async (companyId: string) => {
+    if (!userId) return
+
+    const trimmedCode = editedInviteCode.trim()
+    if (!trimmedCode || trimmedCode.length < 4 || trimmedCode.length > 20) {
+      setError("Invite code must be 4-20 characters")
+      return
+    }
+
+    try {
+      setUpdatingInviteCode(true)
+      setError("")
+
+      const result = await authUtils.updateInviteCode(companyId, userId, trimmedCode)
+
+      if (result.success && result.inviteCode) {
+        setSuccess("Invite code updated successfully!")
+        setEditingInviteCode(null)
+        setEditedInviteCode("")
+        fetchCompanies() // Refresh the list
+        setTimeout(() => setSuccess(""), 3000)
+      } else {
+        setError(result.error || "Failed to update invite code")
+      }
+    } catch (err) {
+      console.error("Error updating invite code:", err)
+      setError("Failed to update invite code")
+    } finally {
+      setUpdatingInviteCode(false)
     }
   }
 
@@ -294,32 +355,94 @@ export default function CompanyManagement() {
                     </Box>
 
                     <Box sx={{ mb: 3 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Invite Code
-                      </Typography>
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Invite Code
+                        </Typography>
+                        {editingInviteCode !== company.id ? (
+                          <Box sx={{ display: "flex", gap: 0.5 }}>
+                            <Tooltip title="Regenerate invite code">
+                              <IconButton
+                                onClick={() => handleRegenerateInviteCode(company.id)}
+                                size="small"
+                                disabled={updatingInviteCode}
+                                sx={{ color: "#388560" }}
+                              >
+                                <RefreshIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Edit invite code">
+                              <IconButton
+                                onClick={() => {
+                                  setEditingInviteCode(company.id)
+                                  setEditedInviteCode(company.inviteCode)
+                                }}
+                                size="small"
+                                sx={{ color: "#388560" }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        ) : (
+                          <Box sx={{ display: "flex", gap: 0.5 }}>
+                            <Tooltip title="Save">
+                              <IconButton
+                                onClick={() => handleSaveInviteCode(company.id)}
+                                size="small"
+                                disabled={updatingInviteCode}
+                                sx={{ color: "#388560" }}
+                              >
+                                <SaveIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Cancel">
+                              <IconButton
+                                onClick={() => {
+                                  setEditingInviteCode(null)
+                                  setEditedInviteCode("")
+                                }}
+                                size="small"
+                                sx={{ color: "#666" }}
+                              >
+                                <CancelIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        )}
+                      </Box>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <TextField
                           fullWidth
-                          value={company.inviteCode}
-                          InputProps={{
-                            readOnly: true,
+                          value={editingInviteCode === company.id ? editedInviteCode : company.inviteCode}
+                          onChange={(e) => {
+                            if (editingInviteCode === company.id) {
+                              setEditedInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                            }
                           }}
+                          InputProps={{
+                            readOnly: editingInviteCode !== company.id,
+                          }}
+                          disabled={updatingInviteCode}
                           sx={{
                             "& .MuiOutlinedInput-root": {
-                              bgcolor: "#f5f5f5",
+                              bgcolor: editingInviteCode === company.id ? "white" : "#f5f5f5",
                               fontFamily: "monospace",
                               fontWeight: 600,
                             },
                           }}
+                          helperText={editingInviteCode === company.id ? "4-20 characters, letters and numbers only" : ""}
                         />
-                        <Tooltip title="Copy invite code">
-                          <IconButton
-                            onClick={() => copyToClipboard(company.inviteCode)}
-                            sx={{ color: "#388560" }}
-                          >
-                            <ContentCopyIcon />
-                          </IconButton>
-                        </Tooltip>
+                        {editingInviteCode !== company.id && (
+                          <Tooltip title="Copy invite code">
+                            <IconButton
+                              onClick={() => copyToClipboard(company.inviteCode)}
+                              sx={{ color: "#388560" }}
+                            >
+                              <ContentCopyIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </Box>
                     </Box>
 
@@ -369,8 +492,8 @@ export default function CompanyManagement() {
       </Container>
 
       {/* Delete Company Confirmation Dialog */}
-      <Dialog 
-        open={deleteDialogOpen} 
+      <Dialog
+        open={deleteDialogOpen}
         onClose={() => !deleting && setDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
@@ -393,7 +516,7 @@ export default function CompanyManagement() {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setDeleteDialogOpen(false)
               setCompanyToDelete(null)
