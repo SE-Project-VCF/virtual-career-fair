@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
   Container,
@@ -19,9 +19,21 @@ import {
   Divider,
   Grid,
 } from "@mui/material"
+
 import { authUtils } from "../utils/auth"
-import { doc, getDoc, updateDoc, collection, addDoc } from "firebase/firestore"
-import { db } from "../firebase"
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore"
+import { db, storage } from "../firebase"
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
+
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import UploadIcon from "@mui/icons-material/Upload"
@@ -35,8 +47,6 @@ interface BoothData {
   location: string
   description: string
   logoUrl?: string
-  openPositions: number
-  hiringFor?: string
   website?: string
   careersPage?: string
   contactName: string
@@ -76,20 +86,20 @@ export default function BoothEditor() {
   const navigate = useNavigate()
   const { companyId } = useParams<{ companyId: string }>()
   const user = authUtils.getCurrentUser()
+
   const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
+  // Booth form fields that are saved to Firestore
   const [formData, setFormData] = useState<BoothData>({
     companyName: "",
     industry: "",
     companySize: "",
     location: "",
     description: "",
-    openPositions: 0,
-    hiringFor: "",
     website: "",
     careersPage: "",
     contactName: "",
@@ -97,23 +107,57 @@ export default function BoothEditor() {
     contactPhone: "",
   })
 
-  const userId = useMemo(() => user?.uid, [user?.uid])
-  const userRole = useMemo(() => user?.role, [user?.role])
+  // Logo upload state
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoUploadProgress, setLogoUploadProgress] = useState(0)
+
+  // Stable derived values for effects/guards
+  const userId = useMemo(() => user?.uid ?? null, [user?.uid])
+  const userRole = useMemo(() => user?.role ?? null, [user?.role])
+
+  // Track if component is mounted to prevent setState after unmount
+  const isMountedRef = useRef(true)
 
   useEffect(() => {
+    // Auth guard
     if (!authUtils.isAuthenticated()) {
       navigate("/login")
       return
     }
 
+    // Route guard
     if (!companyId) {
       navigate("/companies")
       return
     }
 
-    fetchCompany()
+    // Load company + booth data
+    void fetchCompany()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, companyId, userId])
 
+  useEffect(() => {
+    // Cleanup preview object URLs to avoid memory leaks
+    // This will run whenever logoPreviewUrl changes or on unmount
+    return () => {
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl)
+      }
+    }
+  }, [logoPreviewUrl])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  /**
+   * Fetch the company doc and validate access.
+   * If the company has boothId, load the booth and pre-fill the form.
+   */
   const fetchCompany = async () => {
     if (!companyId) return
 
@@ -122,27 +166,33 @@ export default function BoothEditor() {
       setError("")
 
       const companyDoc = await getDoc(doc(db, "companies", companyId))
-
       if (!companyDoc.exists()) {
         setError("Company not found")
-        setLoading(false)
         return
       }
 
       const companyData = companyDoc.data() as Omit<Company, "id">
-      const companyInfo: Company = {
-        id: companyDoc.id,
-        ...companyData,
+      const companyInfo: Company = { id: companyDoc.id, ...companyData }
+
+      // Access control:
+      // - Owners can edit their own company
+      // - Reps can edit if in representativeIDs
+      if (!userId || !userRole) {
+        setError("User not authenticated.")
+        navigate("/login")
+        return
       }
 
-      // Check if user has access (owner or representative)
       if (userRole === "companyOwner" && companyInfo.ownerId !== userId) {
         setError("You don't have access to this company")
         navigate("/companies")
         return
       }
 
-      if (userRole === "representative" && !companyInfo.representativeIDs?.includes(userId ?? "")) {
+      if (
+        userRole === "representative" &&
+        !companyInfo.representativeIDs?.includes(userId)
+      ) {
         setError("You don't have access to this company")
         navigate("/dashboard")
         return
@@ -155,15 +205,11 @@ export default function BoothEditor() {
 
       setCompany(companyInfo)
 
-      // Load existing booth if it exists
+      // Load existing booth if it exists; otherwise prefill company name.
       if (companyInfo.boothId) {
-        await loadBooth(companyInfo.boothId)
+        await loadBooth(companyInfo.boothId, companyInfo.companyName)
       } else {
-        // Pre-fill company name
-        setFormData((prev) => ({
-          ...prev,
-          companyName: companyInfo.companyName,
-        }))
+        setFormData((prev) => ({ ...prev, companyName: companyInfo.companyName }))
       }
     } catch (err) {
       console.error("Error fetching company:", err)
@@ -173,32 +219,113 @@ export default function BoothEditor() {
     }
   }
 
-  const loadBooth = async (boothId: string) => {
+  /**
+   * Loads booth data and hydrates the form.
+   * Also uses existing logoUrl for display if present.
+   */
+  const loadBooth = async (boothId: string, fallbackCompanyName: string) => {
     try {
       const boothDoc = await getDoc(doc(db, "booths", boothId))
-      if (boothDoc.exists()) {
-        const boothData = boothDoc.data()
-        setFormData({
-          companyName: boothData.companyName || company?.companyName || "",
-          industry: boothData.industry || "",
-          companySize: boothData.companySize || "",
-          location: boothData.location || "",
-          description: boothData.description || "",
-          logoUrl: boothData.logoUrl,
-          openPositions: boothData.openPositions || 0,
-          hiringFor: boothData.hiringFor || "",
-          website: boothData.website || "",
-          careersPage: boothData.careersPage || "",
-          contactName: boothData.contactName || "",
-          contactEmail: boothData.contactEmail || "",
-          contactPhone: boothData.contactPhone || "",
-        })
-      }
+      if (!boothDoc.exists()) return
+
+      const boothData = boothDoc.data()
+      setFormData({
+        companyName: boothData.companyName || fallbackCompanyName || "",
+        industry: boothData.industry || "",
+        companySize: boothData.companySize || "",
+        location: boothData.location || "",
+        description: boothData.description || "",
+        logoUrl: boothData.logoUrl,
+        website: boothData.website || "",
+        careersPage: boothData.careersPage || "",
+        contactName: boothData.contactName || "",
+        contactEmail: boothData.contactEmail || "",
+        contactPhone: boothData.contactPhone || "",
+      })
     } catch (err) {
       console.error("Error loading booth:", err)
     }
   }
 
+  /**
+   * Called when a user selects an image file.
+   * This does NOT upload yet; upload happens on Save/Update.
+   */
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate image type
+    const isValidType =
+      file.type === "image/png" || file.type === "image/jpeg" || file.type === "image/jpg"
+    if (!isValidType) {
+      setError("Only PNG or JPG images are allowed.")
+      return
+    }
+
+    // Validate size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Logo file must be under 5MB.")
+      return
+    }
+
+    setError("")
+    setLogoFile(file)
+
+    // Create a local preview url
+    if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
+    setLogoPreviewUrl(URL.createObjectURL(file))
+  }
+
+  /**
+   * Upload logo to Firebase Storage and return the download URL.
+   * Storage path includes companyId + uploader uid for rules + auditing:
+   *   boothLogos/{companyId}/{uploaderUid}/{timestamp}-{original}
+   */
+  const uploadLogoAndGetUrl = async (file: File): Promise<string> => {
+    if (!company || !userId) {
+      throw new Error("Missing company or user id for upload.")
+    }
+
+    const fileName = `${Date.now()}-${file.name}`
+    const storagePath = `boothLogos/${company.id}/${userId}/${fileName}`
+    const storageRef = ref(storage, storagePath)
+
+    setLogoUploading(true)
+    setLogoUploadProgress(0)
+
+    const uploadTask = uploadBytesResumable(storageRef, file)
+
+    const url = await new Promise<string>((resolve, reject) => {
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          if (!isMountedRef.current) return
+          const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
+          setLogoUploadProgress(pct)
+        },
+        (err) => reject(err),
+        async () => {
+          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref)
+          resolve(downloadUrl)
+        }
+      )
+    })
+
+    if (isMountedRef.current) {
+      setLogoUploading(false)
+    }
+    return url
+  }
+
+  /**
+   * Save booth data:
+   * - Validate the contact email belongs to a registered user
+   * - Ensure that contact user is owner or representative for the company
+   * - If a new logo was selected, upload it and save the URL
+   * - Create or update the booth doc
+   * - Ensure companies/{companyId}.boothId is set on first create
+   */
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!company || !userId) return
@@ -208,13 +335,49 @@ export default function BoothEditor() {
       setError("")
       setSuccess("")
 
-      // Validate required fields
-      if (!formData.companyName || !formData.industry || !formData.companySize || !formData.location || !formData.description || !formData.contactName || !formData.contactEmail) {
-        setError("Please fill in all required fields")
-        setSaving(false)
+      // Validate contact rep is a real Firestore user
+      const usersRef = collection(db, "users")
+      const q = query(usersRef, where("email", "==", formData.contactEmail))
+      const snap = await getDocs(q)
+
+      if (snap.empty) {
+        setError("Contact email does not match any registered user.")
         return
       }
 
+      const rep = snap.docs[0].data()
+      const repId = rep.uid
+
+      // Check that this user belongs to the company
+      const isOwner = repId === company.ownerId
+      const isRep = company.representativeIDs?.includes(repId)
+
+      if (!isOwner && !isRep) {
+        setError("This user is not an owner or representative of your company.")
+        return
+      }
+
+      // Upload a new logo if one was selected
+      let logoUrlToSave: string | null = formData.logoUrl || null
+      if (logoFile) {
+        try {
+          logoUrlToSave = await uploadLogoAndGetUrl(logoFile)
+          setFormData((prev) => ({ ...prev, logoUrl: logoUrlToSave || undefined }))
+
+          // Clear file so we don't re-upload accidentally on next save
+          setLogoFile(null)
+          if (logoPreviewUrl) {
+            URL.revokeObjectURL(logoPreviewUrl)
+            setLogoPreviewUrl(null)
+          }
+        } catch (uploadErr) {
+          console.error("Logo upload failed:", uploadErr)
+          setError("Logo upload failed. Please try again.")
+          return
+        }
+      }
+
+      // Booth document payload
       const boothData = {
         companyId: company.id,
         companyName: formData.companyName,
@@ -222,9 +385,7 @@ export default function BoothEditor() {
         companySize: formData.companySize,
         location: formData.location,
         description: formData.description,
-        logoUrl: formData.logoUrl || null,
-        openPositions: formData.openPositions || 0,
-        hiringFor: formData.hiringFor || null,
+        logoUrl: logoUrlToSave,
         website: formData.website || null,
         careersPage: formData.careersPage || null,
         contactName: formData.contactName,
@@ -233,7 +394,7 @@ export default function BoothEditor() {
         updatedAt: new Date().toISOString(),
       }
 
-      // Remove undefined/null fields
+      // Remove undefined/null fields (keeps your existing behavior)
       const cleanedData = Object.fromEntries(
         Object.entries(boothData).filter(([_, value]) => value !== undefined && value !== null)
       )
@@ -252,11 +413,8 @@ export default function BoothEditor() {
         })
         boothId = boothRef.id
 
-        // Update company with boothId
-        await updateDoc(doc(db, "companies", company.id), {
-          boothId: boothId,
-        })
-
+        // Link company to booth
+        await updateDoc(doc(db, "companies", company.id), { boothId })
         setSuccess("Booth created successfully!")
       }
 
@@ -265,22 +423,14 @@ export default function BoothEditor() {
       }, 1500)
     } catch (err: any) {
       console.error("Error saving booth:", err)
-      setError(err.message || "Failed to save booth")
+      setError("Failed to save booth")
     } finally {
       setSaving(false)
+      setLogoUploading(false)
     }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // TODO: Upload to Firebase Storage and get URL
-      // For now, just log it
-      console.log("Logo file selected:", file.name)
-      // In a real implementation, you'd upload to Firebase Storage and set logoUrl
-    }
-  }
-
+  // Loading state
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
@@ -289,11 +439,23 @@ export default function BoothEditor() {
     )
   }
 
+  // Fatal error state (company didn't load)
   if (error && !company) {
     return (
       <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Card sx={{ p: 4, maxWidth: 500 }}>
-          <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+          <Alert 
+            severity="error" 
+            sx={{ mb: 2 }}
+            onClose={() => setError("")}
+            slotProps={{
+              closeButton: {
+                title: "Close"
+              }
+            }}
+          >
+            {error}
+          </Alert>
           <Button onClick={() => navigate("/companies")} variant="contained">
             Go Back
           </Button>
@@ -340,22 +502,43 @@ export default function BoothEditor() {
 
       <Container maxWidth="md" sx={{ py: 4 }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError("")}>
+          <Alert 
+            severity="error" 
+            sx={{ mb: 3, borderRadius: 2 }} 
+            onClose={() => setError("")}
+            slotProps={{
+              closeButton: {
+                title: "Close"
+              }
+            }}
+          >
             {error}
           </Alert>
         )}
 
         {success && (
-          <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setSuccess("")}>
+          <Alert 
+            severity="success" 
+            sx={{ mb: 3, borderRadius: 2 }} 
+            onClose={() => setSuccess("")}
+            slotProps={{
+              closeButton: {
+                title: "Close"
+              }
+            }}
+          >
             {success}
           </Alert>
-        )}
+        )}  
 
         <Card sx={{ p: 4 }}>
           <form onSubmit={handleSubmit}>
             {/* Company Information Section */}
             <Box sx={{ mb: 4 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography
+                variant="h6"
+                sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}
+              >
                 <BusinessIcon sx={{ color: "#388560" }} />
                 Company Information
               </Typography>
@@ -373,8 +556,10 @@ export default function BoothEditor() {
 
                 <Grid size={{ xs: 12, md: 6 }}>
                   <FormControl fullWidth required>
-                    <InputLabel>Industry</InputLabel>
+                    <InputLabel id="industry-label">Industry</InputLabel>
                     <Select
+                      labelId="industry-label"
+                      id="industry-select"
                       value={formData.industry}
                       label="Industry"
                       onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
@@ -390,8 +575,10 @@ export default function BoothEditor() {
 
                 <Grid size={{ xs: 12, md: 6 }}>
                   <FormControl fullWidth required>
-                    <InputLabel>Company Size</InputLabel>
+                    <InputLabel id="company-size-label">Company Size</InputLabel>
                     <Select
+                      labelId="company-size-label"
+                      id="company-size-select"
                       value={formData.companySize}
                       label="Company Size"
                       onChange={(e) => setFormData({ ...formData, companySize: e.target.value })}
@@ -432,20 +619,23 @@ export default function BoothEditor() {
                   </Typography>
                 </Grid>
 
+                {/* Logo Upload */}
                 <Grid size={{ xs: 12 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
                     <input
                       accept="image/png,image/jpeg,image/jpg"
                       style={{ display: "none" }}
                       id="logo-upload"
                       type="file"
                       onChange={handleFileChange}
+                      disabled={saving || logoUploading}
                     />
                     <label htmlFor="logo-upload">
                       <Button
                         variant="outlined"
                         component="span"
                         startIcon={<UploadIcon />}
+                        disabled={saving || logoUploading}
                         sx={{
                           borderColor: "#388560",
                           color: "#388560",
@@ -453,14 +643,86 @@ export default function BoothEditor() {
                             borderColor: "#2d6b4d",
                             bgcolor: "rgba(56, 133, 96, 0.05)",
                           },
+                          "&:disabled": {
+                            borderColor: "rgba(0,0,0,0.12)",
+                            color: "rgba(0,0,0,0.26)",
+                          },
                         }}
                       >
                         Upload Logo
                       </Button>
                     </label>
+
                     <Typography variant="body2" color="text.secondary">
                       PNG, JPG up to 5MB (recommended: 400x400px)
                     </Typography>
+                  </Box>
+
+                  {/* Logo Preview / Status */}
+                  <Box sx={{ mt: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+                    {logoPreviewUrl ? (
+                      <Box
+                        component="img"
+                        src={logoPreviewUrl}
+                        alt="Selected logo preview"
+                        sx={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: 2,
+                          objectFit: "cover",
+                          border: "1px solid rgba(0,0,0,0.12)",
+                        }}
+                      />
+                    ) : formData.logoUrl ? (
+                      <Box
+                        component="img"
+                        src={formData.logoUrl}
+                        alt="Current logo"
+                        sx={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: 2,
+                          objectFit: "cover",
+                          border: "1px solid rgba(0,0,0,0.12)",
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: 2,
+                          background:
+                            "linear-gradient(135deg, rgba(56, 133, 96, 0.12) 0%, rgba(176, 58, 108, 0.12) 100%)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: "1px solid rgba(56, 133, 96, 0.2)",
+                        }}
+                      >
+                        <BusinessIcon sx={{ fontSize: 40, color: "#388560" }} />
+                      </Box>
+                    )}
+
+                    <Box>
+                      {logoFile && (
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          Selected: {logoFile.name}
+                        </Typography>
+                      )}
+
+                      {logoUploading && (
+                        <Typography variant="body2" color="text.secondary">
+                          Uploading logo… {logoUploadProgress}%
+                        </Typography>
+                      )}
+
+                      {!logoFile && !!formData.logoUrl && (
+                        <Typography variant="body2" color="text.secondary">
+                          Current logo is saved and will display on booth pages.
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
                 </Grid>
               </Grid>
@@ -475,30 +737,6 @@ export default function BoothEditor() {
               </Typography>
 
               <Grid container spacing={3}>
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Number of Open Positions"
-                    type="number"
-                    value={formData.openPositions}
-                    onChange={(e) => setFormData({ ...formData, openPositions: parseInt(e.target.value) || 0 })}
-                    required
-                    inputProps={{ min: 0 }}
-                  />
-                </Grid>
-
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Hiring For (Optional)"
-                    value={formData.hiringFor}
-                    onChange={(e) => setFormData({ ...formData, hiringFor: e.target.value })}
-                    multiline
-                    rows={3}
-                    placeholder="e.g., Software Engineers, Data Scientists, Product Managers..."
-                  />
-                </Grid>
-
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
@@ -573,7 +811,7 @@ export default function BoothEditor() {
               <Button
                 variant="outlined"
                 onClick={() => navigate(`/company/${company.id}`)}
-                disabled={saving}
+                disabled={saving || logoUploading}
                 sx={{
                   borderColor: "#388560",
                   color: "#388560",
@@ -585,11 +823,12 @@ export default function BoothEditor() {
               >
                 Cancel
               </Button>
+
               <Button
                 type="submit"
                 variant="contained"
                 startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-                disabled={saving}
+                disabled={saving || logoUploading}
                 sx={{
                   background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
                   "&:hover": {
@@ -607,7 +846,15 @@ export default function BoothEditor() {
         <Box sx={{ textAlign: "center", mt: 4 }}>
           <Typography variant="body2" color="text.secondary">
             Need help? Contact our support team at{" "}
-            <Typography component="a" href="mailto:support@careerfair.com" sx={{ color: "#388560", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>
+            <Typography
+              component="a"
+              href="mailto:support@careerfair.com"
+              sx={{
+                color: "#388560",
+                textDecoration: "none",
+                "&:hover": { textDecoration: "underline" },
+              }}
+            >
               support@careerfair.com
             </Typography>
           </Typography>
@@ -616,4 +863,3 @@ export default function BoothEditor() {
     </Box>
   )
 }
-

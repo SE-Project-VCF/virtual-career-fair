@@ -1,13 +1,19 @@
 // console.js
 const admin = require("firebase-admin");
 const readline = require("readline");
-const serviceAccount = require("./privateKey.json");
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-
-const db = admin.firestore();
+// Only initialize Firebase when running as CLI (not in tests)
+let db;
+if (process.env.NODE_ENV !== "test") {
+  const serviceAccount = require("./privateKey.json");
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+  db = admin.firestore();
+} else {
+  // In test environment, db will be mocked
+  db = require("./firebase").db;
+}
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -177,5 +183,20 @@ Commands:
   });
 }
 
-console.log("🔥 Firebase Admin Console Ready");
-startConsole();
+// Export functions for testing
+module.exports = {
+  validateFieldsRecursive,
+  validateFields,
+  listAll,
+  addDocument,
+  updateDocument,
+  deleteDocument,
+  ALLOWED_COLLECTIONS,
+  COLLECTION_FIELDS,
+};
+
+// Only start console when run directly (not when imported for testing)
+if (require.main === module) {
+  console.log("🔥 Firebase Admin Console Ready");
+  startConsole();
+}

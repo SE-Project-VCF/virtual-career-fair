@@ -1,18 +1,22 @@
-"use client"
-
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { collection, query, where, getDocs } from "firebase/firestore"
-import { db } from "../firebase"
+import { collection, query, where, getDocs, Timestamp } from "firebase/firestore"
+import { db, auth } from "../firebase"
+import { evaluateFairStatus } from "../utils/fairStatus"
+import { API_URL } from "../config"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
-import ProfileMenu from "./ProfileMenu";
-
+import MailIcon from "@mui/icons-material/Mail"
+import { Badge, Tooltip } from "@mui/material"
+import ChatIcon from "@mui/icons-material/Chat"
+import ProfileMenu from "./ProfileMenu"
+import EventList from "../components/EventList"
+import NotificationBell from "../components/NotificationBell"
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -22,16 +26,90 @@ export default function Dashboard() {
   const [inviteCodeError, setInviteCodeError] = useState("")
   const [linking, setLinking] = useState(false)
   const [totalRepresentatives, setTotalRepresentatives] = useState(0)
+  const [unreadCount, setUnreadCount] = useState<number>(0)
+  const [isLive, setIsLive] = useState(false)
+  const [loadingFairStatus, setLoadingFairStatus] = useState(true)
+  const [upcomingEventsCount, setUpcomingEventsCount] = useState(0)
+  const [totalCompaniesCount, setTotalCompaniesCount] = useState(0)
+  const [totalJobOpenings, setTotalJobOpenings] = useState(0)
+  const [loadingStats, setLoadingStats] = useState(true)
+  const [jobInvitationsCount, setJobInvitationsCount] = useState(0)
+  const [newInvitationsCount, setNewInvitationsCount] = useState(0)
+  const [loadingInvitations, setLoadingInvitations] = useState(false)
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
       navigate("/")
       return
     }
-    
+
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
   }, [navigate])
+
+  // Fetch fair status
+  useEffect(() => {
+    const fetchFairStatus = async () => {
+      try {
+        setLoadingFairStatus(true)
+        const status = await evaluateFairStatus()
+        setIsLive(status.isLive)
+      } catch (err) {
+        console.error("Error fetching fair status:", err)
+      } finally {
+        setLoadingFairStatus(false)
+      }
+    }
+
+    fetchFairStatus()
+  }, [])
+
+  // Fetch unread chat count and keep it updated
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    let cancelled = false;
+
+    const fetchUnread = async () => {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch(
+          `${API_URL}/api/stream-unread`,
+          {
+            headers: { Authorization: `Bearer ${idToken}` },
+          }
+        );
+
+        if (!res.ok) {
+          console.error("Unread API error:", res.status);
+          return;
+        }
+
+        const data = await res.json();
+
+        if (!cancelled && typeof data.unread === "number") {
+          setUnreadCount(data.unread);
+        }
+      } catch (err) {
+        console.error("Failed to fetch unread count:", err);
+      }
+    };
+
+    void fetchUnread().catch((err) => {
+      console.error("Initial unread count fetch failed:", err);
+    });
+
+    const interval = setInterval(() => {
+      void fetchUnread().catch((err) => {
+        console.error("Periodic unread count fetch failed:", err);
+      });
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user?.uid]);
 
   // Fetch total representatives count for company owners
   useEffect(() => {
@@ -41,23 +119,98 @@ export default function Dashboard() {
           const companiesRef = collection(db, "companies")
           const q = query(companiesRef, where("ownerId", "==", user.uid))
           const querySnapshot = await getDocs(q)
-          
+
           let totalCount = 0
           querySnapshot.forEach((doc) => {
             const data = doc.data()
             const representativeIDs = data.representativeIDs || []
             totalCount += representativeIDs.length
           })
-          
+
           setTotalRepresentatives(totalCount)
         } catch (err) {
-          console.error("Error fetching representatives count:", err)
+          console.error("Error fetching representatives count:", err);
         }
       }
     }
 
     fetchTotalRepresentatives()
-  }, [user])
+  }, [user?.uid, user?.role])
+
+  const fetchJobInvitations = useCallback(async () => {
+    const currentUser = authUtils.getCurrentUser();
+    if (!currentUser || currentUser.role !== "student") return;
+
+    try {
+      setLoadingInvitations(true);
+      const response = await fetch(
+        `${API_URL}/api/job-invitations/received?userId=${currentUser.uid}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const invitations = data.invitations || [];
+        setJobInvitationsCount(invitations.length);
+        setNewInvitationsCount(invitations.filter((inv: any) => inv.status === "sent").length);
+      }
+    } catch (err) {
+      console.error("Error fetching job invitations:", err);
+    } finally {
+      setLoadingInvitations(false);
+    }
+  }, []);
+
+  // Fetch job invitations for students
+  useEffect(() => {
+    if (user?.uid && user?.role === "student") {
+      fetchJobInvitations();
+
+      const interval = setInterval(fetchJobInvitations, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.uid, user?.role, fetchJobInvitations]);
+
+  // Fetch dashboard statistics
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoadingStats(true)
+
+        // Fetch upcoming events count (schedules that haven't ended)
+        const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
+        const now = Date.now()
+        let upcomingCount = 0
+        schedulesSnapshot.forEach((doc) => {
+          const data = doc.data()
+          const endTime = data.endTime instanceof Timestamp
+            ? data.endTime.toMillis()
+            : data.endTime
+          if (endTime && endTime > now) {
+            upcomingCount++
+          }
+        })
+        setUpcomingEventsCount(upcomingCount)
+
+        // Fetch total companies count
+        const companiesSnapshot = await getDocs(collection(db, "companies"))
+        setTotalCompaniesCount(companiesSnapshot.size)
+
+        // Fetch total job openings (count of all job postings)
+        const jobsSnapshot = await getDocs(collection(db, "jobs"))
+        setTotalJobOpenings(jobsSnapshot.size)
+      } catch (err) {
+        console.error("Error fetching stats:", err)
+      } finally {
+        setLoadingStats(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
 
   const handleLinkInviteCode = async () => {
     if (!inviteCode.trim()) {
@@ -109,9 +262,50 @@ export default function Dashboard() {
               Job Goblin - Virtual Career Fair
             </Typography>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              {/* Other buttons can be added here */}
+              {/* ✅ Chat Button with Unread Badge */}
+              <Tooltip title="Open Chat">
+                <Badge
+                  color="error"
+                  badgeContent={unreadCount > 0 ? unreadCount : null}
+                  overlap="circular"
+                  anchorOrigin={{
+                    vertical: "top",
+                    horizontal: "right",
+                  }}
+                  sx={{
+                    "& .MuiBadge-badge": {
+                      fontSize: "0.875rem",
+                      height: "20px",
+                      minWidth: "20px",
+                      padding: "0 6px",
+                      right: "4px",
+                      top: "4px",
+                    },
+                  }}
+                >
+                  <Button
+                    onClick={() => navigate("/dashboard/chat")}
+                    startIcon={<ChatIcon />}
+                    sx={{
+                      fontWeight: 600,
+                      color: "white",
+                      background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      "&:hover": {
+                        background: "linear-gradient(135deg, #388560 0%, #b03a6c 100%)",
+                      },
+                    }}
+                  >
+                    Chat
+                  </Button>
+                </Badge>
+              </Tooltip>
+
+              <NotificationBell />
+
               <ProfileMenu />
             </Box>
+
           </Box>
         </Container>
       </Box>
@@ -149,13 +343,13 @@ export default function Dashboard() {
                 }
               })()}!
             </Typography>
-            
+
             {/* Company name display for representatives - only show if they have a valid companyId */}
             {user.role === "representative" && user.companyId && user.companyName && (
-              <Box sx={{ 
-                display: "inline-flex", 
-                alignItems: "center", 
-                gap: 1, 
+              <Box sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 1,
                 mb: 2,
                 px: 2,
                 py: 1,
@@ -169,11 +363,38 @@ export default function Dashboard() {
                 </Typography>
               </Box>
             )}
-            
+
             <Typography variant="body1" color="text.secondary">
               You're all set to explore career opportunities at our virtual fair.
             </Typography>
           </Box>
+
+          {/* Event List - Shows scheduled career fairs */}
+          <EventList />
+
+          {/* Fair Status Alert */}
+          {!loadingFairStatus && !isLive && (
+            <Alert
+              severity="info"
+              sx={{
+                mb: 3,
+                borderRadius: 2,
+                bgcolor: "rgba(56, 133, 96, 0.1)",
+                border: "1px solid rgba(56, 133, 96, 0.3)",
+              }}
+            >
+              <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Career Fair is Not Currently Live
+              </Typography>
+              <Typography variant="body2">
+                {user?.role === "student"
+                  ? "The career fair is not currently live. You will be able to browse all company booths once the fair goes live."
+                  : user?.role === "representative" || user?.role === "companyOwner"
+                    ? "The career fair is not currently live. You can still view and edit your own booth, but you cannot browse other companies' booths until the fair goes live."
+                    : "The career fair is not currently live. Only company owners and representatives can view their own booths."}
+              </Typography>
+            </Alert>
+          )}
 
           {/* Company Owner-specific section */}
           {user && user.role === "companyOwner" && (
@@ -182,7 +403,7 @@ export default function Dashboard() {
                 Company Management
               </Typography>
               <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 6 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                   <Card
                     sx={{
                       bgcolor: "white",
@@ -219,7 +440,7 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 </Grid>
-                <Grid size={{ xs: 12, md: 6 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                   <Card
                     sx={{
                       bgcolor: "white",
@@ -244,6 +465,79 @@ export default function Dashboard() {
                       <Typography variant="body2" color="text.secondary">
                         Company representatives registered
                       </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(56, 133, 96, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Browse All Booths
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        {isLive
+                          ? "Explore other companies' booths at the virtual career fair."
+                          : "The career fair is not currently live. You can only view your own company's booth."}
+                      </Typography>
+
+                      {/* Two-button row: keep the existing button, add a second beside it */}
+                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                        <Button
+                          variant="contained"
+                          onClick={() => navigate("/booths")}
+                          disabled={!isLive}
+                          sx={{
+                            background: isLive
+                              ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                            color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              background: isLive
+                                ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+                                : "rgba(0, 0, 0, 0.12)",
+                            },
+                            "&:disabled": {
+                              background: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View All Booths
+                        </Button>
+
+                        <Button
+                          variant="outlined"
+                          onClick={() => navigate("/dashboard/booth-history")}
+                          disabled={!isLive}
+                          sx={{
+                            borderColor: "rgba(56, 133, 96, 0.6)",
+                            color: isLive ? "#388560" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              borderColor: "#388560",
+                              backgroundColor: "rgba(56, 133, 96, 0.08)",
+                            },
+                            "&:disabled": {
+                              borderColor: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View Booth History
+                        </Button>
+                      </Box>
                     </CardContent>
                   </Card>
                 </Grid>
@@ -363,19 +657,79 @@ export default function Dashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Explore other companies' booths at the virtual career fair.
+                        {isLive
+                          ? "Explore other companies' booths at the virtual career fair."
+                          : "The career fair is not currently live. You can only view your own company's booth."}
                       </Typography>
                       <Button
                         variant="contained"
                         onClick={() => navigate("/booths")}
+                        disabled={!isLive}
                         sx={{
-                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          background: isLive
+                            ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
+                            : "rgba(0, 0, 0, 0.12)",
+                          color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
                           "&:hover": {
-                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                            background: isLive
+                              ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                          },
+                          "&:disabled": {
+                            background: "rgba(0, 0, 0, 0.12)",
+                            color: "rgba(0, 0, 0, 0.26)",
                           },
                         }}
                       >
                         View All Booths
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+
+          {/* Administrator-specific section */}
+          {user && user.role === "administrator" && (
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+                Administrator Controls
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Card
+                    sx={{
+                      bgcolor: "white",
+                      border: "1px solid rgba(176, 58, 108, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                        <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          Manage Career Fair
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Control when the career fair is live and visible to all users.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/admin")}
+                        sx={{
+                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                          },
+                        }}
+                      >
+                        Go to Admin Dashboard
                       </Button>
                     </CardContent>
                   </Card>
@@ -411,28 +765,67 @@ export default function Dashboard() {
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Explore opportunities from top companies at the virtual career fair.
+                        {isLive
+                          ? "Explore opportunities from top companies at the virtual career fair."
+                          : "The career fair is not currently live. Check back later to browse company booths."}
                       </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => navigate("/booths")}
-                        sx={{
-                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
-                          "&:hover": {
-                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                          },
-                        }}
-                      >
-                        View All Booths
-                      </Button>
+
+                      {/* Two-button row: View All Booths + View Booth History */}
+                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                        <Button
+                          variant="contained"
+                          onClick={() => navigate("/booths")}
+                          disabled={!isLive}
+                          sx={{
+                            background: isLive
+                              ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                            color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              background: isLive
+                                ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+                                : "rgba(0, 0, 0, 0.12)",
+                            },
+                            "&:disabled": {
+                              background: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View All Booths
+                        </Button>
+
+                        <Button
+                          variant="outlined"
+                          onClick={() => navigate("/dashboard/booth-history")}
+                          disabled={!isLive}
+                          sx={{
+                            borderColor: "rgba(176, 58, 108, 0.6)",
+                            color: isLive ? "#b03a6c" : "rgba(0, 0, 0, 0.26)",
+                            "&:hover": {
+                              borderColor: "#b03a6c",
+                              backgroundColor: "rgba(176, 58, 108, 0.08)",
+                            },
+                            "&:disabled": {
+                              borderColor: "rgba(0, 0, 0, 0.12)",
+                              color: "rgba(0, 0, 0, 0.26)",
+                            },
+                          }}
+                        >
+                          View Booth History
+                        </Button>
+                      </Box>
                     </CardContent>
                   </Card>
                 </Grid>
+
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Card
                     sx={{
                       bgcolor: "white",
-                      border: "1px solid rgba(176, 58, 108, 0.3)",
+                      border: newInvitationsCount > 0 
+                        ? "2px solid rgba(176, 58, 108, 0.5)" 
+                        : "1px solid rgba(176, 58, 108, 0.3)",
                       transition: "transform 0.2s, box-shadow 0.2s",
                       "&:hover": {
                         transform: "translateY(-4px)",
@@ -441,18 +834,47 @@ export default function Dashboard() {
                     }}
                   >
                     <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <WorkIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Job Opportunities
-                        </Typography>
+                      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <MailIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            Job Invitations
+                          </Typography>
+                        </Box>
+                        {newInvitationsCount > 0 && (
+                          <Badge badgeContent={newInvitationsCount} color="error" />
+                        )}
                       </Box>
                       <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                        0
+                        {loadingInvitations ? "..." : jobInvitationsCount}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Available positions
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        {newInvitationsCount > 0 
+                          ? `${newInvitationsCount} new invitation${newInvitationsCount !== 1 ? "s" : ""}`
+                          : "Companies have invited you to apply"}
                       </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/dashboard/job-invitations")}
+                        disabled={jobInvitationsCount === 0}
+                        sx={{
+                          background: jobInvitationsCount > 0
+                            ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+                            : "rgba(0, 0, 0, 0.12)",
+                          color: jobInvitationsCount > 0 ? "white" : "rgba(0, 0, 0, 0.26)",
+                          "&:hover": {
+                            background: jobInvitationsCount > 0
+                              ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+                              : "rgba(0, 0, 0, 0.12)",
+                          },
+                          "&:disabled": {
+                            background: "rgba(0, 0, 0, 0.12)",
+                            color: "rgba(0, 0, 0, 0.26)",
+                          },
+                        }}
+                      >
+                        View Invitations
+                      </Button>
                     </CardContent>
                   </Card>
                 </Grid>
@@ -482,10 +904,10 @@ export default function Dashboard() {
                     </Typography>
                   </Box>
                   <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                    12
+                    {loadingStats ? "..." : upcomingEventsCount}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Career sessions available
+                    Career fairs scheduled
                   </Typography>
                 </CardContent>
               </Card>
@@ -510,7 +932,7 @@ export default function Dashboard() {
                     </Typography>
                   </Box>
                   <Typography variant="h3" sx={{ fontWeight: 700, color: "#388560", mb: 1 }}>
-                    45
+                    {loadingStats ? "..." : totalCompaniesCount}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Employers participating
@@ -538,7 +960,7 @@ export default function Dashboard() {
                     </Typography>
                   </Box>
                   <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                    128
+                    {loadingStats ? "..." : totalJobOpenings}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Positions available
@@ -551,8 +973,8 @@ export default function Dashboard() {
       </Container>
 
       {/* Invite Code Dialog */}
-      <Dialog 
-        open={inviteCodeDialogOpen} 
+      <Dialog
+        open={inviteCodeDialogOpen}
         onClose={() => {
           setInviteCodeDialogOpen(false)
           setInviteCode("")
@@ -585,7 +1007,7 @@ export default function Dashboard() {
           />
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setInviteCodeDialogOpen(false)
               setInviteCode("")
@@ -595,7 +1017,7 @@ export default function Dashboard() {
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={handleLinkInviteCode}
             variant="contained"
             disabled={linking || !inviteCode.trim()}
@@ -610,6 +1032,7 @@ export default function Dashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+
     </Box>
   )
 }

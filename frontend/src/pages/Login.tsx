@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
@@ -9,12 +7,29 @@ import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GoogleIcon from "@mui/icons-material/Google"
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from "@mui/material"
+import { doc, setDoc } from "firebase/firestore"
+import { auth, db } from "../firebase"
+
 
 export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+
+  // Google profile completion popup state
+  const [showProfileDialog, setShowProfileDialog] = useState(false)
+  const [googleFirstName, setGoogleFirstName] = useState("")
+  const [googleLastName, setGoogleLastName] = useState("")
+
+
+
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -40,23 +55,48 @@ export default function Login() {
   }
 
   const handleGoogleLogin = async () => {
-    setError("")
+    setError("");
+
     try {
-      // Try to login with Google - if user exists in Firestore, use their role
-      // If new user, loginWithGoogle will create a Firestore record with "student" role
-      // For existing users, it will use their actual role from Firestore
-      const result = await authUtils.loginWithGoogle("student")
-      
+      // Attempt Google login — this will NOT create new Firestore records
+      const result = await authUtils.loginWithGoogle("student", false);
+
       if (result.success) {
-        navigate("/dashboard")
-      } else {
-        setError(result.error || "Google login failed.")
+        // If Firestore record does NOT exist, block login
+        if (result.role === undefined) {
+          setError("No account exists for this Google email. Please register first.");
+          return;
+        }
+
+        // If they are missing required name fields → ask for first/last
+        if (result.needsProfile) {
+          const currentUser = auth.currentUser;
+
+          // Pre-fill Google name if available
+          if (currentUser?.displayName) {
+            const parts = currentUser.displayName.trim().split(" ");
+            setGoogleFirstName(parts[0] || "");
+            setGoogleLastName(parts.slice(1).join(" ") || "");
+          }
+
+          setShowProfileDialog(true);
+          return;
+        }
+
+        // Fully valid existing user → login
+        navigate("/dashboard");
+        return;
       }
+
+      setError(result.error || "Google login failed.");
+
     } catch (err: any) {
-      console.error("Google login error:", err)
-      setError("Failed to sign in with Google. Please try again.")
+      console.error("Google login error:", err);
+      setError("Failed to sign in with Google. Please try again or register an account first.");
     }
-  }
+  };
+
+
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
@@ -329,6 +369,56 @@ export default function Login() {
           </Box>
         </Paper>
       </Box>
+      {/* Google Profile Completion Dialog */}
+      <Dialog open={showProfileDialog}>
+        <DialogTitle>Complete Your Profile</DialogTitle>
+
+        <DialogContent>
+          <TextField
+            fullWidth
+            label="First Name"
+            value={googleFirstName}
+            onChange={(e) => setGoogleFirstName(e.target.value)}
+            sx={{ mt: 2 }}
+          />
+
+          <TextField
+            fullWidth
+            label="Last Name"
+            value={googleLastName}
+            onChange={(e) => setGoogleLastName(e.target.value)}
+            sx={{ mt: 2 }}
+          />
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setShowProfileDialog(false)}>Cancel</Button>
+
+          <Button
+            variant="contained"
+            onClick={async () => {
+              const currentUser = auth.currentUser
+              if (!currentUser) return
+
+              await setDoc(
+                doc(db, "users", currentUser.uid),
+                {
+                  firstName: googleFirstName,
+                  lastName: googleLastName,
+                },
+                { merge: true }
+              )
+
+              setShowProfileDialog(false)
+              navigate("/dashboard")
+            }}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+
     </Box>
   )
 }
