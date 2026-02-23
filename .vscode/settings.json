@@ -1,0 +1,6 @@
+{
+    "sonarlint.connectedMode.project": {
+        "connectionId": "se-project-vcf",
+        "projectKey": "SE-Project-VCF_virtual-career-fair"
+    }
+}
