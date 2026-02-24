@@ -255,8 +255,8 @@ describe("BoothEditor", () => {
       renderBoothEditor();
 
       await waitFor(() => {
-        const input = screen.getByRole("textbox", { name: /company name/i }) as HTMLInputElement;
-        expect(input.value).toBe("Tech Company");
+        const input = screen.getByRole("textbox", { name: /company name/i });
+        expect((input as HTMLInputElement).value).toBe("Tech Company");
       });
     });
 
@@ -272,15 +272,15 @@ describe("BoothEditor", () => {
       renderBoothEditor();
 
       await waitFor(() => {
-        const nameInput = screen.getByRole("textbox", { name: /company name/i }) as HTMLInputElement;
-        expect(nameInput.value).toBe("Tech Company");
+        const nameInput = screen.getByRole("textbox", { name: /company name/i });
+        expect((nameInput as HTMLInputElement).value).toBe("Tech Company");
       });
 
-      const locationInput = screen.getByRole("textbox", { name: /location/i }) as HTMLInputElement;
-      expect(locationInput.value).toBe("San Francisco, CA");
+      const locationInput = screen.getByRole("textbox", { name: /location/i });
+      expect((locationInput as HTMLInputElement).value).toBe("San Francisco, CA");
 
-      const descriptionInput = screen.getByRole("textbox", { name: /company description/i }) as HTMLInputElement;
-      expect(descriptionInput.value).toBe("We build innovative software solutions");
+      const descriptionInput = screen.getByRole("textbox", { name: /company description/i });
+      expect((descriptionInput as HTMLInputElement).value).toBe("We build innovative software solutions");
     });
   });
 
@@ -467,7 +467,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("heading", { name: "Edit Booth" })).toBeInTheDocument();
       }, { timeout: 5000 });
 
-      const locationInput = screen.getByRole("textbox", { name: /location/i }) as HTMLInputElement;
+      const locationInput = screen.getByRole("textbox", { name: /location/i });
       await user.clear(locationInput);
       await user.type(locationInput, "New York, NY");
 
@@ -795,8 +795,8 @@ describe("BoothEditor", () => {
 
     it("accepts valid PNG file and shows preview", async () => {
       const user = userEvent.setup();
-      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
-      global.URL.revokeObjectURL = vi.fn();
+      globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+      globalThis.URL.revokeObjectURL = vi.fn();
 
       renderBoothEditor();
 
@@ -814,12 +814,12 @@ describe("BoothEditor", () => {
         expect(screen.getByText(/Selected: logo.png/i)).toBeInTheDocument();
       });
 
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(file);
+      expect(globalThis.URL.createObjectURL).toHaveBeenCalledWith(file);
     });
 
     it("accepts valid JPG file", async () => {
       const user = userEvent.setup();
-      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+      globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
 
       renderBoothEditor();
 
@@ -868,8 +868,8 @@ describe("BoothEditor", () => {
 
     it("uploads logo file during form submission", async () => {
       const user = userEvent.setup();
-      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
-      global.URL.revokeObjectURL = vi.fn();
+      globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+      globalThis.URL.revokeObjectURL = vi.fn();
 
       const mockUploadTask = {
         on: vi.fn((_event, onProgress, _onError, onComplete) => {
@@ -930,7 +930,7 @@ describe("BoothEditor", () => {
 
     it("shows error when logo upload fails", async () => {
       const user = userEvent.setup();
-      global.URL.createObjectURL = vi.fn(() => "blob:mock-url");
+      globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
 
       const mockUploadTask = {
         on: vi.fn((_event, _onProgress, onError) => {
@@ -1301,8 +1301,8 @@ describe("BoothEditor", () => {
       renderBoothEditor();
 
       await waitFor(() => {
-        const nameInput = screen.getByRole("textbox", { name: /company name/i }) as HTMLInputElement;
-        expect(nameInput.value).toBe("Minimal Company");
+        const nameInput = screen.getByRole("textbox", { name: /company name/i });
+        expect((nameInput as HTMLInputElement).value).toBe("Minimal Company");
       });
     });
   });

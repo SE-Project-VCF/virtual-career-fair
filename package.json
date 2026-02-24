@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "vitest": "^4.0.18"
+  },
+  "devDependencies": {
+    "sonarqube-scanner": "^4.3.4"
   }
 }

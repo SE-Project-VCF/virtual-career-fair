@@ -29,7 +29,7 @@ import {
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, setDoc, Timestamp } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
 import { evaluateFairStatus } from "../utils/fairStatus"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import EventIcon from "@mui/icons-material/Event"
@@ -38,6 +38,187 @@ import EditIcon from "@mui/icons-material/Edit"
 import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
 import ProfileMenu from "./ProfileMenu"
+import { API_URL } from "../config"
+
+/* -------------------------------------------------------
+   Inline component: Manage Fairs panel for AdminDashboard
+------------------------------------------------------- */
+function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<typeof useNavigate> }>) {
+  const user = authUtils.getCurrentUser()
+  const [fairs, setFairs] = useState<any[]>([])
+  const [loadingFairs, setLoadingFairs] = useState(true)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: "", description: "", startTime: "", endTime: "" })
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState("")
+
+  useEffect(() => {
+    loadFairs()
+  }, [])
+
+  const loadFairs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/fairs`)
+      if (res.ok) {
+        const data = await res.json()
+        setFairs(data.fairs || [])
+      }
+    } finally {
+      setLoadingFairs(false)
+    }
+  }
+
+  const handleCreateFair = async () => {
+    if (!createForm.name.trim()) return
+    setCreating(true)
+    setCreateError("")
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/fairs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          userId: user?.uid,
+          name: createForm.name,
+          description: createForm.description,
+          startTime: createForm.startTime ? new Date(createForm.startTime).toISOString() : null,
+          endTime: createForm.endTime ? new Date(createForm.endTime).toISOString() : null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to create fair")
+      setCreateDialogOpen(false)
+      setCreateForm({ name: "", description: "", startTime: "", endTime: "" })
+      loadFairs()
+    } catch (err: any) {
+      setCreateError(err.message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDeleteFair = async (fairId: string, fairName: string) => {
+    if (!globalThis.confirm(`Delete "${fairName}"? This will remove all booths and enrollments.`)) return
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      await fetch(`${API_URL}/api/fairs/${fairId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId: user?.uid }),
+      })
+      loadFairs()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  return (
+    <Card sx={{ border: "1px solid rgba(176, 58, 108, 0.3)", mb: 3 }}>
+      <CardContent sx={{ p: 4 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <EventIcon sx={{ fontSize: 40, color: "#b03a6c" }} />
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>Manage Career Fairs</Typography>
+              <Typography variant="body2" color="text.secondary">Create and manage multiple concurrent fairs</Typography>
+            </Box>
+          </Box>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateDialogOpen(true)}
+            sx={{ background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)" }}>
+            New Fair
+          </Button>
+        </Box>
+
+        {loadingFairs && <CircularProgress size={24} />}
+        {!loadingFairs && fairs.length === 0 && (
+          <Typography color="text.secondary">No fairs created yet. Create your first fair above.</Typography>
+        )}
+        {!loadingFairs && fairs.length > 0 && (
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Fair Name</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Start</TableCell>
+                  <TableCell>End</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {fairs.map((fair) => {
+                  const now = Date.now()
+                  let statusLabel: string
+                  if (fair.isLive) {
+                    statusLabel = "Live"
+                  } else if (fair.startTime && now < fair.startTime) {
+                    statusLabel = "Upcoming"
+                  } else if (fair.endTime && now > fair.endTime) {
+                    statusLabel = "Ended"
+                  } else {
+                    statusLabel = "Scheduled"
+                  }
+                  let chipColor: "success" | "default" | "warning"
+                  if (fair.isLive) {
+                    chipColor = "success"
+                  } else if (statusLabel === "Ended") {
+                    chipColor = "default"
+                  } else {
+                    chipColor = "warning"
+                  }
+                  return (
+                    <TableRow key={fair.id}>
+                      <TableCell>{fair.name}</TableCell>
+                      <TableCell>
+                        <Chip label={statusLabel} size="small"
+                          color={chipColor} />
+                      </TableCell>
+                      <TableCell>{fair.startTime ? new Date(fair.startTime).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell>{fair.endTime ? new Date(fair.endTime).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell align="right">
+                        <Button size="small" onClick={() => navigate(`/fair/${fair.id}/admin`)} sx={{ mr: 1 }}>
+                          Manage
+                        </Button>
+                        <IconButton size="small" onClick={() => handleDeleteFair(fair.id, fair.name)} color="error">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </CardContent>
+
+      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Create New Fair</DialogTitle>
+        <DialogContent>
+          <TextField label="Fair Name" value={createForm.name}
+            onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+            fullWidth required sx={{ mt: 1, mb: 2 }} />
+          <TextField label="Description" value={createForm.description}
+            onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+            fullWidth multiline rows={2} sx={{ mb: 2 }} />
+          <TextField label="Start Time" type="datetime-local" value={createForm.startTime}
+            onChange={(e) => setCreateForm({ ...createForm, startTime: e.target.value })}
+            fullWidth slotProps={{ inputLabel: { shrink: true } }} sx={{ mb: 2 }} />
+          <TextField label="End Time" type="datetime-local" value={createForm.endTime}
+            onChange={(e) => setCreateForm({ ...createForm, endTime: e.target.value })}
+            fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+          {createError && <Alert severity="error" sx={{ mt: 2 }}>{createError}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreateFair} disabled={creating || !createForm.name.trim()}>
+            {creating ? "Creating..." : "Create"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Card>
+  )
+}
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -50,7 +231,7 @@ export default function AdminDashboard() {
   const [schedules, setSchedules] = useState<any[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
-  const [editingSchedule, setEditingSchedule] = useState<any | null>(null)
+  const [editingSchedule, setEditingSchedule] = useState<any>(null)
   const [scheduleForm, setScheduleForm] = useState({
     name: "",
     description: "",
@@ -68,8 +249,8 @@ export default function AdminDashboard() {
     // Create a Date object treating it as local time, then convert to UTC ISO string
     const localDate = new Date(localDateTime)
     // Check if date is valid
-    if (isNaN(localDate.getTime())) {
-      throw new Error(`Invalid date: ${localDateTime}`)
+    if (Number.isNaN(localDate.getTime())) {
+      throw new TypeError(`Invalid date: ${localDateTime}`)
     }
     return localDate.toISOString()
   }
@@ -237,6 +418,38 @@ export default function AdminDashboard() {
     })
   }
 
+  const validateScheduleTimes = (startTime: string, endTime: string): boolean => {
+    const startDate = new Date(localToUTC(startTime))
+    const endDate = new Date(localToUTC(endTime))
+    return endDate > startDate
+  }
+
+  const createScheduleData = (startTime: string, endTime: string) => {
+    const startDate = new Date(localToUTC(startTime))
+    const endDate = new Date(localToUTC(endTime))
+    
+    return {
+      name: scheduleForm.name || null,
+      description: scheduleForm.description || null,
+      startTime: Timestamp.fromDate(startDate),
+      endTime: Timestamp.fromDate(endDate),
+      updatedAt: Timestamp.now(),
+      updatedBy: user?.uid || "",
+    }
+  }
+
+  const saveScheduleToDb = async (scheduleData: any) => {
+    if (editingSchedule) {
+      await updateDoc(doc(db, "fairSchedules", editingSchedule.id), scheduleData)
+      setSuccess("Career fair schedule updated successfully!")
+    } else {
+      scheduleData.createdAt = Timestamp.now()
+      scheduleData.createdBy = user?.uid || ""
+      await addDoc(collection(db, "fairSchedules"), scheduleData)
+      setSuccess("Career fair scheduled successfully!")
+    }
+  }
+
   const handleSaveSchedule = async () => {
     if (!user?.uid) {
       setError("User not found")
@@ -248,40 +461,18 @@ export default function AdminDashboard() {
       return
     }
 
+    if (!validateScheduleTimes(scheduleForm.startTime, scheduleForm.endTime)) {
+      setError("End time must be after start time")
+      return
+    }
+
     try {
       setSavingSchedule(true)
       setError("")
       setSuccess("")
 
-      // Convert local datetime to UTC Timestamp
-      const startDate = new Date(localToUTC(scheduleForm.startTime))
-      const endDate = new Date(localToUTC(scheduleForm.endTime))
-      
-      if (endDate <= startDate) {
-        setError("End time must be after start time")
-        return
-      }
-
-      const scheduleData: any = {
-        name: scheduleForm.name || null,
-        description: scheduleForm.description || null,
-        startTime: Timestamp.fromDate(startDate),
-        endTime: Timestamp.fromDate(endDate),
-        updatedAt: Timestamp.now(),
-        updatedBy: user.uid,
-      }
-
-      if (editingSchedule) {
-        // Update existing schedule
-        await updateDoc(doc(db, "fairSchedules", editingSchedule.id), scheduleData)
-        setSuccess("Career fair schedule updated successfully!")
-      } else {
-        // Create new schedule
-        scheduleData.createdAt = Timestamp.now()
-        scheduleData.createdBy = user.uid
-        await addDoc(collection(db, "fairSchedules"), scheduleData)
-        setSuccess("Career fair scheduled successfully!")
-      }
+      const scheduleData = createScheduleData(scheduleForm.startTime, scheduleForm.endTime)
+      await saveScheduleToDb(scheduleData)
 
       setTimeout(() => setSuccess(""), 5000)
       handleCloseScheduleDialog()
@@ -301,7 +492,7 @@ export default function AdminDashboard() {
       return
     }
 
-    if (!window.confirm("Are you sure you want to delete this career fair schedule?")) {
+    if (!globalThis.confirm("Are you sure you want to delete this career fair schedule?")) {
       return
     }
 
@@ -330,7 +521,7 @@ export default function AdminDashboard() {
     })
   }
 
-  const getScheduleStatus = (schedule: any) => {
+const getScheduleStatus = (schedule: any) => {
     if (!schedule.startTime || !schedule.endTime) {
       return null
     }
@@ -338,12 +529,111 @@ export default function AdminDashboard() {
     const now = Date.now()
     if (now < schedule.startTime) {
       return { type: "upcoming", label: "Upcoming" }
-    } else if (now >= schedule.startTime && now <= schedule.endTime) {
-      return { type: "active", label: "Active" }
-    } else {
-      return { type: "ended", label: "Ended" }
     }
+    if (now >= schedule.startTime && now <= schedule.endTime) {
+      return { type: "active", label: "Active" }
+    }
+    return { type: "ended", label: "Ended" }
   }
+
+  const renderLoadingState = () => (
+    <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+      <CircularProgress />
+    </Box>
+  )
+
+  const renderEmptyState = () => (
+    <Box sx={{ textAlign: "center", py: 4 }}>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+        No career fairs scheduled yet. Schedule your first career fair to get started.
+      </Typography>
+      <Button
+        variant="outlined"
+        startIcon={<AddIcon />}
+        onClick={() => handleOpenScheduleDialog()}
+        sx={{
+          borderColor: "#b03a6c",
+          color: "#b03a6c",
+          "&:hover": {
+            borderColor: "#8a2d54",
+            bgcolor: "rgba(176, 58, 108, 0.05)",
+          },
+        }}
+      >
+        Schedule Career Fair
+      </Button>
+    </Box>
+  )
+
+  const renderScheduleTable = () => (
+    <TableContainer component={Paper} variant="outlined">
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+            <TableCell sx={{ fontWeight: 600 }}>Start Time</TableCell>
+            <TableCell sx={{ fontWeight: 600 }}>End Time</TableCell>
+            <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+            <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {schedules.map((schedule) => {
+            const status = getScheduleStatus(schedule)
+            return (
+              <TableRow key={schedule.id}>
+                <TableCell>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {schedule.name || "Unnamed Career Fair"}
+                  </Typography>
+                  {schedule.description && (
+                    <Typography variant="caption" color="text.secondary">
+                      {schedule.description}
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>{formatDateTime(schedule.startTime)}</TableCell>
+                <TableCell>{formatDateTime(schedule.endTime)}</TableCell>
+                <TableCell>
+                  {status ? (
+                    <Chip
+                      label={status.label}
+                      size="small"
+                      color={
+                        (() => {
+                          if (status.type === "active") return "success"
+                          if (status.type === "upcoming") return "primary"
+                          return "default"
+                        })()
+                      }
+                    />
+                  ) : (
+                    <Chip label="No Status" size="small" color="default" />
+                  )}
+                </TableCell>
+                <TableCell align="right">
+                  <IconButton
+                    size="small"
+                    onClick={() => handleOpenScheduleDialog(schedule)}
+                    sx={{ color: "#b03a6c" }}
+                  >
+                    <EditIcon data-testid="EditIcon" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleDeleteSchedule(schedule.id)}
+                    sx={{ color: "#d32f2f" }}
+                  >
+                    <DeleteIcon data-testid="DeleteIcon" />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  )
 
   if (loading) {
     return (
@@ -389,6 +679,9 @@ export default function AdminDashboard() {
             {success}
           </Alert>
         )}
+
+        {/* Multi-Fair Management */}
+        <FairsManagementPanel navigate={navigate} />
 
         {/* Fair Name and Description Banner - Show when active */}
         {isLive && (scheduleName || scheduleDescription) && (
@@ -509,100 +802,11 @@ export default function AdminDashboard() {
               </Button>
             </Box>
 
-            {loadingSchedules ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-                <CircularProgress />
-              </Box>
-            ) : schedules.length === 0 ? (
-              <Box sx={{ textAlign: "center", py: 4 }}>
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-                  No career fairs scheduled yet. Schedule your first career fair to get started.
-                </Typography>
-                <Button
-                  variant="outlined"
-                  startIcon={<AddIcon />}
-                  onClick={() => handleOpenScheduleDialog()}
-                  sx={{
-                    borderColor: "#b03a6c",
-                    color: "#b03a6c",
-                    "&:hover": {
-                      borderColor: "#8a2d54",
-                      bgcolor: "rgba(176, 58, 108, 0.05)",
-                    },
-                  }}
-                >
-                  Schedule Career Fair
-                </Button>
-              </Box>
-            ) : (
-              <TableContainer component={Paper} variant="outlined">
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Start Time</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>End Time</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {schedules.map((schedule) => {
-                      const status = getScheduleStatus(schedule)
-                      return (
-                        <TableRow key={schedule.id}>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {schedule.name || "Unnamed Career Fair"}
-                            </Typography>
-                            {schedule.description && (
-                              <Typography variant="caption" color="text.secondary">
-                                {schedule.description}
-                              </Typography>
-                            )}
-                          </TableCell>
-                          <TableCell>{formatDateTime(schedule.startTime)}</TableCell>
-                          <TableCell>{formatDateTime(schedule.endTime)}</TableCell>
-                          <TableCell>
-                            {status ? (
-                              <Chip
-                                label={status.label}
-                                size="small"
-                                color={
-                                  status.type === "active"
-                                    ? "success"
-                                    : status.type === "upcoming"
-                                    ? "primary"
-                                    : "default"
-                                }
-                              />
-                            ) : (
-                              <Chip label="No Status" size="small" color="default" />
-                            )}
-                          </TableCell>
-                          <TableCell align="right">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleOpenScheduleDialog(schedule)}
-                              sx={{ color: "#b03a6c" }}
-                            >
-                              <EditIcon data-testid="EditIcon" />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleDeleteSchedule(schedule.id)}
-                              sx={{ color: "#d32f2f" }}
-                            >
-                              <DeleteIcon data-testid="DeleteIcon" />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+            {(() => {
+              if (loadingSchedules) return renderLoadingState()
+              if (schedules.length === 0) return renderEmptyState()
+              return renderScheduleTable()
+            })()}
 
             <Box sx={{ mt: 3 }}>
               <Typography variant="body2" color="text.secondary">
@@ -645,11 +849,13 @@ export default function AdminDashboard() {
                     type="datetime-local"
                     value={scheduleForm.startTime}
                     onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    inputProps={{
-                      min: new Date().toISOString().slice(0, 16),
+                    slotProps={{
+                      inputLabel: {
+                        shrink: true,
+                      },
+                      htmlInput: {
+                        min: new Date().toISOString().slice(0, 16),
+                      },
                     }}
                     required
                   />
@@ -661,11 +867,13 @@ export default function AdminDashboard() {
                     type="datetime-local"
                     value={scheduleForm.endTime}
                     onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    inputProps={{
-                      min: scheduleForm.startTime || new Date().toISOString().slice(0, 16),
+                    slotProps={{
+                      inputLabel: {
+                        shrink: true,
+                      },
+                      htmlInput: {
+                        min: scheduleForm.startTime || new Date().toISOString().slice(0, 16),
+                      },
                     }}
                     required
                   />
@@ -686,7 +894,11 @@ export default function AdminDashboard() {
                 },
               }}
             >
-              {savingSchedule ? "Saving..." : editingSchedule ? "Update Schedule" : "Schedule Career Fair"}
+              {(() => {
+                if (savingSchedule) return "Saving..."
+                if (editingSchedule) return "Update Schedule"
+                return "Schedule Career Fair"
+              })()}
             </Button>
           </DialogActions>
         </Dialog>

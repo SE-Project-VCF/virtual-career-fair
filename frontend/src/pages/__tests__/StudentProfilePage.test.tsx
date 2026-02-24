@@ -348,7 +348,8 @@ describe("StudentProfilePage", () => {
     renderStudentProfile();
 
     await waitFor(() => {
-      expect((screen.getByLabelText(/Major/) as HTMLInputElement).value).toBe(
+      const majorInput = screen.getByLabelText(/Major/);
+      expect((majorInput as HTMLInputElement).value).toBe(
         "Computer Science"
       );
     });

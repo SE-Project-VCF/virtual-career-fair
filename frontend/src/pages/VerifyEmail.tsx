@@ -43,27 +43,32 @@ export default function VerifyEmail() {
     verify()
   }, [location.state, navigate])
 
-  const content =
-    status === "verifying"
-      ? {
-          icon: <CircularProgress size={60} sx={{ color: "#388560" }} />,
-          title: "Verifying Your Email...",
-          message: "Please wait while we confirm your email.",
-          color: "#388560",
-        }
-      : status === "verified"
-      ? {
-          icon: <CheckCircleIcon sx={{ fontSize: 60, color: "#388560" }} />,
-          title: "Email Verified Successfully!",
-          message: "Redirecting you to your dashboard...",
-          color: "#388560",
-        }
-      : {
-          icon: <ErrorIcon sx={{ fontSize: 60, color: "#b03a6c" }} />,
-          title: "Verification Failed",
-          message: error || "Please try again.",
-          color: "#b03a6c",
-        }
+  const getContent = () => {
+    if (status === "verifying") {
+      return {
+        icon: <CircularProgress size={60} sx={{ color: "#388560" }} />,
+        title: "Verifying Your Email...",
+        message: "Please wait while we confirm your email.",
+        color: "#388560",
+      }
+    }
+    if (status === "verified") {
+      return {
+        icon: <CheckCircleIcon sx={{ fontSize: 60, color: "#388560" }} />,
+        title: "Email Verified Successfully!",
+        message: "Redirecting you to your dashboard...",
+        color: "#388560",
+      }
+    }
+    return {
+      icon: <ErrorIcon sx={{ fontSize: 60, color: "#b03a6c" }} />,
+      title: "Verification Failed",
+      message: error || "Please try again.",
+      color: "#b03a6c",
+    }
+  }
+
+  const content = getContent()
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>

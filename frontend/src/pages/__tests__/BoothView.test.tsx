@@ -98,7 +98,7 @@ describe("BoothView", () => {
     (firestore.collection as any).mockReturnValue({});
     (firestore.where as any).mockReturnValue({});
     // Default fetch mock - resolves with empty jobs
-    (global.fetch as any) = vi.fn().mockResolvedValue({
+    (globalThis.fetch as any) = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ jobs: [] }),
     });
@@ -308,7 +308,7 @@ describe("BoothView", () => {
 
   // Jobs Fetching Tests
   it("fetches jobs for company on booth load", async () => {
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ jobs: [] }),
     });
@@ -316,7 +316,7 @@ describe("BoothView", () => {
     renderBoothView();
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/jobs?companyId=company-1")
       );
     });
@@ -333,7 +333,7 @@ describe("BoothView", () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ jobs }),
     });
@@ -356,7 +356,7 @@ describe("BoothView", () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ jobs }),
     });
@@ -433,7 +433,7 @@ describe("BoothView", () => {
 
   // Error Handling Tests
   it("displays error when job fetch fails", async () => {
-    (global.fetch as any).mockRejectedValue(new Error("Network error"));
+    (globalThis.fetch as any).mockRejectedValue(new Error("Network error"));
 
     renderBoothView();
 
@@ -477,7 +477,7 @@ describe("BoothView", () => {
 
   // Empty Jobs Test
   it("does not display job section when no jobs available", async () => {
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ jobs: [] }),
     });
@@ -529,7 +529,7 @@ describe("BoothView", () => {
 
     // Should still fetch jobs with found companyId
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/jobs?companyId=company-2")
       );
     });
@@ -724,7 +724,7 @@ describe("BoothView", () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ jobs }),
     });
@@ -866,7 +866,7 @@ describe("BoothView", () => {
       resolveJobs = resolve;
     });
 
-    (global.fetch as any).mockReturnValue(jobsPromise);
+    (globalThis.fetch as any).mockReturnValue(jobsPromise);
 
     renderBoothView();
 
@@ -889,7 +889,7 @@ describe("BoothView", () => {
   // Job fetch non-ok response
   it("handles non-ok response when fetching jobs", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: false,
     });
 

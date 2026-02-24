@@ -65,7 +65,7 @@ export default function StudentProfilePage() {
       setError("Major and Expected Graduation Year are required.")
       return
     }
-    const gradYear = parseInt(year)
+    const gradYear = Number.parseInt(year)
     if (gradYear < 2023 || gradYear > 2035) {
       setError("Enter a realistic graduation year (2023-2035).")
       return
@@ -113,8 +113,8 @@ export default function StudentProfilePage() {
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
+    const file = e.target.files?.[0]
+    if (file) {
       if (file.type !== "application/pdf") {
         setError("Only PDF files are allowed.")
         return
@@ -203,7 +203,7 @@ export default function StudentProfilePage() {
             {/* Resume Upload */}
             <Box sx={{ mb: 3 }}>
               <Button variant="contained" component="label">
-                Upload Resume (PDF)
+                {"Upload Resume (PDF)"}
                 <input type="file" hidden onChange={handleFileChange} />
               </Button>
               {resumeFile && (

@@ -775,26 +775,19 @@ describe("Booths", () => {
     let getDocCallCount = 0;
     (getDoc as Mock).mockImplementation(() => {
       getDocCallCount++;
-      if (getDocCallCount === 1) {
-        // First call: get company to find boothId
-        return Promise.resolve({
-          exists: () => true,
-          data: () => mockCompanies[0],
-        });
-      } else if (getDocCallCount === 2) {
+      if (getDocCallCount === 2) {
         // Second call: get booth data
         return Promise.resolve({
           exists: () => true,
           id: "booth1",
           data: () => mockBooth,
         });
-      } else {
-        // Third call: lookup company by boothId
-        return Promise.resolve({
-          exists: () => true,
-          data: () => mockCompanies[0],
-        });
       }
+      // First and third calls: get company to find boothId / lookup company by boothId
+      return Promise.resolve({
+        exists: () => true,
+        data: () => mockCompanies[0],
+      });
     });
 
     renderBooths();

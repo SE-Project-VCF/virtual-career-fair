@@ -12,7 +12,7 @@ vi.mock("../../utils/auth", () => ({
 }));
 
 // Mock fetch
-global.fetch = vi.fn();
+globalThis.fetch = vi.fn();
 
 const mockInvitations = [
   {
@@ -72,7 +72,7 @@ describe("JobInviteStatsDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (authUtils.getCurrentUser as any).mockReturnValue(mockUser);
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ invitations: mockInvitations }),
     });
@@ -88,7 +88,7 @@ describe("JobInviteStatsDialog", () => {
       />
     );
 
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("renders dialog title with job title", async () => {
@@ -129,7 +129,7 @@ describe("JobInviteStatsDialog", () => {
     );
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         "http://localhost:5000/api/job-invitations/details/job-1?userId=user-1",
         expect.objectContaining({
           method: "GET",
@@ -140,7 +140,7 @@ describe("JobInviteStatsDialog", () => {
   });
 
   it("displays error message when fetch fails", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: false,
       json: async () => ({ error: "Failed to fetch data" }),
     });
@@ -338,7 +338,7 @@ describe("JobInviteStatsDialog", () => {
   });
 
   it("shows empty state when no invitations", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ invitations: [] }),
     });
@@ -361,7 +361,7 @@ describe("JobInviteStatsDialog", () => {
     const user = userEvent.setup();
     
     // Mock data with only "sent" invitations
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ 
         invitations: [
@@ -429,7 +429,7 @@ describe("JobInviteStatsDialog", () => {
   });
 
   it("handles missing student information gracefully", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ 
         invitations: [
@@ -474,13 +474,13 @@ describe("JobInviteStatsDialog", () => {
     );
 
     await waitFor(() => {
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
   });
 
   it("formats timestamps correctly for recent times", async () => {
     const now = Date.now();
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ 
         invitations: [
@@ -529,7 +529,7 @@ describe("JobInviteStatsDialog", () => {
     );
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
     rerender(
@@ -542,8 +542,8 @@ describe("JobInviteStatsDialog", () => {
     );
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledTimes(2);
-      expect(global.fetch).toHaveBeenLastCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+      expect(globalThis.fetch).toHaveBeenLastCalledWith(
         "http://localhost:5000/api/job-invitations/details/job-2?userId=user-1",
         expect.any(Object)
       );

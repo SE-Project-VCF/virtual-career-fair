@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { User as FirebaseUser } from "firebase/auth";
+import { createContext, useContext, useState, useEffect, useMemo } from "react";
+import type { ReactNode } from "react";
+import type { User as FirebaseUser } from "firebase/auth";
 import { auth } from "../firebase";
 
 interface UserData {
@@ -29,7 +30,7 @@ export function useAuth() {
 }
 
 interface AuthProviderProps {
-  children: ReactNode;
+  readonly children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -65,12 +66,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return unsubscribe;
   }, []);
 
-  const value = {
-    currentUser,
-    firebaseUser,
-    loading,
-    setCurrentUser,
-  };
+  const value = useMemo(
+    () => ({
+      currentUser,
+      firebaseUser,
+      loading,
+      setCurrentUser,
+    }),
+    [currentUser, firebaseUser, loading, setCurrentUser]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

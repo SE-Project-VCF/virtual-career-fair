@@ -79,7 +79,7 @@ describe("CompanyManagement", () => {
     // Default mock for getDocs
     (firestore.getDocs as any).mockResolvedValue({
       forEach: (callback: any) => {
-        mockCompanyData.forEach(callback);
+        mockCompanyData.forEach((item) => callback(item));
       },
       docs: mockCompanyData,
     });

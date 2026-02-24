@@ -67,7 +67,7 @@ describe("CORS Branch Coverage", () => {
   it("rejects requests from disallowed origin", async () => {
     const res = await request(app)
       .get("/api/fair-status")
-      .set("Origin", "http://evil.com");
+      .set("Origin", "http://evil.com"); // NOSONAR - intentional http for security test
     // CORS rejection happens at middleware level
     expect(res.status).toBeGreaterThan(0);
   });
@@ -393,7 +393,7 @@ describe("Register User Branch Coverage", () => {
       .post("/api/register-user")
       .send({
         email: "test@test.com",
-        password: "pass123",
+        password: "pass123", // NOSONAR - test fixture password
         role: "student",
       });
 

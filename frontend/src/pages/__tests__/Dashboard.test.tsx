@@ -46,7 +46,7 @@ vi.mock("../../firebase", () => ({
 }))
 
 // Mock fetch for unread count and other API calls
-global.fetch = vi.fn().mockResolvedValue({
+globalThis.fetch = vi.fn().mockResolvedValue({
   ok: true,
   json: () => Promise.resolve({ unread: 0 }),
 })
@@ -552,7 +552,7 @@ describe("Dashboard", () => {
   // Chat Functionality Tests
   describe("Chat Functionality", () => {
     it("displays chat button with unread count badge", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ unread: 5 }),
       })

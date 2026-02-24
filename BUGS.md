@@ -18,7 +18,7 @@
 | 7 | **Unprotected admin sync endpoint** — `POST /api/sync-stream-users` has no auth check; anyone can trigger a full user sync | backend/server.js | 304-351 |
 | 8 | **Missing env var validation at startup** — Backend creates `StreamChat` client without checking if `STREAM_API_KEY`/`STREAM_API_SECRET` exist, causing silent failures | backend/server.js | 13-16 |
 | 9 | **Incomplete `.env.example`** — Frontend example only has `VITE_STREAM_API_KEY`; missing `VITE_API_URL` and Firebase config vars. Backend example missing `PORT`, `FRONTEND_URL` | frontend/.env.example, backend/.env.example | — |
-| 10 | **Password logged to console** in `createAdmin.js` script | backend/scripts/createAdmin.js | 130 |
+| 10 | **Password logged to console** in `createAdmin.mjs` script | backend/scripts/createAdmin.mjs | 130 |
 
 ## MEDIUM
 

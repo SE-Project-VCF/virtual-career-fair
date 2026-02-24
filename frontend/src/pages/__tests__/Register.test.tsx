@@ -63,7 +63,7 @@ describe("Register", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
   });
 
   it("renders the register form", () => {
@@ -350,7 +350,7 @@ describe("Register", () => {
       success: true,
       needsVerification: false,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -432,7 +432,7 @@ describe("Register", () => {
       success: true,
       needsVerification: false,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -478,7 +478,7 @@ describe("Register", () => {
       success: true,
       needsVerification: false,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -571,7 +571,7 @@ describe("Register", () => {
       success: true,
       needsVerification: true,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -614,7 +614,7 @@ describe("Register", () => {
       success: true,
       needsVerification: false,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -669,7 +669,7 @@ describe("Register", () => {
       success: true,
       needsVerification: false,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -748,7 +748,7 @@ describe("Register", () => {
       success: true,
       needsProfile: true,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -793,7 +793,7 @@ describe("Register", () => {
     });
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/sync-stream-user"),
         expect.objectContaining({
           method: "POST",
@@ -853,7 +853,7 @@ describe("Register", () => {
       success: true,
       needsVerification: false,
     });
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       status: 200,
       json: async () => ({}),
     });
@@ -884,7 +884,7 @@ describe("Register", () => {
     await user.click(submitButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/sync-stream-user"),
         expect.objectContaining({
           method: "POST",

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   useCompany,
   useJobs,
@@ -16,7 +16,7 @@ import {
 import { auth } from "../../firebase";
 
 // Get mocked function for manipulation in tests
-const mockGetIdToken = vi.mocked(auth.currentUser.getIdToken);
+const mockGetIdToken = vi.mocked(auth.currentUser!.getIdToken);
 
 // Mock firebase auth
 vi.mock("../../firebase", () => ({
@@ -28,7 +28,7 @@ vi.mock("../../firebase", () => ({
 }));
 
 // Mock fetch
-global.fetch = vi.fn();
+globalThis.fetch = vi.fn();
 
 // Helper to create React Query wrapper
 const createWrapper = () => {

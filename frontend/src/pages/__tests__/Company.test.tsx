@@ -242,7 +242,7 @@ describe("Company", () => {
       await user.click(editButtons[0].closest("button")!);
 
       const inputs = screen.queryAllByRole("textbox");
-      const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE") || i.getAttribute("label")?.includes("Invite"));
+      const inviteInput = inputs.find(i => ('value' in i && (i as HTMLInputElement).value.includes("INVITE")) || i.getAttribute("label")?.includes("Invite"));
       if (inviteInput) {
         await user.clear(inviteInput);
         await user.type(inviteInput, "CUSTOM");
@@ -285,7 +285,7 @@ describe("Company", () => {
       await user.click(editButtons[0].closest("button")!);
 
       const inputs = screen.queryAllByRole("textbox");
-      const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE"));
+      const inviteInput = inputs.find(i => 'value' in i && (i as HTMLInputElement).value.includes("INVITE"));
       if (inviteInput) {
         await user.clear(inviteInput);
         await user.type(inviteInput, "ABC");
@@ -308,7 +308,7 @@ describe("Company", () => {
       await user.click(editButtons[0].closest("button")!);
 
       const inputs = screen.queryAllByRole("textbox");
-      const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE"));
+      const inviteInput = inputs.find(i => 'value' in i && (i as HTMLInputElement).value.includes("INVITE"));
       if (inviteInput) {
         await user.clear(inviteInput);
         await user.type(inviteInput, "A");
@@ -453,7 +453,7 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[editButtons.length - 1].closest("button")!);
+      await user.click(editButtons.at(-1)!.closest("button")!);
     }
   });
 
@@ -464,7 +464,7 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[editButtons.length - 1].closest("button")!);
+      await user.click(editButtons.at(-1)!.closest("button")!);
     }
 
     const linkInput = screen.getByLabelText(/application url/i);
@@ -490,7 +490,7 @@ describe("Company", () => {
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
-      await user.click(deleteButtons[deleteButtons.length - 1].closest("button")!);
+      await user.click(deleteButtons.at(-1)!.closest("button")!);
       
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
@@ -522,12 +522,12 @@ describe("Company", () => {
 
     // Wait for confirmation dialog
     await waitFor(() => {
-      const confirmButtons = screen.getAllByRole("button").filter(b => b.textContent === "Delete");
-      expect(confirmButtons.length).toBeGreaterThan(0);
+      const confirmButton = screen.getAllByRole("button").find(b => b.textContent === "Delete");
+      expect(confirmButton).toBeDefined();
     }, { timeout: 5000 });
 
-    const confirmButtons = screen.getAllByRole("button").filter(b => b.textContent === "Delete");
-    await user.click(confirmButtons[0]);
+    const confirmButton = screen.getAllByRole("button").find(b => b.textContent === "Delete");
+    if (confirmButton) await user.click(confirmButton);
 
     // Wait for error message
     await waitFor(() => {
@@ -729,11 +729,11 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
-      global.fetch = vi.fn();
+      globalThis.fetch = vi.fn();
     });
 
     it("fetches and displays job invitation stats", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -748,7 +748,7 @@ describe("Company", () => {
       await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
+        expect(globalThis.fetch).toHaveBeenCalledWith(
           expect.stringContaining("/api/job-invitations/stats/job-1"),
           expect.any(Object)
         );
@@ -756,7 +756,7 @@ describe("Company", () => {
     });
 
     it("displays View Details button when invitations exist", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -781,7 +781,7 @@ describe("Company", () => {
     it("opens JobInviteStatsDialog when View Details is clicked", async () => {
       const user = userEvent.setup();
       
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -793,7 +793,7 @@ describe("Company", () => {
       });
 
       // Mock the details endpoint
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           invitations: [
@@ -835,7 +835,7 @@ describe("Company", () => {
     it("closes JobInviteStatsDialog when Close is clicked", async () => {
       const user = userEvent.setup();
       
-      (global.fetch as any).mockResolvedValue({
+      (globalThis.fetch as any).mockResolvedValue({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -870,7 +870,7 @@ describe("Company", () => {
     });
 
     it("does not display View Details button when no invitations", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 0,
@@ -891,7 +891,7 @@ describe("Company", () => {
     });
 
     it("handles stats fetch error gracefully", async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error("Network error"));
+      (globalThis.fetch as any).mockRejectedValueOnce(new Error("Network error"));
 
       renderComp();
       await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
@@ -903,7 +903,7 @@ describe("Company", () => {
     });
 
     it("displays invitation stats summary", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 10,
@@ -919,8 +919,8 @@ describe("Company", () => {
 
       await waitFor(() => {
         // Check if stats numbers are displayed (they might be in various formats)
-        const statsText = screen.getByText(/Software Engineer/i).closest('div')?.textContent;
         // Stats should be visible somewhere in the job card
+        expect(screen.getByText(/Software Engineer/i)).toBeInTheDocument();
       }, { timeout: 5000 });
     });
   });

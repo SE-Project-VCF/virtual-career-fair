@@ -69,6 +69,6 @@ describe("firebase", () => {
 
   it("googleProvider is an instance", () => {
     expect(googleProvider).toBeInstanceOf(Object);
-    expect(googleProvider.name).toBe("mock-google-provider");
+    expect((googleProvider as any).name).toBe("mock-google-provider");
   });
 });

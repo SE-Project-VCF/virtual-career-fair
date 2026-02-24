@@ -516,7 +516,7 @@ describe("AdminDashboard", () => {
 
     it("deletes schedule after confirmation", async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(true);
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],
         forEach: (cb: any) => cb(mockSchedule),
@@ -541,7 +541,7 @@ describe("AdminDashboard", () => {
 
     it("cancels schedule deletion when user declines", async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+      const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(false);
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],
         forEach: (cb: any) => cb(mockSchedule),
@@ -852,7 +852,7 @@ describe("AdminDashboard", () => {
 
     it("handles error in delete schedule", async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(true);
       (firestore.deleteDoc as any).mockRejectedValue(new Error("Delete failed"));
       (firestore.getDocs as any).mockResolvedValue({
         docs: [mockSchedule],

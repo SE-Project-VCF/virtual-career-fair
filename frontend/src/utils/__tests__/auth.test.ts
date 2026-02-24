@@ -20,7 +20,7 @@ describe("authUtils.registerUser", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.registerUser("test@test.com", "pass123", "student", {
       firstName: "John",
@@ -52,7 +52,7 @@ describe("authUtils.login", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.login("test@test.com", "pass123")
 
@@ -99,7 +99,7 @@ describe("authUtils.loginUser", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.loginUser("test@test.com", "pass123", "student")
 
@@ -131,7 +131,7 @@ describe("authUtils.loginWithGoogle", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.loginWithGoogle("student", false)
 
@@ -302,7 +302,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner-1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "RAND1234" }),
     } as any)
@@ -311,7 +311,7 @@ describe("authUtils.updateInviteCode", () => {
 
     expect(result.success).toBe(true)
     expect(result.inviteCode).toBeDefined()
-    expect(global.fetch).toHaveBeenCalled()
+    expect(globalThis.fetch).toHaveBeenCalled()
   })
 
   it("validates custom invite code", async () => {
@@ -319,7 +319,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner-1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "CUSTOM123" }),
     } as any)
@@ -336,7 +336,7 @@ describe("authUtils.updateInviteCode", () => {
       data: () => ({ ownerId: "owner-1" }),
     } as any)
     // Backend returns 400 when invite code is already in use
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       json: async () => ({ error: "Invite code already in use" }),
     } as any)
@@ -392,7 +392,7 @@ describe("authUtils error handling", () => {
       exists: () => true,
       data: () => ({ role: "student" }),
     } as any)
-    global.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
 
     const result = await authUtils.login("test@test.com", "pass123")
 
@@ -415,7 +415,7 @@ describe("authUtils error handling", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockRejectedValue(new Error("Sync failed"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Sync failed"))
 
     const result = await authUtils.registerUser("test@test.com", "pass123", "student")
 
@@ -433,7 +433,7 @@ describe("authUtils.login - role verification", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.login("test@test.com", "pass123")
 
@@ -452,12 +452,12 @@ describe("authUtils.login - role verification", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.login("test@test.com", "pass123")
 
     expect(result.success).toBe(true)
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/sync-stream-user"),
       expect.any(Object)
     )
@@ -482,7 +482,7 @@ describe("authUtils.loginUser - role-specific validation", () => {
       exists: () => true,
       data: () => ({ role: "representative", companyId: "comp1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.loginUser("test@test.com", "pass123", "representative")
 
@@ -553,7 +553,7 @@ describe("authUtils.registerUser - additional cases", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     await authUtils.registerUser("test@test.com", "pass123", "student", {
       firstName: "John",
@@ -573,7 +573,7 @@ describe("authUtils.registerUser - additional cases", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const additionalData = { school: "MIT", major: "CS" }
     await authUtils.registerUser("test@test.com", "pass123", "student", additionalData)
@@ -590,14 +590,14 @@ describe("authUtils.registerUser - additional cases", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     await authUtils.registerUser("test@test.com", "pass123", "student", {
       firstName: "Jane",
       lastName: "Smith",
     })
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/sync-stream-user"),
       expect.objectContaining({
         body: expect.stringContaining("Jane"),
@@ -726,7 +726,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1", inviteCode: "OLD" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "NEWCODE1" }),
     } as any)
@@ -767,7 +767,7 @@ describe("authUtils.updateInviteCode", () => {
       data: () => ({ ownerId: "owner1" }),
     } as any)
     // Backend returns 400 when invite code is already in use
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       json: async () => ({ error: "Invite code already in use" }),
     } as any)
@@ -783,7 +783,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "RAND1234" }),
     } as any)
@@ -800,7 +800,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "RAND5678" }),
     } as any)
@@ -816,7 +816,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockRejectedValue(new Error("Update failed"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Update failed"))
 
     const result = await authUtils.updateInviteCode("comp1", "owner1", "NEWCODE")
 
@@ -840,7 +840,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "CUSTOM123" }),
     } as any)

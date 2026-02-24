@@ -7,13 +7,16 @@ import * as streamChatReact from "stream-chat-react";
 vi.mock("stream-chat-react", () => ({
   ChannelList: ({ Preview }: any) => (
     <div data-testid="channel-list">
-      {Preview && Preview({ channel: { cid: "test-channel" }, setActiveChannel: vi.fn() })}
+      {Preview?.({ channel: { cid: "test-channel" }, setActiveChannel: vi.fn() })}
     </div>
   ),
   ChannelPreviewMessenger: (props: any) => (
-    <div data-testid="channel-preview" onClick={props.onSelect}>
+    <button 
+      data-testid="channel-preview" 
+      onClick={props.onSelect}
+    >
       {props.channel?.name || "Test Channel"}
-    </div>
+    </button>
   ),
 }));
 

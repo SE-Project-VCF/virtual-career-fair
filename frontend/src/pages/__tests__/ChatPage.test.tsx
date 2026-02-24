@@ -124,7 +124,7 @@ describe("ChatPage", () => {
       lastName: "User",
     });
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ token: "mock-stream-token" }),
     });
@@ -182,7 +182,7 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
+        expect(globalThis.fetch).toHaveBeenCalledWith(
           "http://localhost:3000/api/stream-token",
           expect.objectContaining({
             headers: { Authorization: "Bearer mock-token" },
@@ -227,7 +227,7 @@ describe("ChatPage", () => {
 
     it("handles API error when fetching token", async () => {
       const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,
         json: async () => ({ error: "Unauthorized" }),
       });
@@ -469,12 +469,12 @@ describe("ChatPage", () => {
         expect(screen.getByPlaceholderText(/Begin typing to send a message/)).toBeInTheDocument();
       });
 
-      const textareaElement = screen.getByPlaceholderText(/Begin typing to send a message/) as HTMLTextAreaElement;
+      const textareaElement = screen.getByPlaceholderText(/Begin typing to send a message/);
       await user.type(textareaElement, "Line 1");
       await user.keyboard("{Alt>}{Enter}{/Alt}");
 
       // Should have newline without sending
-      expect(textareaElement.value).toContain("\n");
+      expect((textareaElement as HTMLTextAreaElement).value).toContain("\n");
       expect(mockChannel.sendMessage).not.toHaveBeenCalled();
     });
   });
@@ -674,13 +674,13 @@ describe("ChatPage", () => {
         expect(screen.getByPlaceholderText(/Begin typing to send a message/)).toBeInTheDocument();
       });
 
-      const textarea = screen.getByPlaceholderText(/Begin typing to send a message/) as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText(/Begin typing to send a message/);
       
       // Type a long message
       await user.type(textarea, "Line 1\nLine 2\nLine 3\nLine 4");
 
       // The textarea should have adjusted its height (style changes are applied)
-      expect(textarea.value).toContain("\n");
+      expect((textarea as HTMLTextAreaElement).value).toContain("\n");
     });
   });
 

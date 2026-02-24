@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip } from "@mui/material"
+import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import PersonAddIcon from "@mui/icons-material/PersonAdd"
@@ -8,15 +8,8 @@ import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GoogleIcon from "@mui/icons-material/Google"
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-} from "@mui/material"
 import { doc, setDoc } from "firebase/firestore"
-import { db } from "../firebase"
-import { auth } from "../firebase"
+import { db, auth } from "../firebase"
 
 
 type RoleType = "student" | "companyOwner" | "representative" | ""
@@ -48,93 +41,83 @@ export default function Register() {
   const [googleSchool, setGoogleSchool] = useState("")
   const [googleMajor, setGoogleMajor] = useState("")
 
+  const validateRegistrationForm = (): string | null => {
+    if (!role) return "Please select a role."
+    if (!email || !password || !confirmPassword) {
+      return "Email, password, and confirm password are required."
+    }
+    if (password !== confirmPassword) return "Passwords do not match."
+    if (password.length < 6) return "Password must be at least 6 characters long."
+    if (!firstName || !lastName) return "First name and last name are required."
+    return null
+  }
 
+  const buildRegistrationData = () => {
+    if (role === "student") {
+      const studentData: any = { firstName, lastName }
+      if (school?.trim()) studentData.school = school.trim()
+      if (major?.trim()) studentData.major = major.trim()
+      return { role: "student", data: studentData }
+    }
+    
+    if (role === "companyOwner") {
+      return { role: "companyOwner", data: { firstName, lastName } }
+    }
+    
+    if (role === "representative") {
+      const representativeData: any = { firstName, lastName }
+      if (inviteCode?.trim()) representativeData.inviteCode = inviteCode.trim()
+      return { role: "representative", data: representativeData }
+    }
+    
+    return null
+  }
 
+  const syncUserToStreamChat = async () => {
+    await fetch(`${API_URL}/api/sync-stream-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uid: auth.currentUser?.uid,
+        email,
+        firstName,
+        lastName,
+      }),
+    })
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError("")
 
-    if (!role) {
-      setError("Please select a role.")
+    const validationError = validateRegistrationForm()
+    if (validationError) {
+      setError(validationError)
       return
     }
 
-    if (!email || !password || !confirmPassword) {
-      setError("Email, password, and confirm password are required.")
-      return
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.")
-      return
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.")
-      return
-    }
-
-    // First name and last name are required for all roles
-    if (!firstName || !lastName) {
-      setError("First name and last name are required.")
-      return
-    }
-
-    let result
-
-    if (role === "student") {
-      const studentData: any = {
-        firstName,
-        lastName,
-      };
-      if (school && school.trim()) {
-        studentData.school = school.trim();
-      }
-      if (major && major.trim()) {
-        studentData.major = major.trim();
-      }
-      result = await authUtils.registerUser(email, password, "student", studentData)
-    } else if (role === "companyOwner") {
-      result = await authUtils.registerUser(email, password, "companyOwner", {
-        firstName,
-        lastName,
-      })
-    } else if (role === "representative") {
-      // Invite code is optional for representatives
-      const representativeData: any = {
-        firstName,
-        lastName,
-      };
-      if (inviteCode && inviteCode.trim()) {
-        representativeData.inviteCode = inviteCode.trim();
-      }
-      result = await authUtils.registerUser(email, password, "representative", representativeData)
-    } else {
+    const registrationData = buildRegistrationData()
+    if (!registrationData) {
       setError("Invalid role selected.")
       return
     }
 
-    if (result.success) {
-      // 🔥 Sync new user to Stream Chat
-      await fetch(`${API_URL}/api/sync-stream-user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uid: auth.currentUser?.uid,
-          email,
-          firstName,
-          lastName,
-        }),
-      });
+    const result = await authUtils.registerUser(
+      email,
+      password,
+      registrationData.role as "student" | "companyOwner" | "representative",
+      registrationData.data
+    )
 
+    if (result.success) {
+      await syncUserToStreamChat()
+      
       if (result.needsVerification) {
-        navigate("/verification-pending", { state: { email } });
+        navigate("/verification-pending", { state: { email } })
       } else {
-        navigate("/login");
+        navigate("/login")
       }
-    }
-    else {
+    } else {
       setError(result.error || "Registration failed.")
     }
   }
@@ -149,8 +132,8 @@ export default function Register() {
 
     try {
       const result = await authUtils.loginWithGoogle(
-        role as "student" | "representative" | "companyOwner"
-        , true);
+        role,
+        true);
 
       if (result.success) {
         if (result.needsProfile) {
@@ -524,28 +507,26 @@ export default function Register() {
 
               {/* Representative-specific fields */}
               {role === "representative" && (
-                <>
-                  <TextField
-                    fullWidth
-                    label="Invite Code (Optional)"
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value)}
-                    margin="normal"
-                    helperText="Get this code from your employer (optional)"
-                    sx={{
-                      mb: 3,
-                      "& .MuiOutlinedInput-root": {
-                        borderRadius: 2,
-                        "&.Mui-focused fieldset": {
-                          borderColor: "#b03a6c",
-                        },
+                <TextField
+                  fullWidth
+                  label="Invite Code (Optional)"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  margin="normal"
+                  helperText="Get this code from your employer (optional)"
+                  sx={{
+                    mb: 3,
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: 2,
+                      "&.Mui-focused fieldset": {
+                        borderColor: "#b03a6c",
                       },
-                      "& .MuiInputLabel-root.Mui-focused": {
-                        color: "#b03a6c",
-                      },
-                    }}
-                  />
-                </>
+                    },
+                    "& .MuiInputLabel-root.Mui-focused": {
+                      color: "#b03a6c",
+                    },
+                  }}
+                />
               )}
 
               <Button
@@ -576,7 +557,7 @@ export default function Register() {
 
             {/* Google Sign-In button */}
             <Tooltip
-              title={!role ? "Please select an account type first" : ""}
+              title={role ? "" : "Please select an account type first"}
               arrow
               placement="top"
             >

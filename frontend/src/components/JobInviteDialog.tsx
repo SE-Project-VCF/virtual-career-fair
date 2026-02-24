@@ -41,6 +41,37 @@ interface JobInviteDialogProps {
   onSuccess?: () => void;
 }
 
+const getFilteredStudents = (students: Student[], searchTerm: string) => {
+  const trimmedSearch = searchTerm.trim();
+  if (trimmedSearch.length === 0) return students;
+
+  const searchLower = trimmedSearch.toLowerCase();
+  return students.filter((student) => {
+    const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
+    return (
+      fullName.includes(searchLower) ||
+      student.email.toLowerCase().includes(searchLower) ||
+      student.major.toLowerCase().includes(searchLower)
+    );
+  });
+};
+
+const getStudentCountLabel = (count: number) => (count === 1 ? "student" : "students");
+
+const buildInfoMessage = (boothId: string | undefined, studentCount: number) => {
+  if (boothId) {
+    return `Showing ${studentCount} ${getStudentCountLabel(studentCount)} who visited your booth. Invitations will be sent to their dashboards.`;
+  }
+
+  return "Invitations will be sent to students' dashboards as notifications.";
+};
+
+const buildSendButtonLabel = (isLoading: boolean, selectedCount: number) => {
+  if (isLoading) return "Sending...";
+  if (selectedCount === 0) return "Send";
+  return `Send (${selectedCount})`;
+};
+
 export default function JobInviteDialog({
   open,
   onClose,
@@ -48,7 +79,7 @@ export default function JobInviteDialog({
   jobTitle,
   boothId,
   onSuccess,
-}: JobInviteDialogProps) {
+}: Readonly<JobInviteDialogProps>) {
   const [students, setStudents] = useState<Student[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
@@ -74,20 +105,7 @@ export default function JobInviteDialog({
 
   // Filter students based on search term
   useEffect(() => {
-    if (searchTerm.trim() === "") {
-      setFilteredStudents(students);
-    } else {
-      const searchLower = searchTerm.toLowerCase();
-      const filtered = students.filter((student) => {
-        const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
-        return (
-          fullName.includes(searchLower) ||
-          student.email.toLowerCase().includes(searchLower) ||
-          student.major.toLowerCase().includes(searchLower)
-        );
-      });
-      setFilteredStudents(filtered);
-    }
+    setFilteredStudents(getFilteredStudents(students, searchTerm));
   }, [searchTerm, students]);
 
   const fetchStudents = async () => {
@@ -96,7 +114,7 @@ export default function JobInviteDialog({
       setError("");
       
       const currentUser = authUtils.getCurrentUser();
-      if (!currentUser) {
+      if (currentUser === null) {
         setError("You must be logged in to invite students");
         return;
       }
@@ -117,14 +135,14 @@ export default function JobInviteDialog({
         }
       );
 
-      if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        setStudents(data.students || []);
+        setFilteredStudents(data.students || []);
+      } else {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to fetch students");
       }
-
-      const data = await response.json();
-      setStudents(data.students || []);
-      setFilteredStudents(data.students || []);
     } catch (err: any) {
       console.error("Error fetching students:", err);
       setError(err.message || "Failed to load students");
@@ -164,7 +182,7 @@ export default function JobInviteDialog({
       setError("");
 
       const currentUser = authUtils.getCurrentUser();
-      if (!currentUser) {
+      if (currentUser === null) {
         throw new Error("You must be logged in");
       }
 
@@ -180,13 +198,13 @@ export default function JobInviteDialog({
         }),
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        await response.json();
+        setSuccess(true);
+      } else {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to send invitations");
       }
-
-      const data = await response.json();
-      setSuccess(true);
       
       // Show success message briefly, then close
       setTimeout(() => {
@@ -209,6 +227,156 @@ export default function JobInviteDialog({
 
   const allSelected = filteredStudents.length > 0 && selectedStudents.size === filteredStudents.length;
   const someSelected = selectedStudents.size > 0 && selectedStudents.size < filteredStudents.length;
+  const infoMessage = buildInfoMessage(boothId, students.length);
+  const inviteCountSuffix = selectedStudents.size === 1 ? "" : "s";
+  const sendButtonLabel = buildSendButtonLabel(loading, selectedStudents.size);
+
+  const renderStudentList = () => {
+    if (loadingStudents) {
+      return (
+        <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+          <CircularProgress />
+        </Box>
+      );
+    }
+
+    if (filteredStudents.length === 0) {
+      return (
+        <Box sx={{ p: 3, textAlign: "center" }}>
+          <Typography color="text.secondary">
+            {students.length === 0 ? "No students found" : "No students match your search"}
+          </Typography>
+        </Box>
+      );
+    }
+
+    return (
+      <List dense sx={{ p: 0 }}>
+        {filteredStudents.map((student) => (
+          <ListItem key={student.id} disablePadding>
+            <ListItemButton onClick={() => handleToggleStudent(student.id)} dense>
+              <ListItemIcon>
+                <Checkbox
+                  edge="start"
+                  checked={selectedStudents.has(student.id)}
+                  tabIndex={-1}
+                  disableRipple
+                />
+              </ListItemIcon>
+              <ListItemText
+                primary={`${student.firstName} ${student.lastName}`}
+                secondary={
+                  <>
+                    {student.email}
+                    {student.major && ` • ${student.major}`}
+                  </>
+                }
+              />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+    );
+  };
+
+  const renderDialogContent = () => {
+    if (success) {
+      return (
+        <Box sx={{ textAlign: "center", py: 4 }}>
+          <Alert severity="success">
+            Successfully sent {selectedStudents.size} invitation{inviteCountSuffix}!
+          </Alert>
+        </Box>
+      );
+    }
+
+    return (
+      <>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}> 
+            {error}
+          </Alert>
+        )}
+
+        <Alert severity="info" sx={{ mb: 3 }}>
+          {infoMessage}
+        </Alert>
+
+        {/* Optional Message */}
+        <TextField
+          fullWidth
+          multiline
+          rows={3}
+          label="Personal Message (Optional)"
+          placeholder="Add a personal message to your invitation..."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          sx={{ mb: 3 }}
+        />
+
+        {/* Student Selection */}
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              Select Students
+            </Typography>
+            <Chip
+              label={`${selectedStudents.size} selected`}
+              color={selectedStudents.size > 0 ? "primary" : "default"}
+              size="small"
+            />
+          </Box>
+
+          {/* Search */}
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search by name, email, or major..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: searchTerm ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchTerm("")} edge="end">
+                      <ClearIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ) : undefined,
+              },
+            }}
+            sx={{ mb: 1 }}
+          />
+
+          {/* Select All Button */}
+          {filteredStudents.length > 0 && (
+            <Button size="small" onClick={handleSelectAll} sx={{ mb: 1 }}>
+              {allSelected ? "Deselect All" : "Select All"}
+              {someSelected && ` (${selectedStudents.size})`}
+            </Button>
+          )}
+
+          {/* Students List */}
+          <Box
+            sx={{
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1,
+              maxHeight: "300px",
+              overflow: "auto",
+            }}
+          >
+            {renderStudentList()}
+          </Box>
+        </Box>
+      </>
+    );
+  };
 
   return (
     <Dialog
@@ -216,8 +384,10 @@ export default function JobInviteDialog({
       onClose={handleClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: { minHeight: "70vh", maxHeight: "90vh" },
+      slotProps={{
+        paper: {
+          sx: { minHeight: "70vh", maxHeight: "90vh" },
+        },
       }}
     >
       <DialogTitle>
@@ -229,149 +399,7 @@ export default function JobInviteDialog({
         </Typography>
       </DialogTitle>
 
-      <DialogContent dividers>
-        {success ? (
-          <Box sx={{ textAlign: "center", py: 4 }}>
-            <Alert severity="success">
-              Successfully sent {selectedStudents.size} invitation{selectedStudents.size !== 1 ? "s" : ""}!
-            </Alert>
-          </Box>
-        ) : (
-          <>
-            {error && (
-              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
-                {error}
-              </Alert>
-            )}
-
-            <Alert severity="info" sx={{ mb: 3 }}>
-              {boothId 
-                ? `Showing ${students.length} student${students.length !== 1 ? 's' : ''} who visited your booth. Invitations will be sent to their dashboards.`
-                : "Invitations will be sent to students' dashboards as notifications."}
-            </Alert>
-
-            {/* Optional Message */}
-            <TextField
-              fullWidth
-              multiline
-              rows={3}
-              label="Personal Message (Optional)"
-              placeholder="Add a personal message to your invitation..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              sx={{ mb: 3 }}
-            />
-
-            {/* Student Selection */}
-            <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Select Students
-                </Typography>
-                <Chip
-                  label={`${selectedStudents.size} selected`}
-                  color={selectedStudents.size > 0 ? "primary" : "default"}
-                  size="small"
-                />
-              </Box>
-
-              {/* Search */}
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Search by name, email, or major..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                  endAdornment: searchTerm && (
-                    <InputAdornment position="end">
-                      <IconButton
-                        size="small"
-                        onClick={() => setSearchTerm("")}
-                        edge="end"
-                      >
-                        <ClearIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{ mb: 1 }}
-              />
-
-              {/* Select All Button */}
-              {filteredStudents.length > 0 && (
-                <Button
-                  size="small"
-                  onClick={handleSelectAll}
-                  sx={{ mb: 1 }}
-                >
-                  {allSelected ? "Deselect All" : "Select All"}
-                  {!allSelected && someSelected && ` (${selectedStudents.size})`}
-                </Button>
-              )}
-
-              {/* Students List */}
-              <Box
-                sx={{
-                  border: "1px solid",
-                  borderColor: "divider",
-                  borderRadius: 1,
-                  maxHeight: "300px",
-                  overflow: "auto",
-                }}
-              >
-                {loadingStudents ? (
-                  <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-                    <CircularProgress />
-                  </Box>
-                ) : filteredStudents.length === 0 ? (
-                  <Box sx={{ p: 3, textAlign: "center" }}>
-                    <Typography color="text.secondary">
-                      {students.length === 0
-                        ? "No students found"
-                        : "No students match your search"}
-                    </Typography>
-                  </Box>
-                ) : (
-                  <List dense sx={{ p: 0 }}>
-                    {filteredStudents.map((student) => (
-                      <ListItem key={student.id} disablePadding>
-                        <ListItemButton
-                          onClick={() => handleToggleStudent(student.id)}
-                          dense
-                        >
-                          <ListItemIcon>
-                            <Checkbox
-                              edge="start"
-                              checked={selectedStudents.has(student.id)}
-                              tabIndex={-1}
-                              disableRipple
-                            />
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={`${student.firstName} ${student.lastName}`}
-                            secondary={
-                              <>
-                                {student.email}
-                                {student.major && ` • ${student.major}`}
-                              </>
-                            }
-                          />
-                        </ListItemButton>
-                      </ListItem>
-                    ))}
-                  </List>
-                )}
-              </Box>
-            </Box>
-          </>
-        )}
-      </DialogContent>
+      <DialogContent dividers>{renderDialogContent()}</DialogContent>
 
       <DialogActions>
         <Button onClick={handleClose} disabled={loading}>
@@ -383,7 +411,7 @@ export default function JobInviteDialog({
           disabled={loading || selectedStudents.size === 0 || success}
           startIcon={loading && <CircularProgress size={20} />}
         >
-          {loading ? "Sending..." : `Send ${selectedStudents.size > 0 ? `(${selectedStudents.size})` : ""}`}
+          {sendButtonLabel}
         </Button>
       </DialogActions>
     </Dialog>

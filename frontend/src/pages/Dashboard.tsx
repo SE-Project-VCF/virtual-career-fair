@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
+import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Badge, Tooltip } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { collection, query, where, getDocs, Timestamp } from "firebase/firestore"
 import { db, auth } from "../firebase"
@@ -12,11 +12,685 @@ import WorkIcon from "@mui/icons-material/Work"
 import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
 import MailIcon from "@mui/icons-material/Mail"
-import { Badge, Tooltip } from "@mui/material"
 import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu"
 import EventList from "../components/EventList"
 import NotificationBell from "../components/NotificationBell"
+
+// Helper function to get fair status message based on user role
+function getFairStatusMessage(role: string | undefined): string {
+  if (role === "student") {
+    return "The career fair is not currently live. You will be able to browse all company booths once the fair goes live.";
+  }
+  if (role === "representative" || role === "companyOwner") {
+    return "The career fair is not currently live. You can still view and edit your own booth, but you cannot browse other companies' booths until the fair goes live.";
+  }
+  return "The career fair is not currently live. Only company owners and representatives can view their own booths.";
+}
+
+// Helper function to get display name
+function getDisplayName(user: ReturnType<typeof authUtils.getCurrentUser>): string {
+  const firstName = user?.firstName || "";
+  const lastName = user?.lastName || "";
+  if (firstName && lastName) {
+    return `${firstName} ${lastName}`;
+  }
+  if (firstName) {
+    return firstName;
+  }
+  return user?.email || "User";
+}
+
+// Helper function to get job invitation text
+function getJobInvitationText(newInvitationsCount: number): string {
+  const invitationSuffix = newInvitationsCount === 1 ? "" : "s";
+  return newInvitationsCount > 0 
+    ? `${newInvitationsCount} new invitation${invitationSuffix}`
+    : "Companies have invited you to apply";
+}
+
+// Component for Representative section
+function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen }: Readonly<{
+  navigate: ReturnType<typeof useNavigate>
+  user: any
+  isLive: boolean
+  setInviteCodeDialogOpen: (open: boolean) => void
+}>) {
+  return (
+    <Box sx={{ mb: 4 }}>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+        Company Management
+      </Typography>
+      <Grid container spacing={3}>
+        {!user.companyId && (
+          <Grid size={{ xs: 12 }}>
+            <Card
+              sx={{
+                bgcolor: "white",
+                border: "2px dashed rgba(56, 133, 96, 0.3)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                "&:hover": {
+                  transform: "translateY(-4px)",
+                  boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                },
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                  <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Link to Company
+                  </Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Enter an invite code from your employer to link your account to a company.
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => setInviteCodeDialogOpen(true)}
+                  sx={{
+                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                    "&:hover": {
+                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                    },
+                  }}
+                >
+                  Enter Invite Code
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+        {user.companyId && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card
+              sx={{
+                bgcolor: "white",
+                border: "1px solid rgba(56, 133, 96, 0.3)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+                "&:hover": {
+                  transform: "translateY(-4px)",
+                  boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                },
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                  <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Manage Company
+                  </Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  View and manage your company information and booth.
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    if (user.companyId) {
+                      navigate(`/company/${user.companyId}`)
+                    } else {
+                      navigate("/dashboard")
+                    }
+                  }}
+                  sx={{
+                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                    "&:hover": {
+                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                    },
+                  }}
+                >
+                  View Company
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Browse All Booths
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                {isLive
+                  ? "Explore other companies' booths at the virtual career fair."
+                  : "The career fair is not currently live. You can only view your own company's booth."}
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => navigate("/booths")}
+                disabled={!isLive}
+                sx={{
+                  background: isLive
+                    ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
+                    : "rgba(0, 0, 0, 0.12)",
+                  color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                  "&:hover": {
+                    background: isLive
+                      ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+                      : "rgba(0, 0, 0, 0.12)",
+                  },
+                  "&:disabled": {
+                    background: "rgba(0, 0, 0, 0.12)",
+                    color: "rgba(0, 0, 0, 0.26)",
+                  },
+                }}
+              >
+                View All Booths
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  )
+}
+
+function AdminSection({ navigate }: Readonly<{
+  navigate: ReturnType<typeof useNavigate>
+}>) {
+  return (
+    <Box sx={{ mb: 4 }}>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+        Administrator Controls
+      </Typography>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(176, 58, 108, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Manage Career Fair
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Control when the career fair is live and visible to all users.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => navigate("/admin")}
+                sx={{
+                  background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                  "&:hover": {
+                    background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                  },
+                }}
+              >
+                Go to Admin Dashboard
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  )
+}
+
+function StudentSection({
+  navigate,
+  isLive,
+  jobInvitationsCount,
+  newInvitationsCount,
+  loadingInvitations,
+}: Readonly<{
+  navigate: ReturnType<typeof useNavigate>
+  isLive: boolean
+  jobInvitationsCount: number
+  newInvitationsCount: number
+  loadingInvitations: boolean
+}>) {
+  return (
+    <Box sx={{ mb: 4 }}>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+        Career Opportunities
+      </Typography>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <EventIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Browse Career Fairs
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                View all available virtual career fairs and browse company booths within each one.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => navigate("/fairs")}
+                sx={{
+                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  "&:hover": {
+                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                  },
+                }}
+              >
+                View All Fairs
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(176, 58, 108, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <BusinessIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Browse Company Booths
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                {isLive
+                  ? "Explore opportunities from top companies at the virtual career fair."
+                  : "The career fair is not currently live. Check back later to browse company booths."}
+              </Typography>
+              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                <Button
+                  variant="contained"
+                  onClick={() => navigate("/booths")}
+                  disabled={!isLive}
+                  sx={{
+                    background: isLive
+                      ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+                      : "rgba(0, 0, 0, 0.12)",
+                    color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                    "&:hover": {
+                      background: isLive
+                        ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+                        : "rgba(0, 0, 0, 0.12)",
+                    },
+                    "&:disabled": {
+                      background: "rgba(0, 0, 0, 0.12)",
+                      color: "rgba(0, 0, 0, 0.26)",
+                    },
+                  }}
+                >
+                  View All Booths
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate("/dashboard/booth-history")}
+                  disabled={!isLive}
+                  sx={{
+                    borderColor: "rgba(176, 58, 108, 0.6)",
+                    color: isLive ? "#b03a6c" : "rgba(0, 0, 0, 0.26)",
+                    "&:hover": {
+                      borderColor: "#b03a6c",
+                      backgroundColor: "rgba(176, 58, 108, 0.08)",
+                    },
+                    "&:disabled": {
+                      borderColor: "rgba(0, 0, 0, 0.12)",
+                      color: "rgba(0, 0, 0, 0.26)",
+                    },
+                  }}
+                >
+                  View Booth History
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: newInvitationsCount > 0
+                ? "2px solid rgba(176, 58, 108, 0.5)"
+                : "1px solid rgba(176, 58, 108, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <MailIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Job Invitations
+                  </Typography>
+                </Box>
+                {newInvitationsCount > 0 && (
+                  <Badge badgeContent={newInvitationsCount} color="error" />
+                )}
+              </Box>
+              <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
+                {loadingInvitations ? "..." : jobInvitationsCount}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {getJobInvitationText(newInvitationsCount)}
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => navigate("/dashboard/job-invitations")}
+                disabled={jobInvitationsCount === 0}
+                sx={{
+                  background: jobInvitationsCount > 0
+                    ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+                    : "rgba(0, 0, 0, 0.12)",
+                  color: jobInvitationsCount > 0 ? "white" : "rgba(0, 0, 0, 0.26)",
+                  "&:hover": {
+                    background: jobInvitationsCount > 0
+                      ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
+                      : "rgba(0, 0, 0, 0.12)",
+                  },
+                  "&:disabled": {
+                    background: "rgba(0, 0, 0, 0.12)",
+                    color: "rgba(0, 0, 0, 0.26)",
+                  },
+                }}
+              >
+                View Invitations
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  )
+}
+
+function StatsSection({
+  loadingStats,
+  upcomingEventsCount,
+  totalCompaniesCount,
+  totalJobOpenings,
+}: Readonly<{
+  loadingStats: boolean
+  upcomingEventsCount: number
+  totalCompaniesCount: number
+  totalJobOpenings: number
+}>) {
+  return (
+    <Grid container spacing={3}>
+      <Grid size={{ xs: 12, md: 4 }}>
+        <Card
+          sx={{
+            bgcolor: "white",
+            border: "1px solid rgba(176, 58, 108, 0.3)",
+            transition: "transform 0.2s, box-shadow 0.2s",
+            "&:hover": {
+              transform: "translateY(-4px)",
+              boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+            },
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+              <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Upcoming Events
+              </Typography>
+            </Box>
+            <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
+              {loadingStats ? "..." : upcomingEventsCount}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Career fairs scheduled
+            </Typography>
+          </CardContent>
+        </Card>
+      </Grid>
+      <Grid size={{ xs: 12, md: 4 }}>
+        <Card
+          sx={{
+            bgcolor: "white",
+            border: "1px solid rgba(56, 133, 96, 0.3)",
+            transition: "transform 0.2s, box-shadow 0.2s",
+            "&:hover": {
+              transform: "translateY(-4px)",
+              boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+            },
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+              <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Companies
+              </Typography>
+            </Box>
+            <Typography variant="h3" sx={{ fontWeight: 700, color: "#388560", mb: 1 }}>
+              {loadingStats ? "..." : totalCompaniesCount}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Employers participating
+            </Typography>
+          </CardContent>
+        </Card>
+      </Grid>
+      <Grid size={{ xs: 12, md: 4 }}>
+        <Card
+          sx={{
+            bgcolor: "white",
+            border: "1px solid rgba(176, 58, 108, 0.3)",
+            transition: "transform 0.2s, box-shadow 0.2s",
+            "&:hover": {
+              transform: "translateY(-4px)",
+              boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+            },
+          }}
+        >
+          <CardContent sx={{ p: 3 }}>
+            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+              <WorkIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Job Openings
+              </Typography>
+            </Box>
+            <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
+              {loadingStats ? "..." : totalJobOpenings}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Positions available
+            </Typography>
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
+  )
+}
+
+// Component for Company Owner section
+function CompanyOwnerSection({ navigate, isLive, totalRepresentatives }: Readonly<{
+  navigate: ReturnType<typeof useNavigate>
+  isLive: boolean
+  totalRepresentatives: number
+}>) {
+  return (
+    <Box sx={{ mb: 4 }}>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+        Company Management
+      </Typography>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <ShareIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Manage Companies
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Create and manage your companies.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => navigate("/companies")}
+                sx={{
+                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  "&:hover": {
+                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                  },
+                }}
+              >
+                Manage Companies
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(176, 58, 108, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <PeopleIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Team Members
+                </Typography>
+              </Box>
+              <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
+                {totalRepresentatives}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Company representatives registered
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Browse All Booths
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                {isLive
+                  ? "Explore other companies' booths at the virtual career fair."
+                  : "The career fair is not currently live. You can only view your own company's booth."}
+              </Typography>
+              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                <Button
+                  variant="contained"
+                  onClick={() => navigate("/booths")}
+                  disabled={!isLive}
+                  sx={{
+                    background: isLive
+                      ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
+                      : "rgba(0, 0, 0, 0.12)",
+                    color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                    "&:hover": {
+                      background: isLive
+                        ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
+                        : "rgba(0, 0, 0, 0.12)",
+                    },
+                    "&:disabled": {
+                      background: "rgba(0, 0, 0, 0.12)",
+                      color: "rgba(0, 0, 0, 0.26)",
+                    },
+                  }}
+                >
+                  View All Booths
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate("/dashboard/booth-history")}
+                  disabled={!isLive}
+                  sx={{
+                    borderColor: "rgba(56, 133, 96, 0.6)",
+                    color: isLive ? "#388560" : "rgba(0, 0, 0, 0.26)",
+                    "&:hover": {
+                      borderColor: "#388560",
+                      backgroundColor: "rgba(56, 133, 96, 0.08)",
+                    },
+                    "&:disabled": {
+                      borderColor: "rgba(0, 0, 0, 0.12)",
+                      color: "rgba(0, 0, 0, 0.26)",
+                    },
+                  }}
+                >
+                  View Booth History
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  )
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -40,7 +714,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
       navigate("/")
-      return
     }
 
     // Additional role validation could be added here if needed
@@ -139,7 +812,7 @@ export default function Dashboard() {
 
   const fetchJobInvitations = useCallback(async () => {
     const currentUser = authUtils.getCurrentUser();
-    if (!currentUser || currentUser.role !== "student") return;
+    if (!currentUser || currentUser?.role !== "student") return;
 
     try {
       setLoadingInvitations(true);
@@ -331,17 +1004,7 @@ export default function Dashboard() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              Welcome back, {(() => {
-                const firstName = user?.firstName || "";
-                const lastName = user?.lastName || "";
-                if (firstName && lastName) {
-                  return `${firstName} ${lastName}`;
-                } else if (firstName) {
-                  return firstName;
-                } else {
-                  return user?.email || "User";
-                }
-              })()}!
+              Welcome back, {getDisplayName(user)}!
             </Typography>
 
             {/* Company name display for representatives - only show if they have a valid companyId */}
@@ -387,588 +1050,52 @@ export default function Dashboard() {
                 Career Fair is Not Currently Live
               </Typography>
               <Typography variant="body2">
-                {user?.role === "student"
-                  ? "The career fair is not currently live. You will be able to browse all company booths once the fair goes live."
-                  : user?.role === "representative" || user?.role === "companyOwner"
-                    ? "The career fair is not currently live. You can still view and edit your own booth, but you cannot browse other companies' booths until the fair goes live."
-                    : "The career fair is not currently live. Only company owners and representatives can view their own booths."}
+                {getFairStatusMessage(user?.role)}
               </Typography>
             </Alert>
           )}
 
           {/* Company Owner-specific section */}
-          {user && user.role === "companyOwner" && (
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-                Company Management
-              </Typography>
-              <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <Card
-                    sx={{
-                      bgcolor: "white",
-                      border: "1px solid rgba(56, 133, 96, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <ShareIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Manage Companies
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Create and manage your companies.
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => navigate("/companies")}
-                        sx={{
-                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                          "&:hover": {
-                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                          },
-                        }}
-                      >
-                        Manage Companies
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <Card
-                    sx={{
-                      bgcolor: "white",
-                      border: "1px solid rgba(176, 58, 108, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <PeopleIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Team Members
-                        </Typography>
-                      </Box>
-                      <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                        {totalRepresentatives}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Company representatives registered
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid size={{ xs: 12, md: 4 }}>
-                  <Card
-                    sx={{
-                      bgcolor: "white",
-                      border: "1px solid rgba(56, 133, 96, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Browse All Booths
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {isLive
-                          ? "Explore other companies' booths at the virtual career fair."
-                          : "The career fair is not currently live. You can only view your own company's booth."}
-                      </Typography>
-
-                      {/* Two-button row: keep the existing button, add a second beside it */}
-                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                        <Button
-                          variant="contained"
-                          onClick={() => navigate("/booths")}
-                          disabled={!isLive}
-                          sx={{
-                            background: isLive
-                              ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
-                              : "rgba(0, 0, 0, 0.12)",
-                            color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
-                            "&:hover": {
-                              background: isLive
-                                ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
-                                : "rgba(0, 0, 0, 0.12)",
-                            },
-                            "&:disabled": {
-                              background: "rgba(0, 0, 0, 0.12)",
-                              color: "rgba(0, 0, 0, 0.26)",
-                            },
-                          }}
-                        >
-                          View All Booths
-                        </Button>
-
-                        <Button
-                          variant="outlined"
-                          onClick={() => navigate("/dashboard/booth-history")}
-                          disabled={!isLive}
-                          sx={{
-                            borderColor: "rgba(56, 133, 96, 0.6)",
-                            color: isLive ? "#388560" : "rgba(0, 0, 0, 0.26)",
-                            "&:hover": {
-                              borderColor: "#388560",
-                              backgroundColor: "rgba(56, 133, 96, 0.08)",
-                            },
-                            "&:disabled": {
-                              borderColor: "rgba(0, 0, 0, 0.12)",
-                              color: "rgba(0, 0, 0, 0.26)",
-                            },
-                          }}
-                        >
-                          View Booth History
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-            </Box>
+          {user?.role === "companyOwner" && (
+            <CompanyOwnerSection 
+              navigate={navigate}
+              isLive={isLive}
+              totalRepresentatives={totalRepresentatives}
+            />
           )}
-
           {/* Representative-specific section */}
-          {user && user.role === "representative" && (
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-                Company Management
-              </Typography>
-              <Grid container spacing={3}>
-                {!user.companyId && (
-                  <Grid size={{ xs: 12 }}>
-                    <Card
-                      sx={{
-                        bgcolor: "white",
-                        border: "2px dashed rgba(56, 133, 96, 0.3)",
-                        transition: "transform 0.2s, box-shadow 0.2s",
-                        "&:hover": {
-                          transform: "translateY(-4px)",
-                          boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ p: 3 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                          <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            Link to Company
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                          Enter an invite code from your employer to link your account to a company.
-                        </Typography>
-                        <Button
-                          variant="contained"
-                          onClick={() => setInviteCodeDialogOpen(true)}
-                          sx={{
-                            background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                            "&:hover": {
-                              background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                            },
-                          }}
-                        >
-                          Enter Invite Code
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )}
-                {user.companyId && (
-                  <Grid size={{ xs: 12, md: 6 }}>
-                    <Card
-                      sx={{
-                        bgcolor: "white",
-                        border: "1px solid rgba(56, 133, 96, 0.3)",
-                        transition: "transform 0.2s, box-shadow 0.2s",
-                        "&:hover": {
-                          transform: "translateY(-4px)",
-                          boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ p: 3 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                          <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            Manage Company
-                          </Typography>
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                          View and manage your company information and booth.
-                        </Typography>
-                        <Button
-                          variant="contained"
-                          onClick={() => {
-                            // Navigate to company page if companyId is available
-                            if (user.companyId) {
-                              navigate(`/company/${user.companyId}`)
-                            } else {
-                              navigate("/dashboard")
-                            }
-                          }}
-                          sx={{
-                            background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                            "&:hover": {
-                              background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                            },
-                          }}
-                        >
-                          View Company
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )}
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card
-                    sx={{
-                      bgcolor: "white",
-                      border: "1px solid rgba(56, 133, 96, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Browse All Booths
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {isLive
-                          ? "Explore other companies' booths at the virtual career fair."
-                          : "The career fair is not currently live. You can only view your own company's booth."}
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => navigate("/booths")}
-                        disabled={!isLive}
-                        sx={{
-                          background: isLive
-                            ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
-                            : "rgba(0, 0, 0, 0.12)",
-                          color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
-                          "&:hover": {
-                            background: isLive
-                              ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
-                              : "rgba(0, 0, 0, 0.12)",
-                          },
-                          "&:disabled": {
-                            background: "rgba(0, 0, 0, 0.12)",
-                            color: "rgba(0, 0, 0, 0.26)",
-                          },
-                        }}
-                      >
-                        View All Booths
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-            </Box>
+          {user?.role === "representative" && (
+            <RepresentativeSection 
+              navigate={navigate}
+              user={user}
+              isLive={isLive}
+              setInviteCodeDialogOpen={setInviteCodeDialogOpen}
+            />
           )}
 
           {/* Administrator-specific section */}
-          {user && user.role === "administrator" && (
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-                Administrator Controls
-              </Typography>
-              <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card
-                    sx={{
-                      bgcolor: "white",
-                      border: "1px solid rgba(176, 58, 108, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Manage Career Fair
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Control when the career fair is live and visible to all users.
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => navigate("/admin")}
-                        sx={{
-                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
-                          "&:hover": {
-                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                          },
-                        }}
-                      >
-                        Go to Admin Dashboard
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-            </Box>
+          {user?.role === "administrator" && (
+            <AdminSection navigate={navigate} />
           )}
 
           {/* Student-specific section */}
-          {user && user.role === "student" && (
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-                Career Opportunities
-              </Typography>
-              <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card
-                    sx={{
-                      bgcolor: "white",
-                      border: "1px solid rgba(176, 58, 108, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                        <BusinessIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Browse Company Booths
-                        </Typography>
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {isLive
-                          ? "Explore opportunities from top companies at the virtual career fair."
-                          : "The career fair is not currently live. Check back later to browse company booths."}
-                      </Typography>
-
-                      {/* Two-button row: View All Booths + View Booth History */}
-                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                        <Button
-                          variant="contained"
-                          onClick={() => navigate("/booths")}
-                          disabled={!isLive}
-                          sx={{
-                            background: isLive
-                              ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
-                              : "rgba(0, 0, 0, 0.12)",
-                            color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
-                            "&:hover": {
-                              background: isLive
-                                ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
-                                : "rgba(0, 0, 0, 0.12)",
-                            },
-                            "&:disabled": {
-                              background: "rgba(0, 0, 0, 0.12)",
-                              color: "rgba(0, 0, 0, 0.26)",
-                            },
-                          }}
-                        >
-                          View All Booths
-                        </Button>
-
-                        <Button
-                          variant="outlined"
-                          onClick={() => navigate("/dashboard/booth-history")}
-                          disabled={!isLive}
-                          sx={{
-                            borderColor: "rgba(176, 58, 108, 0.6)",
-                            color: isLive ? "#b03a6c" : "rgba(0, 0, 0, 0.26)",
-                            "&:hover": {
-                              borderColor: "#b03a6c",
-                              backgroundColor: "rgba(176, 58, 108, 0.08)",
-                            },
-                            "&:disabled": {
-                              borderColor: "rgba(0, 0, 0, 0.12)",
-                              color: "rgba(0, 0, 0, 0.26)",
-                            },
-                          }}
-                        >
-                          View Booth History
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Card
-                    sx={{
-                      bgcolor: "white",
-                      border: newInvitationsCount > 0 
-                        ? "2px solid rgba(176, 58, 108, 0.5)" 
-                        : "1px solid rgba(176, 58, 108, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
-                        <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <MailIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                            Job Invitations
-                          </Typography>
-                        </Box>
-                        {newInvitationsCount > 0 && (
-                          <Badge badgeContent={newInvitationsCount} color="error" />
-                        )}
-                      </Box>
-                      <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                        {loadingInvitations ? "..." : jobInvitationsCount}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        {newInvitationsCount > 0 
-                          ? `${newInvitationsCount} new invitation${newInvitationsCount !== 1 ? "s" : ""}`
-                          : "Companies have invited you to apply"}
-                      </Typography>
-                      <Button
-                        variant="contained"
-                        onClick={() => navigate("/dashboard/job-invitations")}
-                        disabled={jobInvitationsCount === 0}
-                        sx={{
-                          background: jobInvitationsCount > 0
-                            ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
-                            : "rgba(0, 0, 0, 0.12)",
-                          color: jobInvitationsCount > 0 ? "white" : "rgba(0, 0, 0, 0.26)",
-                          "&:hover": {
-                            background: jobInvitationsCount > 0
-                              ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
-                              : "rgba(0, 0, 0, 0.12)",
-                          },
-                          "&:disabled": {
-                            background: "rgba(0, 0, 0, 0.12)",
-                            color: "rgba(0, 0, 0, 0.26)",
-                          },
-                        }}
-                      >
-                        View Invitations
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-            </Box>
+          {user?.role === "student" && (
+            <StudentSection 
+              navigate={navigate}
+              isLive={isLive}
+              jobInvitationsCount={jobInvitationsCount}
+              newInvitationsCount={newInvitationsCount}
+              loadingInvitations={loadingInvitations}
+            />
           )}
 
           {/* Stats Cards */}
-          <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Card
-                sx={{
-                  bgcolor: "white",
-                  border: "1px solid rgba(176, 58, 108, 0.3)",
-                  transition: "transform 0.2s, box-shadow 0.2s",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 3 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                    <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                      Upcoming Events
-                    </Typography>
-                  </Box>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                    {loadingStats ? "..." : upcomingEventsCount}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Career fairs scheduled
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Card
-                sx={{
-                  bgcolor: "white",
-                  border: "1px solid rgba(56, 133, 96, 0.3)",
-                  transition: "transform 0.2s, box-shadow 0.2s",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 3 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                    <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                      Companies
-                    </Typography>
-                  </Box>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: "#388560", mb: 1 }}>
-                    {loadingStats ? "..." : totalCompaniesCount}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Employers participating
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Card
-                sx={{
-                  bgcolor: "white",
-                  border: "1px solid rgba(176, 58, 108, 0.3)",
-                  transition: "transform 0.2s, box-shadow 0.2s",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 3 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                    <WorkIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                      Job Openings
-                    </Typography>
-                  </Box>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                    {loadingStats ? "..." : totalJobOpenings}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Positions available
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
+          <StatsSection
+            loadingStats={loadingStats}
+            upcomingEventsCount={upcomingEventsCount}
+            totalCompaniesCount={totalCompaniesCount}
+            totalJobOpenings={totalJobOpenings}
+          />
         </Box>
       </Container>
 

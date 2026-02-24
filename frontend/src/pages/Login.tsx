@@ -1,18 +1,12 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
+import { Box, TextField, Button, Typography, Alert, Paper, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import LoginIcon from "@mui/icons-material/Login"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GoogleIcon from "@mui/icons-material/Google"
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-} from "@mui/material"
 import { doc, setDoc } from "firebase/firestore"
 import { auth, db } from "../firebase"
 
@@ -45,12 +39,10 @@ export default function Login() {
 
     if (result.success) {
       navigate("/dashboard")
+    } else if (result.needsVerification) {
+      setError("Please verify your email before logging in. Check your inbox for a verification link.")
     } else {
-      if (result.needsVerification) {
-        setError("Please verify your email before logging in. Check your inbox for a verification link.")
-      } else {
-        setError(result.error || "Login failed.")
-      }
+      setError(result.error || "Login failed.")
     }
   }
 

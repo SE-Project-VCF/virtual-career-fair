@@ -5,7 +5,10 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
-const { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin } = require("./helpers");
+const { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin, validateJobInput } = require("./helpers");
+
+// Fair routes (multi-fair support)
+const fairsRouter = require("./routes/fairs");
 
 // --------------------------
 // ENVIRONMENT VALIDATION
@@ -29,14 +32,15 @@ const streamServer = StreamChat.getInstance(
 );
 
 const app = express();
+app.disable('x-powered-by'); // Disable Express version disclosure
 const PORT = process.env.PORT || 5000;
 
 // CORS configuration - allow multiple origins
-const allowedOrigins = [
+const allowedOrigins = new Set([
   "http://localhost:5173",
   "https://virtual-career-fair-git-dev-ninapellis-projects.vercel.app",
   process.env.FRONTEND_URL, // Allow custom frontend URL from env
-].filter(Boolean); // Remove any undefined values
+].filter(Boolean)); // Remove any undefined values
 
 app.use(
   cors({
@@ -45,7 +49,7 @@ app.use(
       if (!origin) return callback(null, true);
 
       // Check if origin is in allowed list
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      if (allowedOrigins.has(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
@@ -66,6 +70,9 @@ if (process.env.NODE_ENV !== "test") {
     legacyHeaders: false,
   }));
 }
+
+// Mount fair routes (multi-fair support)
+app.use(fairsRouter);
 
 /* ----------------------------------------------------
    FIREBASE AUTH MIDDLEWARE
@@ -269,8 +276,8 @@ app.post("/api/register-user", async (req, res) => {
         role: "user", // Stream requires a valid role
       });
 
-    } catch (streamErr) {
-      console.error("Stream upsert error:", streamErr);
+    } catch (error_) {
+      console.error("Stream upsert error:", error_);
     }
 
     res.send({
@@ -347,7 +354,7 @@ app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
 });
 
 /* ----------------------------------------------------
-   ADD JOB
+   HELPER: Validate job input fields
 ---------------------------------------------------- */
 app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
   try {
@@ -360,57 +367,9 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!companyId) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Company ID is required" });
-    }
-
-    if (!name || !name.trim()) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job title is required" });
-    }
-
-    if (name.trim().length > 200) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job title must be 200 characters or less" });
-    }
-
-    if (!description || !description.trim()) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job description is required" });
-    }
-
-    if (description.trim().length > 5000) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job description must be 5000 characters or less" });
-    }
-
-    if (!majorsAssociated || !majorsAssociated.trim()) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Skills are required" });
-    }
-
-    if (majorsAssociated.trim().length > 500) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Skills must be 500 characters or less" });
-    }
-
-    // Validate application link format if provided
-    if (applicationLink && applicationLink.trim()) {
-      try {
-        new URL(applicationLink.trim());
-      } catch (e) {
-        return res
-          .status(400)
-          .send({ success: false, error: "Invalid application URL format" });
-      }
+    const validationError = validateJobInput(req.body);
+    if (validationError) {
+      return res.status(400).send({ success: false, error: validationError });
     }
 
     const companyDoc = await db.collection("companies").doc(companyId).get();
@@ -428,10 +387,10 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
     }
 
     // Sanitize inputs (trim and remove null bytes)
-    const sanitizedName = name.trim().replace(/\0/g, '');
-    const sanitizedDescription = description.trim().replace(/\0/g, '');
-    const sanitizedMajors = majorsAssociated.trim().replace(/\0/g, '');
-    const sanitizedAppLink = applicationLink && applicationLink.trim() ? applicationLink.trim().replace(/\0/g, '') : undefined;
+    const sanitizedName = name.trim().replaceAll('\0', '');
+    const sanitizedDescription = description.trim().replaceAll('\0', '');
+    const sanitizedMajors = majorsAssociated.trim().replaceAll('\0', '');
+    const sanitizedAppLink = applicationLink && applicationLink.trim() ? applicationLink.trim().replaceAll('\0', '') : undefined;
 
     const jobRef = await db.collection("jobs").add(
       removeUndefined({
@@ -522,7 +481,8 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
     if (applicationLink && applicationLink.trim()) {
       try {
         new URL(applicationLink.trim());
-      } catch (e) {
+      } catch (err) {
+        console.error("Invalid application URL provided:", err.message);
         return res.status(400).json({ success: false, error: "Invalid application URL format" });
       }
     }
@@ -717,69 +677,6 @@ app.post("/api/job-invitations/send", async (req, res) => {
 
     await batch.commit();
     console.log(`Successfully created ${invitationIds.length} invitation(s)`);
-
-    // Chat invitations are no longer supported - invitations are only sent via dashboard notifications
-    // The code below is kept for reference but will not be executed
-    if (sentVia === "chat") {
-      try {
-        // Get sender details
-        const senderDoc = await db.collection("users").doc(userId).get();
-        const senderData = senderDoc.data();
-        const senderName = `${senderData.firstName || ""} ${senderData.lastName || ""}`.trim() || "Representative";
-
-        // Get company details
-        const companyDoc = await db.collection("companies").doc(companyId).get();
-        const companyName = companyDoc.exists ? companyDoc.data().companyName : "Our Company";
-
-        // Send a chat message to each student
-        for (const studentId of studentIds) {
-          try {
-            // Create or get 1-on-1 channel between sender and student
-            const channelId = [userId, studentId].sort().join("-");
-            const channel = streamServer.channel("messaging", channelId, {
-              members: [userId, studentId],
-              created_by_id: userId,
-            });
-
-            await channel.create();
-
-            // Send the job invitation message
-            const messageText = message 
-              ? `🎯 **Job Opportunity: ${jobData.name}**\n\n${companyName} has invited you to apply for this position!\n\n"${message}"\n\n👉 View details and apply: [Click here to view invitation]`
-              : `🎯 **Job Opportunity: ${jobData.name}**\n\n${companyName} has invited you to apply for this position!\n\n👉 View details and apply: [Click here to view invitation]`;
-
-            await channel.sendMessage({
-              text: messageText,
-              user_id: userId,
-              attachments: [{
-                type: "job_invitation",
-                title: jobData.name,
-                title_link: `/dashboard/job-invitations`,
-                text: jobData.description.substring(0, 200) + (jobData.description.length > 200 ? "..." : ""),
-                fields: [
-                  {
-                    title: "Company",
-                    value: companyName,
-                    short: true,
-                  },
-                  {
-                    title: "Skills Required",
-                    value: jobData.majorsAssociated,
-                    short: true,
-                  }
-                ],
-              }],
-            });
-          } catch (chatErr) {
-            console.error(`Failed to send chat message to student ${studentId}:`, chatErr);
-            // Continue with other students even if one fails
-          }
-        }
-      } catch (chatErr) {
-        console.error("Error sending chat messages:", chatErr);
-        // Don't fail the entire request if chat fails, invitations are still created
-      }
-    }
 
     return res.json({
       success: true,
@@ -1343,9 +1240,9 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
     }
 
     // Sanitize text inputs (trim whitespace, remove null bytes)
-    const sanitizedBoothName = boothName ? boothName.trim().replace(/\0/g, '') : boothName;
-    const sanitizedLocation = location ? location.trim().replace(/\0/g, '') : location;
-    const sanitizedDescription = description ? description.trim().replace(/\0/g, '') : description;
+    const sanitizedBoothName = boothName ? boothName.trim().replaceAll('\0', '') : boothName;
+    const sanitizedLocation = location ? location.trim().replaceAll('\0', '') : location;
+    const sanitizedDescription = description ? description.trim().replaceAll('\0', '') : description;
 
     const boothRef = await db.collection("booths").add(
       removeUndefined({
@@ -1562,7 +1459,7 @@ app.get("/api/public/fair-schedules", async (req, res) => {
 ---------------------------------------------------- */
 app.post("/api/fair-schedules", async (req, res) => {
   try {
-    const { userId, name, startTime, endTime, description, enabled } = req.body;
+    const { userId, name, startTime, endTime, description } = req.body;
 
     const adminCheck = await verifyAdmin(userId);
     if (adminCheck) {
@@ -1576,7 +1473,6 @@ app.post("/api/fair-schedules", async (req, res) => {
     // Parse dates as UTC to ensure consistent storage
     const start = parseUTCToTimestamp(startTime);
     const end = parseUTCToTimestamp(endTime);
-    const now = admin.firestore.Timestamp.now();
 
     if (end.toMillis() <= start.toMillis()) {
       return res.status(400).json({ error: "End time must be after start time" });
@@ -1613,6 +1509,53 @@ app.post("/api/fair-schedules", async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   HELPER: Validate and parse schedule timing updates
+---------------------------------------------------- */
+function validateScheduleTiming(startTime, endTime, existingData) {
+  const start = startTime === undefined
+    ? existingData.startTime
+    : parseUTCToTimestamp(startTime);
+  const end = endTime === undefined
+    ? existingData.endTime
+    : parseUTCToTimestamp(endTime);
+
+  if (!start || !end) {
+    return { error: "Both start time and end time are required", status: 400 };
+  }
+
+  if (end.toMillis() <= start.toMillis()) {
+    return { error: "End time must be after start time", status: 400 };
+  }
+
+  return { start, end };
+}
+
+/* ----------------------------------------------------
+   HELPER: Build schedule update data
+---------------------------------------------------- */
+function buildScheduleUpdateData(userId, name, description, startTime, endTime, existingData) {
+  const updateData = {
+    updatedAt: admin.firestore.Timestamp.now(),
+    updatedBy: userId,
+  };
+
+  if (name !== undefined) updateData.name = name || null;
+  if (description !== undefined) updateData.description = description || null;
+
+  const hasTimingChange = [startTime, endTime].some((v) => v !== undefined);
+  if (hasTimingChange) {
+    const timingResult = validateScheduleTiming(startTime, endTime, existingData);
+    if (timingResult.error) {
+      return timingResult;
+    }
+    updateData.startTime = timingResult.start;
+    updateData.endTime = timingResult.end;
+  }
+
+  return { updateData };
+}
+
+/* ----------------------------------------------------
    UPDATE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
 app.put("/api/fair-schedules/:id", async (req, res) => {
@@ -1632,38 +1575,14 @@ app.put("/api/fair-schedules/:id", async (req, res) => {
       return res.status(404).json({ error: "Schedule not found" });
     }
 
-    const updateData = {
-      updatedAt: admin.firestore.Timestamp.now(),
-      updatedBy: userId,
-    };
+    const existingData = scheduleDoc.data();
+    const result = buildScheduleUpdateData(userId, name, description, startTime, endTime, existingData);
 
-    // Update fields if provided
-    if (name !== undefined) updateData.name = name || null;
-    if (description !== undefined) updateData.description = description || null;
-
-    if (startTime !== undefined || endTime !== undefined) {
-      // Get existing times if not provided
-      const existingData = scheduleDoc.data();
-      const start = startTime !== undefined 
-        ? parseUTCToTimestamp(startTime)
-        : existingData.startTime;
-      const end = endTime !== undefined 
-        ? parseUTCToTimestamp(endTime)
-        : existingData.endTime;
-
-      if (!start || !end) {
-        return res.status(400).json({ error: "Both start time and end time are required" });
-      }
-
-      if (end.toMillis() <= start.toMillis()) {
-        return res.status(400).json({ error: "End time must be after start time" });
-      }
-
-      updateData.startTime = start;
-      updateData.endTime = end;
+    if (result.error) {
+      return res.status(result.status).json({ error: result.error });
     }
 
-    await scheduleRef.update(updateData);
+    await scheduleRef.update(result.updateData);
 
     const updatedDoc = await scheduleRef.get();
     const updatedData = updatedDoc.data();
@@ -1875,8 +1794,8 @@ app.post("/api/create-admin", async (req, res) => {
         lastName: lastName || "",
         role: "user",
       });
-    } catch (streamErr) {
-      console.error("STREAM UPSERT ERROR:", streamErr);
+    } catch (error_) {
+      console.error("STREAM UPSERT ERROR:", error_);
     }
 
     return res.json({

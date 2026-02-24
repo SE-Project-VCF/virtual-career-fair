@@ -144,9 +144,8 @@ export default function Booths() {
             companyId,
           } as Booth)
         })
-      } else {
+      } else if (user && (user.role === "companyOwner" || user.role === "representative")) {
         // Fair is not live - only show booths for company owners/representatives
-        if (user && (user.role === "companyOwner" || user.role === "representative")) {
           // Get user's company IDs
           const companiesRef = collection(db, "companies")
           let companyIds: string[] = []
@@ -201,7 +200,6 @@ export default function Booths() {
               })
             }
           }
-        }
         // If user is student or not logged in, they see no booths when fair is not live
       }
 
@@ -423,11 +421,12 @@ export default function Booths() {
           </Alert>
         )}
 
-        {loading ? (
+        {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
             <CircularProgress />
           </Box>
-        ) : booths.length === 0 ? (
+        )}
+        {!loading && booths.length === 0 && (
           <Card sx={{ textAlign: "center", p: 6, border: "1px solid rgba(56, 133, 96, 0.3)" }}>
             <BusinessIcon sx={{ fontSize: 80, color: "#ccc", mb: 2 }} />
             <Typography variant="h5" sx={{ mb: 2, color: "text.secondary" }}>
@@ -439,7 +438,8 @@ export default function Booths() {
                 : "The career fair is not currently live. You can only view and edit your own booth."}
             </Typography>
           </Card>
-        ) : (
+        )}
+        {!loading && booths.length > 0 && (
           <>
             <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a" }}>
               Company Booths
@@ -549,7 +549,7 @@ export default function Booths() {
                         }}
                       >
                         <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
-                          {getJobCountForBooth(booth)} open position{getJobCountForBooth(booth) !== 1 ? "s" : ""}
+                          {getJobCountForBooth(booth)} open position{getJobCountForBooth(booth) === 1 ? "" : "s"}
                         </Typography>
                         <Button
                           variant="outlined"
