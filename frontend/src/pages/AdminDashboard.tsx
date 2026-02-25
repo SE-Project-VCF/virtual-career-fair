@@ -177,11 +177,13 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
                   } else {
                     statusLabel = "Scheduled"
                   }
-                  let chipColor: "success" | "default" | "warning"
+                  let chipColor: "success" | "default" | "warning" | "primary"
                   if (fair.isLive) {
                     chipColor = "success"
                   } else if (statusLabel === "Ended") {
                     chipColor = "default"
+                  } else if (statusLabel === "Upcoming") {
+                    chipColor = "primary"
                   } else {
                     chipColor = "warning"
                   }

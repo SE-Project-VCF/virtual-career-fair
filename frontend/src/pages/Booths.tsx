@@ -15,7 +15,7 @@ import {
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
-import { evaluateFairStatus } from "../utils/fairStatus"
+import { API_URL } from "../config"
 import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
@@ -111,12 +111,26 @@ export default function Booths() {
       setLoading(true)
       setError("")
 
-      // Check if fair is live
-      const status = await evaluateFairStatus()
-      const fairIsLive = status.isLive
-      setIsLive(status.isLive)
-      setScheduleName(status.scheduleName)
-      setScheduleDescription(status.scheduleDescription)
+      // Check if any fair is live
+      let fairIsLive = false
+      let activeFairName: string | null = null
+      let activeFairDescription: string | null = null
+      try {
+        const fairsRes = await fetch(`${API_URL}/api/fairs`)
+        if (fairsRes.ok) {
+          const fairsData = await fairsRes.json()
+          const fairs: Array<{ isLive: boolean; name: string; description: string | null }> = fairsData.fairs || []
+          const activeFair = fairs.find((f) => f.isLive)
+          fairIsLive = !!activeFair
+          activeFairName = activeFair?.name ?? null
+          activeFairDescription = activeFair?.description ?? null
+        }
+      } catch (err) {
+        console.error("Error fetching fairs:", err)
+      }
+      setIsLive(fairIsLive)
+      setScheduleName(activeFairName)
+      setScheduleDescription(activeFairDescription)
 
       let boothsList: Booth[] = []
 
