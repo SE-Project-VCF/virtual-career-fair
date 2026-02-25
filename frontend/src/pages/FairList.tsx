@@ -153,11 +153,10 @@ export default function FairList() {
                     <Button
                       variant="contained"
                       endIcon={<ArrowForwardIcon />}
-                      onClick={() => navigate(`/fair/${fair.id}/booths`)}
-                      disabled={status.label === "Ended"}
+                      onClick={() => navigate(`/fair/${fair.id}`)}
                       fullWidth
                     >
-                      Browse Booths
+                      View Fair
                     </Button>
                   </CardActions>
                 </Card>

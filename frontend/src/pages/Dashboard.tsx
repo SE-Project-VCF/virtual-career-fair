@@ -2,15 +2,15 @@ import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Badge, Tooltip } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { collection, query, where, getDocs, Timestamp } from "firebase/firestore"
+import { collection, query, where, getDocs } from "firebase/firestore"
 import { db, auth } from "../firebase"
-import { evaluateFairStatus } from "../utils/fairStatus"
 import { API_URL } from "../config"
 import EventIcon from "@mui/icons-material/Event"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"
 import MailIcon from "@mui/icons-material/Mail"
 import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu"
@@ -631,6 +631,43 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives }: Readonl
           >
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <CalendarMonthIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Career Fairs
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Browse available career fairs and join them with an invite code.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => navigate("/fairs")}
+                sx={{
+                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  "&:hover": {
+                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                  },
+                }}
+              >
+                Browse Fairs
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.3)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              "&:hover": {
+                transform: "translateY(-4px)",
+                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                 <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   Browse All Booths
@@ -702,7 +739,6 @@ export default function Dashboard() {
   const [totalRepresentatives, setTotalRepresentatives] = useState(0)
   const [unreadCount, setUnreadCount] = useState<number>(0)
   const [isLive, setIsLive] = useState(false)
-  const [loadingFairStatus, setLoadingFairStatus] = useState(true)
   const [upcomingEventsCount, setUpcomingEventsCount] = useState(0)
   const [totalCompaniesCount, setTotalCompaniesCount] = useState(0)
   const [totalJobOpenings, setTotalJobOpenings] = useState(0)
@@ -719,23 +755,6 @@ export default function Dashboard() {
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
   }, [navigate])
-
-  // Fetch fair status
-  useEffect(() => {
-    const fetchFairStatus = async () => {
-      try {
-        setLoadingFairStatus(true)
-        const status = await evaluateFairStatus()
-        setIsLive(status.isLive)
-      } catch (err) {
-        console.error("Error fetching fair status:", err)
-      } finally {
-        setLoadingFairStatus(false)
-      }
-    }
-
-    fetchFairStatus()
-  }, [])
 
   // Fetch unread chat count and keep it updated
   useEffect(() => {
@@ -853,20 +872,15 @@ export default function Dashboard() {
       try {
         setLoadingStats(true)
 
-        // Fetch upcoming events count (schedules that haven't ended)
-        const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
-        const now = Date.now()
-        let upcomingCount = 0
-        schedulesSnapshot.forEach((doc) => {
-          const data = doc.data()
-          const endTime = data.endTime instanceof Timestamp
-            ? data.endTime.toMillis()
-            : data.endTime
-          if (endTime && endTime > now) {
-            upcomingCount++
-          }
-        })
-        setUpcomingEventsCount(upcomingCount)
+        // Fetch fairs — derive upcoming count and live status
+        const fairsRes = await fetch(`${API_URL}/api/fairs`)
+        if (fairsRes.ok) {
+          const fairsData = await fairsRes.json()
+          const fairs = fairsData.fairs || []
+          const now = Date.now()
+          setUpcomingEventsCount(fairs.filter((f: any) => !f.endTime || f.endTime > now).length)
+          setIsLive(fairs.some((f: any) => f.isLive))
+        }
 
         // Fetch total companies count
         const companiesSnapshot = await getDocs(collection(db, "companies"))
@@ -1036,7 +1050,7 @@ export default function Dashboard() {
           <EventList />
 
           {/* Fair Status Alert */}
-          {!loadingFairStatus && !isLive && (
+          {!loadingStats && !isLive && (
             <Alert
               severity="info"
               sx={{

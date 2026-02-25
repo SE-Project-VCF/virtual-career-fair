@@ -9,76 +9,54 @@ import {
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import AccessTimeIcon from "@mui/icons-material/AccessTime"
-import { collection, getDocs, Timestamp } from "firebase/firestore"
-import { db } from "../firebase"
+import { API_URL } from "../config"
 
-interface FairSchedule {
+interface Fair {
   id: string
-  name: string | null
+  name: string
+  description: string | null
+  isLive: boolean
   startTime: number | null
   endTime: number | null
-  description: string | null
 }
 
 export default function EventList() {
-  const [schedules, setSchedules] = useState<FairSchedule[]>([])
+  const [fairs, setFairs] = useState<Fair[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   useEffect(() => {
-    const fetchSchedules = async () => {
+    const fetchFairs = async () => {
       try {
         setLoading(true)
         setError("")
-        const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
+        const res = await fetch(`${API_URL}/api/fairs`)
+        if (!res.ok) throw new Error("Failed to load fairs")
+        const data = await res.json()
         const now = Date.now()
-        
-        const schedulesList: FairSchedule[] = []
-        schedulesSnapshot.forEach((doc) => {
-          const data = doc.data()
-          const startTime = data.startTime instanceof Timestamp
-            ? data.startTime.toMillis()
-            : data.startTime
-          const endTime = data.endTime instanceof Timestamp
-            ? data.endTime.toMillis()
-            : data.endTime
-          
-          // Only include events that haven't ended yet
-          if (endTime && endTime > now) {
-            schedulesList.push({
-              id: doc.id,
-              name: data.name || null,
-              startTime,
-              endTime,
-              description: data.description || null,
-            })
-          }
-        })
-        
-        // Sort by start time
-        schedulesList.sort((a, b) => {
+        // Only show fairs that haven't ended
+        const upcoming = (data.fairs || []).filter((f: Fair) => !f.endTime || f.endTime > now)
+        upcoming.sort((a: Fair, b: Fair) => {
           if (!a.startTime && !b.startTime) return 0
           if (!a.startTime) return 1
           if (!b.startTime) return -1
           return a.startTime - b.startTime
         })
-        
-        setSchedules(schedulesList)
+        setFairs(upcoming)
       } catch (err) {
-        console.error("Error fetching schedules:", err)
+        console.error("Error fetching fairs:", err)
         setError("Failed to load events")
       } finally {
         setLoading(false)
       }
     }
 
-    fetchSchedules()
+    fetchFairs()
   }, [])
 
   const formatDateTime = (timestamp: number | null) => {
     if (!timestamp) return "Not set"
-    const date = new Date(timestamp)
-    return date.toLocaleString(undefined, {
+    return new Date(timestamp).toLocaleString(undefined, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -87,19 +65,11 @@ export default function EventList() {
     })
   }
 
-  const getScheduleStatus = (schedule: FairSchedule) => {
-    if (!schedule.startTime || !schedule.endTime) {
-      return null
-    }
-
+  const getFairStatus = (fair: Fair) => {
     const now = Date.now()
-    if (now < schedule.startTime) {
-      return { type: "upcoming", label: "Upcoming", color: "primary" as const }
-    } else if (now >= schedule.startTime && now <= schedule.endTime) {
-      return { type: "active", label: "Live Now", color: "success" as const }
-    } else {
-      return { type: "ended", label: "Ended", color: "default" as const }
-    }
+    if (fair.isLive) return { label: "Live Now", color: "success" as const }
+    if (fair.startTime && now < fair.startTime) return { label: "Upcoming", color: "primary" as const }
+    return null
   }
 
   if (loading) {
@@ -120,9 +90,7 @@ export default function EventList() {
     )
   }
 
-  if (schedules.length === 0) {
-    return null // Don't show anything if no schedules
-  }
+  if (fairs.length === 0) return null
 
   return (
     <Card sx={{ border: "1px solid rgba(176, 58, 108, 0.3)", mb: 3 }}>
@@ -135,34 +103,28 @@ export default function EventList() {
         </Box>
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {schedules.map((schedule) => {
-            const status = getScheduleStatus(schedule)
+          {fairs.map((fair) => {
+            const status = getFairStatus(fair)
             return (
               <Box
-                key={schedule.id}
+                key={fair.id}
                 sx={{
                   p: 2,
                   borderRadius: 2,
                   border: "1px solid rgba(0,0,0,0.1)",
-                  bgcolor: status?.type === "active" ? "rgba(56, 133, 96, 0.05)" : "transparent",
+                  bgcolor: fair.isLive ? "rgba(56, 133, 96, 0.05)" : "transparent",
                 }}
               >
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
-                    {schedule.name || "Career Fair"}
+                    {fair.name}
                   </Typography>
-                  {status && (
-                    <Chip
-                      label={status.label}
-                      size="small"
-                      color={status.color}
-                    />
-                  )}
+                  {status && <Chip label={status.label} size="small" color={status.color} />}
                 </Box>
 
-                {schedule.description && (
+                {fair.description && (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {schedule.description}
+                    {fair.description}
                   </Typography>
                 )}
 
@@ -170,13 +132,13 @@ export default function EventList() {
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <AccessTimeIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
                     <Typography variant="body2" color="text.secondary">
-                      <strong>Start:</strong> {formatDateTime(schedule.startTime)}
+                      <strong>Start:</strong> {formatDateTime(fair.startTime)}
                     </Typography>
                   </Box>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <AccessTimeIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
                     <Typography variant="body2" color="text.secondary">
-                      <strong>End:</strong> {formatDateTime(schedule.endTime)}
+                      <strong>End:</strong> {formatDateTime(fair.endTime)}
                     </Typography>
                   </Box>
                 </Box>
@@ -188,4 +150,3 @@ export default function EventList() {
     </Card>
   )
 }
-

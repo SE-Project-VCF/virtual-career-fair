@@ -52,21 +52,21 @@ describe("CORS Branch Coverage", () => {
 
   it("allows requests with no origin header", async () => {
     const res = await request(app)
-      .get("/api/fair-status")
+      .get("/api/fairs")
       .set("Origin", "");
     expect(res.status).toBeGreaterThan(0);
   });
 
   it("allows requests from localhost:5173", async () => {
     const res = await request(app)
-      .get("/api/fair-status")
+      .get("/api/fairs")
       .set("Origin", "http://localhost:5173");
     expect(res.status).toBeGreaterThan(0);
   });
 
   it("rejects requests from disallowed origin", async () => {
     const res = await request(app)
-      .get("/api/fair-status")
+      .get("/api/fairs")
       .set("Origin", "http://evil.com"); // NOSONAR - intentional http for security test
     // CORS rejection happens at middleware level
     expect(res.status).toBeGreaterThan(0);
@@ -218,100 +218,6 @@ describe("Input Validation Branch Coverage", () => {
   });
 });
 
-describe("Fair Schedules Branch Coverage", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  describe("PUT /api/fair-schedules/:id", () => {
-    it("handles both startTime and endTime undefined", async () => {
-      const { verifyAdmin } = require("../helpers");
-      verifyAdmin.mockResolvedValue(null);
-
-      db.collection.mockReturnValue({
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue({
-            exists: true,
-            data: () => ({
-              startTime: { toMillis: () => 1000 },
-              endTime: { toMillis: () => 2000 },
-              name: "Schedule",
-            }),
-          }),
-          update: jest.fn().mockResolvedValue(undefined),
-        })),
-      });
-
-      const res = await request(app)
-        .put("/api/fair-schedules/s1")
-        .send({ userId: "admin1", name: "Updated Name" });
-
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-    });
-
-    it("handles name and description update only", async () => {
-      const { verifyAdmin } = require("../helpers");
-      verifyAdmin.mockResolvedValue(null);
-
-      const updateMock = jest.fn().mockResolvedValue(undefined);
-      db.collection.mockReturnValue({
-        doc: jest.fn(() => ({
-          get: jest
-            .fn()
-            .mockResolvedValueOnce({
-              exists: true,
-              data: () => ({
-                startTime: { toMillis: () => 1000 },
-                endTime: { toMillis: () => 2000 },
-                name: "Old Name",
-                description: "Old Description",
-              }),
-            })
-            .mockResolvedValueOnce({
-              exists: true,
-              id: "s1",
-              data: () => ({
-                startTime: { toMillis: () => 1000 },
-                endTime: { toMillis: () => 2000 },
-                name: "New Name",
-                description: "New Description",
-              }),
-            }),
-          update: updateMock,
-        })),
-      });
-
-      const res = await request(app)
-        .put("/api/fair-schedules/s1")
-        .send({ userId: "admin1", name: "New Name", description: "New Description" });
-
-      expect(res.status).toBe(200);
-      expect(updateMock).toHaveBeenCalled();
-    });
-
-    it("returns 400 when neither start/end times exist but update provided", async () => {
-      const { verifyAdmin } = require("../helpers");
-      verifyAdmin.mockResolvedValue(null);
-
-      db.collection.mockReturnValue({
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue({
-            exists: true,
-            data: () => ({
-              startTime: null,
-              endTime: null,
-            }),
-          }),
-        })),
-      });
-
-      const res = await request(app)
-        .put("/api/fair-schedules/s1")
-        .send({ userId: "admin1", startTime: "2024-06-15T10:00" });
-
-      expect(res.status).toBe(400);
-    });
-  });
-});
 
 describe("Sync Stream Users Branch Coverage", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -402,100 +308,6 @@ describe("Register User Branch Coverage", () => {
   });
 });
 
-describe("Fair Status Evaluation Branch Coverage", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("returns isLive true when schedule exactly at startTime", async () => {
-    // Timestamp.now() returns 1000000
-    db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
-        return {
-          get: jest.fn().mockResolvedValue({
-            docs: [
-              {
-                id: "sched-1",
-                data: () => ({
-                  startTime: { toMillis: () => 1000000 },
-                  endTime: { toMillis: () => 2000000 },
-                  name: "Fair",
-                }),
-              },
-            ],
-          }),
-        };
-      }
-      return {
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue(mockDocSnap({ isLive: false }, true)),
-        })),
-      };
-    });
-
-    const res = await request(app).get("/api/fair-status");
-    expect(res.status).toBe(200);
-    expect(res.body.isLive).toBe(true);
-  });
-
-  it("returns isLive true when schedule exactly at endTime", async () => {
-    db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
-        return {
-          get: jest.fn().mockResolvedValue({
-            docs: [
-              {
-                id: "sched-1",
-                data: () => ({
-                  startTime: { toMillis: () => 500000 },
-                  endTime: { toMillis: () => 1000000 },
-                  name: "Fair",
-                }),
-              },
-            ],
-          }),
-        };
-      }
-      return {
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue(mockDocSnap({ isLive: false }, true)),
-        })),
-      };
-    });
-
-    const res = await request(app).get("/api/fair-status");
-    expect(res.status).toBe(200);
-    expect(res.body.isLive).toBe(true);
-  });
-
-  it("handles schedule with no startTime or endTime", async () => {
-    db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
-        return {
-          get: jest.fn().mockResolvedValue({
-            docs: [
-              {
-                id: "sched-1",
-                data: () => ({
-                  startTime: null,
-                  endTime: null,
-                  name: "Invalid Schedule",
-                }),
-              },
-            ],
-          }),
-        };
-      }
-      return {
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue(mockDocSnap({ isLive: false }, true)),
-        })),
-      };
-    });
-
-    const res = await request(app).get("/api/fair-status");
-    expect(res.status).toBe(200);
-    expect(res.body.isLive).toBe(false);
-  });
-});
 
 describe("Job Sorting Branch Coverage", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -574,69 +386,3 @@ describe("Job Sorting Branch Coverage", () => {
   });
 });
 
-describe("Public Fair Schedules Sorting", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("handles schedules without startTime in sorting", async () => {
-    const schedules = [
-      {
-        id: "s2",
-        data: () => ({
-          name: "Schedule 2",
-          startTime: { toMillis: () => 2000 },
-          endTime: { toMillis: () => 3000 },
-          description: null,
-        }),
-      },
-      {
-        id: "s1",
-        data: () => ({
-          name: "Schedule 1",
-          startTime: null,
-          endTime: { toMillis: () => 1000 },
-          description: null,
-        }),
-      },
-    ];
-
-    db.collection.mockReturnValue({
-      get: jest.fn().mockResolvedValue(mockQuerySnap(schedules)),
-    });
-
-    const res = await request(app).get("/api/public/fair-schedules");
-    expect(res.status).toBe(200);
-    expect(res.body.schedules[0].name).toBe("Schedule 2");
-    expect(res.body.schedules[1].name).toBe("Schedule 1");
-  });
-
-  it("handles all schedules without startTime", async () => {
-    const schedules = [
-      {
-        id: "s1",
-        data: () => ({
-          name: "Schedule 1",
-          startTime: null,
-          endTime: { toMillis: () => 1000 },
-          description: null,
-        }),
-      },
-      {
-        id: "s2",
-        data: () => ({
-          name: "Schedule 2",
-          startTime: null,
-          endTime: { toMillis: () => 2000 },
-          description: null,
-        }),
-      },
-    ];
-
-    db.collection.mockReturnValue({
-      get: jest.fn().mockResolvedValue(mockQuerySnap(schedules)),
-    });
-
-    const res = await request(app).get("/api/public/fair-schedules");
-    expect(res.status).toBe(200);
-    expect(res.body.schedules).toHaveLength(2);
-  });
-});
