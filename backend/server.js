@@ -5,7 +5,7 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
-const { removeUndefined, generateInviteCode, validateJobInput } = require("./helpers");
+const { removeUndefined, generateInviteCode, validateJobInput, verifyAdmin } = require("./helpers");
 
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
@@ -71,6 +71,39 @@ if (process.env.NODE_ENV !== "test") {
     legacyHeaders: false,
   }));
 }
+
+// Test endpoint directly on app
+app.post("/test-endpoint", (req, res) => {
+  res.json({ success: true, message: "Direct endpoint works!" });
+});
+
+// Refresh invite code endpoint
+app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const { userId } = req.body;
+  const adminUid = req.user.uid;
+
+  const adminError = await verifyAdmin(userId || adminUid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+
+    const newInviteCode = generateInviteCode();
+
+    await db.collection("fairs").doc(fairId).update({
+      inviteCode: newInviteCode,
+      updatedAt: admin.firestore.Timestamp.now(),
+      updatedBy: adminUid,
+    });
+
+    return res.json({ inviteCode: newInviteCode });
+  } catch (err) {
+    console.error("POST /api/fairs/:fairId/refresh-invite-code error:", err);
+    return res.status(500).json({ error: "Failed to refresh invite code" });
+  }
+});
 
 // Mount fair routes (multi-fair support)
 app.use(fairsRouter);

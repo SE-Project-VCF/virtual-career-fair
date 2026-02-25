@@ -197,7 +197,7 @@ async function verifyCompanyAccess(userId, companyId) {
    FAIR CRUD
 ======================================================= */
 
-/* GET /api/fairs — public: list all fairs */
+/* GET /api/fairs - public: list all fairs */
 router.get("/api/fairs", async (_req, res) => {
   try {
     const snap = await db.collection("fairs").orderBy("createdAt", "desc").get();
@@ -220,7 +220,32 @@ router.get("/api/fairs", async (_req, res) => {
   }
 });
 
-/* GET /api/fairs/:fairId — public: single fair detail */
+/* GET /api/fairs/my-enrollments - auth required: returns fairs the current user's company is enrolled in */
+router.get("/api/fairs/my-enrollments", verifyFirebaseToken, async (req, res) => {
+  try {
+    const userDoc = await db.collection("users").doc(req.user.uid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    const companyId = userDoc.data().companyId;
+    if (!companyId) return res.json({ enrollments: [] });
+
+    const snap = await db.collectionGroup("enrollments")
+      .where("companyId", "==", companyId)
+      .get();
+
+    const enrollments = snap.docs.map((doc) => ({
+      fairId: doc.ref.parent.parent.id,
+      boothId: doc.data().boothId || null,
+      enrolledAt: doc.data().enrolledAt ? doc.data().enrolledAt.toMillis() : null,
+    }));
+
+    return res.json({ enrollments });
+  } catch (err) {
+    console.error("GET /api/fairs/my-enrollments error:", err);
+    return res.status(500).json({ error: "Failed to fetch enrollments" });
+  }
+});
+
+/* GET /api/fairs/:fairId - public: single fair detail */
 router.get("/api/fairs/:fairId", async (req, res) => {
   const { fairId } = req.params;
   try {
@@ -244,7 +269,7 @@ router.get("/api/fairs/:fairId", async (req, res) => {
   }
 });
 
-/* GET /api/fairs/:fairId/status — public: live status */
+/* GET /api/fairs/:fairId/status - public: live status */
 router.get("/api/fairs/:fairId/status", async (req, res) => {
   const { fairId } = req.params;
   try {
@@ -257,7 +282,7 @@ router.get("/api/fairs/:fairId/status", async (req, res) => {
   }
 });
 
-/* POST /api/fairs — admin: create fair */
+/* POST /api/fairs - admin: create fair */
 router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
   const { userId, name, description, startTime, endTime } = req.body;
   const adminUid = req.user.uid;
@@ -296,7 +321,7 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
   }
 });
 
-/* PUT /api/fairs/:fairId — admin: update fair metadata/schedule */
+/* PUT /api/fairs/:fairId - admin: update fair metadata/schedule */
 router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const { userId, name, description, startTime, endTime } = req.body;
@@ -330,7 +355,7 @@ router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   }
 });
 
-/* DELETE /api/fairs/:fairId — admin: delete fair */
+/* DELETE /api/fairs/:fairId - admin: delete fair */
 router.delete("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const { userId } = req.body;
@@ -360,7 +385,7 @@ router.delete("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   }
 });
 
-/* POST /api/fairs/:fairId/toggle-status — admin: manual live toggle */
+/* POST /api/fairs/:fairId/toggle-status - admin: manual live toggle */
 router.post("/api/fairs/:fairId/toggle-status", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const { userId } = req.body;
@@ -389,11 +414,39 @@ router.post("/api/fairs/:fairId/toggle-status", verifyFirebaseToken, async (req,
   }
 });
 
+// Refresh invite code endpoint
+router.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const { userId } = req.body;
+  const adminUid = req.user.uid;
+
+  const adminError = await verifyAdmin(userId || adminUid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+
+    const newInviteCode = generateInviteCode();
+
+    await db.collection("fairs").doc(fairId).update({
+      inviteCode: newInviteCode,
+      updatedAt: admin.firestore.Timestamp.now(),
+      updatedBy: adminUid,
+    });
+
+    return res.json({ inviteCode: newInviteCode });
+  } catch (err) {
+    console.error("POST /api/fairs/:fairId/refresh-code error:", err);
+    return res.status(500).json({ error: "Failed to refresh invite code" });
+  }
+});
+
 /* =======================================================
    ENROLLMENT
 ======================================================= */
 
-/* POST /api/fairs/:fairId/enroll — enroll company in fair */
+/* POST /api/fairs/:fairId/enroll - enroll company in fair */
 router.post("/api/fairs/:fairId/enroll", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const { companyId, inviteCode } = req.body;
@@ -440,7 +493,7 @@ router.post("/api/fairs/:fairId/enroll", verifyFirebaseToken, async (req, res) =
   }
 });
 
-/* GET /api/fairs/:fairId/enrollments — admin: list enrolled companies */
+/* GET /api/fairs/:fairId/enrollments - admin: list enrolled companies */
 router.get("/api/fairs/:fairId/enrollments", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const adminUid = req.user.uid;
@@ -469,7 +522,7 @@ router.get("/api/fairs/:fairId/enrollments", verifyFirebaseToken, async (req, re
   }
 });
 
-/* DELETE /api/fairs/:fairId/enrollments/:companyId — admin: remove company from fair */
+/* DELETE /api/fairs/:fairId/enrollments/:companyId - admin: remove company from fair */
 router.delete("/api/fairs/:fairId/enrollments/:companyId", verifyFirebaseToken, async (req, res) => {
   const { fairId, companyId } = req.params;
   const adminUid = req.user.uid;
@@ -523,13 +576,13 @@ router.delete("/api/fairs/:fairId/enrollments/:companyId", verifyFirebaseToken, 
    FAIR-SCOPED BOOTHS
 ======================================================= */
 
-/* GET /api/fairs/:fairId/booths — public (gated on isLive for students) */
+/* GET /api/fairs/:fairId/booths - public (gated on isLive for students) */
 router.get("/api/fairs/:fairId/booths", async (req, res) => {
   const { fairId } = req.params;
   try {
     const status = await evaluateFairStatusForFair(fairId);
 
-    // Check if request has auth token — if not, require fair to be live
+    // Check if request has auth token - if not, require fair to be live
     const requestingRole = await getRequestingRoleFromAuthHeader(req.headers.authorization);
 
     const isAdmin = requestingRole === "administrator";
@@ -553,7 +606,7 @@ router.get("/api/fairs/:fairId/booths", async (req, res) => {
   }
 });
 
-/* GET /api/fairs/:fairId/booths/:boothId — public (gated on isLive) */
+/* GET /api/fairs/:fairId/booths/:boothId - public (gated on isLive) */
 router.get("/api/fairs/:fairId/booths/:boothId", async (req, res) => {
   const { fairId, boothId } = req.params;
   try {
@@ -582,7 +635,7 @@ router.get("/api/fairs/:fairId/booths/:boothId", async (req, res) => {
   }
 });
 
-/* PUT /api/fairs/:fairId/booths/:boothId — company owner/rep: edit fair-scoped booth */
+/* PUT /api/fairs/:fairId/booths/:boothId - company owner/rep: edit fair-scoped booth */
 router.put("/api/fairs/:fairId/booths/:boothId", verifyFirebaseToken, async (req, res) => {
   const { fairId, boothId } = req.params;
   const requestingUid = req.user.uid;
@@ -634,7 +687,7 @@ router.put("/api/fairs/:fairId/booths/:boothId", verifyFirebaseToken, async (req
    FAIR-SCOPED JOBS
 ======================================================= */
 
-/* GET /api/fairs/:fairId/jobs — public (gated on isLive) */
+/* GET /api/fairs/:fairId/jobs - public (gated on isLive) */
 router.get("/api/fairs/:fairId/jobs", async (req, res) => {
   const { fairId } = req.params;
   const { companyId } = req.query;
@@ -662,7 +715,7 @@ router.get("/api/fairs/:fairId/jobs", async (req, res) => {
   }
 });
 
-/* POST /api/fairs/:fairId/jobs — company owner/rep: add job to fair */
+/* POST /api/fairs/:fairId/jobs - company owner/rep: add job to fair */
 router.post("/api/fairs/:fairId/jobs", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const { companyId, name, description, majorsAssociated, applicationLink } = req.body;
@@ -704,7 +757,7 @@ router.post("/api/fairs/:fairId/jobs", verifyFirebaseToken, async (req, res) => 
   }
 });
 
-/* PUT /api/fairs/:fairId/jobs/:jobId — company owner/rep: edit fair job */
+/* PUT /api/fairs/:fairId/jobs/:jobId - company owner/rep: edit fair job */
 router.put("/api/fairs/:fairId/jobs/:jobId", verifyFirebaseToken, async (req, res) => {
   const { fairId, jobId } = req.params;
   const requestingUid = req.user.uid;
@@ -747,7 +800,7 @@ router.put("/api/fairs/:fairId/jobs/:jobId", verifyFirebaseToken, async (req, re
   }
 });
 
-/* DELETE /api/fairs/:fairId/jobs/:jobId — company owner/rep: remove job from fair */
+/* DELETE /api/fairs/:fairId/jobs/:jobId - company owner/rep: remove job from fair */
 router.delete("/api/fairs/:fairId/jobs/:jobId", verifyFirebaseToken, async (req, res) => {
   const { fairId, jobId } = req.params;
   const requestingUid = req.user.uid;
@@ -781,7 +834,7 @@ router.delete("/api/fairs/:fairId/jobs/:jobId", verifyFirebaseToken, async (req,
    COMPANY FAIRS LOOKUP
 ======================================================= */
 
-/* GET /api/companies/:companyId/fairs — list fairs a company is enrolled in */
+/* GET /api/companies/:companyId/fairs - list fairs a company is enrolled in */
 router.get("/api/companies/:companyId/fairs", verifyFirebaseToken, async (req, res) => {
   const { companyId } = req.params;
   const requestingUid = req.user.uid;

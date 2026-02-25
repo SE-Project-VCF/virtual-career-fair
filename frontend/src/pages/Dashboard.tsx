@@ -57,9 +57,9 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
   setInviteCodeDialogOpen: (open: boolean) => void
 }>) {
   return (
-    <Box sx={{ mb: 4 }}>
-      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-        Company Management
+    <Box sx={{ mb: 6 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+        💼 Company Management
       </Typography>
       <Grid container spacing={3}>
         {!user.companyId && (
@@ -67,22 +67,32 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
             <Card
               sx={{
                 bgcolor: "white",
-                border: "2px dashed rgba(56, 133, 96, 0.3)",
-                transition: "transform 0.2s, box-shadow 0.2s",
+                border: "2px dashed rgba(56, 133, 96, 0.4)",
+                borderRadius: 3,
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                cursor: "pointer",
                 "&:hover": {
-                  transform: "translateY(-4px)",
-                  boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                  transform: "translateY(-6px)",
+                  boxShadow: "0 16px 40px rgba(56, 133, 96, 0.2)",
+                  borderColor: "rgba(56, 133, 96, 0.6)",
                 },
               }}
             >
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: 4 }}>
                 <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                  <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Box sx={{
+                    p: 1.5,
+                    bgcolor: "rgba(56, 133, 96, 0.1)",
+                    borderRadius: 2,
+                    mr: 2,
+                  }}>
+                    <BusinessIcon sx={{ fontSize: 32, color: "#388560" }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                     Link to Company
                   </Typography>
                 </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                <Typography variant="body2" sx={{ color: "text.secondary", mb: 3, lineHeight: 1.6 }}>
                   Enter an invite code from your employer to link your account to a company.
                 </Typography>
                 <Button
@@ -90,8 +100,17 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
                   onClick={() => setInviteCodeDialogOpen(true)}
                   sx={{
                     background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                    fontWeight: 700,
+                    py: 1.2,
+                    px: 3,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontSize: "0.95rem",
+                    transition: "all 0.3s ease",
+                    boxShadow: "0 4px 12px rgba(56, 133, 96, 0.25)",
                     "&:hover": {
-                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 6px 20px rgba(56, 133, 96, 0.35)",
                     },
                   }}
                 >
@@ -106,22 +125,32 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
             <Card
               sx={{
                 bgcolor: "white",
-                border: "1px solid rgba(56, 133, 96, 0.3)",
-                transition: "transform 0.2s, box-shadow 0.2s",
+                border: "1px solid rgba(56, 133, 96, 0.2)",
+                borderRadius: 3,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "&:hover": {
-                  transform: "translateY(-4px)",
-                  boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                  transform: "translateY(-6px)",
+                  boxShadow: "0 16px 40px rgba(56, 133, 96, 0.15)",
+                  borderColor: "rgba(56, 133, 96, 0.4)",
                 },
               }}
             >
-              <CardContent sx={{ p: 3 }}>
+              <CardContent sx={{ p: 4 }}>
                 <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                  <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Box sx={{
+                    p: 1.5,
+                    bgcolor: "rgba(56, 133, 96, 0.1)",
+                    borderRadius: 2,
+                    mr: 2,
+                  }}>
+                    <BusinessIcon sx={{ fontSize: 32, color: "#388560" }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                     Manage Company
                   </Typography>
                 </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
                   View and manage your company information and booth.
                 </Typography>
                 <Button
@@ -135,8 +164,14 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
                   }}
                   sx={{
                     background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                    fontWeight: 700,
+                    py: 1,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    boxShadow: "0 4px 12px rgba(56, 133, 96, 0.25)",
                     "&:hover": {
-                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 6px 20px rgba(56, 133, 96, 0.35)",
                     },
                   }}
                 >
@@ -150,22 +185,32 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
           <Card
             sx={{
               bgcolor: "white",
-              border: "1px solid rgba(56, 133, 96, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
+              border: "1px solid rgba(56, 133, 96, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(56, 133, 96, 0.15)",
+                borderColor: "rgba(56, 133, 96, 0.4)",
               },
             }}
           >
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                <Box sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(56, 133, 96, 0.1)",
+                  borderRadius: 2,
+                  mr: 2,
+                }}>
+                  <BusinessIcon sx={{ fontSize: 32, color: "#388560" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                   Browse All Booths
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
                 {isLive
                   ? "Explore other companies' booths at the virtual career fair."
                   : "The career fair is not currently live. You can only view your own company's booth."}
@@ -179,14 +224,15 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
                     ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
                     : "rgba(0, 0, 0, 0.12)",
                   color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                  fontWeight: 700,
+                  py: 1,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  boxShadow: isLive ? "0 4px 12px rgba(56, 133, 96, 0.25)" : "none",
+                  transition: "all 0.3s ease",
                   "&:hover": {
-                    background: isLive
-                      ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
-                      : "rgba(0, 0, 0, 0.12)",
-                  },
-                  "&:disabled": {
-                    background: "rgba(0, 0, 0, 0.12)",
-                    color: "rgba(0, 0, 0, 0.26)",
+                    transform: isLive ? "translateY(-2px)" : "none",
+                    boxShadow: isLive ? "0 6px 20px rgba(56, 133, 96, 0.35)" : "none",
                   },
                 }}
               >
@@ -204,31 +250,41 @@ function AdminSection({ navigate }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
 }>) {
   return (
-    <Box sx={{ mb: 4 }}>
-      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-        Administrator Controls
+    <Box sx={{ mb: 6 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+        ⚙️ Administrator Controls
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Card
             sx={{
               bgcolor: "white",
-              border: "1px solid rgba(176, 58, 108, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
+              border: "1px solid rgba(176, 58, 108, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(176, 58, 108, 0.15)",
+                borderColor: "rgba(176, 58, 108, 0.4)",
               },
             }}
           >
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                <Box sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(176, 58, 108, 0.1)",
+                  borderRadius: 2,
+                  mr: 2,
+                }}>
+                  <EventIcon sx={{ fontSize: 32, color: "#b03a6c" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                   Manage Career Fair
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
                 Control when the career fair is live and visible to all users.
               </Typography>
               <Button
@@ -236,8 +292,15 @@ function AdminSection({ navigate }: Readonly<{
                 onClick={() => navigate("/admin")}
                 sx={{
                   background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                  fontWeight: 700,
+                  py: 1,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  boxShadow: "0 4px 12px rgba(176, 58, 108, 0.25)",
+                  transition: "all 0.3s ease",
                   "&:hover": {
-                    background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 6px 20px rgba(176, 58, 108, 0.35)",
                   },
                 }}
               >
@@ -249,6 +312,98 @@ function AdminSection({ navigate }: Readonly<{
       </Grid>
     </Box>
   )
+}
+
+// Helper to get browse booths description
+function getBoothsDescription(isLive: boolean): string {
+  return isLive
+    ? "Explore opportunities from top companies at the virtual career fair."
+    : "The career fair is not currently live. Check back later to browse company booths."
+}
+
+// Helper to get view booths button styles
+function getViewBoothsButtonStyles(isLive: boolean) {
+  return {
+    background: isLive
+      ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+      : "rgba(0, 0, 0, 0.12)",
+    color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+    fontWeight: 700,
+    py: 1,
+    borderRadius: 2,
+    textTransform: "none",
+    boxShadow: isLive ? "0 4px 12px rgba(176, 58, 108, 0.25)" : "none",
+    transition: "all 0.3s ease",
+    "&:hover": {
+      transform: isLive ? "translateY(-2px)" : "none",
+      boxShadow: isLive ? "0 6px 20px rgba(176, 58, 108, 0.35)" : "none",
+    },
+  }
+}
+
+// Helper to get booth history button styles
+function getBoothHistoryButtonStyles(isLive: boolean) {
+  return {
+    borderColor: isLive ? "rgba(176, 58, 108, 0.4)" : "rgba(0, 0, 0, 0.12)",
+    color: isLive ? "#b03a6c" : "rgba(0, 0, 0, 0.26)",
+    fontWeight: 700,
+    borderWidth: "1.5px",
+    transition: "all 0.3s ease",
+    "&:hover": {
+      borderColor: "#b03a6c",
+      backgroundColor: "rgba(176, 58, 108, 0.08)",
+      transform: isLive ? "translateY(-2px)" : "none",
+    },
+    "&:disabled": {
+      borderColor: "rgba(0, 0, 0, 0.12)",
+      color: "rgba(0, 0, 0, 0.26)",
+    },
+  }
+}
+
+// Helper to get invitations card styles
+function getInvitationsCardStyles(newInvitationsCount: number) {
+  const hasNewInvitations = newInvitationsCount > 0
+  return {
+    bgcolor: "white",
+    border: hasNewInvitations 
+      ? "2px solid rgba(176, 58, 108, 0.4)"
+      : "1px solid rgba(176, 58, 108, 0.2)",
+    borderRadius: 3,
+    boxShadow: hasNewInvitations
+      ? "0 8px 24px rgba(176, 58, 108, 0.15)"
+      : "0 2px 8px rgba(0,0,0,0.08)",
+    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+    background: hasNewInvitations
+      ? "linear-gradient(135deg, rgba(176, 58, 108, 0.02) 0%, rgba(255,255,255) 100%)"
+      : "white",
+    "&:hover": {
+      transform: "translateY(-6px)",
+      boxShadow: "0 16px 40px rgba(176, 58, 108, 0.15)",
+      borderColor: "rgba(176, 58, 108, 0.4)",
+    },
+  }
+}
+
+// Helper to get view invitations button styles
+function getViewInvitationsButtonStyles(jobInvitationsCount: number) {
+  const hasInvitations = jobInvitationsCount > 0
+  return {
+    background: hasInvitations
+      ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
+      : "rgba(0, 0, 0, 0.12)",
+    color: hasInvitations ? "white" : "rgba(0, 0, 0, 0.26)",
+    fontWeight: 700,
+    py: 1,
+    borderRadius: 2,
+    textTransform: "none",
+    boxShadow: hasInvitations ? "0 4px 12px rgba(176, 58, 108, 0.25)" : "none",
+    transition: "all 0.3s ease",
+    "&:hover": {
+      transform: hasInvitations ? "translateY(-2px)" : "none",
+      boxShadow: hasInvitations ? "0 6px 20px rgba(176, 58, 108, 0.35)" : "none",
+    },
+  }
 }
 
 function StudentSection({
@@ -264,32 +419,48 @@ function StudentSection({
   newInvitationsCount: number
   loadingInvitations: boolean
 }>) {
+  const boothsDescription = getBoothsDescription(isLive)
+  const viewBoothsStyles = getViewBoothsButtonStyles(isLive)
+  const boothHistoryStyles = getBoothHistoryButtonStyles(isLive)
+  const invitationsCardStyles = getInvitationsCardStyles(newInvitationsCount)
+  const viewInvitationsStyles = getViewInvitationsButtonStyles(jobInvitationsCount)
+
   return (
-    <Box sx={{ mb: 4 }}>
-      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-        Career Opportunities
+    <Box sx={{ mb: 6 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+        🎯 Career Opportunities
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
           <Card
             sx={{
               bgcolor: "white",
-              border: "1px solid rgba(56, 133, 96, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
+              border: "1px solid rgba(56, 133, 96, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(56, 133, 96, 0.15)",
+                borderColor: "rgba(56, 133, 96, 0.4)",
               },
             }}
           >
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <EventIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                <Box sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(56, 133, 96, 0.1)",
+                  borderRadius: 2,
+                  mr: 2,
+                }}>
+                  <EventIcon sx={{ fontSize: 32, color: "#388560" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                   Browse Career Fairs
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
                 View all available virtual career fairs and browse company booths within each one.
               </Typography>
               <Button
@@ -297,8 +468,15 @@ function StudentSection({
                 onClick={() => navigate("/fairs")}
                 sx={{
                   background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  fontWeight: 700,
+                  py: 1,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  boxShadow: "0 4px 12px rgba(56, 133, 96, 0.25)",
+                  transition: "all 0.3s ease",
                   "&:hover": {
-                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 6px 20px rgba(56, 133, 96, 0.35)",
                   },
                 }}
               >
@@ -311,46 +489,40 @@ function StudentSection({
           <Card
             sx={{
               bgcolor: "white",
-              border: "1px solid rgba(176, 58, 108, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
+              border: "1px solid rgba(176, 58, 108, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(176, 58, 108, 0.15)",
+                borderColor: "rgba(176, 58, 108, 0.4)",
               },
             }}
           >
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <BusinessIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                <Box sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(176, 58, 108, 0.1)",
+                  borderRadius: 2,
+                  mr: 2,
+                }}>
+                  <BusinessIcon sx={{ fontSize: 32, color: "#b03a6c" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                   Browse Company Booths
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {isLive
-                  ? "Explore opportunities from top companies at the virtual career fair."
-                  : "The career fair is not currently live. Check back later to browse company booths."}
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
+                {boothsDescription}
               </Typography>
               <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                 <Button
                   variant="contained"
                   onClick={() => navigate("/booths")}
                   disabled={!isLive}
-                  sx={{
-                    background: isLive
-                      ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
-                      : "rgba(0, 0, 0, 0.12)",
-                    color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
-                    "&:hover": {
-                      background: isLive
-                        ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
-                        : "rgba(0, 0, 0, 0.12)",
-                    },
-                    "&:disabled": {
-                      background: "rgba(0, 0, 0, 0.12)",
-                      color: "rgba(0, 0, 0, 0.26)",
-                    },
-                  }}
+                  sx={viewBoothsStyles}
                 >
                   View All Booths
                 </Button>
@@ -358,18 +530,7 @@ function StudentSection({
                   variant="outlined"
                   onClick={() => navigate("/dashboard/booth-history")}
                   disabled={!isLive}
-                  sx={{
-                    borderColor: "rgba(176, 58, 108, 0.6)",
-                    color: isLive ? "#b03a6c" : "rgba(0, 0, 0, 0.26)",
-                    "&:hover": {
-                      borderColor: "#b03a6c",
-                      backgroundColor: "rgba(176, 58, 108, 0.08)",
-                    },
-                    "&:disabled": {
-                      borderColor: "rgba(0, 0, 0, 0.12)",
-                      color: "rgba(0, 0, 0, 0.26)",
-                    },
-                  }}
+                  sx={boothHistoryStyles}
                 >
                   View Booth History
                 </Button>
@@ -378,56 +539,46 @@ function StudentSection({
           </Card>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card
-            sx={{
-              bgcolor: "white",
-              border: newInvitationsCount > 0
-                ? "2px solid rgba(176, 58, 108, 0.5)"
-                : "1px solid rgba(176, 58, 108, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
-              "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-              },
-            }}
-          >
-            <CardContent sx={{ p: 3 }}>
+          <Card sx={invitationsCardStyles}>
+            <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
                 <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <MailIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Box sx={{
+                    p: 1.5,
+                    bgcolor: "rgba(176, 58, 108, 0.1)",
+                    borderRadius: 2,
+                    mr: 2,
+                  }}>
+                    <MailIcon sx={{ fontSize: 32, color: "#b03a6c" }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                     Job Invitations
                   </Typography>
                 </Box>
                 {newInvitationsCount > 0 && (
-                  <Badge badgeContent={newInvitationsCount} color="error" />
+                  <Badge 
+                    badgeContent={newInvitationsCount} 
+                    color="error"
+                    sx={{
+                      "& .MuiBadge-badge": {
+                        background: "linear-gradient(135deg, #ff5252 0%, #ff1744 100%)",
+                        boxShadow: "0 2px 8px rgba(255, 82, 82, 0.4)",
+                      },
+                    }}
+                  />
                 )}
               </Box>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 800, background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", mb: 1 }}>
                 {loadingInvitations ? "..." : jobInvitationsCount}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
                 {getJobInvitationText(newInvitationsCount)}
               </Typography>
               <Button
                 variant="contained"
                 onClick={() => navigate("/dashboard/job-invitations")}
                 disabled={jobInvitationsCount === 0}
-                sx={{
-                  background: jobInvitationsCount > 0
-                    ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
-                    : "rgba(0, 0, 0, 0.12)",
-                  color: jobInvitationsCount > 0 ? "white" : "rgba(0, 0, 0, 0.26)",
-                  "&:hover": {
-                    background: jobInvitationsCount > 0
-                      ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
-                      : "rgba(0, 0, 0, 0.12)",
-                  },
-                  "&:disabled": {
-                    background: "rgba(0, 0, 0, 0.12)",
-                    color: "rgba(0, 0, 0, 0.26)",
-                  },
-                }}
+                sx={viewInvitationsStyles}
               >
                 View Invitations
               </Button>
@@ -451,136 +602,191 @@ function StatsSection({
   totalJobOpenings: number
 }>) {
   return (
-    <Grid container spacing={3}>
-      <Grid size={{ xs: 12, md: 4 }}>
-        <Card
-          sx={{
-            bgcolor: "white",
-            border: "1px solid rgba(176, 58, 108, 0.3)",
-            transition: "transform 0.2s, box-shadow 0.2s",
-            "&:hover": {
-              transform: "translateY(-4px)",
-              boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-            },
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <EventIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Upcoming Events
-              </Typography>
-            </Box>
-            <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-              {loadingStats ? "..." : upcomingEventsCount}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Career fairs scheduled
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-      <Grid size={{ xs: 12, md: 4 }}>
-        <Card
-          sx={{
-            bgcolor: "white",
-            border: "1px solid rgba(56, 133, 96, 0.3)",
-            transition: "transform 0.2s, box-shadow 0.2s",
-            "&:hover": {
-              transform: "translateY(-4px)",
-              boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-            },
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Companies
-              </Typography>
-            </Box>
-            <Typography variant="h3" sx={{ fontWeight: 700, color: "#388560", mb: 1 }}>
-              {loadingStats ? "..." : totalCompaniesCount}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Employers participating
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-      <Grid size={{ xs: 12, md: 4 }}>
-        <Card
-          sx={{
-            bgcolor: "white",
-            border: "1px solid rgba(176, 58, 108, 0.3)",
-            transition: "transform 0.2s, box-shadow 0.2s",
-            "&:hover": {
-              transform: "translateY(-4px)",
-              boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
-            },
-          }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <WorkIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Job Openings
-              </Typography>
-            </Box>
-            <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-              {loadingStats ? "..." : totalJobOpenings}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Positions available
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
-  )
-}
-
-// Component for Company Owner section
-function CompanyOwnerSection({ navigate, isLive, totalRepresentatives }: Readonly<{
-  navigate: ReturnType<typeof useNavigate>
-  isLive: boolean
-  totalRepresentatives: number
-}>) {
-  return (
-    <Box sx={{ mb: 4 }}>
-      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-        Company Management
+    <Box sx={{ mt: 6, mb: 2 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+        📊 Quick Stats
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 4 }}>
           <Card
             sx={{
               bgcolor: "white",
-              border: "1px solid rgba(56, 133, 96, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
+              border: "1px solid rgba(176, 58, 108, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(176, 58, 108, 0.15)",
+                borderColor: "rgba(176, 58, 108, 0.4)",
               },
             }}
           >
-            <CardContent sx={{ p: 3 }}>
+            <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <ShareIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                <Box sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(176, 58, 108, 0.1)",
+                  borderRadius: 2,
+                  mr: 2,
+                }}>
+                  <EventIcon sx={{ fontSize: 32, color: "#b03a6c" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
+                  Upcoming Events
+                </Typography>
+              </Box>
+              <Typography variant="h3" sx={{ fontWeight: 800, background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", mb: 1 }}>
+                {loadingStats ? "..." : upcomingEventsCount}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Career fairs scheduled
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              "&:hover": {
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(56, 133, 96, 0.15)",
+                borderColor: "rgba(56, 133, 96, 0.4)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 4 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <Box sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(56, 133, 96, 0.1)",
+                  borderRadius: 2,
+                  mr: 2,
+                }}>
+                  <BusinessIcon sx={{ fontSize: 32, color: "#388560" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
+                  Companies
+                </Typography>
+              </Box>
+              <Typography variant="h3" sx={{ fontWeight: 800, background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", mb: 1 }}>
+                {loadingStats ? "..." : totalCompaniesCount}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Employers participating
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(176, 58, 108, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              "&:hover": {
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(176, 58, 108, 0.15)",
+                borderColor: "rgba(176, 58, 108, 0.4)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 4 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <Box sx={{
+                  p: 1.5,
+                  bgcolor: "rgba(176, 58, 108, 0.1)",
+                  borderRadius: 2,
+                  mr: 2,
+                }}>
+                  <WorkIcon sx={{ fontSize: 32, color: "#b03a6c" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
+                  Job Openings
+                </Typography>
+              </Box>
+              <Typography variant="h3" sx={{ fontWeight: 800, background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", mb: 1 }}>
+                {loadingStats ? "..." : totalJobOpenings}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Positions available
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  )
+}
+
+// Component for Company Owner section
+function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledFairCount }: Readonly<{
+  navigate: ReturnType<typeof useNavigate>
+  isLive: boolean
+  totalRepresentatives: number
+  enrolledFairCount: number
+}>) {
+  return (
+    <Box sx={{ mb: 6 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+        💼 Company Management
+      </Typography>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              height: "100%",
+              "&:hover": {
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(56, 133, 96, 0.15)",
+                borderColor: "rgba(56, 133, 96, 0.4)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 4, display: "flex", flexDirection: "column", height: "100%" }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
+                <Box sx={{
+                  p: 2,
+                  bgcolor: "rgba(56, 133, 96, 0.1)",
+                  borderRadius: 2.5,
+                  mr: 2,
+                }}>
+                  <ShareIcon sx={{ fontSize: 28, color: "#388560" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                   Manage Companies
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3, flex: 1 }}>
                 Create and manage your companies.
               </Typography>
               <Button
                 variant="contained"
                 onClick={() => navigate("/companies")}
+                fullWidth
                 sx={{
                   background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  fontWeight: 700,
+                  py: 1.2,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  boxShadow: "0 4px 12px rgba(56, 133, 96, 0.25)",
+                  transition: "all 0.3s ease",
                   "&:hover": {
-                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 6px 20px rgba(56, 133, 96, 0.35)",
                   },
                 }}
               >
@@ -589,63 +795,57 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives }: Readonl
             </CardContent>
           </Card>
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 6 }}>
           <Card
             sx={{
               bgcolor: "white",
-              border: "1px solid rgba(176, 58, 108, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
+              border: "1px solid rgba(56, 133, 96, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              height: "100%",
               "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(176, 58, 108, 0.3)",
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(56, 133, 96, 0.15)",
+                borderColor: "rgba(56, 133, 96, 0.4)",
               },
             }}
           >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <PeopleIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  Team Members
-                </Typography>
-              </Box>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: "#b03a6c", mb: 1 }}>
-                {totalRepresentatives}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Company representatives registered
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Card
-            sx={{
-              bgcolor: "white",
-              border: "1px solid rgba(56, 133, 96, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
-              "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-              },
-            }}
-          >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <CalendarMonthIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            <CardContent sx={{ p: 4, display: "flex", flexDirection: "column", height: "100%" }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
+                <Box sx={{
+                  p: 2,
+                  bgcolor: "rgba(56, 133, 96, 0.1)",
+                  borderRadius: 2.5,
+                  mr: 2,
+                }}>
+                  <CalendarMonthIcon sx={{ fontSize: 28, color: "#388560" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
                   Career Fairs
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Browse available career fairs and join them with an invite code.
+              <Typography variant="h2" sx={{ fontWeight: 800, background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", mb: 1 }}>
+                {enrolledFairCount}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3, flex: 1 }}>
+                {enrolledFairCount === 1 ? "fair enrolled" : "fairs enrolled"}
               </Typography>
               <Button
                 variant="contained"
                 onClick={() => navigate("/fairs")}
+                fullWidth
                 sx={{
                   background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                  fontWeight: 700,
+                  py: 1.2,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  boxShadow: "0 4px 12px rgba(56, 133, 96, 0.25)",
+                  transition: "all 0.3s ease",
                   "&:hover": {
-                    background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                    transform: "translateY(-2px)",
+                    boxShadow: "0 6px 20px rgba(56, 133, 96, 0.35)",
                   },
                 }}
               >
@@ -654,63 +854,121 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives }: Readonl
             </CardContent>
           </Card>
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 6 }}>
           <Card
             sx={{
               bgcolor: "white",
-              border: "1px solid rgba(56, 133, 96, 0.3)",
-              transition: "transform 0.2s, box-shadow 0.2s",
+              border: "1px solid rgba(176, 58, 108, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              height: "100%",
               "&:hover": {
-                transform: "translateY(-4px)",
-                boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(176, 58, 108, 0.15)",
+                borderColor: "rgba(176, 58, 108, 0.4)",
               },
             }}
           >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <BusinessIcon sx={{ fontSize: 40, color: "#388560", mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  Browse All Booths
+            <CardContent sx={{ p: 4 }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
+                <Box sx={{
+                  p: 2,
+                  bgcolor: "rgba(176, 58, 108, 0.1)",
+                  borderRadius: 2.5,
+                  mr: 2,
+                }}>
+                  <PeopleIcon sx={{ fontSize: 28, color: "#b03a6c" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
+                  Team Members
                 </Typography>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="h2" sx={{ fontWeight: 800, background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", mb: 1 }}>
+                {totalRepresentatives}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Company representatives registered
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+          <Card
+            sx={{
+              bgcolor: "white",
+              border: "1px solid rgba(56, 133, 96, 0.2)",
+              borderRadius: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              height: "100%",
+              "&:hover": {
+                transform: "translateY(-6px)",
+                boxShadow: "0 16px 40px rgba(56, 133, 96, 0.15)",
+                borderColor: "rgba(56, 133, 96, 0.4)",
+              },
+            }}
+          >
+            <CardContent sx={{ p: 4, display: "flex", flexDirection: "column", height: "100%" }}>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
+                <Box sx={{
+                  p: 2,
+                  bgcolor: "rgba(56, 133, 96, 0.1)",
+                  borderRadius: 2.5,
+                  mr: 2,
+                }}>
+                  <BusinessIcon sx={{ fontSize: 28, color: "#388560" }} />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: "#1a1a1a" }}>
+                  Browse Booths
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 3, flex: 1 }}>
                 {isLive
                   ? "Explore other companies' booths at the virtual career fair."
                   : "The career fair is not currently live. You can only view your own company's booth."}
               </Typography>
-              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+              <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
                 <Button
                   variant="contained"
                   onClick={() => navigate("/booths")}
                   disabled={!isLive}
+                  size="small"
                   sx={{
                     background: isLive
                       ? "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)"
                       : "rgba(0, 0, 0, 0.12)",
                     color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
+                    fontWeight: 700,
+                    borderRadius: 1.5,
+                    textTransform: "none",
+                    boxShadow: isLive ? "0 4px 12px rgba(56, 133, 96, 0.25)" : "none",
+                    transition: "all 0.3s ease",
                     "&:hover": {
-                      background: isLive
-                        ? "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)"
-                        : "rgba(0, 0, 0, 0.12)",
-                    },
-                    "&:disabled": {
-                      background: "rgba(0, 0, 0, 0.12)",
-                      color: "rgba(0, 0, 0, 0.26)",
+                      transform: isLive ? "translateY(-2px)" : "none",
+                      boxShadow: isLive ? "0 6px 20px rgba(56, 133, 96, 0.35)" : "none",
                     },
                   }}
                 >
-                  View All Booths
+                  View Booths
                 </Button>
                 <Button
                   variant="outlined"
                   onClick={() => navigate("/dashboard/booth-history")}
                   disabled={!isLive}
+                  size="small"
                   sx={{
-                    borderColor: "rgba(56, 133, 96, 0.6)",
+                    borderColor: isLive ? "rgba(56, 133, 96, 0.4)" : "rgba(0, 0, 0, 0.12)",
                     color: isLive ? "#388560" : "rgba(0, 0, 0, 0.26)",
+                    fontWeight: 700,
+                    borderWidth: "1.5px",
+                    borderRadius: 1.5,
+                    textTransform: "none",
+                    transition: "all 0.3s ease",
                     "&:hover": {
                       borderColor: "#388560",
                       backgroundColor: "rgba(56, 133, 96, 0.08)",
+                      transform: isLive ? "translateY(-2px)" : "none",
                     },
                     "&:disabled": {
                       borderColor: "rgba(0, 0, 0, 0.12)",
@@ -718,7 +976,7 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives }: Readonl
                     },
                   }}
                 >
-                  View Booth History
+                  Booth History
                 </Button>
               </Box>
             </CardContent>
@@ -727,6 +985,56 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives }: Readonl
       </Grid>
     </Box>
   )
+}
+
+function renderRoleSection(
+  role: string | undefined,
+  navigate: ReturnType<typeof useNavigate>,
+  props: {
+    isLive: boolean
+    totalRepresentatives: number
+    enrolledFairCount: number
+    user: ReturnType<typeof authUtils.getCurrentUser>
+    jobInvitationsCount: number
+    newInvitationsCount: number
+    loadingInvitations: boolean
+    setInviteCodeDialogOpen: (open: boolean) => void
+  }
+) {
+  switch (role) {
+    case "companyOwner":
+      return (
+        <CompanyOwnerSection
+          navigate={navigate}
+          isLive={props.isLive}
+          totalRepresentatives={props.totalRepresentatives}
+          enrolledFairCount={props.enrolledFairCount}
+        />
+      )
+    case "representative":
+      return (
+        <RepresentativeSection 
+          navigate={navigate}
+          user={props.user}
+          isLive={props.isLive}
+          setInviteCodeDialogOpen={props.setInviteCodeDialogOpen}
+        />
+      )
+    case "administrator":
+      return <AdminSection navigate={navigate} />
+    case "student":
+      return (
+        <StudentSection 
+          navigate={navigate}
+          isLive={props.isLive}
+          jobInvitationsCount={props.jobInvitationsCount}
+          newInvitationsCount={props.newInvitationsCount}
+          loadingInvitations={props.loadingInvitations}
+        />
+      )
+    default:
+      return null
+  }
 }
 
 export default function Dashboard() {
@@ -743,6 +1051,7 @@ export default function Dashboard() {
   const [totalCompaniesCount, setTotalCompaniesCount] = useState(0)
   const [totalJobOpenings, setTotalJobOpenings] = useState(0)
   const [loadingStats, setLoadingStats] = useState(true)
+  const [enrolledFairCount, setEnrolledFairCount] = useState(0)
   const [jobInvitationsCount, setJobInvitationsCount] = useState(0)
   const [newInvitationsCount, setNewInvitationsCount] = useState(0)
   const [loadingInvitations, setLoadingInvitations] = useState(false)
@@ -882,6 +1191,20 @@ export default function Dashboard() {
           setIsLive(fairs.some((f: any) => f.isLive))
         }
 
+        // Fetch enrollment count for company users
+        if (user?.role === "companyOwner" || user?.role === "representative") {
+          const token = await auth.currentUser?.getIdToken()
+          if (token) {
+            const enrollRes = await fetch(`${API_URL}/api/fairs/my-enrollments`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (enrollRes.ok) {
+              const enrollData = await enrollRes.json()
+              setEnrolledFairCount((enrollData.enrollments || []).length)
+            }
+          }
+        }
+
         // Fetch total companies count
         const companiesSnapshot = await getDocs(collection(db, "companies"))
         setTotalCompaniesCount(companiesSnapshot.size)
@@ -898,6 +1221,8 @@ export default function Dashboard() {
 
     fetchStats()
   }, [])
+
+
 
   const handleLinkInviteCode = async () => {
     if (!inviteCode.trim()) {
@@ -933,21 +1258,27 @@ export default function Dashboard() {
   if (!user) return null
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "#fafafa" }}>
       {/* Header */}
       <Box
         sx={{
           background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
+          py: 4,
           px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+          backdropFilter: "blur(10px)",
         }}
       >
         <Container maxWidth="lg">
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-              Job Goblin - Virtual Career Fair
-            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column" }}>
+              <Typography variant="h4" sx={{ fontWeight: 800, color: "white", letterSpacing: "-0.5px" }}>
+                Job Goblin
+              </Typography>
+              <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.9)" }}>
+                Virtual Career Fair
+              </Typography>
+            </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               {/* ✅ Chat Button with Unread Badge */}
               <Tooltip title="Open Chat">
@@ -967,6 +1298,8 @@ export default function Dashboard() {
                       padding: "0 6px",
                       right: "4px",
                       top: "4px",
+                      background: "#ff5252",
+                      boxShadow: "0 0 0 2px #b03a6c",
                     },
                   }}
                 >
@@ -974,12 +1307,17 @@ export default function Dashboard() {
                     onClick={() => navigate("/dashboard/chat")}
                     startIcon={<ChatIcon />}
                     sx={{
-                      fontWeight: 600,
+                      fontWeight: 700,
                       color: "white",
-                      background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.15)",
+                      border: "1px solid rgba(255,255,255,0.3)",
+                      backdropFilter: "blur(10px)",
+                      transition: "all 0.3s ease",
                       "&:hover": {
-                        background: "linear-gradient(135deg, #388560 0%, #b03a6c 100%)",
+                        background: "rgba(255,255,255,0.25)",
+                        backdropFilter: "blur(10px)",
+                        transform: "translateY(-2px)",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
                       },
                     }}
                   >
@@ -1001,49 +1339,72 @@ export default function Dashboard() {
           {/* Welcome Section */}
           <Box
             sx={{
-              background: "linear-gradient(135deg, rgba(176, 58, 108, 0.1) 0%, rgba(56, 133, 96, 0.1) 100%)",
-              border: "1px solid rgba(176, 58, 108, 0.3)",
-              borderRadius: 2,
-              p: 4,
-              mb: 5,
+              background: "linear-gradient(135deg, rgba(176, 58, 108, 0.08) 0%, rgba(56, 133, 96, 0.08) 100%)",
+              border: "2px solid rgba(176, 58, 108, 0.15)",
+              borderRadius: 3,
+              p: { xs: 3, md: 5 },
+              mb: 6,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+              position: "relative",
+              overflow: "hidden",
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                top: 0,
+                right: 0,
+                width: "300px",
+                height: "300px",
+                background: "radial-gradient(circle, rgba(56, 133, 96, 0.1) 0%, transparent 70%)",
+                borderRadius: "50%",
+                pointerEvents: "none",
+              },
             }}
           >
-            <Typography
-              variant="h4"
-              sx={{
-                fontWeight: 700,
-                mb: 1,
-                background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              Welcome back, {getDisplayName(user)}!
-            </Typography>
+            <Box sx={{ position: "relative", zIndex: 1 }}>
+              <Typography
+                variant="h3"
+                sx={{
+                  fontWeight: 800,
+                  mb: 2,
+                  background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  letterSpacing: "-0.5px",
+                }}
+              >
+                Welcome back, {getDisplayName(user)}!
+              </Typography>
 
-            {/* Company name display for representatives - only show if they have a valid companyId */}
-            {user.role === "representative" && user.companyId && user.companyName && (
-              <Box sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 1,
-                mb: 2,
-                px: 2,
-                py: 1,
-                bgcolor: "rgba(56, 133, 96, 0.1)",
-                borderRadius: 2,
-                border: "1px solid rgba(56, 133, 96, 0.2)"
-              }}>
-                <BusinessIcon sx={{ fontSize: 20, color: "#388560" }} />
-                <Typography variant="body1" sx={{ fontWeight: 500, color: "#388560" }}>
-                  Representing {user.companyName}
-                </Typography>
-              </Box>
-            )}
+              {/* Company name display for representatives - only show if they have a valid companyId */}
+              {user.role === "representative" && user.companyId && user.companyName && (
+                <Box sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                  mb: 3,
+                  px: 3,
+                  py: 1.5,
+                  bgcolor: "rgba(56, 133, 96, 0.12)",
+                  borderRadius: 2.5,
+                  border: "1.5px solid rgba(56, 133, 96, 0.3)",
+                  backdropFilter: "blur(10px)",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    bgcolor: "rgba(56, 133, 96, 0.18)",
+                    borderColor: "rgba(56, 133, 96, 0.5)",
+                  },
+                }}>
+                  <BusinessIcon sx={{ fontSize: 20, color: "#388560", fontWeight: 700 }} />
+                  <Typography variant="body1" sx={{ fontWeight: 600, color: "#2d6b4d" }}>
+                    Representing <strong>{user.companyName}</strong>
+                  </Typography>
+                </Box>
+              )}
 
-            <Typography variant="body1" color="text.secondary">
-              You're all set to explore career opportunities at our virtual fair.
-            </Typography>
+              <Typography variant="body1" sx={{ color: "text.secondary", fontSize: "1.05rem", lineHeight: 1.6 }}>
+                You're all set to explore career opportunities at our virtual fair. Start by browsing companies or checking your invitations.
+              </Typography>
+            </Box>
           </Box>
 
           {/* Event List - Shows scheduled career fairs */}
@@ -1054,54 +1415,35 @@ export default function Dashboard() {
             <Alert
               severity="info"
               sx={{
-                mb: 3,
-                borderRadius: 2,
-                bgcolor: "rgba(56, 133, 96, 0.1)",
-                border: "1px solid rgba(56, 133, 96, 0.3)",
+                mb: 4,
+                borderRadius: 2.5,
+                bgcolor: "rgba(56, 133, 96, 0.08)",
+                border: "2px solid rgba(56, 133, 96, 0.25)",
+                "& .MuiAlert-icon": {
+                  color: "#388560",
+                },
               }}
             >
-              <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>
+              <Typography variant="body1" sx={{ fontWeight: 700, mb: 0.5, color: "#2d6b4d" }}>
                 Career Fair is Not Currently Live
               </Typography>
-              <Typography variant="body2">
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
                 {getFairStatusMessage(user?.role)}
               </Typography>
             </Alert>
           )}
 
-          {/* Company Owner-specific section */}
-          {user?.role === "companyOwner" && (
-            <CompanyOwnerSection 
-              navigate={navigate}
-              isLive={isLive}
-              totalRepresentatives={totalRepresentatives}
-            />
-          )}
-          {/* Representative-specific section */}
-          {user?.role === "representative" && (
-            <RepresentativeSection 
-              navigate={navigate}
-              user={user}
-              isLive={isLive}
-              setInviteCodeDialogOpen={setInviteCodeDialogOpen}
-            />
-          )}
-
-          {/* Administrator-specific section */}
-          {user?.role === "administrator" && (
-            <AdminSection navigate={navigate} />
-          )}
-
-          {/* Student-specific section */}
-          {user?.role === "student" && (
-            <StudentSection 
-              navigate={navigate}
-              isLive={isLive}
-              jobInvitationsCount={jobInvitationsCount}
-              newInvitationsCount={newInvitationsCount}
-              loadingInvitations={loadingInvitations}
-            />
-          )}
+          {/* Role-specific sections */}
+          {renderRoleSection(user?.role, navigate, {
+            isLive,
+            totalRepresentatives,
+            enrolledFairCount,
+            user,
+            jobInvitationsCount,
+            newInvitationsCount,
+            loadingInvitations,
+            setInviteCodeDialogOpen,
+          })}
 
           {/* Stats Cards */}
           <StatsSection

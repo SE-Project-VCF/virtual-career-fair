@@ -1190,19 +1190,19 @@ export default function Company() {
             copyToClipboard={copyToClipboard}
           />
 
+          {/* Booth Management Card */}
+          <BoothManagementCard
+            companyId={company.id}
+            boothId={company.boothId}
+            navigate={navigate}
+          />
+
           {/* Representatives List Card */}
           <RepresentativesSection
             isOwner={isOwner}
             loadingRepresentatives={loadingRepresentatives}
             representatives={representatives}
             handleDeleteClick={handleDeleteClick}
-          />
-
-          {/* Booth Management Card */}
-          <BoothManagementCard
-            companyId={company.id}
-            boothId={company.boothId}
-            navigate={navigate}
           />
 
           {/* Job Postings Card */}

@@ -30,6 +30,7 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
+import RefreshIcon from "@mui/icons-material/Refresh"
 import ProfileMenu from "./ProfileMenu"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
@@ -60,6 +61,7 @@ export default function FairAdminDashboard() {
   const [saving, setSaving] = useState(false)
 
   const [codeCopied, setCodeCopied] = useState(false)
+  const [refreshingInviteCode, setRefreshingInviteCode] = useState(false)
 
   useEffect(() => {
     if (user?.role !== "administrator") {
@@ -205,6 +207,47 @@ export default function FairAdminDashboard() {
     }
   }
 
+  const handleRefreshInviteCode = async () => {
+    if (!fairId || user?.role !== "administrator") return
+    
+    setRefreshingInviteCode(true)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/fairs/${fairId}/refresh-invite-code`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId: user?.uid }),
+      })
+      
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type")
+        let errorMessage = "Failed to refresh invite code"
+        
+        if (contentType?.includes("application/json")) {
+          const errorData = await res.json()
+          errorMessage = errorData.error || errorMessage
+        } else {
+          errorMessage = `API Error: ${res.status} ${res.statusText}`
+        }
+        throw new Error(errorMessage)
+      }
+      
+      const data = await res.json()
+      if (fair) {
+        fair.inviteCode = data.inviteCode
+      }
+      setCodeCopied(false)
+    } catch (err: any) {
+      console.error("Error refreshing invite code:", err)
+      setError(err.message || "Failed to refresh invite code")
+    } finally {
+      setRefreshingInviteCode(false)
+    }
+  }
+
   if (fairLoading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
@@ -280,17 +323,28 @@ export default function FairAdminDashboard() {
             <Card>
               <CardContent>
                 <Typography variant="h6" gutterBottom>Company Invite Code</Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Typography
                     variant="h5"
                     fontFamily="monospace"
                     fontWeight="bold"
-                    sx={{ letterSpacing: 4 }}
+                    sx={{ letterSpacing: 4, flex: 1 }}
                   >
                     {fair.inviteCode ?? "—"}
                   </Typography>
-                  <IconButton onClick={handleCopyCode} title="Copy code">
+                  <IconButton onClick={handleCopyCode} title="Copy code" size="small">
                     <ContentCopyIcon />
+                  </IconButton>
+                  <IconButton 
+                    onClick={handleRefreshInviteCode} 
+                    title="Generate new code" 
+                    size="small" 
+                    disabled={refreshingInviteCode}
+                  >
+                    <RefreshIcon sx={{ 
+                      transition: "transform 0.6s linear",
+                      transform: refreshingInviteCode ? "rotate(360deg)" : "rotate(0deg)",
+                    }} />
                   </IconButton>
                 </Box>
                 {codeCopied && (
