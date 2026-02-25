@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(node scripts/verifyUserEmail.mjs:*)",
+      "Bash(node scripts/createAdmin.mjs:*)"
     ]
   }
 }

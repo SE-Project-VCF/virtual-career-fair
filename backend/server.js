@@ -38,6 +38,7 @@ const PORT = process.env.PORT || 5000;
 // CORS configuration - allow multiple origins
 const allowedOrigins = new Set([
   "http://localhost:5173",
+  "http://localhost:5174",
   "https://virtual-career-fair-git-dev-ninapellis-projects.vercel.app",
   process.env.FRONTEND_URL, // Allow custom frontend URL from env
 ].filter(Boolean)); // Remove any undefined values
@@ -159,6 +160,7 @@ app.get("/api/stream-unread", verifyFirebaseToken, async (req, res) => {
    ENSURE SINGLE USER EXISTS IN STREAM
    Called from frontend after login/registration
 ---------------------------------------------------- */
+app.options("/api/sync-stream-user", cors());
 app.post("/api/sync-stream-user", verifyFirebaseToken, async (req, res) => {
   try {
     const { uid, email, firstName, lastName } = req.body;
@@ -220,6 +222,7 @@ app.post("/api/register-user", async (req, res) => {
       email,
       password,
       displayName: `${firstName || ""} ${lastName || ""}`.trim(),
+      emailVerified: true,
     });
 
     let companyId = null;
@@ -252,7 +255,7 @@ app.post("/api/register-user", async (req, res) => {
       role,
       companyId,
       inviteCode,
-      emailVerified: false,
+      emailVerified: true,
       createdAt: admin.firestore.Timestamp.now(),
     });
 

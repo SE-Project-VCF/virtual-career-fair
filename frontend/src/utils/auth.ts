@@ -12,9 +12,13 @@ import { API_URL } from "../config";
 
 async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
   try {
+    const idToken = await auth.currentUser?.getIdToken();
     await fetch(`${API_URL}/api/sync-stream-user`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
       body: JSON.stringify({
         uid,
         email,
@@ -69,12 +73,18 @@ export const authUtils = {
       // Only send verification email after successful registration
       await sendEmailVerification(user);
 
-      await syncStreamUser(
-        user.uid,
-        email,
-        userData.firstName,
-        userData.lastName
-      );
+      // Attempt to sync user to Stream Chat, but don't block registration if it fails
+      try {
+        await syncStreamUser(
+          user.uid,
+          email,
+          userData.firstName,
+          userData.lastName
+        );
+      } catch (error_) {
+        // Log the error but continue with registration - chat is optional
+        console.warn("Warning: Failed to sync chat user:", error_);
+      }
 
       return { success: true, needsVerification: true };
     } catch (err: any) {
@@ -115,12 +125,18 @@ export const authUtils = {
       const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
-      await syncStreamUser(
-        user.uid,
-        user.email!,
-        userData.firstName,
-        userData.lastName
-      );
+      // Attempt to sync user to Stream Chat, but don't block login if it fails
+      try {
+        await syncStreamUser(
+          user.uid,
+          user.email!,
+          userData.firstName,
+          userData.lastName
+        );
+      } catch (error_) {
+        // Log the error but continue with login - chat is optional
+        console.warn("Warning: Failed to sync chat user:", error_);
+      }
 
       return { success: true };
     } catch (err: any) {
@@ -165,12 +181,18 @@ export const authUtils = {
       const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
-      await syncStreamUser(
-        user.uid,
-        user.email!,
-        userData.firstName,
-        userData.lastName
-      );
+      // Attempt to sync user to Stream Chat, but don't block login if it fails
+      try {
+        await syncStreamUser(
+          user.uid,
+          user.email!,
+          userData.firstName,
+          userData.lastName
+        );
+      } catch (error_) {
+        // Log the error but continue with login - chat is optional
+        console.warn("Warning: Failed to sync chat user:", error_);
+      }
 
       return { success: true };
     } catch (err: any) {
@@ -224,12 +246,18 @@ export const authUtils = {
 
         localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
-        await syncStreamUser(
-          user.uid,
-          user.email!,
-          existingData.firstName,
-          existingData.lastName
-        );
+        // Attempt to sync user to Stream Chat, but don't block login if it fails
+        try {
+          await syncStreamUser(
+            user.uid,
+            user.email!,
+            existingData.firstName,
+            existingData.lastName
+          );
+        } catch (error_) {
+          // Log the error but continue with login - chat is optional
+          console.warn("Warning: Failed to sync chat user:", error_);
+        }
 
         return {
           success: true,

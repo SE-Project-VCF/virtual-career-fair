@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material"
+import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import PersonAddIcon from "@mui/icons-material/PersonAdd"
@@ -8,6 +8,8 @@ import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GoogleIcon from "@mui/icons-material/Google"
+import Visibility from "@mui/icons-material/Visibility"
+import VisibilityOff from "@mui/icons-material/VisibilityOff"
 import { doc, setDoc } from "firebase/firestore"
 import { db, auth } from "../firebase"
 
@@ -21,6 +23,8 @@ export default function Register() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   // Student fields
   const [firstName, setFirstName] = useState("")
@@ -371,12 +375,23 @@ export default function Register() {
               <TextField
                 fullWidth
                 label="Password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 margin="normal"
                 required
                 helperText="Minimum 6 characters"
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowPassword((v) => !v)} edge="end" aria-label="toggle password visibility">
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
                 sx={{
                   mb: 2,
                   "& .MuiOutlinedInput-root": {
@@ -393,11 +408,22 @@ export default function Register() {
               <TextField
                 fullWidth
                 label="Confirm Password"
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 margin="normal"
                 required
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowConfirmPassword((v) => !v)} edge="end" aria-label="toggle confirm password visibility">
+                          {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
                 sx={{
                   mb: 3,
                   "& .MuiOutlinedInput-root": {
