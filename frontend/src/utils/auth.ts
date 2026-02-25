@@ -390,6 +390,7 @@ export const authUtils = {
           await setDoc(userRef, {
             ...userData,
             companyId,
+            companyName,
             inviteCode,
           }, { merge: true });
         }

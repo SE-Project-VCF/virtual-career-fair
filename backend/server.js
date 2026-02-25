@@ -287,6 +287,7 @@ app.post("/api/register-user", async (req, res) => {
       email,
       role,
       companyId,
+      companyName: role === "companyOwner" ? companyName : undefined,
       inviteCode,
       emailVerified: true,
       createdAt: admin.firestore.Timestamp.now(),
@@ -1359,10 +1360,16 @@ app.post("/api/update-invite-code", async (req, res) => {
         throw new Error("Company not found");
       }
 
-      // Perform atomic update
+      // Perform atomic update on company
       transaction.update(companyRef, {
         inviteCode: inviteCode,
         inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
+      });
+
+      // Also update the owner's user document with the new invite code
+      const ownerRef = db.collection("users").doc(companyDoc.data().ownerId);
+      transaction.update(ownerRef, {
+        inviteCode: inviteCode,
       });
     });
 
