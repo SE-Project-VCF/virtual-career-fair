@@ -17,15 +17,31 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  IconButton,
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
+import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import ProfileMenu from "./ProfileMenu"
 import NotificationBell from "../components/NotificationBell"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
+
+function waitForFirebaseUser(): Promise<typeof auth.currentUser> {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5000)
+    const unsub = auth.onAuthStateChanged((u) => {
+      if (u) {
+        clearTimeout(timer)
+        unsub()
+        resolve(u)
+      }
+    })
+  })
+}
 
 interface Fair {
   id: string
@@ -70,6 +86,11 @@ export default function FairList() {
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState("")
 
+  // Leave dialog state
+  const [leaveDialogFairId, setLeaveDialogFairId] = useState<string | null>(null)
+  const [leaving, setLeaving] = useState(false)
+  const [leaveError, setLeaveError] = useState("")
+
   useEffect(() => {
     async function loadFairs() {
       try {
@@ -92,12 +113,21 @@ export default function FairList() {
     if (!isCompanyUser) return
     async function loadEnrollments() {
       try {
-        const token = await auth.currentUser?.getIdToken()
-        if (!token) return
+        // auth.currentUser may be null on first render if Firebase hasn't restored
+        // the session yet — wait up to 3s for it to become available
+        const firebaseUser = auth.currentUser ?? await waitForFirebaseUser()
+        if (!firebaseUser) {
+          console.warn("loadEnrollments: no Firebase user after waiting")
+          return
+        }
+        const token = await firebaseUser.getIdToken()
         const res = await fetch(`${API_URL}/api/fairs/my-enrollments`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-        if (!res.ok) return
+        if (!res.ok) {
+          console.error("loadEnrollments: API returned", res.status, await res.text().catch(() => ""))
+          return
+        }
         const data = await res.json()
         const map: Record<string, string | null> = {}
         for (const e of data.enrollments || []) {
@@ -140,14 +170,9 @@ export default function FairList() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to join fair")
 
-      // Update local enrollment state
+      // Update local enrollment state and close dialog — user can click Edit Booth when ready
       setEnrolledMap((prev) => ({ ...prev, [joinDialogFairId]: data.boothId || null }))
       handleCloseJoinDialog()
-
-      // Navigate directly to the fair-scoped booth editor
-      if (data.boothId && user?.companyId) {
-        navigate(`/fair/${data.fairId || joinDialogFairId}/company/${user.companyId}/booth`)
-      }
     } catch (err: any) {
       setJoinError(err.message)
     } finally {
@@ -155,28 +180,61 @@ export default function FairList() {
     }
   }
 
+  const handleLeaveFair = async () => {
+    if (!leaveDialogFairId) return
+    setLeaving(true)
+    setLeaveError("")
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/fairs/${leaveDialogFairId}/leave`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to leave fair")
+
+      setEnrolledMap((prev) => {
+        const next = { ...prev }
+        delete next[leaveDialogFairId]
+        return next
+      })
+      setLeaveDialogFairId(null)
+    } catch (err: any) {
+      setLeaveError(err.message)
+    } finally {
+      setLeaving(false)
+    }
+  }
+
   const joinDialogFair = fairs.find((f) => f.id === joinDialogFairId)
+  const leaveDialogFair = fairs.find((f) => f.id === leaveDialogFairId)
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
       <Box
         sx={{
-          bgcolor: "primary.main",
-          color: "white",
-          py: 2,
-          px: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+          py: 3,
+          px: 4,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
         }}
       >
-        <Typography variant="h6" fontWeight="bold">
-          Virtual Career Fair
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <NotificationBell />
-          <ProfileMenu />
-        </Box>
+        <Container maxWidth="lg">
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <IconButton onClick={() => navigate("/dashboard")} sx={{ color: "white" }}>
+                <ArrowBackIcon />
+              </IconButton>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
+                Career Fairs
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <NotificationBell />
+              <ProfileMenu />
+            </Box>
+          </Box>
+        </Container>
       </Box>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -218,22 +276,38 @@ export default function FairList() {
 
             return (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={fair.id}>
-                <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                <Card sx={{
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  ...(isEnrolled && {
+                    border: "2px solid",
+                    borderColor: "success.main",
+                    bgcolor: "rgba(46, 125, 50, 0.04)",
+                  }),
+                }}>
+                  {isEnrolled && (
+                    <Box sx={{
+                      bgcolor: "success.main",
+                      color: "white",
+                      px: 2,
+                      py: 0.75,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}>
+                      <CheckCircleIcon sx={{ fontSize: 16 }} />
+                      <Typography variant="caption" fontWeight="bold" sx={{ letterSpacing: 0.5 }}>
+                        {user?.companyName ? `${user.companyName} is enrolled` : "Your company is enrolled"}
+                      </Typography>
+                    </Box>
+                  )}
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1, gap: 1 }}>
                       <Typography variant="h6" fontWeight="bold">
                         {fair.name}
                       </Typography>
                       <Box sx={{ display: "flex", gap: 0.5, flexShrink: 0 }}>
-                        {isEnrolled && (
-                          <Chip
-                            icon={<CheckCircleIcon />}
-                            label="Enrolled"
-                            color="success"
-                            size="small"
-                            variant="outlined"
-                          />
-                        )}
                         <Chip label={status.label} color={status.color} size="small" />
                       </Box>
                     </Box>
@@ -266,20 +340,30 @@ export default function FairList() {
 
                     {isCompanyUser && !isEnded && (
                       isEnrolled ? (
-                        <Button
-                          variant="contained"
-                          color="success"
-                          onClick={() =>
-                            navigate(
-                              boothId && user?.companyId
-                                ? `/fair/${fair.id}/company/${user.companyId}/booth`
-                                : `/fair/${fair.id}`
-                            )
-                          }
-                          sx={{ flexGrow: 1 }}
-                        >
-                          Edit Booth
-                        </Button>
+                        <>
+                          <Button
+                            variant="contained"
+                            color="success"
+                            onClick={() =>
+                              navigate(
+                                boothId && user?.companyId
+                                  ? `/fair/${fair.id}/company/${user.companyId}/booth?bid=${boothId}`
+                                  : `/fair/${fair.id}`
+                              )
+                            }
+                            sx={{ flexGrow: 1 }}
+                          >
+                            Edit Booth
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            onClick={() => { setLeaveDialogFairId(fair.id); setLeaveError("") }}
+                            sx={{ flexGrow: 1 }}
+                          >
+                            Leave Fair
+                          </Button>
+                        </>
                       ) : (
                         <Button
                           variant="outlined"
@@ -333,6 +417,36 @@ export default function FairList() {
             disabled={joining || !inviteCode.trim()}
           >
             {joining ? "Joining..." : "Join Fair"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Leave Fair confirmation dialog */}
+      <Dialog
+        open={leaveDialogFairId !== null}
+        onClose={() => setLeaveDialogFairId(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Leave {leaveDialogFair?.name ?? "Fair"}?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Your company's booth and job listings will be removed from this fair. You will need a new invite code to rejoin.
+          </Typography>
+          {leaveError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {leaveError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLeaveDialogFairId(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleLeaveFair}
+            disabled={leaving}
+          >
+            {leaving ? "Leaving..." : "Leave Fair"}
           </Button>
         </DialogActions>
       </Dialog>

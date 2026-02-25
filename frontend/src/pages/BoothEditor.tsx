@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   Container,
   Box,
@@ -40,6 +40,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
+import RestartAltIcon from "@mui/icons-material/RestartAlt"
 import ProfileMenu from "./ProfileMenu"
 
 interface BoothData {
@@ -88,6 +89,8 @@ const COMPANY_SIZES = [
 export default function BoothEditor() {
   const navigate = useNavigate()
   const { companyId } = useParams<{ companyId: string }>()
+  const [searchParams] = useSearchParams()
+  const urlBoothId = searchParams.get("bid")
   const user = authUtils.getCurrentUser()
   const { fairId } = useFair()
 
@@ -97,6 +100,7 @@ export default function BoothEditor() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [fairBoothId, setFairBoothId] = useState<string | null>(null)
+  const [fairBoothHasData, setFairBoothHasData] = useState(false)
 
   // Booth form fields that are saved to Firestore
   const [formData, setFormData] = useState<BoothData>({
@@ -257,29 +261,47 @@ export default function BoothEditor() {
   }
 
   /**
-   * Loads fair-scoped booth data via the enrollment record.
-   * Reads the enrollment doc to find boothId, then loads the fair booth.
+   * Loads fair-scoped booth data via the backend API.
+   * Uses an authenticated API call instead of direct Firestore reads
+   * to avoid security rule restrictions on the enrollments subcollection.
    */
   const loadFairBooth = async (companyInfo: Company) => {
     if (!fairId || !companyId) return
     try {
-      const enrollmentDoc = await getDoc(doc(db, "fairs", fairId, "enrollments", companyId))
-      if (!enrollmentDoc.exists()) {
-        setError("Company is not enrolled in this fair")
-        return
-      }
-      const { boothId: fbId } = enrollmentDoc.data()
-      if (!fbId) {
+      // Firebase auth state may not be ready immediately after navigation.
+      // Wait up to 3 seconds for auth.currentUser to become available.
+      let firebaseUser = auth.currentUser
+      firebaseUser ??= await new Promise<typeof auth.currentUser>((resolve) => {
+        const timer = setTimeout(() => resolve(null), 5000)
+        const unsub = auth.onAuthStateChanged((u) => {
+          if (u) {
+            clearTimeout(timer)
+            unsub()
+            resolve(u)
+          }
+        })
+      })
+
+      const token = await firebaseUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/fairs/${fairId}/company/${companyId}/booth`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (res.status === 404) {
+        // Not enrolled or no booth yet — just prefill company name
         setFormData((prev) => ({ ...prev, companyName: companyInfo.companyName }))
         return
       }
-      setFairBoothId(fbId)
-      const boothDoc = await getDoc(doc(db, "fairs", fairId, "booths", fbId))
-      if (!boothDoc.exists()) {
-        setFormData((prev) => ({ ...prev, companyName: companyInfo.companyName }))
-        return
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || "Failed to load fair booth")
       }
-      const boothData = boothDoc.data()
+
+      const boothData = await res.json()
+      setFairBoothId(boothData.boothId || urlBoothId)
+      const hasExistingData = !!(boothData.industry || boothData.description || boothData.contactName)
+      setFairBoothHasData(hasExistingData)
       setFormData({
         companyName: boothData.companyName || companyInfo.companyName || "",
         industry: boothData.industry || "",
@@ -296,7 +318,13 @@ export default function BoothEditor() {
       })
     } catch (err) {
       console.error("Error loading fair booth:", err)
-      setError("Failed to load fair booth")
+      // If we have a boothId from the URL, use it as a fallback so saving still works
+      if (urlBoothId) {
+        setFairBoothId(urlBoothId)
+        setFormData((prev) => ({ ...prev, companyName: companyInfo.companyName }))
+      } else {
+        setError("Failed to load fair booth")
+      }
     }
   }
 
@@ -383,18 +411,22 @@ export default function BoothEditor() {
     e.preventDefault()
     if (!company || !userId) return
 
+    const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" })
+
     try {
       setSaving(true)
       setError("")
       setSuccess("")
 
       // Validate contact rep is a real Firestore user
+      const normalizedEmail = formData.contactEmail.trim().toLowerCase()
       const usersRef = collection(db, "users")
-      const q = query(usersRef, where("email", "==", formData.contactEmail))
+      const q = query(usersRef, where("email", "==", normalizedEmail))
       const snap = await getDocs(q)
 
       if (snap.empty) {
-        setError("Contact email does not match any registered user.")
+        setError("Contact email does not match any registered user. Please use your own email or a registered team member's email.")
+        scrollToTop()
         return
       }
 
@@ -407,6 +439,7 @@ export default function BoothEditor() {
 
       if (!isOwner && !isRep) {
         setError("This user is not an owner or representative of your company.")
+        scrollToTop()
         return
       }
 
@@ -424,6 +457,7 @@ export default function BoothEditor() {
         } catch (error_) {
           console.error("Logo upload failed:", error_)
           setError("Logo upload failed. Please try again.")
+          scrollToTop()
           return
         }
       }
@@ -454,7 +488,8 @@ export default function BoothEditor() {
       // Fair-scoped booth: save via API
       if (fairId) {
         if (!fairBoothId) {
-          setError("No booth found for this fair enrollment")
+          setError("Unable to save: booth not found for this fair. Go back to the fair list and try opening Edit Booth again.")
+          scrollToTop()
           return
         }
         const token = await auth.currentUser?.getIdToken()
@@ -468,7 +503,7 @@ export default function BoothEditor() {
           throw new Error(errData.error || "Failed to update booth")
         }
         setSuccess("Booth updated successfully!")
-        setTimeout(() => { navigate(`/fair/${fairId}`) }, 1500)
+        setTimeout(() => { navigate(`/fairs`) }, 1500)
         return
       }
 
@@ -497,10 +532,31 @@ export default function BoothEditor() {
     } catch (err: any) {
       console.error("Error saving booth:", err)
       setError("Failed to save booth")
+      scrollToTop()
     } finally {
       setSaving(false)
       setLogoUploading(false)
     }
+  }
+
+  const handleStartFresh = () => {
+    setFormData({
+      companyName: company?.companyName ?? "",
+      industry: "",
+      companySize: "",
+      location: "",
+      description: "",
+      website: "",
+      careersPage: "",
+      contactName: "",
+      contactEmail: "",
+      contactPhone: "",
+      hiringFor: "",
+    })
+    setLogoFile(null)
+    if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl)
+    setLogoPreviewUrl(null)
+    setFairBoothHasData(false)
   }
 
   // Loading state
@@ -613,7 +669,7 @@ export default function BoothEditor() {
         <Container maxWidth="lg">
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton onClick={() => navigate(fairId ? `/fair/${fairId}` : `/company/${company.id}`)} sx={{ color: "white" }}>
+              <IconButton onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)} sx={{ color: "white" }}>
                 <ArrowBackIcon />
               </IconButton>
               <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
@@ -664,6 +720,25 @@ export default function BoothEditor() {
           </Alert>
         )}  
 
+        {fairId && fairBoothHasData && (
+          <Alert
+            severity="info"
+            sx={{ mb: 3, borderRadius: 2 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                startIcon={<RestartAltIcon />}
+                onClick={handleStartFresh}
+              >
+                Start Fresh
+              </Button>
+            }
+          >
+            This booth was pre-filled from your existing company profile. Edit as needed for this fair, or start with a blank booth.
+          </Alert>
+        )}
+
         <Card sx={{ p: 4 }}>
           <form onSubmit={handleSubmit}>
             {/* Company Information Section */}
@@ -680,6 +755,8 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
+                    id="company-name"
+                    name="companyName"
                     label="Company Name"
                     value={formData.companyName}
                     onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
@@ -693,6 +770,7 @@ export default function BoothEditor() {
                     <Select
                       labelId="industry-label"
                       id="industry-select"
+                      name="industry"
                       value={formData.industry}
                       label="Industry"
                       onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
@@ -712,6 +790,7 @@ export default function BoothEditor() {
                     <Select
                       labelId="company-size-label"
                       id="company-size-select"
+                      name="companySize"
                       value={formData.companySize}
                       label="Company Size"
                       onChange={(e) => setFormData({ ...formData, companySize: e.target.value })}
@@ -728,6 +807,8 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
+                    id="company-location"
+                    name="location"
                     label="Location"
                     value={formData.location}
                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
@@ -739,6 +820,8 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
+                    id="company-description"
+                    name="description"
                     label="Company Description"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -759,6 +842,7 @@ export default function BoothEditor() {
                       accept="image/png,image/jpeg,image/jpg"
                       style={{ display: "none" }}
                       id="logo-upload"
+                      name="logoUpload"
                       type="file"
                       onChange={handleFileChange}
                       disabled={saving || logoUploading}
@@ -831,6 +915,8 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
+                    id="company-website"
+                    name="website"
                     label="Company Website"
                     type="url"
                     value={formData.website}
@@ -842,6 +928,8 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
+                    id="careers-page"
+                    name="careersPage"
                     label="Careers Page URL"
                     type="url"
                     value={formData.careersPage}
@@ -853,6 +941,8 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
+                    id="hiring-for"
+                    name="hiringFor"
                     label="Hiring For (Optional)"
                     value={formData.hiringFor}
                     onChange={(e) => setFormData({ ...formData, hiringFor: e.target.value })}
@@ -874,6 +964,8 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
+                    id="contact-name"
+                    name="contactName"
                     label="Contact Person Name"
                     value={formData.contactName}
                     onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
@@ -885,18 +977,23 @@ export default function BoothEditor() {
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
+                    id="contact-email"
+                    name="contactEmail"
                     label="Contact Email"
                     type="email"
                     value={formData.contactEmail}
                     onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
                     placeholder="contact@example.com"
                     required
+                    helperText="Must be your email or a registered team member's email"
                   />
                 </Grid>
 
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
+                    id="contact-phone"
+                    name="contactPhone"
                     label="Contact Phone (Optional)"
                     type="tel"
                     value={formData.contactPhone}
@@ -911,7 +1008,7 @@ export default function BoothEditor() {
             <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
               <Button
                 variant="outlined"
-                onClick={() => navigate(fairId ? `/fair/${fairId}` : `/company/${company.id}`)}
+                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
                 disabled={saving || logoUploading}
                 sx={{
                   borderColor: "#388560",

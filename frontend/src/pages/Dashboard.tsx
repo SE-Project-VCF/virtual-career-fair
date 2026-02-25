@@ -1037,6 +1037,16 @@ function renderRoleSection(
   }
 }
 
+function waitForFirebaseUser(): Promise<typeof auth.currentUser> {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5000)
+    const unsub = auth.onAuthStateChanged((u) => {
+      if (u) { clearTimeout(timer); unsub(); resolve(u) }
+    })
+  })
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [user, setUser] = useState(authUtils.getCurrentUser())
@@ -1052,6 +1062,7 @@ export default function Dashboard() {
   const [totalJobOpenings, setTotalJobOpenings] = useState(0)
   const [loadingStats, setLoadingStats] = useState(true)
   const [enrolledFairCount, setEnrolledFairCount] = useState(0)
+  const [enrolledFairIds, setEnrolledFairIds] = useState<string[]>([])
   const [jobInvitationsCount, setJobInvitationsCount] = useState(0)
   const [newInvitationsCount, setNewInvitationsCount] = useState(0)
   const [loadingInvitations, setLoadingInvitations] = useState(false)
@@ -1073,7 +1084,9 @@ export default function Dashboard() {
 
     const fetchUnread = async () => {
       try {
-        const idToken = await auth.currentUser?.getIdToken();
+        const firebaseUser = await waitForFirebaseUser()
+        if (!firebaseUser) return
+        const idToken = await firebaseUser.getIdToken();
         const res = await fetch(
           `${API_URL}/api/stream-unread`,
           {
@@ -1193,14 +1206,17 @@ export default function Dashboard() {
 
         // Fetch enrollment count for company users
         if (user?.role === "companyOwner" || user?.role === "representative") {
-          const token = await auth.currentUser?.getIdToken()
-          if (token) {
+          const enrollFirebaseUser = await waitForFirebaseUser()
+          if (enrollFirebaseUser) {
+            const token = await enrollFirebaseUser.getIdToken()
             const enrollRes = await fetch(`${API_URL}/api/fairs/my-enrollments`, {
               headers: { Authorization: `Bearer ${token}` },
             })
             if (enrollRes.ok) {
               const enrollData = await enrollRes.json()
-              setEnrolledFairCount((enrollData.enrollments || []).length)
+              const enrollments = enrollData.enrollments || []
+              setEnrolledFairCount(enrollments.length)
+              setEnrolledFairIds(enrollments.map((e: any) => e.fairId))
             }
           }
         }
@@ -1408,7 +1424,7 @@ export default function Dashboard() {
           </Box>
 
           {/* Event List - Shows scheduled career fairs */}
-          <EventList />
+          <EventList enrolledFairIds={enrolledFairIds} />
 
           {/* Fair Status Alert */}
           {!loadingStats && !isLive && (

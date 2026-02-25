@@ -20,7 +20,7 @@ interface Fair {
   endTime: number | null
 }
 
-export default function EventList() {
+export default function EventList({ enrolledFairIds = [] }: Readonly<{ enrolledFairIds?: string[] }>) {
   const [fairs, setFairs] = useState<Fair[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -105,21 +105,28 @@ export default function EventList() {
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {fairs.map((fair) => {
             const status = getFairStatus(fair)
+            const isEnrolled = enrolledFairIds.includes(fair.id)
+            let bgcolor = "transparent"
+            if (isEnrolled) bgcolor = "rgba(46, 125, 50, 0.04)"
+            else if (fair.isLive) bgcolor = "rgba(56, 133, 96, 0.05)"
             return (
               <Box
                 key={fair.id}
                 sx={{
                   p: 2,
                   borderRadius: 2,
-                  border: "1px solid rgba(0,0,0,0.1)",
-                  bgcolor: fair.isLive ? "rgba(56, 133, 96, 0.05)" : "transparent",
+                  border: isEnrolled ? "1px solid rgba(46, 125, 50, 0.5)" : "1px solid rgba(0,0,0,0.1)",
+                  bgcolor,
                 }}
               >
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
                     {fair.name}
                   </Typography>
-                  {status && <Chip label={status.label} size="small" color={status.color} />}
+                  <Box sx={{ display: "flex", gap: 0.5 }}>
+                    {isEnrolled && <Chip label="Enrolled" size="small" color="success" />}
+                    {status && <Chip label={status.label} size="small" color={status.color} />}
+                  </Box>
                 </Box>
 
                 {fair.description && (

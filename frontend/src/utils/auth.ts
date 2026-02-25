@@ -55,7 +55,7 @@ export const authUtils = {
 
       let userData: any = {
         uid: user.uid,
-        email,
+        email: email.trim().toLowerCase(),
         role,
         emailVerified: false,
         createdAt: new Date().toISOString(),

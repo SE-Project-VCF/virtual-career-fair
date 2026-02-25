@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Container,
@@ -37,8 +37,40 @@ export default function FairLanding() {
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState("")
   const [joinSuccess, setJoinSuccess] = useState(false)
+  const [enrollmentLoading, setEnrollmentLoading] = useState(false)
+  const [isEnrolled, setIsEnrolled] = useState(false)
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [leaveError, setLeaveError] = useState("")
+  const [leaveSuccess, setLeaveSuccess] = useState(false)
 
   const isCompanyUser = user?.role === "companyOwner" || user?.role === "representative"
+
+  useEffect(() => {
+    if (!isCompanyUser || !fairId) return
+
+    async function loadEnrollment() {
+      setEnrollmentLoading(true)
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        if (!token) return
+        const res = await fetch(`${API_URL}/api/fairs/my-enrollments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Failed to load enrollments")
+
+        const entry = (data.enrollments || []).find((e: { fairId: string }) => e.fairId === fairId)
+        setIsEnrolled(!!entry)
+      } catch (err) {
+        console.error("Error loading enrollment:", err)
+      } finally {
+        setEnrollmentLoading(false)
+      }
+    }
+
+    loadEnrollment()
+  }, [fairId, isCompanyUser])
 
   const handleJoinFair = async () => {
     if (!inviteCode.trim()) return
@@ -57,6 +89,8 @@ export default function FairLanding() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to join fair")
       setJoinSuccess(true)
+      setLeaveSuccess(false)
+      setIsEnrolled(true)
       setJoinDialogOpen(false)
       // Navigate to the fair-scoped booth editor using the resolved fairId from the response
       if (data.boothId && user?.companyId) {
@@ -66,6 +100,30 @@ export default function FairLanding() {
       setJoinError(err.message)
     } finally {
       setJoining(false)
+    }
+  }
+
+  const handleLeaveFair = async () => {
+    if (!fairId) return
+    setLeaving(true)
+    setLeaveError("")
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/fairs/${fairId}/leave`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to leave fair")
+
+      setIsEnrolled(false)
+      setLeaveSuccess(true)
+      setJoinSuccess(false)
+      setLeaveDialogOpen(false)
+    } catch (err: any) {
+      setLeaveError(err.message)
+    } finally {
+      setLeaving(false)
     }
   }
 
@@ -142,6 +200,12 @@ export default function FairLanding() {
           </Alert>
         )}
 
+        {leaveSuccess && (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            You have left this fair.
+          </Alert>
+        )}
+
         <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
           <Button
             variant="contained"
@@ -157,9 +221,11 @@ export default function FairLanding() {
             <Button
               variant="outlined"
               size="large"
-              onClick={() => setJoinDialogOpen(true)}
+              color={isEnrolled ? "error" : "primary"}
+              onClick={() => (isEnrolled ? setLeaveDialogOpen(true) : setJoinDialogOpen(true))}
+              disabled={enrollmentLoading}
             >
-              Join This Fair
+              {isEnrolled ? "Leave Fair" : "Join This Fair"}
             </Button>
           )}
         </Box>
@@ -184,6 +250,22 @@ export default function FairLanding() {
           <Button onClick={() => setJoinDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleJoinFair} disabled={joining || !inviteCode.trim()}>
             {joining ? "Joining..." : "Join Fair"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={leaveDialogOpen} onClose={() => setLeaveDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Leave Career Fair?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            Your company will be unenrolled from this fair. Booth and job listings for this fair will be removed.
+          </Typography>
+          {leaveError && <Alert severity="error" sx={{ mt: 2 }}>{leaveError}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLeaveDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleLeaveFair} disabled={leaving}>
+            {leaving ? "Leaving..." : "Leave Fair"}
           </Button>
         </DialogActions>
       </Dialog>

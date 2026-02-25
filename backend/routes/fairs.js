@@ -228,15 +228,16 @@ router.get("/api/fairs/my-enrollments", verifyFirebaseToken, async (req, res) =>
     const companyId = userDoc.data().companyId;
     if (!companyId) return res.json({ enrollments: [] });
 
-    const snap = await db.collectionGroup("enrollments")
-      .where("companyId", "==", companyId)
-      .get();
-
-    const enrollments = snap.docs.map((doc) => ({
-      fairId: doc.ref.parent.parent.id,
-      boothId: doc.data().boothId || null,
-      enrolledAt: doc.data().enrolledAt ? doc.data().enrolledAt.toMillis() : null,
-    }));
+    const fairsSnap = await db.collection("fairs").get();
+    const enrollmentChecks = fairsSnap.docs.map((fairDoc) =>
+      db.collection("fairs").doc(fairDoc.id).collection("enrollments").doc(companyId).get()
+        .then((enrollDoc) => enrollDoc.exists ? {
+          fairId: fairDoc.id,
+          boothId: enrollDoc.data().boothId || null,
+          enrolledAt: enrollDoc.data().enrolledAt ? enrollDoc.data().enrolledAt.toMillis() : null,
+        } : null)
+    );
+    const enrollments = (await Promise.all(enrollmentChecks)).filter(Boolean);
 
     return res.json({ enrollments });
   } catch (err) {
@@ -877,6 +878,108 @@ router.get("/api/companies/:companyId/fairs", verifyFirebaseToken, async (req, r
   } catch (err) {
     console.error("GET /api/companies/:companyId/fairs error:", err);
     return res.status(500).json({ error: "Failed to list company fairs" });
+  }
+});
+
+/* DELETE /api/fairs/:fairId/leave - company owner/rep: leave (unenroll from) a fair */
+router.delete("/api/fairs/:fairId/leave", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const requestingUid = req.user.uid;
+
+  try {
+    const userDoc = await db.collection("users").doc(requestingUid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+
+    const companyId = userDoc.data().companyId;
+    if (!companyId) return res.status(400).json({ error: "You are not associated with a company" });
+
+    // Must be owner or rep of the company
+    const accessError = await verifyCompanyAccess(requestingUid, companyId);
+    if (accessError) return res.status(accessError.status).json({ error: accessError.error });
+
+    const enrollmentDoc = await db
+      .collection("fairs")
+      .doc(fairId)
+      .collection("enrollments")
+      .doc(companyId)
+      .get();
+    if (!enrollmentDoc.exists) return res.status(404).json({ error: "Your company is not enrolled in this fair" });
+
+    const { boothId } = enrollmentDoc.data();
+    const batch = db.batch();
+
+    batch.delete(db.collection("fairs").doc(fairId).collection("enrollments").doc(companyId));
+
+    if (boothId) {
+      batch.delete(db.collection("fairs").doc(fairId).collection("booths").doc(boothId));
+    }
+
+    await batch.commit();
+
+    // Remove company's jobs from the fair
+    const jobsSnap = await db
+      .collection("fairs")
+      .doc(fairId)
+      .collection("jobs")
+      .where("companyId", "==", companyId)
+      .get();
+    if (!jobsSnap.empty) {
+      const jobBatch = db.batch();
+      jobsSnap.docs.forEach((doc) => jobBatch.delete(doc.ref));
+      await jobBatch.commit();
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /api/fairs/:fairId/leave error:", err);
+    return res.status(500).json({ error: "Failed to leave fair" });
+  }
+});
+
+/* GET /api/fairs/:fairId/company/:companyId/booth - get the fair-scoped booth for an enrolled company */
+router.get("/api/fairs/:fairId/company/:companyId/booth", verifyFirebaseToken, async (req, res) => {
+  const { fairId, companyId } = req.params;
+  const requestingUid = req.user.uid;
+
+  try {
+    // Must be admin or member of the company
+    const adminError = await verifyAdmin(requestingUid);
+    if (adminError) {
+      const accessError = await verifyCompanyAccess(requestingUid, companyId);
+      if (accessError) return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    const enrollmentDoc = await db
+      .collection("fairs")
+      .doc(fairId)
+      .collection("enrollments")
+      .doc(companyId)
+      .get();
+
+    if (!enrollmentDoc.exists) {
+      return res.status(404).json({ error: "Company is not enrolled in this fair" });
+    }
+
+    const { boothId } = enrollmentDoc.data();
+    if (!boothId) {
+      return res.status(404).json({ error: "No booth found for this enrollment" });
+    }
+
+    const boothDoc = await db
+      .collection("fairs")
+      .doc(fairId)
+      .collection("booths")
+      .doc(boothId)
+      .get();
+
+    if (!boothDoc.exists) {
+      return res.status(404).json({ error: "Booth not found" });
+    }
+
+    return res.json({ boothId, ...boothDoc.data() });
+  } catch (err) {
+    console.error("GET /api/fairs/:fairId/company/:companyId/booth error:", err);
+    return res.status(500).json({ error: "Failed to load fair booth" });
   }
 });
 
