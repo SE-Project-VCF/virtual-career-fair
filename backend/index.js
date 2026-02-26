@@ -2,7 +2,7 @@ const { db } = require("./firebase");
 const admin = require("firebase-admin");
 const bcrypt = require("bcrypt"); // for password encryption
 
-async function addStudent() {
+async function seedStudent() {
   // Encrypt password before saving
   const plainPassword = "student123";
   const hashedPassword = await bcrypt.hash(plainPassword, 10);
@@ -26,4 +26,9 @@ async function addStudent() {
   console.log(`Student added with ID: ${docRef.id}`);
 }
 
-addStudent();
+// Use top-level await
+try {
+  await seedStudent();
+} catch (error) {
+  console.error(error);
+}

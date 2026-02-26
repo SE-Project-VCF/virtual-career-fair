@@ -13,7 +13,6 @@ import {
   Tab,
   List,
   ListItem,
-  ListItemText,
   Chip,
   Divider,
 } from "@mui/material";
@@ -55,7 +54,7 @@ export default function JobInviteStatsDialog({
   onClose,
   jobId,
   jobTitle,
-}: JobInviteStatsDialogProps) {
+}: Readonly<JobInviteStatsDialogProps>) {
   const [invitations, setInvitations] = useState<InvitationDetail[]>([]);
   const [filteredInvitations, setFilteredInvitations] = useState<InvitationDetail[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,6 +148,135 @@ export default function JobInviteStatsDialog({
   const sentCount = invitations.filter((inv) => inv.status === "sent").length;
   const viewedCount = invitations.filter((inv) => inv.status === "viewed").length;
   const clickedCount = invitations.filter((inv) => inv.status === "clicked").length;
+  const emptyStateMessage = currentTab === "all" ? "No invitations sent yet" : `No ${currentTab} invitations`;
+
+  const renderDialogBody = () => {
+    if (loading) {
+      return (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+          <CircularProgress />
+        </Box>
+      );
+    }
+
+    if (error) {
+      return (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      );
+    }
+
+    return (
+      <>
+        {/* Filter Tabs */}
+        <Tabs
+          value={currentTab}
+          onChange={(_, newValue) => setCurrentTab(newValue)}
+          sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+        >
+          <Tab label={`All (${invitations.length})`} value="all" />
+          <Tab label={`Sent (${sentCount})`} value="sent" />
+          <Tab label={`Viewed (${viewedCount})`} value="viewed" />
+          <Tab label={`Applied (${clickedCount})`} value="clicked" />
+        </Tabs>
+
+        {/* Invitations List */}
+        {filteredInvitations.length === 0 ? (
+          <Box sx={{ textAlign: "center", py: 4 }}>
+            <PersonIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
+            <Typography variant="body2" color="text.secondary">
+              {emptyStateMessage}
+            </Typography>
+          </Box>
+        ) : (
+          <List sx={{ p: 0 }}>
+            {filteredInvitations.map((invitation, index) => {
+              const studentName = invitation.student
+                ? `${invitation.student.firstName} ${invitation.student.lastName}`
+                : "Unknown Student";
+
+              return (
+                <Box key={invitation.id}>
+                  <ListItem
+                    sx={{
+                      py: 2,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <Box sx={{ display: "flex", justifyContent: "space-between", width: "100%", mb: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
+                        <PersonIcon sx={{ color: "#388560" }} />
+                        <Box>
+                          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                            {studentName}
+                          </Typography>
+                          {invitation.student && (
+                            <Typography variant="caption" color="text.secondary">
+                              {invitation.student.email}
+                              {invitation.student.major && ` • ${invitation.student.major}`}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                      {getStatusChip(invitation.status)}
+                    </Box>
+
+                    {/* Timeline */}
+                    <Box sx={{ pl: 4, width: "100%" }}>
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <AccessTimeIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+                          <Typography variant="caption" color="text.secondary">
+                            Sent: {formatDateTime(invitation.sentAt)}
+                          </Typography>
+                        </Box>
+                        {invitation.viewedAt && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <VisibilityIcon sx={{ fontSize: 14, color: "#0288d1" }} />
+                            <Typography variant="caption" color="text.secondary">
+                              Viewed: {formatDateTime(invitation.viewedAt)}
+                            </Typography>
+                          </Box>
+                        )}
+                        {invitation.clickedAt && (
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <LaunchIcon sx={{ fontSize: 14, color: "#2e7d32" }} />
+                            <Typography variant="caption" color="text.secondary">
+                              Applied: {formatDateTime(invitation.clickedAt)}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+
+                      {invitation.message && (
+                        <Box
+                          sx={{
+                            mt: 1,
+                            p: 1.5,
+                            bgcolor: "rgba(56, 133, 96, 0.05)",
+                            borderRadius: 1,
+                            borderLeft: "3px solid #388560",
+                          }}
+                        >
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
+                            Message: "{invitation.message}"
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </ListItem>
+                  {index < filteredInvitations.length - 1 && <Divider />}
+                </Box>
+              );
+            })}
+          </List>
+        )}
+      </>
+    );
+  };
 
   return (
     <Dialog
@@ -156,8 +284,10 @@ export default function JobInviteStatsDialog({
       onClose={onClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: { minHeight: "70vh", maxHeight: "90vh" },
+      slotProps={{
+        paper: {
+          sx: { minHeight: "70vh", maxHeight: "90vh" },
+        },
       }}
     >
       <DialogTitle>
@@ -169,135 +299,7 @@ export default function JobInviteStatsDialog({
         </Typography>
       </DialogTitle>
 
-      <DialogContent dividers>
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
-          </Box>
-        ) : error ? (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        ) : (
-          <>
-            {/* Filter Tabs */}
-            <Tabs
-              value={currentTab}
-              onChange={(_, newValue) => setCurrentTab(newValue)}
-              sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
-            >
-              <Tab
-                label={`All (${invitations.length})`}
-                value="all"
-              />
-              <Tab
-                label={`Sent (${sentCount})`}
-                value="sent"
-              />
-              <Tab
-                label={`Viewed (${viewedCount})`}
-                value="viewed"
-              />
-              <Tab
-                label={`Applied (${clickedCount})`}
-                value="clicked"
-              />
-            </Tabs>
-
-            {/* Invitations List */}
-            {filteredInvitations.length === 0 ? (
-              <Box sx={{ textAlign: "center", py: 4 }}>
-                <PersonIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
-                <Typography variant="body2" color="text.secondary">
-                  {currentTab === "all"
-                    ? "No invitations sent yet"
-                    : `No ${currentTab} invitations`}
-                </Typography>
-              </Box>
-            ) : (
-              <List sx={{ p: 0 }}>
-                {filteredInvitations.map((invitation, index) => (
-                  <Box key={invitation.id}>
-                    <ListItem
-                      sx={{
-                        py: 2,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <Box sx={{ display: "flex", justifyContent: "space-between", width: "100%", mb: 1 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
-                          <PersonIcon sx={{ color: "#388560" }} />
-                          <Box>
-                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                              {invitation.student
-                                ? `${invitation.student.firstName} ${invitation.student.lastName}`
-                                : "Unknown Student"}
-                            </Typography>
-                            {invitation.student && (
-                              <Typography variant="caption" color="text.secondary">
-                                {invitation.student.email}
-                                {invitation.student.major && ` • ${invitation.student.major}`}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                        {getStatusChip(invitation.status)}
-                      </Box>
-
-                      {/* Timeline */}
-                      <Box sx={{ pl: 4, width: "100%" }}>
-                        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                            <AccessTimeIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-                            <Typography variant="caption" color="text.secondary">
-                              Sent: {formatDateTime(invitation.sentAt)}
-                            </Typography>
-                          </Box>
-                          {invitation.viewedAt && (
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                              <VisibilityIcon sx={{ fontSize: 14, color: "#0288d1" }} />
-                              <Typography variant="caption" color="text.secondary">
-                                Viewed: {formatDateTime(invitation.viewedAt)}
-                              </Typography>
-                            </Box>
-                          )}
-                          {invitation.clickedAt && (
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                              <LaunchIcon sx={{ fontSize: 14, color: "#2e7d32" }} />
-                              <Typography variant="caption" color="text.secondary">
-                                Applied: {formatDateTime(invitation.clickedAt)}
-                              </Typography>
-                            </Box>
-                          )}
-                        </Box>
-
-                        {invitation.message && (
-                          <Box
-                            sx={{
-                              mt: 1,
-                              p: 1.5,
-                              bgcolor: "rgba(56, 133, 96, 0.05)",
-                              borderRadius: 1,
-                              borderLeft: "3px solid #388560",
-                            }}
-                          >
-                            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: "italic" }}>
-                              Message: "{invitation.message}"
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    </ListItem>
-                    {index < filteredInvitations.length - 1 && <Divider />}
-                  </Box>
-                ))}
-              </List>
-            )}
-          </>
-        )}
-      </DialogContent>
+      <DialogContent dividers>{renderDialogBody()}</DialogContent>
 
       <DialogActions>
         <Button onClick={onClose}>Close</Button>

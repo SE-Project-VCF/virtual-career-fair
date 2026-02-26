@@ -1,21 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { 
-  Container, 
-  Box, 
-  Typography, 
-  Button, 
-  Card, 
-  CardContent,
-  Alert,
-  CircularProgress,
-  IconButton,
-  Tooltip,
-  Divider,
-  Grid,
-  TextField,
-  Chip
-} from "@mui/material"
+import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
@@ -40,7 +25,6 @@ import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
-import ListItemSecondaryAction from "@mui/material/ListItemSecondaryAction"
 import Dialog from "@mui/material/Dialog"
 import DialogTitle from "@mui/material/DialogTitle"
 import DialogContent from "@mui/material/DialogContent"
@@ -80,6 +64,561 @@ interface JobInvitationStats {
   clickRate: string
 }
 
+// Helper function to get save button label
+function getSaveButtonLabel(savingJob: boolean, editingJob: Job | null): string {
+  if (savingJob) return "Saving..."
+  if (editingJob) return "Update Job"
+  return "Publish Job"
+}
+
+// Helper function to get representative display name
+function getRepresentativeName(rep: Representative): string {
+  if (rep.firstName && rep.lastName) {
+    return `${rep.firstName} ${rep.lastName}`
+  }
+  if (rep.firstName) {
+    return rep.firstName
+  }
+  return rep.email
+}
+
+function CompanyInfoCard({
+  company,
+  isOwner,
+  editingInviteCode,
+  editedInviteCode,
+  updatingInviteCode,
+  setEditingInviteCode,
+  setEditedInviteCode,
+  handleRegenerateInviteCode,
+  handleSaveInviteCode,
+  copyToClipboard,
+}: Readonly<{
+  company: Company
+  isOwner: boolean
+  editingInviteCode: boolean
+  editedInviteCode: string
+  updatingInviteCode: boolean
+  setEditingInviteCode: (value: boolean) => void
+  setEditedInviteCode: (value: string) => void
+  handleRegenerateInviteCode: () => void
+  handleSaveInviteCode: () => void
+  copyToClipboard: (text: string) => void
+}>) {
+  return (
+    <Grid size={{ xs: 12, md: 6 }}>
+      <Card sx={{ height: "100%", border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
+            <BusinessIcon sx={{ color: "#388560" }} />
+            Company Information
+          </Typography>
+
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Company Name
+            </Typography>
+            <Typography variant="body1" sx={{ fontWeight: 500 }}>
+              {company.companyName}
+            </Typography>
+          </Box>
+
+          {isOwner && (
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Invite Code
+                </Typography>
+                {editingInviteCode ? (
+                  <Box sx={{ display: "flex", gap: 0.5 }}>
+                    <Tooltip title="Save">
+                      <IconButton
+                        onClick={() => handleSaveInviteCode()}
+                        size="small"
+                        disabled={updatingInviteCode}
+                        sx={{ color: "#388560" }}
+                      >
+                        <SaveIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Cancel">
+                      <IconButton
+                        onClick={() => {
+                          setEditingInviteCode(false)
+                          setEditedInviteCode("")
+                        }}
+                        size="small"
+                        sx={{ color: "#666" }}
+                      >
+                        <CancelIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: "flex", gap: 0.5 }}>
+                    <Tooltip title="Regenerate invite code">
+                      <IconButton
+                        onClick={() => handleRegenerateInviteCode()}
+                        size="small"
+                        disabled={updatingInviteCode}
+                        sx={{ color: "#388560" }}
+                      >
+                        <RefreshIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit invite code">
+                      <IconButton
+                        onClick={() => {
+                          setEditingInviteCode(true)
+                          setEditedInviteCode(company.inviteCode)
+                        }}
+                        size="small"
+                        sx={{ color: "#388560" }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                )}
+              </Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {editingInviteCode ? (
+                  <TextField
+                    fullWidth
+                    id="invite-code"
+                    label="Invite Code"
+                    slotProps={{ htmlInput: { name: "inviteCode" } }}
+                    value={editedInviteCode}
+                    onChange={(e) => {
+                      setEditedInviteCode(e.target.value.toUpperCase().replaceAll(/[^A-Z0-9]/g, ""))
+                    }}
+                    disabled={updatingInviteCode}
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        fontFamily: "monospace",
+                        fontWeight: 600,
+                      },
+                    }}
+                    helperText="4-20 characters, letters and numbers only"
+                  />
+                ) : (
+                  <>
+                    <Typography variant="body1" sx={{ fontFamily: "monospace", fontWeight: 600, flex: 1 }}>
+                      {company.inviteCode}
+                    </Typography>
+                    <Tooltip title="Copy invite code">
+                      <IconButton onClick={() => copyToClipboard(company.inviteCode)} size="small">
+                        <ContentCopyIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
+              </Box>
+            </Box>
+          )}
+
+          <Divider sx={{ my: 2 }} />
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+            <PeopleIcon sx={{ fontSize: 20, color: "#b03a6c" }} />
+            <Typography variant="body2" color="text.secondary">
+              {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length === 1 ? "" : "s"}
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
+    </Grid>
+  )
+}
+
+function RepresentativesSection({
+  isOwner,
+  loadingRepresentatives,
+  representatives,
+  handleDeleteClick,
+}: Readonly<{
+  isOwner: boolean
+  loadingRepresentatives: boolean
+  representatives: Representative[]
+  handleDeleteClick: (rep: Representative) => void
+}>) {
+  if (!isOwner) return null
+
+  return (
+    <Grid size={{ xs: 12 }}>
+      <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
+            <PeopleIcon sx={{ color: "#b03a6c" }} />
+            Representatives
+          </Typography>
+
+          {loadingRepresentatives && (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+          {!loadingRepresentatives && representatives.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No representatives have joined this company yet.
+            </Typography>
+          )}
+          {!loadingRepresentatives && representatives.length > 0 && (
+            <List>
+              {representatives.map((rep) => (
+                <ListItem
+                  key={rep.uid}
+                  secondaryAction={
+                    <Tooltip title="Remove representative">
+                      <IconButton
+                        edge="end"
+                        onClick={() => handleDeleteClick(rep)}
+                        sx={{ color: "#d32f2f" }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  }
+                  sx={{
+                    borderBottom: "1px solid rgba(0,0,0,0.1)",
+                    "&:last-child": {
+                      borderBottom: "none"
+                    }
+                  }}
+                >
+                  <ListItemText
+                    primary={getRepresentativeName(rep)}
+                    secondary={rep.firstName ? rep.email : undefined}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </CardContent>
+      </Card>
+    </Grid>
+  )
+}
+
+function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
+  companyId: string
+  boothId?: string
+  navigate: ReturnType<typeof useNavigate>
+}>) {
+  return (
+    <Grid size={{ xs: 12, md: 6 }}>
+      <Card sx={{ height: "100%", border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
+            <EditIcon sx={{ color: "#388560" }} />
+            Booth Management
+          </Typography>
+
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            Manage your company booth - a student-facing landing page where students can learn about your company and interact with representatives.
+          </Typography>
+
+          <Button
+            variant="contained"
+            startIcon={<EditIcon />}
+            onClick={() => navigate(`/company/${companyId}/booth`)}
+            sx={{
+              background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+              "&:hover": {
+                background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+              },
+            }}
+          >
+            {boothId ? "Edit Booth" : "Create Booth"}
+          </Button>
+
+          {boothId && (
+            <Box sx={{ mt: 2 }}>
+              <Button
+                variant="outlined"
+                onClick={() => navigate(`/booth/${boothId}`)}
+                sx={{
+                  borderColor: "#388560",
+                  color: "#388560",
+                  "&:hover": {
+                    borderColor: "#2d6b4d",
+                    bgcolor: "rgba(56, 133, 96, 0.05)",
+                  },
+                }}
+              >
+                View Public Booth
+              </Button>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    </Grid>
+  )
+}
+
+function JobPostingsSection({
+  jobs,
+  loadingJobs,
+  jobStats,
+  handleCreateJobClick,
+  handleInviteStudentsClick,
+  handleEditJobClick,
+  handleDeleteJobClick,
+  handleViewStatsClick,
+}: Readonly<{
+  jobs: Job[]
+  loadingJobs: boolean
+  jobStats: Record<string, JobInvitationStats>
+  handleCreateJobClick: () => void
+  handleInviteStudentsClick: (job: Job) => void
+  handleEditJobClick: (job: Job) => void
+  handleDeleteJobClick: (job: Job) => void
+  handleViewStatsClick: (job: Job) => void
+}>) {
+  return (
+    <Grid size={{ xs: 12 }}>
+      <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 1 }}>
+              <WorkIcon sx={{ color: "#388560" }} />
+              Job Postings ({jobs.length})
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateJobClick}
+              sx={{
+                background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                "&:hover": {
+                  background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                },
+              }}
+            >
+              Create Job Posting
+            </Button>
+          </Box>
+
+          {loadingJobs && (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+          {!loadingJobs && jobs.length === 0 && (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <WorkIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                No job postings yet. Create your first job posting to attract students!
+              </Typography>
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={handleCreateJobClick}
+                sx={{
+                  borderColor: "#388560",
+                  color: "#388560",
+                  "&:hover": {
+                    borderColor: "#2d6b4d",
+                    bgcolor: "rgba(56, 133, 96, 0.05)",
+                  },
+                }}
+              >
+                Create Job Posting
+              </Button>
+            </Box>
+          )}
+          {!loadingJobs && jobs.length > 0 && (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {jobs.map((job) => (
+                <Card
+                  key={job.id}
+                  sx={{
+                    border: "1px solid rgba(56, 133, 96, 0.2)",
+                    borderRadius: 2,
+                    transition: "box-shadow 0.2s",
+                    "&:hover": {
+                      boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                    },
+                  }}
+                >
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1.5 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                          {job.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, whiteSpace: "pre-wrap" }}>
+                          {job.description}
+                        </Typography>
+                        <Box sx={{ mb: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                            Required Skills:
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {job.majorsAssociated}
+                          </Typography>
+                        </Box>
+                        {job.applicationLink && (
+                          <Chip
+                            icon={<LaunchIcon sx={{ fontSize: 16 }} />}
+                            label="Application Link Available"
+                            size="small"
+                            sx={{
+                              bgcolor: "rgba(56, 133, 96, 0.1)",
+                              color: "#388560",
+                              fontWeight: 500,
+                            }}
+                          />
+                        )}
+                      </Box>
+                      <Box sx={{ display: "flex", gap: 1, ml: 2, flexDirection: "column" }}>
+                        <Box sx={{ display: "flex", gap: 1 }}>
+                          <Tooltip title="Invite students to apply">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleInviteStudentsClick(job)}
+                              sx={{
+                                color: "#388560",
+                                bgcolor: "rgba(56, 133, 96, 0.08)",
+                                "&:hover": {
+                                  bgcolor: "rgba(56, 133, 96, 0.15)",
+                                }
+                              }}
+                            >
+                              <SendIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Edit job posting">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditJobClick(job)}
+                              sx={{ color: "#388560" }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete job posting">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteJobClick(job)}
+                              sx={{ color: "#d32f2f" }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </Box>
+                    </Box>
+
+                    {jobStats[job.id] && jobStats[job.id].totalSent > 0 && (
+                      <Box
+                        sx={{
+                          mt: 2,
+                          pt: 2,
+                          borderTop: "1px solid rgba(56, 133, 96, 0.15)",
+                          display: "flex",
+                          gap: 3,
+                          alignItems: "center",
+                          justifyContent: "space-between"
+                        }}
+                      >
+                        <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                            <BarChartIcon sx={{ fontSize: 18, color: "#388560" }} />
+                            <Typography variant="caption" fontWeight="600" color="text.secondary">
+                              Invitation Stats:
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: "flex", gap: 2 }}>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">
+                                Sent: <strong>{jobStats[job.id].totalSent}</strong>
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">
+                                Viewed: <strong>{jobStats[job.id].totalViewed}</strong> ({jobStats[job.id].viewRate}%)
+                              </Typography>
+                            </Box>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">
+                                Clicked: <strong>{jobStats[job.id].totalClicked}</strong> ({jobStats[job.id].clickRate}%)
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => handleViewStatsClick(job)}
+                          sx={{
+                            borderColor: "#388560",
+                            color: "#388560",
+                            fontSize: "0.75rem",
+                            "&:hover": {
+                              borderColor: "#2d6b4d",
+                              bgcolor: "rgba(56, 133, 96, 0.05)",
+                            },
+                          }}
+                        >
+                          View Details
+                        </Button>
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    </Grid>
+  )
+}
+
+function DeleteCompanyCard({ isOwner, handleDeleteCompanyClick }: Readonly<{
+  isOwner: boolean
+  handleDeleteCompanyClick: () => void
+}>) {
+  if (!isOwner) return null
+
+  return (
+    <Grid size={{ xs: 12 }}>
+      <Card sx={{ border: "2px solid rgba(211, 47, 47, 0.3)" }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#d32f2f", display: "flex", alignItems: "center", gap: 1 }}>
+            <DeleteIcon />
+            Danger Zone
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Permanently delete this company. This action cannot be undone and will remove all company data, unlink representatives, and delete the associated booth.
+          </Typography>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={handleDeleteCompanyClick}
+            sx={{
+              "&:hover": {
+                bgcolor: "#c62828",
+              },
+            }}
+          >
+            Delete Company
+          </Button>
+        </CardContent>
+      </Card>
+    </Grid>
+  )
+}
+
+const JOB_FIELDS = [
+  { id: "job-title", name: "jobTitle", label: "Job Title *", key: "title" as const, placeholder: "e.g., Software Engineer Intern" },
+  { id: "job-description", name: "jobDescription", label: "Description *", key: "description" as const, multiline: true, rows: 4, placeholder: "Describe the role, responsibilities, and requirements..." },
+  { id: "job-skills", name: "jobSkills", label: "Required Skills *", key: "skills" as const, placeholder: "e.g., JavaScript, React, Python, Communication", helperText: "List the skills or qualifications required" },
+  { id: "job-application-link", name: "jobApplicationLink", label: "Application URL (Optional)", key: "applicationLink" as const, placeholder: "https://company.com/apply", helperText: "External link where students can apply directly" },
+]
+
 export default function Company() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
@@ -102,11 +641,8 @@ export default function Company() {
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [jobDialogOpen, setJobDialogOpen] = useState(false)
   const [editingJob, setEditingJob] = useState<Job | null>(null)
-  const [jobTitle, setJobTitle] = useState("")
-  const [jobDescription, setJobDescription] = useState("")
-  const [jobSkills, setJobSkills] = useState("")
-  const [jobApplicationLink, setJobApplicationLink] = useState("")
-  const [jobErrors, setJobErrors] = useState<{title?: string; description?: string; skills?: string; applicationLink?: string}>({})
+  const [jobForm, setJobForm] = useState({ title: "", description: "", skills: "", applicationLink: "" })
+  const [jobErrors, setJobErrors] = useState<{ title?: string; description?: string; skills?: string; applicationLink?: string }>({})
   const [savingJob, setSavingJob] = useState(false)
   const [deleteJobDialogOpen, setDeleteJobDialogOpen] = useState(false)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
@@ -135,15 +671,36 @@ export default function Company() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, id, userId, userRole])
 
+  const validateUserAccess = async (companyInfo: Company): Promise<boolean> => {
+    if (userRole === "companyOwner" && companyInfo.ownerId !== userId) {
+      setError("You don't have access to this company")
+      navigate("/companies")
+      return false
+    }
+
+    if (userRole === "representative" && !companyInfo.representativeIDs?.includes(userId ?? "")) {
+      setError("You don't have access to this company")
+      navigate("/dashboard")
+      return false
+    }
+
+    if (userRole !== "companyOwner" && userRole !== "representative") {
+      navigate("/dashboard")
+      return false
+    }
+
+    return true
+  }
+
   const fetchCompany = async () => {
     if (!id) return
 
     try {
       setLoading(true)
       setError("")
-      
+
       const companyDoc = await getDoc(doc(db, "companies", id))
-      
+
       if (!companyDoc.exists()) {
         setError("Company not found")
         setLoading(false)
@@ -156,32 +713,12 @@ export default function Company() {
         ...companyData
       }
 
-      // Check if user has access (owner or representative)
-      if (userRole === "companyOwner" && companyInfo.ownerId !== userId) {
-        setError("You don't have access to this company")
-        navigate("/companies")
-        return
-      }
-
-      if (userRole === "representative" && !companyInfo.representativeIDs?.includes(userId ?? "")) {
-        setError("You don't have access to this company")
-        navigate("/dashboard")
-        return
-      }
-
-      if (userRole !== "companyOwner" && userRole !== "representative") {
-        navigate("/dashboard")
-        return
-      }
+      const hasAccess = await validateUserAccess(companyInfo)
+      if (!hasAccess) return
 
       setCompany(companyInfo)
-      
-      // Fetch representatives if there are any
-      if (companyInfo.representativeIDs && companyInfo.representativeIDs.length > 0) {
-        fetchRepresentatives(companyInfo.representativeIDs)
-      }
-      
-      // Fetch jobs for this company
+
+      fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
     } catch (err) {
       console.error("Error fetching company:", err)
@@ -207,7 +744,7 @@ export default function Company() {
         }
         return null
       })
-      
+
       const reps = (await Promise.all(repPromises)).filter((rep): rep is Representative => rep !== null)
       setRepresentatives(reps)
     } catch (err) {
@@ -221,11 +758,11 @@ export default function Company() {
     try {
       setLoadingJobs(true)
       console.log("Fetching jobs for company:", companyId)
-      
+
       const jobsRef = collection(db, "jobs")
       const q = query(jobsRef, where("companyId", "==", companyId))
       const jobsSnapshot = await getDocs(q)
-      
+
       const jobsList: Job[] = []
       jobsSnapshot.forEach((doc) => {
         const data = doc.data()
@@ -239,7 +776,7 @@ export default function Company() {
           createdAt: data.createdAt?.toMillis?.() || data.createdAt || null,
         })
       })
-      
+
       // Sort by createdAt descending
       jobsList.sort((a, b) => {
         if (!a.createdAt && !b.createdAt) return 0
@@ -247,10 +784,10 @@ export default function Company() {
         if (!b.createdAt) return -1
         return b.createdAt - a.createdAt
       })
-      
+
       console.log("Fetched jobs:", jobsList.length, "jobs")
       setJobs(jobsList)
-      
+
       // Fetch stats for each job
       if (userId) {
         jobsList.forEach((job) => {
@@ -303,22 +840,23 @@ export default function Company() {
     setStatsDialogOpen(true)
   }
 
+  const resetJobForm = () => {
+    setJobDialogOpen(false)
+    setEditingJob(null)
+    setJobForm({ title: "", description: "", skills: "", applicationLink: "" })
+    setJobErrors({})
+  }
+
   const handleCreateJobClick = () => {
     setEditingJob(null)
-    setJobTitle("")
-    setJobDescription("")
-    setJobSkills("")
-    setJobApplicationLink("")
+    setJobForm({ title: "", description: "", skills: "", applicationLink: "" })
     setJobErrors({})
     setJobDialogOpen(true)
   }
 
   const handleEditJobClick = (job: Job) => {
     setEditingJob(job)
-    setJobTitle(job.name)
-    setJobDescription(job.description)
-    setJobSkills(job.majorsAssociated)
-    setJobApplicationLink(job.applicationLink || "")
+    setJobForm({ title: job.name, description: job.description, skills: job.majorsAssociated, applicationLink: job.applicationLink || "" })
     setJobErrors({})
     setJobDialogOpen(true)
   }
@@ -328,30 +866,34 @@ export default function Company() {
     setDeleteJobDialogOpen(true)
   }
 
+  const validateJobForm = (): { title?: string; description?: string; skills?: string; applicationLink?: string } => {
+    const errors: { title?: string; description?: string; skills?: string; applicationLink?: string } = {}
+    if (!jobForm.title.trim()) errors.title = "Title is required"
+    if (!jobForm.description.trim()) errors.description = "Description is required"
+    if (!jobForm.skills.trim()) errors.skills = "Skills are required"
+    if (jobForm.applicationLink.trim()) {
+      try { new URL(jobForm.applicationLink.trim()) }
+      catch { errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)" }
+    }
+    return errors
+  }
+
+  const saveJobToDatabase = async (companyId: string, applicationLink: string | null) => {
+    const payload = { name: jobForm.title.trim(), description: jobForm.description.trim(), majorsAssociated: jobForm.skills.trim(), applicationLink }
+    if (editingJob) {
+      await updateDoc(doc(db, "jobs", editingJob.id), payload)
+      setSuccess("Job posting updated successfully!")
+    } else {
+      await addDoc(collection(db, "jobs"), { companyId, ...payload, createdAt: new Date() })
+      setSuccess("Job posting created successfully!")
+    }
+  }
+
   const handleSaveJob = async () => {
     if (!company) return
 
-    // Reset errors
     setJobErrors({})
-
-    // Validate required fields
-    const errors: {title?: string; description?: string; skills?: string; applicationLink?: string} = {}
-    if (!jobTitle.trim()) {
-      errors.title = "Title is required"
-    }
-    if (!jobDescription.trim()) {
-      errors.description = "Description is required"
-    }
-    if (!jobSkills.trim()) {
-      errors.skills = "Skills are required"
-    }
-    if (jobApplicationLink.trim()) {
-      try {
-        new URL(jobApplicationLink.trim())
-      } catch {
-        errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)"
-      }
-    }
+    const errors = validateJobForm()
 
     if (Object.keys(errors).length > 0) {
       setJobErrors(errors)
@@ -359,53 +901,12 @@ export default function Company() {
     }
 
     setSavingJob(true)
+    const applicationLink = jobForm.applicationLink.trim() || null
 
     try {
-      if (editingJob) {
-        // Update existing job
-        const jobRef = doc(db, "jobs", editingJob.id)
-        const updateData: any = {
-          name: jobTitle.trim(),
-          description: jobDescription.trim(),
-          majorsAssociated: jobSkills.trim(),
-        }
-        
-        // Only include applicationLink if it's not empty, otherwise set to null
-        if (jobApplicationLink.trim()) {
-          updateData.applicationLink = jobApplicationLink.trim()
-        } else {
-          updateData.applicationLink = null
-        }
-        
-        await updateDoc(jobRef, updateData)
-        
-        setSuccess("Job posting updated successfully!")
-        fetchJobs(company.id)
-        setJobDialogOpen(false)
-      } else {
-        // Create new job
-        console.log("Creating job for company:", company.id, company.companyName)
-        
-        const jobsRef = collection(db, "jobs")
-        const jobData: any = {
-          companyId: company.id,
-          name: jobTitle.trim(),
-          description: jobDescription.trim(),
-          majorsAssociated: jobSkills.trim(),
-          createdAt: new Date(),
-        }
-        
-        // Only add applicationLink if it's not empty
-        if (jobApplicationLink.trim()) {
-          jobData.applicationLink = jobApplicationLink.trim()
-        }
-        
-        await addDoc(jobsRef, jobData)
-        
-        setSuccess("Job posting created successfully!")
-        fetchJobs(company.id)
-        setJobDialogOpen(false)
-      }
+      await saveJobToDatabase(company.id, applicationLink)
+      fetchJobs(company.id)
+      setJobDialogOpen(false)
     } catch (err) {
       console.error("Error saving job:", err)
       setError("Failed to save job posting. Please try again.")
@@ -420,10 +921,10 @@ export default function Company() {
     try {
       setDeletingJob(true)
       setError("")
-      
+
       const jobRef = doc(db, "jobs", jobToDelete.id)
       await deleteDoc(jobRef)
-      
+
       setSuccess("Job posting deleted successfully!")
       fetchJobs(company.id)
       setDeleteJobDialogOpen(false)
@@ -447,26 +948,26 @@ export default function Company() {
     try {
       setDeleting(true)
       setError("")
-      
+
       // Remove representative from company's representativeIDs array
       await updateDoc(doc(db, "companies", company.id), {
         representativeIDs: arrayRemove(representativeToDelete.uid)
       })
-      
+
       // Remove companyId and companyName from representative's user document
       const representativeUserRef = doc(db, "users", representativeToDelete.uid)
       await updateDoc(representativeUserRef, {
         companyId: null,
         companyName: null,
       })
-      
+
       // Update local state
       setRepresentatives(representatives.filter(rep => rep.uid !== representativeToDelete.uid))
       setCompany({
         ...company,
         representativeIDs: company.representativeIDs.filter(id => id !== representativeToDelete.uid)
       })
-      
+
       setSuccess(`${getRepresentativeName(representativeToDelete)} has been removed from the company`)
       setTimeout(() => setSuccess(""), 3000)
       setDeleteDialogOpen(false)
@@ -479,16 +980,6 @@ export default function Company() {
     }
   }
 
-  const getRepresentativeName = (rep: Representative): string => {
-    if (rep.firstName && rep.lastName) {
-      return `${rep.firstName} ${rep.lastName}`
-    }
-    if (rep.firstName) {
-      return rep.firstName
-    }
-    return rep.email
-  }
-
   const handleDeleteCompanyClick = () => {
     setDeleteCompanyDialogOpen(true)
   }
@@ -499,9 +990,9 @@ export default function Company() {
     try {
       setDeletingCompany(true)
       setError("")
-      
+
       const result = await authUtils.deleteCompany(company.id, userId)
-      
+
       if (result.success) {
         navigate("/companies")
       } else {
@@ -521,6 +1012,7 @@ export default function Company() {
       setSuccess("Invite code copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
     } catch (err) {
+      console.error("Failed to copy to clipboard", err)
       setError("Failed to copy to clipboard")
     }
   }
@@ -531,9 +1023,9 @@ export default function Company() {
     try {
       setUpdatingInviteCode(true)
       setError("")
-      
+
       const result = await authUtils.updateInviteCode(company.id, userId)
-      
+
       if (result.success && result.inviteCode) {
         setSuccess("Invite code regenerated successfully!")
         fetchCompany() // Refresh company data
@@ -561,9 +1053,9 @@ export default function Company() {
     try {
       setUpdatingInviteCode(true)
       setError("")
-      
+
       const result = await authUtils.updateInviteCode(company.id, userId, trimmedCode)
-      
+
       if (result.success && result.inviteCode) {
         setSuccess("Invite code updated successfully!")
         setEditingInviteCode(false)
@@ -605,6 +1097,7 @@ export default function Company() {
   if (!company) return null
 
   const isOwner = userRole === "companyOwner" && company.ownerId === userId
+  const saveButtonLabel = getSaveButtonLabel(savingJob, editingJob)
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
@@ -650,456 +1143,51 @@ export default function Company() {
 
         <Grid container spacing={3}>
           {/* Company Information Card */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Card sx={{ height: "100%", border: "1px solid rgba(56, 133, 96, 0.3)" }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
-                  <BusinessIcon sx={{ color: "#388560" }} />
-                  Company Information
-                </Typography>
-
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Company Name
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                    {company.companyName}
-                  </Typography>
-                </Box>
-
-                {isOwner && (
-                  <Box sx={{ mb: 3 }}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Invite Code
-                      </Typography>
-                      {!editingInviteCode ? (
-                        <Box sx={{ display: "flex", gap: 0.5 }}>
-                          <Tooltip title="Regenerate invite code">
-                            <IconButton
-                              onClick={() => handleRegenerateInviteCode()}
-                              size="small"
-                              disabled={updatingInviteCode}
-                              sx={{ color: "#388560" }}
-                            >
-                              <RefreshIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Edit invite code">
-                            <IconButton
-                              onClick={() => {
-                                setEditingInviteCode(true)
-                                setEditedInviteCode(company.inviteCode)
-                              }}
-                              size="small"
-                              sx={{ color: "#388560" }}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      ) : (
-                        <Box sx={{ display: "flex", gap: 0.5 }}>
-                          <Tooltip title="Save">
-                            <IconButton
-                              onClick={() => handleSaveInviteCode()}
-                              size="small"
-                              disabled={updatingInviteCode}
-                              sx={{ color: "#388560" }}
-                            >
-                              <SaveIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Cancel">
-                            <IconButton
-                              onClick={() => {
-                                setEditingInviteCode(false)
-                                setEditedInviteCode("")
-                              }}
-                              size="small"
-                              sx={{ color: "#666" }}
-                            >
-                              <CancelIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      )}
-                    </Box>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      {editingInviteCode ? (
-                        <TextField
-                          fullWidth
-                          value={editedInviteCode}
-                          onChange={(e) => {
-                            setEditedInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
-                          }}
-                          disabled={updatingInviteCode}
-                          sx={{
-                            "& .MuiOutlinedInput-root": {
-                              fontFamily: "monospace",
-                              fontWeight: 600,
-                            },
-                          }}
-                          helperText="4-20 characters, letters and numbers only"
-                        />
-                      ) : (
-                        <>
-                          <Typography variant="body1" sx={{ fontFamily: "monospace", fontWeight: 600, flex: 1 }}>
-                            {company.inviteCode}
-                          </Typography>
-                          <Tooltip title="Copy invite code">
-                            <IconButton onClick={() => copyToClipboard(company.inviteCode)} size="small">
-                              <ContentCopyIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </>
-                      )}
-                    </Box>
-                  </Box>
-                )}
-
-                <Divider sx={{ my: 2 }} />
-
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-                  <PeopleIcon sx={{ fontSize: 20, color: "#b03a6c" }} />
-                  <Typography variant="body2" color="text.secondary">
-                    {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length !== 1 ? "s" : ""}
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Representatives List Card */}
-          {isOwner && (
-            <Grid size={{ xs: 12 }}>
-              <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
-                    <PeopleIcon sx={{ color: "#b03a6c" }} />
-                    Representatives
-                  </Typography>
-
-                  {loadingRepresentatives ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-                      <CircularProgress size={24} />
-                    </Box>
-                  ) : representatives.length === 0 ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                      No representatives have joined this company yet.
-                    </Typography>
-                  ) : (
-                    <List>
-                      {representatives.map((rep) => (
-                        <ListItem
-                          key={rep.uid}
-                          sx={{
-                            borderBottom: "1px solid rgba(0,0,0,0.1)",
-                            "&:last-child": {
-                              borderBottom: "none"
-                            }
-                          }}
-                        >
-                          <ListItemText
-                            primary={rep.firstName && rep.lastName ? `${rep.firstName} ${rep.lastName}` : rep.email}
-                            secondary={rep.firstName && rep.lastName ? rep.email : undefined}
-                          />
-                          <ListItemSecondaryAction>
-                            <Tooltip title="Remove representative">
-                              <IconButton
-                                edge="end"
-                                onClick={() => handleDeleteClick(rep)}
-                                sx={{ color: "#d32f2f" }}
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </Tooltip>
-                          </ListItemSecondaryAction>
-                        </ListItem>
-                      ))}
-                    </List>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-          )}
+          <CompanyInfoCard
+            company={company}
+            isOwner={isOwner}
+            editingInviteCode={editingInviteCode}
+            editedInviteCode={editedInviteCode}
+            updatingInviteCode={updatingInviteCode}
+            setEditingInviteCode={setEditingInviteCode}
+            setEditedInviteCode={setEditedInviteCode}
+            handleRegenerateInviteCode={handleRegenerateInviteCode}
+            handleSaveInviteCode={handleSaveInviteCode}
+            copyToClipboard={copyToClipboard}
+          />
 
           {/* Booth Management Card */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Card sx={{ height: "100%", border: "1px solid rgba(56, 133, 96, 0.3)" }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
-                  <EditIcon sx={{ color: "#388560" }} />
-                  Booth Management
-                </Typography>
+          <BoothManagementCard
+            companyId={company.id}
+            boothId={company.boothId}
+            navigate={navigate}
+          />
 
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                  Manage your company booth - a student-facing landing page where students can learn about your company and interact with representatives.
-                </Typography>
-
-                <Button
-                  variant="contained"
-                  startIcon={<EditIcon />}
-                  onClick={() => navigate(`/company/${company.id}/booth`)}
-                  sx={{
-                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                    "&:hover": {
-                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                    },
-                  }}
-                >
-                  {company.boothId ? "Edit Booth" : "Create Booth"}
-                </Button>
-
-                {company.boothId && (
-                  <Box sx={{ mt: 2 }}>
-                    <Button
-                      variant="outlined"
-                      onClick={() => navigate(`/booth/${company.boothId}`)}
-                      sx={{
-                        borderColor: "#388560",
-                        color: "#388560",
-                        "&:hover": {
-                          borderColor: "#2d6b4d",
-                          bgcolor: "rgba(56, 133, 96, 0.05)",
-                        },
-                      }}
-                    >
-                      View Public Booth
-                    </Button>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
+          {/* Representatives List Card */}
+          <RepresentativesSection
+            isOwner={isOwner}
+            loadingRepresentatives={loadingRepresentatives}
+            representatives={representatives}
+            handleDeleteClick={handleDeleteClick}
+          />
 
           {/* Job Postings Card */}
-          <Grid size={{ xs: 12 }}>
-            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
-              <CardContent sx={{ p: 3 }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 1 }}>
-                    <WorkIcon sx={{ color: "#388560" }} />
-                    Job Postings ({jobs.length})
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleCreateJobClick}
-                    sx={{
-                      background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                      "&:hover": {
-                        background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                      },
-                    }}
-                  >
-                    Create Job Posting
-                  </Button>
-                </Box>
-
-                {loadingJobs ? (
-                  <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-                    <CircularProgress size={24} />
-                  </Box>
-                ) : jobs.length === 0 ? (
-                  <Box sx={{ textAlign: "center", py: 4 }}>
-                    <WorkIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
-                    <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-                      No job postings yet. Create your first job posting to attract students!
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      startIcon={<AddIcon />}
-                      onClick={handleCreateJobClick}
-                      sx={{
-                        borderColor: "#388560",
-                        color: "#388560",
-                        "&:hover": {
-                          borderColor: "#2d6b4d",
-                          bgcolor: "rgba(56, 133, 96, 0.05)",
-                        },
-                      }}
-                    >
-                      Create Job Posting
-                    </Button>
-                  </Box>
-                ) : (
-                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {jobs.map((job) => (
-                      <Card
-                        key={job.id}
-                        sx={{
-                          border: "1px solid rgba(56, 133, 96, 0.2)",
-                          borderRadius: 2,
-                          transition: "box-shadow 0.2s",
-                          "&:hover": {
-                            boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
-                          },
-                        }}
-                      >
-                        <CardContent sx={{ p: 2.5 }}>
-                          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1.5 }}>
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                                {job.name}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, whiteSpace: "pre-wrap" }}>
-                                {job.description}
-                              </Typography>
-                              <Box sx={{ mb: 1 }}>
-                                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
-                                  Required Skills:
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {job.majorsAssociated}
-                                </Typography>
-                              </Box>
-                              {job.applicationLink && (
-                                <Chip
-                                  icon={<LaunchIcon sx={{ fontSize: 16 }} />}
-                                  label="Application Link Available"
-                                  size="small"
-                                  sx={{
-                                    bgcolor: "rgba(56, 133, 96, 0.1)",
-                                    color: "#388560",
-                                    fontWeight: 500,
-                                  }}
-                                />
-                              )}
-                            </Box>
-                            <Box sx={{ display: "flex", gap: 1, ml: 2, flexDirection: "column" }}>
-                              <Box sx={{ display: "flex", gap: 1 }}>
-                                <Tooltip title="Invite students to apply">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleInviteStudentsClick(job)}
-                                    sx={{ 
-                                      color: "#388560",
-                                      bgcolor: "rgba(56, 133, 96, 0.08)",
-                                      "&:hover": {
-                                        bgcolor: "rgba(56, 133, 96, 0.15)",
-                                      }
-                                    }}
-                                  >
-                                    <SendIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Edit job posting">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleEditJobClick(job)}
-                                    sx={{ color: "#388560" }}
-                                  >
-                                    <EditIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Delete job posting">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleDeleteJobClick(job)}
-                                    sx={{ color: "#d32f2f" }}
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </Box>
-                            </Box>
-                          </Box>
-                          
-                          {/* Job Invitation Stats */}
-                          {jobStats[job.id] && jobStats[job.id].totalSent > 0 && (
-                            <Box 
-                              sx={{ 
-                                mt: 2, 
-                                pt: 2, 
-                                borderTop: "1px solid rgba(56, 133, 96, 0.15)",
-                                display: "flex",
-                                gap: 3,
-                                alignItems: "center",
-                                justifyContent: "space-between"
-                              }}
-                            >
-                              <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
-                                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                  <BarChartIcon sx={{ fontSize: 18, color: "#388560" }} />
-                                  <Typography variant="caption" fontWeight="600" color="text.secondary">
-                                    Invitation Stats:
-                                  </Typography>
-                                </Box>
-                                <Box sx={{ display: "flex", gap: 2 }}>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Sent: <strong>{jobStats[job.id].totalSent}</strong>
-                                    </Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Viewed: <strong>{jobStats[job.id].totalViewed}</strong> ({jobStats[job.id].viewRate}%)
-                                    </Typography>
-                                  </Box>
-                                  <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Clicked: <strong>{jobStats[job.id].totalClicked}</strong> ({jobStats[job.id].clickRate}%)
-                                    </Typography>
-                                  </Box>
-                                </Box>
-                              </Box>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => handleViewStatsClick(job)}
-                                sx={{
-                                  borderColor: "#388560",
-                                  color: "#388560",
-                                  fontSize: "0.75rem",
-                                  "&:hover": {
-                                    borderColor: "#2d6b4d",
-                                    bgcolor: "rgba(56, 133, 96, 0.05)",
-                                  },
-                                }}
-                              >
-                                View Details
-                              </Button>
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
+          <JobPostingsSection
+            jobs={jobs}
+            loadingJobs={loadingJobs}
+            jobStats={jobStats}
+            handleCreateJobClick={handleCreateJobClick}
+            handleInviteStudentsClick={handleInviteStudentsClick}
+            handleEditJobClick={handleEditJobClick}
+            handleDeleteJobClick={handleDeleteJobClick}
+            handleViewStatsClick={handleViewStatsClick}
+          />
 
           {/* Delete Company Card (Owner only) */}
-          {isOwner && (
-            <Grid size={{ xs: 12 }}>
-              <Card sx={{ border: "2px solid rgba(211, 47, 47, 0.3)" }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#d32f2f", display: "flex", alignItems: "center", gap: 1 }}>
-                    <DeleteIcon />
-                    Danger Zone
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Permanently delete this company. This action cannot be undone and will remove all company data, unlink representatives, and delete the associated booth.
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    color="error"
-                    startIcon={<DeleteIcon />}
-                    onClick={handleDeleteCompanyClick}
-                    sx={{
-                      "&:hover": {
-                        bgcolor: "#c62828",
-                      },
-                    }}
-                  >
-                    Delete Company
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-          )}
+          <DeleteCompanyCard
+            isOwner={isOwner}
+            handleDeleteCompanyClick={handleDeleteCompanyClick}
+          />
         </Grid>
       </Container>
 
@@ -1131,8 +1219,8 @@ export default function Company() {
       </Dialog>
 
       {/* Delete Company Confirmation Dialog */}
-      <Dialog 
-        open={deleteCompanyDialogOpen} 
+      <Dialog
+        open={deleteCompanyDialogOpen}
         onClose={() => !deletingCompany && setDeleteCompanyDialogOpen(false)}
         maxWidth="sm"
         fullWidth
@@ -1155,7 +1243,7 @@ export default function Company() {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setDeleteCompanyDialogOpen(false)
             }}
@@ -1178,17 +1266,7 @@ export default function Company() {
       {/* Create/Edit Job Posting Dialog */}
       <Dialog
         open={jobDialogOpen}
-        onClose={() => {
-          if (!savingJob) {
-            setJobDialogOpen(false)
-            setEditingJob(null)
-            setJobTitle("")
-            setJobDescription("")
-            setJobSkills("")
-            setJobApplicationLink("")
-            setJobErrors({})
-          }
-        }}
+        onClose={() => !savingJob && resetJobForm()}
         maxWidth="md"
         fullWidth
       >
@@ -1197,96 +1275,37 @@ export default function Company() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Fill in the details for your job posting. Title, description, and skills are required.
           </Typography>
-          
+
           {(jobErrors.title || jobErrors.description || jobErrors.skills) && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {jobErrors.title || jobErrors.description || jobErrors.skills}
             </Alert>
           )}
 
-          <TextField
-            fullWidth
-            label="Job Title *"
-            value={jobTitle}
-            onChange={(e) => {
-              setJobTitle(e.target.value)
-              if (jobErrors.title) {
-                setJobErrors({ ...jobErrors, title: undefined })
-              }
-            }}
-            placeholder="e.g., Software Engineer Intern"
-            error={!!jobErrors.title}
-            helperText={jobErrors.title}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
-
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            label="Description *"
-            value={jobDescription}
-            onChange={(e) => {
-              setJobDescription(e.target.value)
-              if (jobErrors.description) {
-                setJobErrors({ ...jobErrors, description: undefined })
-              }
-            }}
-            placeholder="Describe the role, responsibilities, and requirements..."
-            error={!!jobErrors.description}
-            helperText={jobErrors.description}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
-
-          <TextField
-            fullWidth
-            label="Required Skills *"
-            value={jobSkills}
-            onChange={(e) => {
-              setJobSkills(e.target.value)
-              if (jobErrors.skills) {
-                setJobErrors({ ...jobErrors, skills: undefined })
-              }
-            }}
-            placeholder="e.g., JavaScript, React, Python, Communication"
-            error={!!jobErrors.skills}
-            helperText={jobErrors.skills || "List the skills or qualifications required"}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
-
-          <TextField
-            fullWidth
-            label="Application URL (Optional)"
-            value={jobApplicationLink}
-            onChange={(e) => {
-              setJobApplicationLink(e.target.value)
-              if (jobErrors.applicationLink) {
-                setJobErrors({ ...jobErrors, applicationLink: undefined })
-              }
-            }}
-            placeholder="https://company.com/apply"
-            error={!!jobErrors.applicationLink}
-            helperText={jobErrors.applicationLink || "External link where students can apply directly"}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
+          {JOB_FIELDS.map(({ id, name, label, key, multiline, rows, placeholder, helperText }) => (
+            <TextField
+              key={id}
+              fullWidth
+              id={id}
+              label={label}
+              multiline={multiline}
+              rows={rows}
+              slotProps={{ htmlInput: { name } }}
+              value={jobForm[key]}
+              onChange={(e) => {
+                setJobForm((prev) => ({ ...prev, [key]: e.target.value }))
+                if (jobErrors[key]) setJobErrors((prev) => ({ ...prev, [key]: undefined }))
+              }}
+              placeholder={placeholder}
+              error={!!jobErrors[key]}
+              helperText={jobErrors[key] || helperText}
+              disabled={savingJob}
+              sx={{ mb: 2 }}
+            />
+          ))}
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={() => {
-              setJobDialogOpen(false)
-              setEditingJob(null)
-              setJobTitle("")
-              setJobDescription("")
-              setJobSkills("")
-              setJobApplicationLink("")
-              setJobErrors({})
-            }}
-            disabled={savingJob}
-          >
+          <Button onClick={resetJobForm} disabled={savingJob}>
             Cancel
           </Button>
           <Button
@@ -1300,7 +1319,7 @@ export default function Company() {
               },
             }}
           >
-            {savingJob ? "Saving..." : editingJob ? "Update Job" : "Publish Job"}
+            {saveButtonLabel}
           </Button>
         </DialogActions>
       </Dialog>

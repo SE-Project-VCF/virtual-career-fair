@@ -146,9 +146,11 @@ describe("POST /api/update-invite-code", () => {
     }));
 
     db.runTransaction.mockImplementation(async (callback) => {
-      const companyRef = { exists: true };
       const transaction = {
-        get: jest.fn().mockResolvedValue({ exists: true }),
+        get: jest.fn().mockResolvedValue({ 
+          exists: true,
+          data: () => ({ ownerId: "user1" })
+        }),
         update: jest.fn(),
       };
       await callback(transaction);
@@ -175,7 +177,10 @@ describe("POST /api/update-invite-code", () => {
 
     db.runTransaction.mockImplementation(async (callback) => {
       const transaction = {
-        get: jest.fn().mockResolvedValue({ exists: true }),
+        get: jest.fn().mockResolvedValue({ 
+          exists: true,
+          data: () => ({ ownerId: "user1" })
+        }),
         update: jest.fn(),
       };
       await callback(transaction);

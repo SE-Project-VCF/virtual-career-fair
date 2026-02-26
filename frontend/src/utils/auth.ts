@@ -10,11 +10,23 @@ import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { API_URL } from "../config";
 
+async function trySyncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
+  try {
+    await syncStreamUser(uid, email, firstName, lastName)
+  } catch (error_) {
+    console.warn("Warning: Failed to sync chat user:", error_)
+  }
+}
+
 async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
   try {
+    const idToken = await auth.currentUser?.getIdToken();
     await fetch(`${API_URL}/api/sync-stream-user`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
       body: JSON.stringify({
         uid,
         email,
@@ -35,6 +47,23 @@ export interface User {
   role: "student" | "representative" | "company" | "companyOwner" | "administrator";
   [key: string]: any;
 }
+// Shared login success handler
+async function handleLoginSuccess(user: FirebaseUser, userData: any, role?: string) {
+  if (!user.emailVerified) {
+    await auth.signOut();
+    return {
+      success: false,
+      error: "Please verify your email before logging in.",
+      needsVerification: true,
+    };
+  }
+  const currentUser = { uid: user.uid, email: user.email!, role: role || userData.role, ...userData };
+  localStorage.setItem("currentUser", JSON.stringify(currentUser));
+  // Attempt to sync user to Stream Chat, but don't block login if it fails
+  await trySyncStreamUser(user.uid, user.email!, userData.firstName, userData.lastName);
+  return { success: true };
+}
+
 export const authUtils = {
   // ------------------------------
   // Register user (student, representative, or companyOwner)
@@ -51,7 +80,7 @@ export const authUtils = {
 
       let userData: any = {
         uid: user.uid,
-        email,
+        email: email.trim().toLowerCase(),
         role,
         emailVerified: false,
         createdAt: new Date().toISOString(),
@@ -69,12 +98,8 @@ export const authUtils = {
       // Only send verification email after successful registration
       await sendEmailVerification(user);
 
-      await syncStreamUser(
-        user.uid,
-        email,
-        userData.firstName,
-        userData.lastName
-      );
+      // Attempt to sync user to Stream Chat, but don't block registration if it fails
+      await trySyncStreamUser(user.uid, email, userData.firstName, userData.lastName);
 
       return { success: true, needsVerification: true };
     } catch (err: any) {
@@ -93,36 +118,13 @@ export const authUtils = {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (!userDoc.exists()) {
         await auth.signOut();
         return { success: false, error: "Account not found." };
       }
-
       const userData = userDoc.data();
-      const role = userData.role;
-
-      if (!user.emailVerified) {
-        await auth.signOut();
-        return {
-          success: false,
-          error: "Please verify your email before logging in.",
-          needsVerification: true,
-        };
-      }
-
-      const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
-      await syncStreamUser(
-        user.uid,
-        user.email!,
-        userData.firstName,
-        userData.lastName
-      );
-
-      return { success: true };
+      return await handleLoginSuccess(user, userData);
     } catch (err: any) {
       console.error("Error logging in:", err);
       return { success: false, error: err.message };
@@ -140,39 +142,17 @@ export const authUtils = {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (!userDoc.exists()) {
         await auth.signOut();
         return { success: false, error: "Account not found." };
       }
-
       const userData = userDoc.data();
       if (userData.role !== role) {
         await auth.signOut();
         return { success: false, error: `Invalid account type. Expected ${role}.` };
       }
-
-      if (!user.emailVerified) {
-        await auth.signOut();
-        return {
-          success: false,
-          error: "Please verify your email before logging in.",
-          needsVerification: true,
-        };
-      }
-
-      const currentUser = { uid: user.uid, email: user.email!, role, ...userData };
-      localStorage.setItem("currentUser", JSON.stringify(currentUser));
-
-      await syncStreamUser(
-        user.uid,
-        user.email!,
-        userData.firstName,
-        userData.lastName
-      );
-
-      return { success: true };
+      return await handleLoginSuccess(user, userData, role);
     } catch (err: any) {
       console.error("Error logging in:", err);
       return { success: false, error: err.message };
@@ -224,12 +204,8 @@ export const authUtils = {
 
         localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
-        await syncStreamUser(
-          user.uid,
-          user.email!,
-          existingData.firstName,
-          existingData.lastName
-        );
+        // Attempt to sync user to Stream Chat, but don't block login if it fails
+        await trySyncStreamUser(user.uid, user.email!, existingData.firstName, existingData.lastName);
 
         return {
           success: true,
@@ -362,6 +338,7 @@ export const authUtils = {
           await setDoc(userRef, {
             ...userData,
             companyId,
+            companyName,
             inviteCode,
           }, { merge: true });
         }

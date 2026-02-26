@@ -1,6 +1,6 @@
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 const admin = require("firebase-admin");
-const { db } = require("./firebase");
+const { db, auth } = require("./firebase");
 
 function removeUndefined(obj) {
   return Object.fromEntries(
@@ -33,8 +33,8 @@ function parseUTCToTimestamp(dateTimeString) {
     date = new Date(dateTimeString);
   }
 
-  if (isNaN(date.getTime())) {
-    throw new Error(`Invalid date string: ${dateTimeString}`);
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError(`Invalid date string: ${dateTimeString}`);
   }
 
   return admin.firestore.Timestamp.fromMillis(date.getTime());
@@ -61,4 +61,87 @@ async function verifyAdmin(userId) {
   return null;
 }
 
-module.exports = { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin };
+/**
+ * Evaluate live status for a specific fair.
+ * Returns { isLive, source, name, description }.
+ */
+async function evaluateFairStatusForFair(fairId) {
+  const fairDoc = await db.collection("fairs").doc(fairId).get();
+  if (!fairDoc.exists) {
+    throw new Error("Fair not found");
+  }
+
+  const data = fairDoc.data();
+  const now = admin.firestore.Timestamp.now().toMillis();
+
+  // Manual override wins
+  if (data.isLive === true) {
+    return {
+      isLive: true,
+      source: "manual",
+      name: data.name || null,
+      description: data.description || null,
+    };
+  }
+
+  // Check scheduled window
+  if (data.startTime && data.endTime) {
+    const start = data.startTime.toMillis();
+    const end = data.endTime.toMillis();
+    if (now >= start && now <= end) {
+      return {
+        isLive: true,
+        source: "schedule",
+        name: data.name || null,
+        description: data.description || null,
+      };
+    }
+  }
+
+  return {
+    isLive: false,
+    source: "manual",
+    name: data.name || null,
+    description: data.description || null,
+  };
+}
+
+/**
+ * Validate job input fields. Returns an error string or null if valid.
+ */
+function validateJobInput({ companyId, name, description, majorsAssociated, applicationLink }) {
+  if (!companyId) return "Company ID is required";
+  if (!name?.trim()) return "Job title is required";
+  if (name.trim().length > 200) return "Job title must be 200 characters or less";
+  if (!description?.trim()) return "Job description is required";
+  if (description.trim().length > 5000) return "Job description must be 5000 characters or less";
+  if (!majorsAssociated?.trim()) return "Skills are required";
+  if (majorsAssociated.trim().length > 500) return "Skills must be 500 characters or less";
+  if (applicationLink && applicationLink.trim()) {
+    try {
+      new URL(applicationLink.trim());
+    } catch (err) {
+      console.error("Invalid URL provided:", err.message);
+      return "Invalid application URL format";
+    }
+  }
+  return null;
+}
+
+async function verifyFirebaseToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid Authorization header" });
+  }
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await auth.verifyIdToken(idToken);
+    req.user = { uid: decodedToken.uid, email: decodedToken.email };
+    next();
+  } catch (err) {
+    console.error("Token verification failed:", err.message);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+module.exports = { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin, evaluateFairStatusForFair, validateJobInput, verifyFirebaseToken };

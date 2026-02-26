@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom"
 import EmailVerificationPending from "../EmailVerificationPending"
 
 const mockNavigate = vi.fn()
-const mockLocation = { state: { email: "test@test.com", password: "pass123" } }
+const mockLocation = { state: { email: "test@test.com", password: "pass123" } } // NOSONAR - test fixture password
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom")
   return {

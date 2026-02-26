@@ -149,6 +149,7 @@ export default function CompanyManagement() {
       setSuccess("Invite code copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
     } catch (err) {
+      console.error("Failed to copy to clipboard", err)
       setError("Failed to copy to clipboard")
     }
   }
@@ -359,32 +360,7 @@ export default function CompanyManagement() {
                         <Typography variant="body2" color="text.secondary">
                           Invite Code
                         </Typography>
-                        {editingInviteCode !== company.id ? (
-                          <Box sx={{ display: "flex", gap: 0.5 }}>
-                            <Tooltip title="Regenerate invite code">
-                              <IconButton
-                                onClick={() => handleRegenerateInviteCode(company.id)}
-                                size="small"
-                                disabled={updatingInviteCode}
-                                sx={{ color: "#388560" }}
-                              >
-                                <RefreshIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Edit invite code">
-                              <IconButton
-                                onClick={() => {
-                                  setEditingInviteCode(company.id)
-                                  setEditedInviteCode(company.inviteCode)
-                                }}
-                                size="small"
-                                sx={{ color: "#388560" }}
-                              >
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        ) : (
+                        {editingInviteCode === company.id ? (
                           <Box sx={{ display: "flex", gap: 0.5 }}>
                             <Tooltip title="Save">
                               <IconButton
@@ -409,6 +385,31 @@ export default function CompanyManagement() {
                               </IconButton>
                             </Tooltip>
                           </Box>
+                        ) : (
+                          <Box sx={{ display: "flex", gap: 0.5 }}>
+                            <Tooltip title="Regenerate invite code">
+                              <IconButton
+                                onClick={() => handleRegenerateInviteCode(company.id)}
+                                size="small"
+                                disabled={updatingInviteCode}
+                                sx={{ color: "#388560" }}
+                              >
+                                <RefreshIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Edit invite code">
+                              <IconButton
+                                onClick={() => {
+                                  setEditingInviteCode(company.id)
+                                  setEditedInviteCode(company.inviteCode)
+                                }}
+                                size="small"
+                                sx={{ color: "#388560" }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         )}
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -417,12 +418,10 @@ export default function CompanyManagement() {
                           value={editingInviteCode === company.id ? editedInviteCode : company.inviteCode}
                           onChange={(e) => {
                             if (editingInviteCode === company.id) {
-                              setEditedInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                              setEditedInviteCode(e.target.value.toUpperCase().replaceAll(/[^A-Z0-9]/g, ""))
                             }
                           }}
-                          InputProps={{
-                            readOnly: editingInviteCode !== company.id,
-                          }}
+                          slotProps={{ input: { readOnly: editingInviteCode !== company.id } }}
                           disabled={updatingInviteCode}
                           sx={{
                             "& .MuiOutlinedInput-root": {
@@ -449,7 +448,7 @@ export default function CompanyManagement() {
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
                       <PeopleIcon sx={{ fontSize: 20, color: "#b03a6c" }} />
                       <Typography variant="body2" color="text.secondary">
-                        {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length !== 1 ? "s" : ""}
+                        {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length === 1 ? "" : "s"}
                       </Typography>
                     </Box>
 

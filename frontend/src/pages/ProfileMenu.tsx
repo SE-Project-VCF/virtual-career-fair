@@ -39,9 +39,11 @@ export default function ProfileMenu() {
         anchorEl={anchorEl}
         open={open}
         onClose={handleMenuClose}
-        PaperProps={{
-          elevation: 3,
-          sx: { mt: 1.5, minWidth: 180, borderRadius: 2 },
+        slotProps={{
+          paper: {
+            elevation: 3,
+            sx: { mt: 1.5, minWidth: 180, borderRadius: 2 },
+          },
         }}
       >
         

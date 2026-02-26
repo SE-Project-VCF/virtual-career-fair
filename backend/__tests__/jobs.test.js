@@ -391,7 +391,6 @@ describe("PUT /api/jobs/:id", () => {
 
   it("returns 403 when user is not authorized", async () => {
     // Need two collection calls: jobs then companies
-    let callCount = 0;
     db.collection.mockImplementation((name) => {
       if (name === "jobs") {
         return {

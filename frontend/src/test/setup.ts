@@ -22,7 +22,7 @@ const mockCurrentUser = { uid: "user1", email: "test@test.com", emailVerified: t
 
 // Mock GoogleAuthProvider as a class constructor
 class MockGoogleAuthProvider {
-  constructor() {}
+  static readonly providerId = "google.com"
 }
 
 vi.mock("firebase/auth", () => ({
@@ -48,12 +48,17 @@ const mockFirestore = {
   }
 }
 
+let mockDocCounter = 0
+
 vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => mockFirestore),
-  doc: vi.fn((_db: any, ...pathSegments: string[]) => ({
-    path: pathSegments.join("/"),
-    id: `mock-id-${Math.random().toString(36).substring(7)}`
-  })),
+  doc: vi.fn((_db: any, ...pathSegments: string[]) => {
+    mockDocCounter += 1
+    return {
+      path: pathSegments.join("/"),
+      id: `mock-id-${mockDocCounter}`,
+    }
+  }),
   collection: vi.fn((_db: any, path: string) => ({ path })),
   setDoc: vi.fn(),
   getDoc: vi.fn(),
@@ -67,8 +72,8 @@ vi.mock("firebase/firestore", () => ({
   Timestamp: class MockTimestamp {
     seconds: number
     nanoseconds: number
-    static now = vi.fn(() => ({ toMillis: () => Date.now() }))
-    static fromMillis = vi.fn((ms: number) => ({ toMillis: () => ms }))
+    static readonly now = vi.fn(() => ({ toMillis: () => Date.now() }))
+    static readonly fromMillis = vi.fn((ms: number) => ({ toMillis: () => ms }))
     constructor(seconds: number, nanoseconds: number) {
       this.seconds = seconds
       this.nanoseconds = nanoseconds
@@ -102,7 +107,7 @@ vi.mock("stream-chat", () => ({
 }))
 
 // Mock window.matchMedia
-Object.defineProperty(window, "matchMedia", {
+Object.defineProperty(globalThis, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
     matches: false,
