@@ -22,10 +22,6 @@ vi.mock("../../utils/auth", () => ({
   },
 }));
 
-vi.mock("../../utils/fairStatus", () => ({
-  evaluateFairStatus: vi.fn(),
-}));
-
 vi.mock("firebase/firestore", () => ({
   collection: vi.fn(),
   getDocs: vi.fn(),
@@ -49,7 +45,6 @@ vi.mock("../../config", () => ({
 
 // Import after mocking
 import { authUtils } from "../../utils/auth";
-import { evaluateFairStatus } from "../../utils/fairStatus";
 import * as firestore from "firebase/firestore";
 
 const mockBoothData = {
@@ -89,18 +84,25 @@ describe("BoothView", () => {
       uid: "student-1",
       role: "student",
     });
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: true,
-    });
+    // Default fetch mock handles /api/fairs and /api/jobs
+    ;
     (firestore.getDoc as any).mockResolvedValue(mockBoothData);
     (firestore.getDocs as any).mockResolvedValue({ docs: [] });
     (firestore.query as any).mockReturnValue({});
     (firestore.collection as any).mockReturnValue({});
     (firestore.where as any).mockReturnValue({});
-    // Default fetch mock - resolves with empty jobs
-    (globalThis.fetch as any) = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs: [] }),
+    // Default fetch mock - handles /api/fairs and /api/jobs
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs: [] }),
+      });
     });
   });
 
@@ -108,7 +110,7 @@ describe("BoothView", () => {
   it("checks fair status on mount", async () => {
     renderBoothView();
     await waitFor(() => {
-      expect(evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
@@ -404,12 +406,18 @@ describe("BoothView", () => {
     renderBoothView();
 
     // When fair is live, students can view booth
-    expect(evaluateFairStatus).toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalled();
   });
 
   it("restricts access for non-owners when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "student-1",
@@ -537,8 +545,14 @@ describe("BoothView", () => {
 
   // Company Owner Access When Fair is Offline
   it("allows company owner to view their booth when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
@@ -574,8 +588,14 @@ describe("BoothView", () => {
 
   // Representative Access When Fair is Offline
   it("allows representative to view their company booth when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "rep-1",
@@ -605,8 +625,14 @@ describe("BoothView", () => {
 
   // Representative without company access when offline
   it("denies representative without companyId when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "rep-1",
@@ -623,8 +649,14 @@ describe("BoothView", () => {
 
   // Company owner without matching booth when offline
   it("denies company owner viewing non-owned booth when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",

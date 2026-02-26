@@ -23,10 +23,6 @@ vi.mock("../../utils/auth", () => ({
   },
 }))
 
-vi.mock("../../utils/fairStatus", () => ({
-  evaluateFairStatus: vi.fn().mockResolvedValue({ isLive: false, scheduleName: null, scheduleDescription: null }),
-}))
-
 vi.mock("../../components/EventList", () => ({
   default: () => <div data-testid="event-list">EventList</div>,
 }))
@@ -45,10 +41,18 @@ vi.mock("../../firebase", () => ({
   },
 }))
 
-// Mock fetch for unread count and other API calls
-globalThis.fetch = vi.fn().mockResolvedValue({
-  ok: true,
-  json: () => Promise.resolve({ unread: 0 }),
+// Mock fetch for API calls (fairs, unread count, etc.)
+globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+  if (url.includes("/api/fairs/my-enrollments")) {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ enrollments: [] }) });
+  }
+  if (url.includes("/api/fairs")) {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ fairs: [] }) });
+  }
+  if (url.includes("/api/chat/unread")) {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ unread: 0 }) });
+  }
+  return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
 })
 
 beforeEach(() => {

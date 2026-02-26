@@ -396,17 +396,23 @@ describe("authUtils error handling", () => {
 
     const result = await authUtils.login("test@test.com", "pass123")
 
-    expect(result.success).toBe(false)
+    // Stream sync failures are non-blocking; login still succeeds
+    expect(result.success).toBe(true)
   })
 
   it("handles missing email in Google login", async () => {
     vi.mocked(signInWithPopup).mockResolvedValue({
       user: { uid: "u1", email: null },
     } as any)
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => false,
+    } as any)
 
     const result = await authUtils.loginWithGoogle("student", false)
 
+    // No account found in login mode → success: false
     expect(result.success).toBe(false)
+    expect(result.error).toContain("No account found")
   })
 
   it("handles error in registerUser sync", async () => {
@@ -419,8 +425,9 @@ describe("authUtils error handling", () => {
 
     const result = await authUtils.registerUser("test@test.com", "pass123", "student")
 
-    expect(result.success).toBe(false)
-    expect(result.error).toContain("Failed to sync chat user")
+    // Stream sync failures are non-blocking; registration still succeeds
+    expect(result.success).toBe(true)
+    expect(result.needsVerification).toBe(true)
   })
 })
 

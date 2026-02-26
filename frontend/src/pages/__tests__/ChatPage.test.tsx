@@ -235,7 +235,7 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalledWith("STREAM INIT ERROR:", expect.any(Error));
+        expect(consoleErrorSpy).toHaveBeenCalledWith("STREAM INIT ERROR", expect.any(Error));
       });
 
       consoleErrorSpy.mockRestore();
