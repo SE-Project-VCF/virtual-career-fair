@@ -10,6 +10,14 @@ import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { API_URL } from "../config";
 
+async function trySyncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
+  try {
+    await syncStreamUser(uid, email, firstName, lastName)
+  } catch (error_) {
+    console.warn("Warning: Failed to sync chat user:", error_)
+  }
+}
+
 async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
   try {
     const idToken = await auth.currentUser?.getIdToken();
@@ -74,17 +82,7 @@ export const authUtils = {
       await sendEmailVerification(user);
 
       // Attempt to sync user to Stream Chat, but don't block registration if it fails
-      try {
-        await syncStreamUser(
-          user.uid,
-          email,
-          userData.firstName,
-          userData.lastName
-        );
-      } catch (error_) {
-        // Log the error but continue with registration - chat is optional
-        console.warn("Warning: Failed to sync chat user:", error_);
-      }
+      await trySyncStreamUser(user.uid, email, userData.firstName, userData.lastName);
 
       return { success: true, needsVerification: true };
     } catch (err: any) {
@@ -126,17 +124,7 @@ export const authUtils = {
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
       // Attempt to sync user to Stream Chat, but don't block login if it fails
-      try {
-        await syncStreamUser(
-          user.uid,
-          user.email!,
-          userData.firstName,
-          userData.lastName
-        );
-      } catch (error_) {
-        // Log the error but continue with login - chat is optional
-        console.warn("Warning: Failed to sync chat user:", error_);
-      }
+      await trySyncStreamUser(user.uid, user.email!, userData.firstName, userData.lastName);
 
       return { success: true };
     } catch (err: any) {
@@ -182,17 +170,7 @@ export const authUtils = {
       localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
       // Attempt to sync user to Stream Chat, but don't block login if it fails
-      try {
-        await syncStreamUser(
-          user.uid,
-          user.email!,
-          userData.firstName,
-          userData.lastName
-        );
-      } catch (error_) {
-        // Log the error but continue with login - chat is optional
-        console.warn("Warning: Failed to sync chat user:", error_);
-      }
+      await trySyncStreamUser(user.uid, user.email!, userData.firstName, userData.lastName);
 
       return { success: true };
     } catch (err: any) {
@@ -247,17 +225,7 @@ export const authUtils = {
         localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
         // Attempt to sync user to Stream Chat, but don't block login if it fails
-        try {
-          await syncStreamUser(
-            user.uid,
-            user.email!,
-            existingData.firstName,
-            existingData.lastName
-          );
-        } catch (error_) {
-          // Log the error but continue with login - chat is optional
-          console.warn("Warning: Failed to sync chat user:", error_);
-        }
+        await trySyncStreamUser(user.uid, user.email!, existingData.firstName, existingData.lastName);
 
         return {
           success: true,

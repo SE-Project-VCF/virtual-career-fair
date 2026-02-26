@@ -8,26 +8,9 @@ const {
   parseUTCToTimestamp,
   verifyAdmin,
   evaluateFairStatusForFair,
+  verifyFirebaseToken,
 } = require("../helpers");
 
-/* -------------------------------------------------------
-   AUTH MIDDLEWARE (local, reuses firebase auth pattern)
-------------------------------------------------------- */
-async function verifyFirebaseToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or invalid Authorization header" });
-  }
-  const idToken = authHeader.split("Bearer ")[1];
-  try {
-    const decodedToken = await auth.verifyIdToken(idToken);
-    req.user = { uid: decodedToken.uid, email: decodedToken.email };
-    next();
-  } catch (err) {
-    console.warn("verifyFirebaseToken: invalid token", err);
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-}
 
 async function getRequestingRoleFromAuthHeader(authHeader) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;

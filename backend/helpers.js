@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 const admin = require("firebase-admin");
-const { db } = require("./firebase");
+const { db, auth } = require("./firebase");
 
 function removeUndefined(obj) {
   return Object.fromEntries(
@@ -128,4 +128,20 @@ function validateJobInput({ companyId, name, description, majorsAssociated, appl
   return null;
 }
 
-module.exports = { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin, evaluateFairStatusForFair, validateJobInput };
+async function verifyFirebaseToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing or invalid Authorization header" });
+  }
+  const idToken = authHeader.split("Bearer ")[1];
+  try {
+    const decodedToken = await auth.verifyIdToken(idToken);
+    req.user = { uid: decodedToken.uid, email: decodedToken.email };
+    next();
+  } catch (err) {
+    console.error("Token verification failed:", err.message);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+module.exports = { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin, evaluateFairStatusForFair, validateJobInput, verifyFirebaseToken };

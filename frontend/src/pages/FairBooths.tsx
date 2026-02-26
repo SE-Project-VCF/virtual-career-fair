@@ -16,8 +16,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import ProfileMenu from "./ProfileMenu"
-import NotificationBell from "../components/NotificationBell"
+import PageHeader from "../components/PageHeader"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -90,25 +89,7 @@ export default function FairBooths() {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <Box
-        sx={{
-          bgcolor: "primary.main",
-          color: "white",
-          py: 2,
-          px: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="h6" fontWeight="bold">
-          Virtual Career Fair
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <NotificationBell />
-          <ProfileMenu />
-        </Box>
-      </Box>
+      <PageHeader />
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>

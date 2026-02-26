@@ -5,7 +5,7 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
-const { removeUndefined, generateInviteCode, validateJobInput, verifyAdmin } = require("./helpers");
+const { removeUndefined, generateInviteCode, validateJobInput, verifyAdmin, verifyFirebaseToken } = require("./helpers");
 
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
@@ -108,26 +108,6 @@ app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (r
 // Mount fair routes (multi-fair support)
 app.use(fairsRouter);
 
-/* ----------------------------------------------------
-   FIREBASE AUTH MIDDLEWARE
-   Verifies Firebase ID token from Authorization header
----------------------------------------------------- */
-async function verifyFirebaseToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing or invalid Authorization header" });
-  }
-
-  const idToken = authHeader.split("Bearer ")[1];
-  try {
-    const decodedToken = await auth.verifyIdToken(idToken);
-    req.user = { uid: decodedToken.uid, email: decodedToken.email };
-    next();
-  } catch (err) {
-    console.error("Token verification failed:", err.message);
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
-}
 
 
 /* ----------------------------------------------------

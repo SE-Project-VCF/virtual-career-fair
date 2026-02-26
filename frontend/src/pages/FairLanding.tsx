@@ -16,8 +16,7 @@ import {
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import ProfileMenu from "./ProfileMenu"
-import NotificationBell from "../components/NotificationBell"
+import PageHeader from "../components/PageHeader"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -146,25 +145,7 @@ export default function FairLanding() {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <Box
-        sx={{
-          bgcolor: "primary.main",
-          color: "white",
-          py: 2,
-          px: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="h6" fontWeight="bold">
-          Virtual Career Fair
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <NotificationBell />
-          <ProfileMenu />
-        </Box>
-      </Box>
+      <PageHeader />
 
       <Container maxWidth="md" sx={{ py: 6 }}>
         <Button variant="text" onClick={() => navigate("/fairs")} sx={{ mb: 3 }}>
