@@ -111,11 +111,11 @@ async function evaluateFairStatusForFair(fairId) {
  */
 function validateJobInput({ companyId, name, description, majorsAssociated, applicationLink }) {
   if (!companyId) return "Company ID is required";
-  if (!name || !name.trim()) return "Job title is required";
+  if (!name?.trim()) return "Job title is required";
   if (name.trim().length > 200) return "Job title must be 200 characters or less";
-  if (!description || !description.trim()) return "Job description is required";
+  if (!description?.trim()) return "Job description is required";
   if (description.trim().length > 5000) return "Job description must be 5000 characters or less";
-  if (!majorsAssociated || !majorsAssociated.trim()) return "Skills are required";
+  if (!majorsAssociated?.trim()) return "Skills are required";
   if (majorsAssociated.trim().length > 500) return "Skills must be 500 characters or less";
   if (applicationLink && applicationLink.trim()) {
     try {

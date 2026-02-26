@@ -25,23 +25,23 @@ import { FairProvider } from "./contexts/FairContext"
 // Wrapper components to inject fairId from URL params into FairProvider
 function FairLandingWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId!}><FairLanding /></FairProvider>
+  return <FairProvider fairId={fairId ?? ""}><FairLanding /></FairProvider>
 }
 function FairBoothsWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId!}><FairBooths /></FairProvider>
+  return <FairProvider fairId={fairId ?? ""}><FairBooths /></FairProvider>
 }
 function FairBoothViewWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId!}><FairBoothView /></FairProvider>
+  return <FairProvider fairId={fairId ?? ""}><FairBoothView /></FairProvider>
 }
 function FairAdminWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId!}><FairAdminDashboard /></FairProvider>
+  return <FairProvider fairId={fairId ?? ""}><FairAdminDashboard /></FairProvider>
 }
 function FairBoothEditorWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId!}><BoothEditor /></FairProvider>
+  return <FairProvider fairId={fairId ?? ""}><BoothEditor /></FairProvider>
 }
 
 function App() {

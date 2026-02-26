@@ -204,8 +204,8 @@ export default function BoothView() {
     }
   }
 
-  const loadBoothData = async (fairIsLive: boolean) => {
-    const boothDoc = await getDoc(doc(db, "booths", boothId!))
+  const loadBoothData = async (id: string, fairIsLive: boolean) => {
+    const boothDoc = await getDoc(doc(db, "booths", id))
     if (!isMountedRef.current) return null
 
     if (!boothDoc.exists()) {
@@ -251,7 +251,7 @@ export default function BoothView() {
       }
       if (!isMountedRef.current) return
 
-      const boothData = await loadBoothData(fairIsLive)
+      const boothData = await loadBoothData(boothId, fairIsLive)
       if (!boothData || !isMountedRef.current) return
 
       setBooth(boothData)

@@ -13,7 +13,7 @@ const {
 
 
 async function getRequestingRoleFromAuthHeader(authHeader) {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  if (!authHeader?.startsWith("Bearer ")) return null;
 
   try {
     const decoded = await auth.verifyIdToken(authHeader.split("Bearer ")[1]);

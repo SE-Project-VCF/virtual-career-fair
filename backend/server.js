@@ -415,7 +415,7 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
     const sanitizedName = name.trim().replaceAll('\0', '');
     const sanitizedDescription = description.trim().replaceAll('\0', '');
     const sanitizedMajors = majorsAssociated.trim().replaceAll('\0', '');
-    const sanitizedAppLink = applicationLink && applicationLink.trim() ? applicationLink.trim().replaceAll('\0', '') : undefined;
+    const sanitizedAppLink = applicationLink?.trim() ? applicationLink.trim().replaceAll('\0', '') : undefined;
 
     const jobRef = await db.collection("jobs").add(
       removeUndefined({
