@@ -121,7 +121,7 @@ export default function EventList({ enrolledFairIds = [] }: Readonly<{ enrolledF
               >
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
-                    {fair.name}
+                    {fair.name || "Career Fair"}
                   </Typography>
                   <Box sx={{ display: "flex", gap: 0.5 }}>
                     {isEnrolled && <Chip label="Enrolled" size="small" color="success" />}

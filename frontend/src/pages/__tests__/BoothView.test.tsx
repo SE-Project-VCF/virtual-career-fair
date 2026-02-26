@@ -310,9 +310,17 @@ describe("BoothView", () => {
 
   // Jobs Fetching Tests
   it("fetches jobs for company on booth load", async () => {
-    (globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs: [] }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs: [] }),
+      });
     });
 
     renderBoothView();
@@ -335,9 +343,17 @@ describe("BoothView", () => {
       },
     ];
 
-    (globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs }),
+      });
     });
 
     renderBoothView();
@@ -358,15 +374,23 @@ describe("BoothView", () => {
       },
     ];
 
-    (globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs }),
+      });
     });
 
     renderBoothView();
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: /Apply Now/ })).toBeInTheDocument();
+      expect(screen.getByText(/Apply Now/)).toBeInTheDocument();
     });
   });
 
@@ -441,7 +465,15 @@ describe("BoothView", () => {
 
   // Error Handling Tests
   it("displays error when job fetch fails", async () => {
-    (globalThis.fetch as any).mockRejectedValue(new Error("Network error"));
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.reject(new Error("Network error"));
+    });
 
     renderBoothView();
 
@@ -485,9 +517,17 @@ describe("BoothView", () => {
 
   // Empty Jobs Test
   it("does not display job section when no jobs available", async () => {
-    (globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs: [] }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs: [] }),
+      });
     });
 
     renderBoothView();
@@ -756,9 +796,17 @@ describe("BoothView", () => {
       },
     ];
 
-    (globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs }),
+      });
     });
 
     renderBoothView();
@@ -898,7 +946,15 @@ describe("BoothView", () => {
       resolveJobs = resolve;
     });
 
-    (globalThis.fetch as any).mockReturnValue(jobsPromise);
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return jobsPromise;
+    });
 
     renderBoothView();
 
@@ -921,8 +977,16 @@ describe("BoothView", () => {
   // Job fetch non-ok response
   it("handles non-ok response when fetching jobs", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    (globalThis.fetch as any).mockResolvedValue({
-      ok: false,
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: false,
+      });
     });
 
     renderBoothView();

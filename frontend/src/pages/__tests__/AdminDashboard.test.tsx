@@ -195,7 +195,9 @@ describe("AdminDashboard", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Active Fair")).toBeInTheDocument();
-        expect(screen.getByText("Live")).toBeInTheDocument();
+        // "Live" appears both as table header and as status chip
+        const liveElements = screen.getAllByText("Live");
+        expect(liveElements.length).toBeGreaterThanOrEqual(2);
       });
     });
 
