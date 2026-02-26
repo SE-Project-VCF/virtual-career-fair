@@ -4,7 +4,7 @@ module.exports = {
   testMatch: ["**/*.test.js"],
   setupFiles: ["<rootDir>/jest.setup.js"],
   clearMocks: true,
-  collectCoverageFrom: ["server.js", "helpers.js", "routes/fairs.js"],
+  collectCoverageFrom: ["server.js", "helpers.js", "routes/fairs.js", "console.js"],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov"],
 };
