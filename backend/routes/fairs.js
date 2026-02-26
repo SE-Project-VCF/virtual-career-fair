@@ -58,12 +58,14 @@ async function resolveCompanyIdForEnrollment(requestingUid, companyId) {
   return resolvedCompanyId;
 }
 
+
+// Helper to check if user is admin or company owner/rep
 async function ensureAdminOrCompanyAccess(requestingUid, companyId) {
   const adminError = await verifyAdmin(requestingUid);
-  if (!adminError) return;
-
+  if (!adminError) return null;
   const accessError = await verifyCompanyAccess(requestingUid, companyId);
-  if (accessError) throw buildHttpError(403, "Unauthorized: must be admin or company owner/rep");
+  if (!accessError) return null;
+  return { error: "Unauthorized: must be admin or company owner/rep", status: 403 };
 }
 
 async function getCompanyAndBoothSnapshot(companyId) {
@@ -271,8 +273,9 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
   const { userId, name, description, startTime, endTime } = req.body;
   const adminUid = req.user.uid;
 
-  const adminError = await verifyAdmin(userId || adminUid);
-  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  const accessError = await ensureAdminOrCompanyAccess(userId || adminUid, companyId);
+  if (accessError) return res.status(accessError.status).json({ error: accessError.error });
 
   if (!name || !name.trim()) return res.status(400).json({ error: "Fair name is required" });
 
@@ -311,8 +314,9 @@ router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { userId, name, description, startTime, endTime } = req.body;
   const adminUid = req.user.uid;
 
-  const adminError = await verifyAdmin(userId || adminUid);
-  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  const accessError = await ensureAdminOrCompanyAccess(userId || adminUid, companyId);
+  if (accessError) return res.status(accessError.status).json({ error: accessError.error });
 
   try {
     const fairDoc = await db.collection("fairs").doc(fairId).get();
@@ -345,8 +349,9 @@ router.delete("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { userId } = req.body;
   const adminUid = req.user.uid;
 
-  const adminError = await verifyAdmin(userId || adminUid);
-  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  const accessError = await ensureAdminOrCompanyAccess(userId || adminUid, companyId);
+  if (accessError) return res.status(accessError.status).json({ error: accessError.error });
 
   try {
     const fairDoc = await db.collection("fairs").doc(fairId).get();
@@ -445,7 +450,9 @@ router.post("/api/fairs/:fairId/enroll", verifyFirebaseToken, async (req, res) =
     await ensureFairExists(resolvedFairId);
 
     const resolvedCompanyId = await resolveCompanyIdForEnrollment(requestingUid, companyId);
-    await ensureAdminOrCompanyAccess(requestingUid, resolvedCompanyId);
+
+    const accessError = await ensureAdminOrCompanyAccess(requestingUid, resolvedCompanyId);
+    if (accessError) return res.status(accessError.status).json({ error: accessError.error });
 
     const enrollmentDoc = await db
       .collection("fairs")

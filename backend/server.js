@@ -1,4 +1,4 @@
-require("dotenv").config();
+yesrequire("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
@@ -7,8 +7,23 @@ const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
 const { removeUndefined, generateInviteCode, validateJobInput, verifyAdmin, verifyFirebaseToken } = require("./helpers");
 
+
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
+
+// Helper to check if user is company owner or representative
+async function checkCompanyAuthorization(companyId, userId) {
+  const companyDoc = await db.collection("companies").doc(companyId).get();
+  if (!companyDoc.exists) {
+    return { authorized: false, error: "Invalid company ID" };
+  }
+  const companyData = companyDoc.data();
+  const reps = companyData.representativeIDs || [];
+  if (companyData.ownerId !== userId && !reps.includes(userId)) {
+    return { authorized: false, error: "Not authorized for this company" };
+  }
+  return { authorized: true, companyData };
+}
 
 // --------------------------
 // ENVIRONMENT VALIDATION
@@ -389,19 +404,12 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
       return res.status(400).send({ success: false, error: validationError });
     }
 
-    const companyDoc = await db.collection("companies").doc(companyId).get();
-    if (!companyDoc.exists) {
-      return res
-        .status(404)
-        .send({ success: false, error: "Invalid company ID" });
+
+    const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).send({ success: false, error: authResult.error });
     }
 
-    // Verify the user is the company owner or a representative
-    const companyData = companyDoc.data();
-    const reps = companyData.representativeIDs || [];
-    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-      return res.status(403).send({ success: false, error: "Not authorized for this company" });
-    }
 
     // Sanitize inputs (trim and remove null bytes)
     const sanitizedName = name.trim().replaceAll('\0', '');
@@ -513,13 +521,10 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
 
     // Verify the user is authorized for this job's company
     const jobData = jobDoc.data();
-    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
-    if (companyDoc.exists) {
-      const companyData = companyDoc.data();
-      const reps = companyData.representativeIDs || [];
-      if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-        return res.status(403).json({ success: false, error: "Not authorized for this company" });
-      }
+
+    const authResult = await checkCompanyAuthorization(jobData.companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).json({ success: false, error: authResult.error });
     }
 
     await jobRef.update(
@@ -555,13 +560,10 @@ app.delete("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
 
     // Verify the user is authorized for this job's company
     const jobData = jobDoc.data();
-    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
-    if (companyDoc.exists) {
-      const companyData = companyDoc.data();
-      const reps = companyData.representativeIDs || [];
-      if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-        return res.status(403).json({ success: false, error: "Not authorized for this company" });
-      }
+
+    const authResult = await checkCompanyAuthorization(jobData.companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).json({ success: false, error: authResult.error });
     }
 
     await jobRef.delete();
@@ -1242,19 +1244,12 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
         .send({ success: false, error: "Description must be 2000 characters or less" });
     }
 
-    const companyDoc = await db.collection("companies").doc(companyId).get();
-    if (!companyDoc.exists) {
-      return res
-        .status(404)
-        .send({ success: false, error: "Invalid company ID" });
+
+    const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).send({ success: false, error: authResult.error });
     }
 
-    // Verify the user is the company owner or a representative
-    const companyData = companyDoc.data();
-    const reps = companyData.representativeIDs || [];
-    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-      return res.status(403).send({ success: false, error: "Not authorized for this company" });
-    }
 
     // Sanitize text inputs (trim whitespace, remove null bytes)
     const sanitizedBoothName = boothName ? boothName.trim().replaceAll('\0', '') : boothName;
