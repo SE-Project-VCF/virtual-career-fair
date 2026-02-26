@@ -270,14 +270,18 @@ router.get("/api/fairs/:fairId/status", async (req, res) => {
 
 /* POST /api/fairs - admin: create fair */
 router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
-  const { userId, name, description, startTime, endTime } = req.body;
+  const { name, description, startTime, endTime } = req.body;
   const adminUid = req.user.uid;
 
+  // Admin check
+  const adminError = await verifyAdmin(adminUid);
+  if (adminError) {
+    return res.status(adminError.status).json({ error: adminError.error });
+  }
 
-  const accessError = await ensureAdminOrCompanyAccess(userId || adminUid, companyId);
-  if (accessError) return res.status(accessError.status).json({ error: accessError.error });
-
-  if (!name || !name.trim()) return res.status(400).json({ error: "Fair name is required" });
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Fair name is required" });
+  }
 
   try {
     let parsedStart = null;
