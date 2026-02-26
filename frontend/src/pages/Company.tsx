@@ -1,21 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { 
-  Container, 
-  Box, 
-  Typography, 
-  Button, 
-  Card, 
-  CardContent,
-  Alert,
-  CircularProgress,
-  IconButton,
-  Tooltip,
-  Divider,
-  Grid,
-  TextField,
-  Chip
-} from "@mui/material"
+import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
@@ -200,6 +185,9 @@ function CompanyInfoCard({
                 {editingInviteCode ? (
                   <TextField
                     fullWidth
+                    id="invite-code"
+                    label="Invite Code"
+                    slotProps={{ htmlInput: { name: "inviteCode" } }}
                     value={editedInviteCode}
                     onChange={(e) => {
                       setEditedInviteCode(e.target.value.toUpperCase().replaceAll(/[^A-Z0-9]/g, ""))
@@ -299,8 +287,8 @@ function RepresentativesSection({
                   }}
                 >
                   <ListItemText
-                    primary={rep.firstName && rep.lastName ? `${rep.firstName} ${rep.lastName}` : rep.email}
-                    secondary={rep.firstName && rep.lastName ? rep.email : undefined}
+                    primary={getRepresentativeName(rep)}
+                    secondary={rep.firstName ? rep.email : undefined}
                   />
                 </ListItem>
               ))}
@@ -624,6 +612,13 @@ function DeleteCompanyCard({ isOwner, handleDeleteCompanyClick }: Readonly<{
   )
 }
 
+const JOB_FIELDS = [
+  { id: "job-title", name: "jobTitle", label: "Job Title *", key: "title" as const, placeholder: "e.g., Software Engineer Intern" },
+  { id: "job-description", name: "jobDescription", label: "Description *", key: "description" as const, multiline: true, rows: 4, placeholder: "Describe the role, responsibilities, and requirements..." },
+  { id: "job-skills", name: "jobSkills", label: "Required Skills *", key: "skills" as const, placeholder: "e.g., JavaScript, React, Python, Communication", helperText: "List the skills or qualifications required" },
+  { id: "job-application-link", name: "jobApplicationLink", label: "Application URL (Optional)", key: "applicationLink" as const, placeholder: "https://company.com/apply", helperText: "External link where students can apply directly" },
+]
+
 export default function Company() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
@@ -646,11 +641,8 @@ export default function Company() {
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [jobDialogOpen, setJobDialogOpen] = useState(false)
   const [editingJob, setEditingJob] = useState<Job | null>(null)
-  const [jobTitle, setJobTitle] = useState("")
-  const [jobDescription, setJobDescription] = useState("")
-  const [jobSkills, setJobSkills] = useState("")
-  const [jobApplicationLink, setJobApplicationLink] = useState("")
-  const [jobErrors, setJobErrors] = useState<{title?: string; description?: string; skills?: string; applicationLink?: string}>({})
+  const [jobForm, setJobForm] = useState({ title: "", description: "", skills: "", applicationLink: "" })
+  const [jobErrors, setJobErrors] = useState<{ title?: string; description?: string; skills?: string; applicationLink?: string }>({})
   const [savingJob, setSavingJob] = useState(false)
   const [deleteJobDialogOpen, setDeleteJobDialogOpen] = useState(false)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
@@ -706,9 +698,9 @@ export default function Company() {
     try {
       setLoading(true)
       setError("")
-      
+
       const companyDoc = await getDoc(doc(db, "companies", id))
-      
+
       if (!companyDoc.exists()) {
         setError("Company not found")
         setLoading(false)
@@ -725,11 +717,8 @@ export default function Company() {
       if (!hasAccess) return
 
       setCompany(companyInfo)
-      
-      if (companyInfo.representativeIDs && companyInfo.representativeIDs.length > 0) {
-        fetchRepresentatives(companyInfo.representativeIDs)
-      }
-      
+
+      fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
     } catch (err) {
       console.error("Error fetching company:", err)
@@ -755,7 +744,7 @@ export default function Company() {
         }
         return null
       })
-      
+
       const reps = (await Promise.all(repPromises)).filter((rep): rep is Representative => rep !== null)
       setRepresentatives(reps)
     } catch (err) {
@@ -769,11 +758,11 @@ export default function Company() {
     try {
       setLoadingJobs(true)
       console.log("Fetching jobs for company:", companyId)
-      
+
       const jobsRef = collection(db, "jobs")
       const q = query(jobsRef, where("companyId", "==", companyId))
       const jobsSnapshot = await getDocs(q)
-      
+
       const jobsList: Job[] = []
       jobsSnapshot.forEach((doc) => {
         const data = doc.data()
@@ -787,7 +776,7 @@ export default function Company() {
           createdAt: data.createdAt?.toMillis?.() || data.createdAt || null,
         })
       })
-      
+
       // Sort by createdAt descending
       jobsList.sort((a, b) => {
         if (!a.createdAt && !b.createdAt) return 0
@@ -795,10 +784,10 @@ export default function Company() {
         if (!b.createdAt) return -1
         return b.createdAt - a.createdAt
       })
-      
+
       console.log("Fetched jobs:", jobsList.length, "jobs")
       setJobs(jobsList)
-      
+
       // Fetch stats for each job
       if (userId) {
         jobsList.forEach((job) => {
@@ -851,22 +840,23 @@ export default function Company() {
     setStatsDialogOpen(true)
   }
 
+  const resetJobForm = () => {
+    setJobDialogOpen(false)
+    setEditingJob(null)
+    setJobForm({ title: "", description: "", skills: "", applicationLink: "" })
+    setJobErrors({})
+  }
+
   const handleCreateJobClick = () => {
     setEditingJob(null)
-    setJobTitle("")
-    setJobDescription("")
-    setJobSkills("")
-    setJobApplicationLink("")
+    setJobForm({ title: "", description: "", skills: "", applicationLink: "" })
     setJobErrors({})
     setJobDialogOpen(true)
   }
 
   const handleEditJobClick = (job: Job) => {
     setEditingJob(job)
-    setJobTitle(job.name)
-    setJobDescription(job.description)
-    setJobSkills(job.majorsAssociated)
-    setJobApplicationLink(job.applicationLink || "")
+    setJobForm({ title: job.name, description: job.description, skills: job.majorsAssociated, applicationLink: job.applicationLink || "" })
     setJobErrors({})
     setJobDialogOpen(true)
   }
@@ -876,49 +866,25 @@ export default function Company() {
     setDeleteJobDialogOpen(true)
   }
 
-  const validateJobForm = (): {title?: string; description?: string; skills?: string; applicationLink?: string} => {
-    const errors: {title?: string; description?: string; skills?: string; applicationLink?: string} = {}
-    
-    if (!jobTitle.trim()) {
-      errors.title = "Title is required"
+  const validateJobForm = (): { title?: string; description?: string; skills?: string; applicationLink?: string } => {
+    const errors: { title?: string; description?: string; skills?: string; applicationLink?: string } = {}
+    if (!jobForm.title.trim()) errors.title = "Title is required"
+    if (!jobForm.description.trim()) errors.description = "Description is required"
+    if (!jobForm.skills.trim()) errors.skills = "Skills are required"
+    if (jobForm.applicationLink.trim()) {
+      try { new URL(jobForm.applicationLink.trim()) }
+      catch { errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)" }
     }
-    if (!jobDescription.trim()) {
-      errors.description = "Description is required"
-    }
-    if (!jobSkills.trim()) {
-      errors.skills = "Skills are required"
-    }
-    if (jobApplicationLink.trim()) {
-      try {
-        new URL(jobApplicationLink.trim())
-      } catch {
-        errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)"
-      }
-    }
-    
     return errors
   }
 
   const saveJobToDatabase = async (companyId: string, applicationLink: string | null) => {
+    const payload = { name: jobForm.title.trim(), description: jobForm.description.trim(), majorsAssociated: jobForm.skills.trim(), applicationLink }
     if (editingJob) {
-      const jobRef = doc(db, "jobs", editingJob.id)
-      await updateDoc(jobRef, {
-        name: jobTitle.trim(),
-        description: jobDescription.trim(),
-        majorsAssociated: jobSkills.trim(),
-        applicationLink,
-      })
+      await updateDoc(doc(db, "jobs", editingJob.id), payload)
       setSuccess("Job posting updated successfully!")
     } else {
-      const jobsRef = collection(db, "jobs")
-      await addDoc(jobsRef, {
-        companyId,
-        name: jobTitle.trim(),
-        description: jobDescription.trim(),
-        majorsAssociated: jobSkills.trim(),
-        applicationLink,
-        createdAt: new Date(),
-      })
+      await addDoc(collection(db, "jobs"), { companyId, ...payload, createdAt: new Date() })
       setSuccess("Job posting created successfully!")
     }
   }
@@ -935,7 +901,7 @@ export default function Company() {
     }
 
     setSavingJob(true)
-    const applicationLink = jobApplicationLink.trim() || null
+    const applicationLink = jobForm.applicationLink.trim() || null
 
     try {
       await saveJobToDatabase(company.id, applicationLink)
@@ -955,10 +921,10 @@ export default function Company() {
     try {
       setDeletingJob(true)
       setError("")
-      
+
       const jobRef = doc(db, "jobs", jobToDelete.id)
       await deleteDoc(jobRef)
-      
+
       setSuccess("Job posting deleted successfully!")
       fetchJobs(company.id)
       setDeleteJobDialogOpen(false)
@@ -982,26 +948,26 @@ export default function Company() {
     try {
       setDeleting(true)
       setError("")
-      
+
       // Remove representative from company's representativeIDs array
       await updateDoc(doc(db, "companies", company.id), {
         representativeIDs: arrayRemove(representativeToDelete.uid)
       })
-      
+
       // Remove companyId and companyName from representative's user document
       const representativeUserRef = doc(db, "users", representativeToDelete.uid)
       await updateDoc(representativeUserRef, {
         companyId: null,
         companyName: null,
       })
-      
+
       // Update local state
       setRepresentatives(representatives.filter(rep => rep.uid !== representativeToDelete.uid))
       setCompany({
         ...company,
         representativeIDs: company.representativeIDs.filter(id => id !== representativeToDelete.uid)
       })
-      
+
       setSuccess(`${getRepresentativeName(representativeToDelete)} has been removed from the company`)
       setTimeout(() => setSuccess(""), 3000)
       setDeleteDialogOpen(false)
@@ -1024,9 +990,9 @@ export default function Company() {
     try {
       setDeletingCompany(true)
       setError("")
-      
+
       const result = await authUtils.deleteCompany(company.id, userId)
-      
+
       if (result.success) {
         navigate("/companies")
       } else {
@@ -1057,9 +1023,9 @@ export default function Company() {
     try {
       setUpdatingInviteCode(true)
       setError("")
-      
+
       const result = await authUtils.updateInviteCode(company.id, userId)
-      
+
       if (result.success && result.inviteCode) {
         setSuccess("Invite code regenerated successfully!")
         fetchCompany() // Refresh company data
@@ -1087,9 +1053,9 @@ export default function Company() {
     try {
       setUpdatingInviteCode(true)
       setError("")
-      
+
       const result = await authUtils.updateInviteCode(company.id, userId, trimmedCode)
-      
+
       if (result.success && result.inviteCode) {
         setSuccess("Invite code updated successfully!")
         setEditingInviteCode(false)
@@ -1253,8 +1219,8 @@ export default function Company() {
       </Dialog>
 
       {/* Delete Company Confirmation Dialog */}
-      <Dialog 
-        open={deleteCompanyDialogOpen} 
+      <Dialog
+        open={deleteCompanyDialogOpen}
         onClose={() => !deletingCompany && setDeleteCompanyDialogOpen(false)}
         maxWidth="sm"
         fullWidth
@@ -1277,7 +1243,7 @@ export default function Company() {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
+          <Button
             onClick={() => {
               setDeleteCompanyDialogOpen(false)
             }}
@@ -1300,17 +1266,7 @@ export default function Company() {
       {/* Create/Edit Job Posting Dialog */}
       <Dialog
         open={jobDialogOpen}
-        onClose={() => {
-          if (!savingJob) {
-            setJobDialogOpen(false)
-            setEditingJob(null)
-            setJobTitle("")
-            setJobDescription("")
-            setJobSkills("")
-            setJobApplicationLink("")
-            setJobErrors({})
-          }
-        }}
+        onClose={() => !savingJob && resetJobForm()}
         maxWidth="md"
         fullWidth
       >
@@ -1319,96 +1275,37 @@ export default function Company() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Fill in the details for your job posting. Title, description, and skills are required.
           </Typography>
-          
+
           {(jobErrors.title || jobErrors.description || jobErrors.skills) && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {jobErrors.title || jobErrors.description || jobErrors.skills}
             </Alert>
           )}
 
-          <TextField
-            fullWidth
-            label="Job Title *"
-            value={jobTitle}
-            onChange={(e) => {
-              setJobTitle(e.target.value)
-              if (jobErrors.title) {
-                setJobErrors({ ...jobErrors, title: undefined })
-              }
-            }}
-            placeholder="e.g., Software Engineer Intern"
-            error={!!jobErrors.title}
-            helperText={jobErrors.title}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
-
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            label="Description *"
-            value={jobDescription}
-            onChange={(e) => {
-              setJobDescription(e.target.value)
-              if (jobErrors.description) {
-                setJobErrors({ ...jobErrors, description: undefined })
-              }
-            }}
-            placeholder="Describe the role, responsibilities, and requirements..."
-            error={!!jobErrors.description}
-            helperText={jobErrors.description}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
-
-          <TextField
-            fullWidth
-            label="Required Skills *"
-            value={jobSkills}
-            onChange={(e) => {
-              setJobSkills(e.target.value)
-              if (jobErrors.skills) {
-                setJobErrors({ ...jobErrors, skills: undefined })
-              }
-            }}
-            placeholder="e.g., JavaScript, React, Python, Communication"
-            error={!!jobErrors.skills}
-            helperText={jobErrors.skills || "List the skills or qualifications required"}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
-
-          <TextField
-            fullWidth
-            label="Application URL (Optional)"
-            value={jobApplicationLink}
-            onChange={(e) => {
-              setJobApplicationLink(e.target.value)
-              if (jobErrors.applicationLink) {
-                setJobErrors({ ...jobErrors, applicationLink: undefined })
-              }
-            }}
-            placeholder="https://company.com/apply"
-            error={!!jobErrors.applicationLink}
-            helperText={jobErrors.applicationLink || "External link where students can apply directly"}
-            disabled={savingJob}
-            sx={{ mb: 2 }}
-          />
+          {JOB_FIELDS.map(({ id, name, label, key, multiline, rows, placeholder, helperText }) => (
+            <TextField
+              key={id}
+              fullWidth
+              id={id}
+              label={label}
+              multiline={multiline}
+              rows={rows}
+              slotProps={{ htmlInput: { name } }}
+              value={jobForm[key]}
+              onChange={(e) => {
+                setJobForm((prev) => ({ ...prev, [key]: e.target.value }))
+                if (jobErrors[key]) setJobErrors((prev) => ({ ...prev, [key]: undefined }))
+              }}
+              placeholder={placeholder}
+              error={!!jobErrors[key]}
+              helperText={jobErrors[key] || helperText}
+              disabled={savingJob}
+              sx={{ mb: 2 }}
+            />
+          ))}
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={() => {
-              setJobDialogOpen(false)
-              setEditingJob(null)
-              setJobTitle("")
-              setJobDescription("")
-              setJobSkills("")
-              setJobApplicationLink("")
-              setJobErrors({})
-            }}
-            disabled={savingJob}
-          >
+          <Button onClick={resetJobForm} disabled={savingJob}>
             Cancel
           </Button>
           <Button

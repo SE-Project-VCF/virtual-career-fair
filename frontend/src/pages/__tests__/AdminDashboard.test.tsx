@@ -302,4 +302,303 @@ describe("AdminDashboard", () => {
       });
     });
   });
+
+  // Fair status labels
+  describe("Fair Status Labels", () => {
+    it("shows 'Ended' chip for a fair whose endTime is in the past", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "fair-ended",
+              name: "Past Fair",
+              isLive: false,
+              startTime: Date.now() - 7200000,
+              endTime: Date.now() - 3600000,
+            },
+          ],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText("Ended")).toBeInTheDocument();
+      });
+    });
+
+    it("shows 'Upcoming' chip for a fair whose startTime is in the future", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "fair-upcoming",
+              name: "Future Fair",
+              isLive: false,
+              startTime: Date.now() + 86400000,
+              endTime: Date.now() + 172800000,
+            },
+          ],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText("Upcoming")).toBeInTheDocument();
+      });
+    });
+
+    it("shows 'Scheduled' chip for a fair with no startTime or endTime", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "fair-scheduled",
+              name: "Unscheduled Fair",
+              isLive: false,
+              startTime: null,
+              endTime: null,
+            },
+          ],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText("Scheduled")).toBeInTheDocument();
+      });
+    });
+
+    it("renders em dash for fairs with no start/end time", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            { id: "fair-1", name: "No Dates Fair", isLive: false, startTime: null, endTime: null },
+          ],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        const dashes = screen.getAllByText("—");
+        expect(dashes.length).toBeGreaterThanOrEqual(2);
+      });
+    });
+  });
+
+  // Toggle Live
+  describe("Toggle Live", () => {
+    it("calls toggle-status API and updates fair isLive on success", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            fairs: [{ id: "fair-1", name: "My Fair", isLive: false, startTime: null, endTime: null }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ isLive: true }),
+        });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("My Fair")).toBeInTheDocument());
+
+      const toggle = screen.getByRole("switch");
+      await user.click(toggle);
+
+      await waitFor(() => {
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          "http://localhost:3000/api/fairs/fair-1/toggle-status",
+          expect.objectContaining({ method: "POST" })
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("switch")).toBeChecked();
+      });
+    });
+
+    it("shows toggle error when API returns error", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            fairs: [{ id: "fair-1", name: "My Fair", isLive: false, startTime: null, endTime: null }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          json: async () => ({ error: "Toggle failed" }),
+        });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("My Fair")).toBeInTheDocument());
+
+      await user.click(screen.getByRole("switch"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Toggle failed")).toBeInTheDocument();
+      });
+    });
+  });
+
+  // Delete Fair
+  describe("Delete Fair", () => {
+    it("calls delete API and reloads fairs when user confirms", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            fairs: [{ id: "fair-1", name: "Doomed Fair", isLive: false, startTime: null, endTime: null }],
+          }),
+        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // DELETE
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }); // reload
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Doomed Fair")).toBeInTheDocument());
+
+      await user.click(screen.getByTestId("DeleteIcon").closest("button")!);
+
+      await waitFor(() => {
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          "http://localhost:3000/api/fairs/fair-1",
+          expect.objectContaining({ method: "DELETE" })
+        );
+      });
+    });
+
+    it("does not call delete API when user cancels confirmation", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(globalThis, "confirm").mockReturnValue(false);
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "fair-1", name: "Safe Fair", isLive: false, startTime: null, endTime: null }],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Safe Fair")).toBeInTheDocument());
+
+      await user.click(screen.getByTestId("DeleteIcon").closest("button")!);
+
+      // Only initial loadFairs call, no DELETE
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // Create Fair
+  describe("Create Fair", () => {
+    const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+      await waitFor(() => expect(screen.getByRole("button", { name: /new fair/i })).toBeInTheDocument());
+      await user.click(screen.getByRole("button", { name: /new fair/i }));
+    };
+
+    it("creates fair successfully and reloads list", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }) // initial load
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "new-fair" }) }) // POST
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }); // reload
+
+      renderAdminDashboard();
+      await openDialog(user);
+
+      await user.type(screen.getByLabelText(/Fair Name/i), "My New Fair");
+      await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+      await waitFor(() => {
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          "http://localhost:3000/api/fairs",
+          expect.objectContaining({
+            method: "POST",
+            body: expect.stringContaining("My New Fair"),
+          })
+        );
+      });
+
+      // Dialog should close
+      await waitFor(() => {
+        expect(screen.queryByText("Create New Fair")).not.toBeInTheDocument();
+      });
+    });
+
+    it("sends startTime and endTime as ISO strings when provided", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "new-fair" }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) });
+
+      renderAdminDashboard();
+      await openDialog(user);
+
+      await user.type(screen.getByLabelText(/Fair Name/i), "Timed Fair");
+      await user.type(screen.getByLabelText(/Start Time/i), "2025-06-01T09:00");
+      await user.type(screen.getByLabelText(/End Time/i), "2025-06-01T17:00");
+      await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+      await waitFor(() => {
+        const body = JSON.parse(
+          (globalThis.fetch as any).mock.calls[1][1].body
+        );
+        expect(body.startTime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        expect(body.endTime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      });
+    });
+
+    it("shows API error message when create fails", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+        .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Name already taken" }) });
+
+      renderAdminDashboard();
+      await openDialog(user);
+
+      await user.type(screen.getByLabelText(/Fair Name/i), "Duplicate Fair");
+      await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Name already taken")).toBeInTheDocument();
+      });
+    });
+
+    it("navigates to fair admin when Manage button is clicked", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "fair-42", name: "Managed Fair", isLive: false, startTime: null, endTime: null }],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByRole("button", { name: /manage/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /manage/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/fair/fair-42/admin");
+    });
+  });
 });

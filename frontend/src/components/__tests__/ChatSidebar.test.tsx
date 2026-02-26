@@ -190,6 +190,37 @@ describe("ChatSidebar", () => {
     channelListSpy.mockRestore();
   });
 
+  it("calls onSelectChannel and skips setActiveChannel when it is not provided", () => {
+    const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
+
+    render(
+      <ChatSidebar
+        client={mockClient}
+        onSelectChannel={mockOnSelectChannel}
+        activeChannel={null}
+      />
+    );
+
+    const preview = channelListSpy.mock.calls[0]?.[0]?.Preview as any;
+    if (preview) {
+      const result = preview({
+        channel: mockChannel,
+        // setActiveChannel intentionally omitted — exercises the ?. branch
+        latestMessagePreview: { text: "Hello" },
+        Avatar: () => null,
+      });
+
+      const onSelect = result?.props?.onSelect;
+      if (onSelect) {
+        onSelect();
+      }
+
+      expect(mockOnSelectChannel).toHaveBeenCalledWith(mockChannel);
+    }
+
+    channelListSpy.mockRestore();
+  });
+
   it("shows inactive state for non-matching channel", () => {
     const differentChannel = {
       cid: "different-channel",

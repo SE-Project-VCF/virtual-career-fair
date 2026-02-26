@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { evaluateFairStatusForFair } from "../fairStatus"
 
-vi.mock("../config", () => ({
+vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }))
 
