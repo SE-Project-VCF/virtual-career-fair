@@ -6,7 +6,7 @@
     "test": "jest --verbose",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "start": "node index.js",
+    "start": "node server.js",
     "dev": "node server.js"
   },
   "keywords": [],
