@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
+const multer = require("multer");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
 const { removeUndefined, generateInviteCode, parseUTCToTimestamp, verifyAdmin } = require("./helpers");
@@ -66,6 +67,25 @@ if (process.env.NODE_ENV !== "test") {
     legacyHeaders: false,
   }));
 }
+
+// --------------------------
+// MULTER CONFIGURATION FOR FILE UPLOADS
+// --------------------------
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    // Only allow PDFs for resume uploads
+    if (req.path === "/api/upload-resume" && file.mimetype !== "application/pdf") {
+      return cb(new Error("Only PDF files are allowed"));
+    }
+    // Allow images for booth logos
+    if (req.path === "/api/upload-booth-logo" && !file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only image files are allowed"));
+    }
+    cb(null, true);
+  }
+});
 
 /* ----------------------------------------------------
    FIREBASE AUTH MIDDLEWARE
@@ -145,6 +165,186 @@ app.get("/api/stream-unread", verifyFirebaseToken, async (req, res) => {
   } catch (err) {
     console.error("Unread calc error:", err);
     return res.status(500).json({ error: "Failed to compute unread" });
+  }
+});
+
+/* ----------------------------------------------------
+   UPLOAD RESUME TO FIREBASE STORAGE (via backend)
+   Uses Firebase Admin SDK to bypass client-side CORS issues
+---------------------------------------------------- */
+app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: "No file provided" });
+    }
+
+    if (file.mimetype !== "application/pdf") {
+      return res.status(400).json({ error: "Only PDF files are allowed" });
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: "File size must be under 5MB" });
+    }
+
+    // Create storage reference using Admin SDK
+    const bucket = admin.storage().bucket();
+    const fileName = `${Date.now()}-${file.originalname.replace(/[^\w.\-() ]/g, "_")}`;
+    const filePath = `resumes/${userId}/${fileName}`;
+    const fileRef = bucket.file(filePath);
+
+    // Upload the file
+    await fileRef.save(file.buffer, {
+      metadata: {
+        contentType: file.mimetype,
+      },
+    });
+
+    // Store the file path in response (not a URL)
+    // Client will call /api/get-resume-url to get a signed URL when viewing
+    return res.json({
+      success: true,
+      filePath: `resumes/${userId}/${fileName}`,
+      message: "Resume uploaded successfully",
+    });
+  } catch (err) {
+    console.error("Resume upload error:", err);
+    return res.status(500).json({ error: err.message || "Failed to upload resume" });
+  }
+});
+
+/* ----------------------------------------------------
+   GET RESUME SIGNED URL (for viewing)
+   Generates a fresh signed URL valid for 1 hour
+---------------------------------------------------- */
+app.get("/api/get-resume-url/:userId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const requesterId = req.user.uid;
+
+    // Only the user can view their own resume
+    if (requesterId !== userId) {
+      return res.status(403).json({ error: "Not authorized to view this resume" });
+    }
+
+    const bucket = admin.storage().bucket();
+    
+    // List files in the user's resume folder to get the most recent one
+    const [files] = await bucket.getFiles({ prefix: `resumes/${userId}/` });
+    
+    if (files.length === 0) {
+      return res.status(404).json({ error: "No resume found" });
+    }
+
+    // Get the most recent file (last one in the list is usually the newest)
+    const latestFile = files[files.length - 1];
+
+    // Generate a signed URL valid for 1 hour
+    const [signedUrl] = await latestFile.getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+    });
+
+    return res.json({
+      success: true,
+      resumeUrl: signedUrl,
+    });
+  } catch (err) {
+    console.error("Get resume URL error:", err);
+    return res.status(500).json({ error: err.message || "Failed to get resume URL" });
+  }
+});
+
+/* ----------------------------------------------------
+   UPLOAD BOOTH LOGO TO FIREBASE STORAGE (via backend)
+   Uses Firebase Admin SDK to bypass client-side CORS issues
+---------------------------------------------------- */
+app.post("/api/upload-booth-logo", verifyFirebaseToken, upload.single("file"), async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    const { companyId } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: "No file provided" });
+    }
+
+    if (!companyId) {
+      return res.status(400).json({ error: "Company ID required" });
+    }
+
+    if (!file.mimetype.startsWith("image/")) {
+      return res.status(400).json({ error: "Only image files are allowed" });
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: "File size must be under 5MB" });
+    }
+
+    // Create storage reference using Admin SDK
+    const bucket = admin.storage().bucket();
+    const fileName = `${Date.now()}-${file.originalname.replace(/[^\w.\-() ]/g, "_")}`;
+    const filePath = `boothLogos/${companyId}/${userId}/${fileName}`;
+    const fileRef = bucket.file(filePath);
+
+    // Upload the file
+    await fileRef.save(file.buffer, {
+      metadata: {
+        contentType: file.mimetype,
+      },
+    });
+
+    // Store the file path in response (not a URL)
+    // Client will call /api/get-booth-logo-url to get a signed URL when viewing
+    return res.json({
+      success: true,
+      filePath: `boothLogos/${companyId}/${userId}/${fileName}`,
+      message: "Logo uploaded successfully",
+    });
+  } catch (err) {
+    console.error("Booth logo upload error:", err);
+    return res.status(500).json({ error: err.message || "Failed to upload logo" });
+  }
+});
+
+/* ----------------------------------------------------
+   GET BOOTH LOGO SIGNED URL (for viewing)
+   Generates a fresh signed URL valid for 1 hour
+   Any authenticated user can view logos
+---------------------------------------------------- */
+app.get("/api/get-booth-logo-url/:companyId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { companyId } = req.params;
+
+    const bucket = admin.storage().bucket();
+    
+    // List files in the company's logo folder to get the most recent one
+    const [files] = await bucket.getFiles({ prefix: `boothLogos/${companyId}/` });
+    
+    if (files.length === 0) {
+      return res.status(404).json({ error: "No logo found" });
+    }
+
+    // Get the most recent file
+    const latestFile = files[files.length - 1];
+
+    // Generate a signed URL valid for 1 hour
+    const [signedUrl] = await latestFile.getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+    });
+
+    return res.json({
+      success: true,
+      logoUrl: signedUrl,
+    });
+  } catch (err) {
+    console.error("Get logo URL error:", err);
+    return res.status(500).json({ error: err.message || "Failed to get logo URL" });
   }
 });
 

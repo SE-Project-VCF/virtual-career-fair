@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "multer": "^2.1.0",
     "vitest": "^4.0.18"
   }
 }

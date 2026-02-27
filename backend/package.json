@@ -1,12 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "test": "jest --verbose",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "start": "node index.js",
+    "start": "node server.js",
     "dev": "node server.js"
   },
   "keywords": [],
@@ -21,6 +21,7 @@
     "express-rate-limit": "^8.2.1",
     "firebase": "^12.4.0",
     "firebase-admin": "^13.5.0",
+    "multer": "^2.1.0",
     "stream-chat": "^9.25.0"
   },
   "devDependencies": {
