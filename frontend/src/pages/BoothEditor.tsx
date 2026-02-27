@@ -31,8 +31,8 @@ import {
   query,
   where,
 } from "firebase/firestore"
-import { db, storage } from "../firebase"
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
+import { db } from "../firebase"
+import { API_URL } from "../config"
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
@@ -112,6 +112,7 @@ export default function BoothEditor() {
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoUploadProgress, setLogoUploadProgress] = useState(0)
+  const [logoSignedUrl, setLogoSignedUrl] = useState<string | null>(null)
 
   // Stable derived values for effects/guards
   const userId = useMemo(() => user?.uid ?? null, [user?.uid])
@@ -153,6 +154,35 @@ export default function BoothEditor() {
       isMountedRef.current = false
     }
   }, [])
+
+  // Fetch signed URL for the booth logo when company ID changes
+  useEffect(() => {
+    const fetchLogoUrl = async () => {
+      if (!companyId || !user) return
+
+      try {
+        const idToken = await authUtils.getIdToken()
+        if (!idToken) return
+
+        const response = await fetch(`${API_URL}/api/get-booth-logo-url/${companyId}`, {
+          headers: {
+            "Authorization": `Bearer ${idToken}`,
+          },
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          if (isMountedRef.current) {
+            setLogoSignedUrl(result.logoUrl)
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch logo URL:", err)
+      }
+    }
+
+    void fetchLogoUrl()
+  }, [companyId, user])
 
   /**
    * Fetch the company doc and validate access.
@@ -278,44 +308,56 @@ export default function BoothEditor() {
   }
 
   /**
-   * Upload logo to Firebase Storage and return the download URL.
-   * Storage path includes companyId + uploader uid for rules + auditing:
-   *   boothLogos/{companyId}/{uploaderUid}/{timestamp}-{original}
+   * Upload logo to backend which handles Firebase Storage upload
+   * Uses backend endpoint to bypass client-side CORS issues
    */
   const uploadLogoAndGetUrl = async (file: File): Promise<string> => {
     if (!company || !userId) {
       throw new Error("Missing company or user id for upload.")
     }
 
-    const fileName = `${Date.now()}-${file.name}`
-    const storagePath = `boothLogos/${company.id}/${userId}/${fileName}`
-    const storageRef = ref(storage, storagePath)
-
     setLogoUploading(true)
     setLogoUploadProgress(0)
 
-    const uploadTask = uploadBytesResumable(storageRef, file)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("companyId", company.id)
 
-    const url = await new Promise<string>((resolve, reject) => {
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          if (!isMountedRef.current) return
-          const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
-          setLogoUploadProgress(pct)
+      // Get the current user's ID token for authentication
+      const idToken = await authUtils.getIdToken()
+      if (!idToken) {
+        throw new Error("Failed to get authentication token. Please log in again.")
+      }
+
+      const response = await fetch(`${API_URL}/api/upload-booth-logo`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${idToken}`,
         },
-        (err) => reject(err),
-        async () => {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref)
-          resolve(downloadUrl)
-        }
-      )
-    })
+        body: formData,
+      })
 
-    if (isMountedRef.current) {
-      setLogoUploading(false)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to upload logo")
+      }
+
+      const result = await response.json()
+      
+      if (isMountedRef.current) {
+        setLogoUploadProgress(100)
+      }
+      
+      // Store the file path (not the URL)
+      // Signed URLs will be fetched on-demand when viewing
+      return result.filePath
+    } finally {
+      if (isMountedRef.current) {
+        setLogoUploading(false)
+        setLogoUploadProgress(0)
+      }
     }
-    return url
   }
 
   /**
@@ -673,10 +715,10 @@ export default function BoothEditor() {
                           border: "1px solid rgba(0,0,0,0.12)",
                         }}
                       />
-                    ) : formData.logoUrl ? (
+                    ) : logoSignedUrl ? (
                       <Box
                         component="img"
-                        src={formData.logoUrl}
+                        src={logoSignedUrl}
                         alt="Current logo"
                         sx={{
                           width: 80,

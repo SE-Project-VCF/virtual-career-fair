@@ -9,14 +9,16 @@ import {
   CircularProgress,
   Card,
 } from "@mui/material"
-import { authUtils } from "../utils/auth"
 import ProfileMenu from "./ProfileMenu"
 import { doc, getDoc, setDoc } from "firebase/firestore"
-import { db, storage } from "../firebase"
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
+import { db } from "../firebase"
+import { authUtils } from "../utils/auth"
+import { API_URL } from "../config"
 
 export default function StudentProfilePage() {
   const navigate = useNavigate()
+
+  // Get user from localStorage like BoothEditor does
   const user = authUtils.getCurrentUser()
 
   const [major, setMajor] = useState("")
@@ -27,17 +29,23 @@ export default function StudentProfilePage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  // Load existing profile data once on mount
+  const [uploadPct, setUploadPct] = useState<number | null>(null)
+
+  // If user is not authenticated, redirect to login
   useEffect(() => {
-    if (!authUtils.isAuthenticated()) {
+    if (!user) {
       navigate("/login")
-      return
     }
+  }, [navigate, user])
+
+  // Load existing profile data once the user is ready
+  useEffect(() => {
     if (!user) return
 
     const fetchProfile = async () => {
       try {
-        const docRef = doc(db, "students", user.uid)
+        // NOTE: use /users (matches your Firestore rules)
+        const docRef = doc(db, "users", user.uid)
         const docSnap = await getDoc(docRef)
         if (docSnap.exists()) {
           const data = docSnap.data()
@@ -46,69 +54,97 @@ export default function StudentProfilePage() {
           setSkills(data.skills || "")
           setResumeUrl(data.resumeUrl || null)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error fetching profile:", err)
+        setError(err?.message || "Failed to load profile.")
       }
     }
 
     fetchProfile()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!user) {
       setError("User not authenticated.")
       return
     }
+
     if (!major || !year) {
       setError("Major and Expected Graduation Year are required.")
       return
     }
-    const gradYear = parseInt(year)
-    if (gradYear < 2023 || gradYear > 2035) {
+
+    const gradYear = parseInt(year, 10)
+    if (Number.isNaN(gradYear) || gradYear < 2023 || gradYear > 2035) {
       setError("Enter a realistic graduation year (2023-2035).")
       return
     }
 
     setError("")
     setLoading(true)
+    setUploadPct(null)
 
     try {
-      const docRef = doc(db, "students", user.uid)
+      const docRef = doc(db, "users", user.uid)
       let uploadedUrl = resumeUrl
 
       if (resumeFile) {
-        const storageRef = ref(storage, `resumes/${user.uid}/${resumeFile.name}`)
-        const uploadTask = uploadBytesResumable(storageRef, resumeFile)
+        // Upload via backend endpoint to bypass CORS issues
+        const formData = new FormData()
+        formData.append("file", resumeFile)
 
-        uploadedUrl = await new Promise<string>((resolve, reject) => {
-          uploadTask.on(
-            "state_changed",
-            null,
-            (err) => reject(err),
-            async () => {
-              const url = await getDownloadURL(uploadTask.snapshot.ref)
-              resolve(url)
-            }
-          )
+        // Get the current user's ID token for authentication
+        const idToken = await authUtils.getIdToken()
+        if (!idToken) {
+          throw new Error("Failed to get authentication token. Please log in again.")
+        }
+
+        const response = await fetch(`${API_URL}/api/upload-resume`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${idToken}`,
+          },
+          body: formData,
         })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to upload resume")
+        }
+
+        const result = await response.json()
+        console.log("Upload response:", result)
+        // Store the file path (not the URL)
+        // Frontend will fetch signed URL when viewing
+        uploadedUrl = result.filePath || null
+        console.log("uploadedUrl set to:", uploadedUrl)
+        if (!uploadedUrl) {
+          console.warn("Warning: filePath is empty/null from backend response")
+        }
       }
 
-      // Use setDoc with merge: true to create the document if it doesn't exist, or update if it does
-      await setDoc(docRef, {
-        major,
-        expectedGradYear: year,
-        skills,
-        resumeUrl: uploadedUrl || null,
-      }, { merge: true })
+      await setDoc(
+        docRef,
+        {
+          major,
+          expectedGradYear: year,
+          skills,
+          resumeUrl: uploadedUrl || null,
+        },
+        { merge: true }
+      )
+
       setResumeUrl(uploadedUrl || null)
+      setResumeFile(null)
       alert("Profile saved successfully!")
-    } catch (err) {
-      console.error(err)
-      setError("Failed to save profile. Try again.")
+    } catch (err: any) {
+      console.error("Failed to save profile:", err)
+      setError(err?.message || "Failed to save profile. Try again.")
     } finally {
       setLoading(false)
+      setUploadPct(null)
     }
   }
 
@@ -125,6 +161,32 @@ export default function StudentProfilePage() {
       }
       setError("")
       setResumeFile(file)
+    }
+  }
+
+  const handleViewResume = async () => {
+    if (!user) return
+    try {
+      const idToken = await authUtils.getIdToken()
+      if (!idToken) {
+        setError("Failed to get authentication token")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/get-resume-url/${user.uid}`, {
+        headers: {
+          "Authorization": `Bearer ${idToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch resume URL")
+      }
+
+      const result = await response.json()
+      window.open(result.resumeUrl, "_blank")
+    } catch (err: any) {
+      setError(err?.message || "Failed to view resume")
     }
   }
 
@@ -202,23 +264,37 @@ export default function StudentProfilePage() {
 
             {/* Resume Upload */}
             <Box sx={{ mb: 3 }}>
-              <Button variant="contained" component="label">
+              <Button variant="contained" component="label" disabled={loading}>
                 Upload Resume (PDF)
-                <input type="file" hidden onChange={handleFileChange} />
+                <input 
+                  id="resume-file-input"
+                  name="resume"
+                  type="file" 
+                  hidden 
+                  onChange={handleFileChange}
+                  accept=".pdf"
+                />
               </Button>
-              {resumeFile && (
-                <Typography sx={{ mt: 1 }}>{resumeFile.name}</Typography>
+
+              {resumeFile && <Typography sx={{ mt: 1 }}>Selected: {resumeFile.name}</Typography>}
+
+              {uploadPct !== null && (
+                <Typography sx={{ mt: 1 }}>Uploading: {uploadPct}%</Typography>
               )}
+
               {!resumeFile && resumeUrl && (
-                <Typography sx={{ mt: 1 }}>
-                  <a
-                    href={resumeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
+                    Resume uploaded successfully
+                  </Typography>
+                  <Button 
+                    variant="outlined"
+                    color="primary" 
+                    onClick={handleViewResume}
                   >
-                    View Existing Resume
-                  </a>
-                </Typography>
+                    View Your Resume
+                  </Button>
+                </Box>
               )}
             </Box>
 
@@ -230,16 +306,12 @@ export default function StudentProfilePage() {
                 alignItems: "center",
               }}
             >
-              <Button variant="outlined" onClick={() => navigate("/dashboard")}>
+              <Button variant="outlined" onClick={() => navigate("/dashboard")} disabled={loading}>
                 Back
               </Button>
 
               <Button type="submit" variant="contained" disabled={loading}>
-                {loading ? (
-                  <CircularProgress size={24} color="success" />
-                ) : (
-                  "Save Profile"
-                )}
+                {loading ? <CircularProgress size={24} color="success" /> : "Save Profile"}
               </Button>
             </Box>
           </form>

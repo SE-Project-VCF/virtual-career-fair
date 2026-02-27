@@ -21,6 +21,7 @@ function getServiceAccount() {
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(getServiceAccount()),
+    storageBucket: "careerfairdb-48105.firebasestorage.app",
   });
 }
 

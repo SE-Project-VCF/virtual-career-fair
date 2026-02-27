@@ -333,6 +333,18 @@ export const authUtils = {
     return authUtils.getCurrentUser() !== null;
   },
 
+  getIdToken: async (): Promise<string | null> => {
+    if (!auth.currentUser) {
+      return null;
+    }
+    try {
+      return await auth.currentUser.getIdToken();
+    } catch (err) {
+      console.error("Failed to get ID token:", err);
+      return null;
+    }
+  },
+
   // ------------------------------
   // Create Company (for company owners)
   // ------------------------------
