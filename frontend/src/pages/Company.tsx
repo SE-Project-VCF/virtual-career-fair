@@ -34,9 +34,12 @@ import AddIcon from "@mui/icons-material/Add"
 import LaunchIcon from "@mui/icons-material/Launch"
 import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
+import DescriptionIcon from "@mui/icons-material/Description"
 import ProfileMenu from "./ProfileMenu"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
+import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -70,6 +73,7 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  applicationForm?: ApplicationForm
 }
 
 interface JobInvitationStats {
@@ -116,6 +120,8 @@ export default function Company() {
   const [deletingJob, setDeletingJob] = useState(false)
   const [statsDialogOpen, setStatsDialogOpen] = useState(false)
   const [selectedJobForStats, setSelectedJobForStats] = useState<Job | null>(null)
+  const [applicationFormDialogOpen, setApplicationFormDialogOpen] = useState(false)
+  const [selectedJobForForm, setSelectedJobForForm] = useState<Job | null>(null)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -220,7 +226,6 @@ export default function Company() {
   const fetchJobs = async (companyId: string) => {
     try {
       setLoadingJobs(true)
-      console.log("Fetching jobs for company:", companyId)
       
       const jobsRef = collection(db, "jobs")
       const q = query(jobsRef, where("companyId", "==", companyId))
@@ -229,6 +234,7 @@ export default function Company() {
       const jobsList: Job[] = []
       jobsSnapshot.forEach((doc) => {
         const data = doc.data()
+        const applicationFormData = data.applicationForm as ApplicationForm | undefined
         jobsList.push({
           id: doc.id,
           companyId: data.companyId,
@@ -237,6 +243,7 @@ export default function Company() {
           majorsAssociated: data.majorsAssociated,
           applicationLink: data.applicationLink || null,
           createdAt: data.createdAt?.toMillis?.() || data.createdAt || null,
+          applicationForm: applicationFormData
         })
       })
       
@@ -248,7 +255,6 @@ export default function Company() {
         return b.createdAt - a.createdAt
       })
       
-      console.log("Fetched jobs:", jobsList.length, "jobs")
       setJobs(jobsList)
       
       // Fetch stats for each job
@@ -301,6 +307,11 @@ export default function Company() {
   const handleViewStatsClick = (job: Job) => {
     setSelectedJobForStats(job)
     setStatsDialogOpen(true)
+  }
+
+  const handleManageApplicationFormClick = (job: Job) => {
+    setSelectedJobForForm(job)
+    setApplicationFormDialogOpen(true)
   }
 
   const handleCreateJobClick = () => {
@@ -384,7 +395,6 @@ export default function Company() {
         setJobDialogOpen(false)
       } else {
         // Create new job
-        console.log("Creating job for company:", company.id, company.companyName)
         
         const jobsRef = collection(db, "jobs")
         const jobData: any = {
@@ -993,6 +1003,15 @@ export default function Company() {
                                     <EditIcon fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
+                                <Tooltip title={job.applicationForm ? "Edit application form" : "Create application form"}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleManageApplicationFormClick(job)}
+                                    sx={{ color: job.applicationForm ? "#388560" : "text.secondary" }}
+                                  >
+                                    <DescriptionIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
                                 <Tooltip title="Delete job posting">
                                   <IconButton
                                     size="small"
@@ -1006,6 +1025,21 @@ export default function Company() {
                             </Box>
                           </Box>
                           
+                          {job.applicationForm && (
+                            <Box sx={{ mt: 1 }}>
+                              <Chip
+                                icon={<DescriptionIcon sx={{ fontSize: 16 }} />}
+                                label="Application Form Available"
+                                size="small"
+                                sx={{
+                                  bgcolor: "rgba(56, 133, 96, 0.08)",
+                                  color: "#388560",
+                                  fontWeight: 500,
+                                }}
+                              />
+                            </Box>
+                          )}
+
                           {/* Job Invitation Stats */}
                           {jobStats[job.id] && jobStats[job.id].totalSent > 0 && (
                             <Box 
@@ -1362,6 +1396,27 @@ export default function Company() {
           }}
           jobId={selectedJobForStats.id}
           jobTitle={selectedJobForStats.name}
+        />
+      )}
+
+      {/* Application Form Builder Dialog */}
+      {selectedJobForForm && (
+        <ApplicationFormBuilderDialog
+          open={applicationFormDialogOpen}
+          onClose={() => {
+            setApplicationFormDialogOpen(false)
+            setSelectedJobForForm(null)
+          }}
+          jobId={selectedJobForForm.id}
+          jobName={selectedJobForForm.name}
+          initialForm={selectedJobForForm.applicationForm}
+          onSaved={(updatedForm) => {
+            setJobs((prev) =>
+              prev.map((job) =>
+                job.id === selectedJobForForm.id ? { ...job, applicationForm: updatedForm } : job
+              )
+            )
+          }}
         />
       )}
     </Box>
