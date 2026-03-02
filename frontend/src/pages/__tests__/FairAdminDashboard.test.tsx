@@ -67,6 +67,7 @@ describe("FairAdminDashboard", () => {
 
     // Default: fair loaded and not live
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -102,6 +103,7 @@ describe("FairAdminDashboard", () => {
 
   it("shows loading spinner when fairLoading is true", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: true,
       fair: null,
       isLive: false,
@@ -115,6 +117,7 @@ describe("FairAdminDashboard", () => {
 
   it("shows Fair not found when fair is null", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: null,
       isLive: false,
@@ -136,6 +139,7 @@ describe("FairAdminDashboard", () => {
 
   it("shows Live chip when fair is live", async () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -213,6 +217,7 @@ describe("FairAdminDashboard — invite code", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -347,6 +352,7 @@ describe("FairAdminDashboard — toggle live", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -436,6 +442,7 @@ describe("FairAdminDashboard — add company dialog", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -551,6 +558,7 @@ describe("FairAdminDashboard — enrolled companies table", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -705,6 +713,7 @@ describe("FairAdminDashboard — edit fair dialog", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",

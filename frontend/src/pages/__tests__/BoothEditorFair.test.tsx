@@ -121,7 +121,8 @@ describe("BoothEditor – fair-scoped", () => {
     mockParams.companyId = "company-1"
     mockSearchParams.instance = new URLSearchParams()
 
-    vi.mocked(useFair).mockReturnValue({ fairId: "fair-1", fair: null, isLive: false, loading: false })
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(), fairId: "fair-1", fair: null, isLive: false, loading: false })
     vi.mocked(authUtils.authUtils.isAuthenticated).mockReturnValue(true)
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "user-1",
