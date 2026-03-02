@@ -160,7 +160,7 @@ describe("BoothEditor – fair-scoped", () => {
     it("prefills company name and shows Create Booth when API returns 404", async () => {
       renderBoothEditor()
       await waitFor(() => {
-        expect((screen.getByRole("textbox", { name: /company name/i }) as HTMLInputElement).value).toBe("Tech Company")
+        expect(screen.getByRole("textbox", { name: /company name/i })).toHaveValue("Tech Company")
       })
       expect(screen.getByRole("heading", { name: /create booth/i })).toBeInTheDocument()
     })
@@ -176,8 +176,8 @@ describe("BoothEditor – fair-scoped", () => {
 
       await waitFor(() => {
         expect(
-          (screen.getByRole("textbox", { name: /company description/i }) as HTMLInputElement).value
-        ).toBe("Fair booth description")
+          screen.getByRole("textbox", { name: /company description/i })
+        ).toHaveValue("Fair booth description")
       })
       expect(screen.getByRole("heading", { name: /edit booth/i })).toBeInTheDocument()
     })
@@ -207,8 +207,8 @@ describe("BoothEditor – fair-scoped", () => {
 
       await waitFor(() => {
         expect(
-          (screen.getByRole("textbox", { name: /company name/i }) as HTMLInputElement).value
-        ).toBe("Tech Company")
+          screen.getByRole("textbox", { name: /company name/i })
+        ).toHaveValue("Tech Company")
       })
       expect(screen.queryByText("Failed to load fair booth")).not.toBeInTheDocument()
       consoleError.mockRestore()
@@ -354,8 +354,8 @@ describe("BoothEditor – fair-scoped", () => {
       await waitFor(() => {
         const desc = screen.getByRole("textbox", {
           name: /company description/i,
-        }) as HTMLInputElement
-        expect(desc.value).toBe("")
+        })
+        expect(desc).toHaveValue("")
       })
 
       // Banner disappears after reset (fairBoothHasData set to false)

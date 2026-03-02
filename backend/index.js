@@ -4,7 +4,7 @@ const bcrypt = require("bcrypt"); // for password encryption
 
 async function seedStudent() {
   // Encrypt password before saving
-  const plainPassword = "student123";
+  const plainPassword = process.env.SEED_STUDENT_PASSWORD || "changeme";
   const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
   const docRef = db.collection("students").doc(); // auto-generated ID
