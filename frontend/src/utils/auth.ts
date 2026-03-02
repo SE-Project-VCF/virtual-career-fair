@@ -7,8 +7,74 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
-import { doc, setDoc, getDoc, collection, getDocs, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { API_URL } from "../config";
+
+/**
+ * Wait for Firebase Auth to be fully initialized.
+ * Helps prevent race condition errors on page load.
+ *
+ * auth.currentUser is null (not undefined) when no user is signed in,
+ * so the previous `!== undefined` guard was always true and never waited.
+ * onAuthStateChanged fires once Firebase has resolved its initial auth state,
+ * so we always wait for it here.
+ */
+async function waitForAuthReady(): Promise<void> {
+  return new Promise((resolve) => {
+    const unsubscribe = auth.onAuthStateChanged(() => {
+      unsubscribe();
+      resolve();
+    });
+    // Timeout after 5 seconds in case of issues
+    setTimeout(() => {
+      unsubscribe();
+      resolve();
+    }, 5000);
+  });
+}
+
+/**
+ * Retry a Firebase operation with exponential backoff.
+ * Helps handle transient network errors.
+ */
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 2,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+      // Don't retry on authentication errors (wrong password, user not found, etc.)
+      if (
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/user-not-found" ||
+        error.code === "auth/email-already-in-use" ||
+        error.code === "auth/invalid-email" ||
+        error.code === "auth/weak-password"
+      ) {
+        throw error;
+      }
+      // Retry on network errors
+      if (attempt < maxRetries && (
+        error.code === "auth/network-request-failed" ||
+        error.code === "unavailable" ||
+        error.message?.includes("network") ||
+        error.message?.includes("timeout")
+      )) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        console.warn(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms due to:`, error.code || error.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
 
 async function trySyncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
   try {
@@ -57,10 +123,10 @@ async function handleLoginSuccess(user: FirebaseUser, userData: any, role?: stri
       needsVerification: true,
     };
   }
-  const currentUser = { uid: user.uid, email: user.email!, role: role || userData.role, ...userData };
+  const currentUser = { uid: user.uid, email: user.email ?? "", role: role || userData.role, ...userData };
   localStorage.setItem("currentUser", JSON.stringify(currentUser));
   // Attempt to sync user to Stream Chat, but don't block login if it fails
-  await trySyncStreamUser(user.uid, user.email!, userData.firstName, userData.lastName);
+  await trySyncStreamUser(user.uid, user.email ?? "", userData.firstName, userData.lastName);
   return { success: true };
 }
 
@@ -116,18 +182,40 @@ export const authUtils = {
     password: string
   ): Promise<{ success: boolean; error?: string; needsVerification?: boolean }> => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (!userDoc.exists()) {
-        await auth.signOut();
-        return { success: false, error: "Account not found." };
-      }
-      const userData = userDoc.data();
-      return await handleLoginSuccess(user, userData);
+      // Wait for auth to be ready before attempting login
+      await waitForAuthReady();
+
+      // Use retry logic for the login operation
+      const result = await retryOperation(async () => {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (!userDoc.exists()) {
+          await auth.signOut();
+          throw new Error("Account not found.");
+        }
+        return { user, userData: userDoc.data() };
+      });
+
+      return await handleLoginSuccess(result.user, result.userData);
     } catch (err: any) {
       console.error("Error logging in:", err);
-      return { success: false, error: err.message };
+      
+      // Provide more user-friendly error messages
+      let errorMessage = err.message;
+      if (err.code === "auth/wrong-password") {
+        errorMessage = "Incorrect password. Please try again.";
+      } else if (err.code === "auth/user-not-found") {
+        errorMessage = "No account found with this email.";
+      } else if (err.code === "auth/invalid-email") {
+        errorMessage = "Invalid email address.";
+      } else if (err.code === "auth/too-many-requests") {
+        errorMessage = "Too many failed login attempts. Please try again later.";
+      } else if (err.code === "auth/network-request-failed") {
+        errorMessage = "Network error. Please check your connection and try again.";
+      }
+
+      return { success: false, error: errorMessage };
     }
   },
 
@@ -173,7 +261,14 @@ export const authUtils = {
     error?: string;
   }> => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      // Wait for auth to be ready
+      await waitForAuthReady();
+
+      // Use retry logic for Google sign-in
+      const result = await retryOperation(async () => {
+        return await signInWithPopup(auth, googleProvider);
+      });
+
       const user = result.user;
 
       const userRef = doc(db, "users", user.uid);
@@ -197,7 +292,7 @@ export const authUtils = {
         // ✔ LOGIN SCREEN → allow login
         const currentUser = {
           uid: user.uid,
-          email: user.email!,
+          email: user.email ?? "",
           role: existingData.role,
           ...existingData,
         };
@@ -205,7 +300,7 @@ export const authUtils = {
         localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
         // Attempt to sync user to Stream Chat, but don't block login if it fails
-        await trySyncStreamUser(user.uid, user.email!, existingData.firstName, existingData.lastName);
+        await trySyncStreamUser(user.uid, user.email ?? "", existingData.firstName, existingData.lastName);
 
         return {
           success: true,
@@ -274,7 +369,7 @@ export const authUtils = {
         }
 
         const userData = userDoc.data();
-        const currentUser = { uid: user.uid, email: user.email!, ...userData };
+        const currentUser = { uid: user.uid, email: user.email ?? "", ...userData };
         localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
         return { success: true, user: currentUser };
@@ -314,37 +409,32 @@ export const authUtils = {
   // ------------------------------
   createCompany: async (
     companyName: string,
-    ownerId: string
-  ): Promise<{ success: boolean; error?: string; companyId?: string }> => {
+    _ownerId: string
+  ): Promise<{ success: boolean; error?: string; companyId?: string; inviteCode?: string }> => {
     try {
-      const companyRef = doc(collection(db, "companies"));
-      const companyId = companyRef.id;
-      const inviteCode = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
-
-      await setDoc(companyRef, {
-        companyId,
-        companyName,
-        ownerId,
-        inviteCode,
-        createdAt: new Date().toISOString(),
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`${API_URL}/api/companies`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ companyName }),
       });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || "Failed to create company" };
 
-      // Update the user's companyId if they don't have one
-      const userRef = doc(db, "users", ownerId);
-      const userDoc = await getDoc(userRef);
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        if (!userData.companyId) {
-          await setDoc(userRef, {
-            ...userData,
-            companyId,
-            companyName,
-            inviteCode,
-          }, { merge: true });
-        }
+      // Update localStorage so the dashboard reflects the new company
+      const currentUser = authUtils.getCurrentUser();
+      if (currentUser) {
+        localStorage.setItem("currentUser", JSON.stringify({
+          ...currentUser,
+          companyId: data.companyId,
+          companyName,
+        }));
       }
 
-      return { success: true, companyId };
+      return { success: true, companyId: data.companyId, inviteCode: data.inviteCode };
     } catch (err: any) {
       console.error("Error creating company:", err);
       return { success: false, error: err.message };
@@ -356,70 +446,32 @@ export const authUtils = {
   // ------------------------------
   linkRepresentativeToCompany: async (
     inviteCode: string,
-    userId: string
+    _userId: string
   ): Promise<{ success: boolean; error?: string; companyId?: string; companyName?: string }> => {
     try {
-      // Find company with matching invite code
-      const companiesRef = collection(db, "companies");
-      const companiesSnapshot = await getDocs(companiesRef);
-
-      let companyDoc: any = null;
-      let companyId: string | null = null;
-
-      companiesSnapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.inviteCode === inviteCode.toUpperCase()) {
-          companyDoc = { id: doc.id, ...data };
-          companyId = doc.id;
-        }
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`${API_URL}/api/link-company`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ inviteCode: inviteCode.trim().toUpperCase() }),
       });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || "Invalid invite code." };
 
-      if (!companyDoc || !companyId) {
-        return { success: false, error: "Invalid invite code." };
-      }
-
-      // Check if user is already linked to this company
-      const userRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        if (userData.companyId === companyId) {
-          return { success: false, error: "You are already linked to this company." };
-        }
-      }
-
-      // Add user to company's representativeIDs array
-      // arrayUnion is atomic and won't add duplicates, so no need to check first
-      const companyRef = doc(db, "companies", companyId);
-      await updateDoc(companyRef, {
-        representativeIDs: arrayUnion(userId),
-      });
-
-      // Update user document with companyId and companyName
-      await setDoc(userRef, {
-        companyId,
-        companyName: companyDoc.companyName,
-      }, { merge: true });
-
-      // Update localStorage
+      // Update localStorage so the dashboard reflects the linked company
       const currentUser = authUtils.getCurrentUser();
       if (currentUser) {
-        localStorage.setItem(
-          "currentUser",
-          JSON.stringify({
-            ...currentUser,
-            companyId,
-            companyName: companyDoc.companyName,
-          })
-        );
+        localStorage.setItem("currentUser", JSON.stringify({
+          ...currentUser,
+          companyId: data.companyId,
+          companyName: data.companyName,
+        }));
       }
 
-      return {
-        success: true,
-        companyId,
-        companyName: companyDoc.companyName
-      };
+      return { success: true, companyId: data.companyId, companyName: data.companyName };
     } catch (err: any) {
       console.error("Error linking representative to company:", err);
       return { success: false, error: err.message };

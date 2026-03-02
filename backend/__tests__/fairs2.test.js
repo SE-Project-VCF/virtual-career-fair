@@ -238,16 +238,15 @@ describe("PUT /api/fairs/:fairId", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 500 due to undefined companyId in route handler (known bug)", async () => {
-    // The PUT /api/fairs/:fairId handler references an undefined `companyId` variable.
-    // This causes a ReferenceError which the Express error handler converts to a 500.
+  it("updates fair successfully as admin", async () => {
     verifyAdmin.mockResolvedValue(null);
     setupFairsDbMock({ fairData: FAIR_DATA });
     const res = await request(app)
       .put("/api/fairs/fair-id")
       .set("Authorization", authHeader())
       .send({ name: "Updated Fair" });
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 });
 
@@ -262,16 +261,15 @@ describe("DELETE /api/fairs/:fairId", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 500 due to undefined companyId in route handler (known bug)", async () => {
-    // The DELETE /api/fairs/:fairId handler also references an undefined `companyId` variable.
-    // This causes a ReferenceError which Express converts to a 500.
+  it("deletes fair successfully as admin", async () => {
     verifyAdmin.mockResolvedValue(null);
     setupFairsDbMock({ fairData: FAIR_DATA });
     const res = await request(app)
       .delete("/api/fairs/fair-id")
       .set("Authorization", authHeader())
       .send({});
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 });
 

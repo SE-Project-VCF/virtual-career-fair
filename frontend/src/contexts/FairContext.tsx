@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import type { ReactNode } from "react"
+import type { Dispatch, ReactNode, SetStateAction } from "react"
 import { API_URL } from "../config"
+import { auth } from "../firebase"
 
 interface FairData {
   id: string
@@ -15,6 +16,7 @@ interface FairData {
 interface FairContextType {
   fairId: string | null
   fair: FairData | null
+  setFair: Dispatch<SetStateAction<FairData | null>>
   isLive: boolean
   loading: boolean
 }
@@ -22,9 +24,19 @@ interface FairContextType {
 const FairContext = createContext<FairContextType>({
   fairId: null,
   fair: null,
+  setFair: () => {},
   isLive: false,
   loading: true,
 })
+
+function waitForAuthReady(): Promise<void> {
+  return new Promise(resolve => {
+    const unsub = auth.onAuthStateChanged(() => {
+      unsub()
+      resolve()
+    })
+  })
+}
 
 interface FairProviderProps {
   fairId: string
@@ -39,12 +51,23 @@ export function FairProvider({ fairId, children }: Readonly<FairProviderProps>) 
   useEffect(() => {
     if (!fairId) return
 
+    let cancelled = false
+
     async function loadFair() {
       try {
+        // Wait for Firebase auth to initialize before fetching
+        await waitForAuthReady()
+
+        if (cancelled) return
+
+        const token = await auth.currentUser?.getIdToken()
+        const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
         const [fairRes, statusRes] = await Promise.all([
-          fetch(`${API_URL}/api/fairs/${fairId}`),
+          fetch(`${API_URL}/api/fairs/${fairId}`, { headers: authHeaders }),
           fetch(`${API_URL}/api/fairs/${fairId}/status`),
         ])
+
+        if (cancelled) return
 
         if (fairRes.ok) {
           const fairData = await fairRes.json()
@@ -58,15 +81,16 @@ export function FairProvider({ fairId, children }: Readonly<FairProviderProps>) 
       } catch (err) {
         console.error("Error loading fair:", err)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     loadFair()
+    return () => { cancelled = true }
   }, [fairId])
 
   const contextValue = useMemo(
-    () => ({ fairId, fair, isLive, loading }),
+    () => ({ fairId, fair, setFair, isLive, loading }),
     [fairId, fair, isLive, loading]
   )
 

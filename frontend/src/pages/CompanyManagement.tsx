@@ -20,7 +20,8 @@ import {
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { collection, query, where, getDocs } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
+import { API_URL } from "../config"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import BusinessIcon from "@mui/icons-material/Business"
 import AddIcon from "@mui/icons-material/Add"
@@ -36,7 +37,6 @@ import CancelIcon from "@mui/icons-material/Cancel"
 interface Company {
   id: string
   companyName: string
-  inviteCode: string
   representativeIDs: string[]
   boothId?: string
   ownerId: string
@@ -58,6 +58,7 @@ export default function CompanyManagement() {
   const [editingInviteCode, setEditingInviteCode] = useState<string | null>(null)
   const [editedInviteCode, setEditedInviteCode] = useState("")
   const [updatingInviteCode, setUpdatingInviteCode] = useState(false)
+  const [inviteCodes, setInviteCodes] = useState<Record<string, string>>({})
 
   // Memoize user ID and role to prevent unnecessary re-renders
   const userId = useMemo(() => user?.uid, [user?.uid])
@@ -83,13 +84,28 @@ export default function CompanyManagement() {
 
       const companiesList: Company[] = []
       querySnapshot.forEach((doc) => {
-        companiesList.push({
-          id: doc.id,
-          ...doc.data()
-        } as Company)
+        companiesList.push({ id: doc.id, ...doc.data() } as Company)
       })
 
       setCompanies(companiesList)
+
+      // Fetch decrypted invite codes from the backend for each company
+      const token = await auth.currentUser?.getIdToken()
+      const codeEntries = await Promise.all(
+        companiesList.map(async (c) => {
+          try {
+            const r = await fetch(`${API_URL}/api/companies/${c.id}/invite-code`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!r.ok) return [c.id, ""] as [string, string]
+            const d = await r.json()
+            return [c.id, d.inviteCode ?? ""] as [string, string]
+          } catch {
+            return [c.id, ""] as [string, string]
+          }
+        })
+      )
+      setInviteCodes(Object.fromEntries(codeEntries))
     } catch (err) {
       console.error("Error fetching companies:", err)
       setError("Failed to load companies")
@@ -195,8 +211,8 @@ export default function CompanyManagement() {
       const result = await authUtils.updateInviteCode(companyId, userId)
 
       if (result.success && result.inviteCode) {
+        setInviteCodes((prev) => ({ ...prev, [companyId]: result.inviteCode! }))
         setSuccess("Invite code regenerated successfully!")
-        fetchCompanies() // Refresh the list
         setTimeout(() => setSuccess(""), 3000)
       } else {
         setError(result.error || "Failed to regenerate invite code")
@@ -225,10 +241,10 @@ export default function CompanyManagement() {
       const result = await authUtils.updateInviteCode(companyId, userId, trimmedCode)
 
       if (result.success && result.inviteCode) {
+        setInviteCodes((prev) => ({ ...prev, [companyId]: result.inviteCode! }))
         setSuccess("Invite code updated successfully!")
         setEditingInviteCode(null)
         setEditedInviteCode("")
-        fetchCompanies() // Refresh the list
         setTimeout(() => setSuccess(""), 3000)
       } else {
         setError(result.error || "Failed to update invite code")
@@ -401,7 +417,7 @@ export default function CompanyManagement() {
                               <IconButton
                                 onClick={() => {
                                   setEditingInviteCode(company.id)
-                                  setEditedInviteCode(company.inviteCode)
+                                  setEditedInviteCode(inviteCodes[company.id] ?? "")
                                 }}
                                 size="small"
                                 sx={{ color: "#388560" }}
@@ -415,7 +431,7 @@ export default function CompanyManagement() {
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <TextField
                           fullWidth
-                          value={editingInviteCode === company.id ? editedInviteCode : company.inviteCode}
+                          value={editingInviteCode === company.id ? editedInviteCode : (inviteCodes[company.id] ?? "")}
                           onChange={(e) => {
                             if (editingInviteCode === company.id) {
                               setEditedInviteCode(e.target.value.toUpperCase().replaceAll(/[^A-Z0-9]/g, ""))
@@ -435,7 +451,7 @@ export default function CompanyManagement() {
                         {editingInviteCode !== company.id && (
                           <Tooltip title="Copy invite code">
                             <IconButton
-                              onClick={() => copyToClipboard(company.inviteCode)}
+                              onClick={() => copyToClipboard(inviteCodes[company.id] ?? "")}
                               sx={{ color: "#388560" }}
                             >
                               <ContentCopyIcon />

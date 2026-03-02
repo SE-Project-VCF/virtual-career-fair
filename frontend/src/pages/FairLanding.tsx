@@ -13,10 +13,13 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  IconButton,
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import PageHeader from "../components/PageHeader"
+import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import NotificationBell from "../components/NotificationBell"
+import ProfileMenu from "./ProfileMenu"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -145,12 +148,33 @@ export default function FairLanding() {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <PageHeader />
+      <Box
+        sx={{
+          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+          py: 3,
+          px: 4,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <IconButton onClick={() => navigate("/fairs")} sx={{ color: "white" }}>
+                <ArrowBackIcon />
+              </IconButton>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
+                {fair?.name ?? "Career Fair"}
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <NotificationBell />
+              <ProfileMenu />
+            </Box>
+          </Box>
+        </Container>
+      </Box>
 
       <Container maxWidth="md" sx={{ py: 6 }}>
-        <Button variant="text" onClick={() => navigate("/fairs")} sx={{ mb: 3 }}>
-          ← All Fairs
-        </Button>
 
         <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 2 }}>
           <Typography variant="h3" fontWeight="bold">

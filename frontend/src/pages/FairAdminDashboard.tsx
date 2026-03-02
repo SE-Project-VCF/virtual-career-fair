@@ -40,7 +40,7 @@ import { API_URL } from "../config"
 
 export default function FairAdminDashboard() {
   const navigate = useNavigate()
-  const { fair, isLive, loading: fairLoading, fairId } = useFair()
+  const { fair, setFair, isLive, loading: fairLoading, fairId } = useFair()
   const user = authUtils.getCurrentUser()
 
   const [toggling, setToggling] = useState(false)
@@ -236,9 +236,7 @@ export default function FairAdminDashboard() {
       }
       
       const data = await res.json()
-      if (fair) {
-        fair.inviteCode = data.inviteCode
-      }
+      setFair(prev => prev ? { ...prev, inviteCode: data.inviteCode } : prev)
       setCodeCopied(false)
     } catch (err: any) {
       console.error("Error refreshing invite code:", err)

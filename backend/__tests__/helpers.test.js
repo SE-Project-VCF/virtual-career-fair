@@ -46,15 +46,15 @@ describe("removeUndefined", () => {
 });
 
 describe("generateInviteCode", () => {
-  it("returns a string of length 8", () => {
+  it("returns a string of length 12", () => {
     const code = generateInviteCode();
     expect(typeof code).toBe("string");
-    expect(code).toHaveLength(8);
+    expect(code).toHaveLength(12);
   });
 
   it("returns only uppercase hex characters", () => {
     const code = generateInviteCode();
-    expect(code).toMatch(/^[A-F0-9]{8}$/);
+    expect(code).toMatch(/^[A-F0-9]{12}$/);
   });
 
   it("returns different values on successive calls", () => {

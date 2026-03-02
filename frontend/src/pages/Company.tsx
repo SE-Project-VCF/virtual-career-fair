@@ -4,7 +4,7 @@ import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularP
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
 import BusinessIcon from "@mui/icons-material/Business"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
@@ -33,7 +33,6 @@ import DialogActions from "@mui/material/DialogActions"
 interface Company {
   id: string
   companyName: string
-  inviteCode: string
   representativeIDs: string[]
   boothId?: string
   ownerId: string
@@ -84,6 +83,7 @@ function getRepresentativeName(rep: Representative): string {
 
 function CompanyInfoCard({
   company,
+  inviteCode,
   isOwner,
   editingInviteCode,
   editedInviteCode,
@@ -95,6 +95,7 @@ function CompanyInfoCard({
   copyToClipboard,
 }: Readonly<{
   company: Company
+  inviteCode: string
   isOwner: boolean
   editingInviteCode: boolean
   editedInviteCode: string
@@ -170,7 +171,7 @@ function CompanyInfoCard({
                       <IconButton
                         onClick={() => {
                           setEditingInviteCode(true)
-                          setEditedInviteCode(company.inviteCode)
+                          setEditedInviteCode(inviteCode)
                         }}
                         size="small"
                         sx={{ color: "#388560" }}
@@ -204,10 +205,10 @@ function CompanyInfoCard({
                 ) : (
                   <>
                     <Typography variant="body1" sx={{ fontFamily: "monospace", fontWeight: 600, flex: 1 }}>
-                      {company.inviteCode}
+                      {inviteCode}
                     </Typography>
                     <Tooltip title="Copy invite code">
-                      <IconButton onClick={() => copyToClipboard(company.inviteCode)} size="small">
+                      <IconButton onClick={() => copyToClipboard(inviteCode)} size="small">
                         <ContentCopyIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -637,6 +638,7 @@ export default function Company() {
   const [editingInviteCode, setEditingInviteCode] = useState(false)
   const [editedInviteCode, setEditedInviteCode] = useState("")
   const [updatingInviteCode, setUpdatingInviteCode] = useState(false)
+  const [inviteCode, setInviteCode] = useState("")
   const [jobs, setJobs] = useState<Job[]>([])
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [jobDialogOpen, setJobDialogOpen] = useState(false)
@@ -720,11 +722,28 @@ export default function Company() {
 
       fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
+      fetchInviteCode(companyInfo.id)
     } catch (err) {
       console.error("Error fetching company:", err)
       setError("Failed to load company")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchInviteCode = async (companyId: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) return
+      const response = await fetch(`${API_URL}/api/companies/${companyId}/invite-code`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setInviteCode(data.inviteCode ?? "")
+      }
+    } catch (err) {
+      console.error("Error fetching invite code:", err)
     }
   }
 
@@ -1027,8 +1046,8 @@ export default function Company() {
       const result = await authUtils.updateInviteCode(company.id, userId)
 
       if (result.success && result.inviteCode) {
+        setInviteCode(result.inviteCode)
         setSuccess("Invite code regenerated successfully!")
-        fetchCompany() // Refresh company data
         setTimeout(() => setSuccess(""), 3000)
       } else {
         setError(result.error || "Failed to regenerate invite code")
@@ -1057,10 +1076,10 @@ export default function Company() {
       const result = await authUtils.updateInviteCode(company.id, userId, trimmedCode)
 
       if (result.success && result.inviteCode) {
+        setInviteCode(result.inviteCode)
         setSuccess("Invite code updated successfully!")
         setEditingInviteCode(false)
         setEditedInviteCode("")
-        fetchCompany() // Refresh company data
         setTimeout(() => setSuccess(""), 3000)
       } else {
         setError(result.error || "Failed to update invite code")
@@ -1145,6 +1164,7 @@ export default function Company() {
           {/* Company Information Card */}
           <CompanyInfoCard
             company={company}
+            inviteCode={inviteCode}
             isOwner={isOwner}
             editingInviteCode={editingInviteCode}
             editedInviteCode={editedInviteCode}

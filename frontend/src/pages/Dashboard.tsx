@@ -376,13 +376,11 @@ function AdminSection({ navigate }: Readonly<{
 
 function StudentSection({
   navigate,
-  isLive,
   jobInvitationsCount,
   newInvitationsCount,
   loadingInvitations,
 }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
-  isLive: boolean
   jobInvitationsCount: number
   newInvitationsCount: number
   loadingInvitations: boolean
@@ -406,17 +404,9 @@ function StudentSection({
           <DashboardCard
             icon={<BusinessIcon sx={{ fontSize: 32, color: "#b03a6c" }} />}
             title="Browse Company Booths"
-            description={isLive
-              ? "Explore opportunities from top companies at the virtual career fair."
-              : "The career fair is not currently live. Check back later to browse company booths."}
-            buttonLabel="View All Booths"
-            buttonOnClick={() => navigate("/booths")}
-            buttonDisabled={!isLive}
-            secondaryButton={{
-              label: "View Booth History",
-              onClick: () => { navigate("/dashboard/booth-history"); },
-              disabled: !isLive
-            }}
+            description="Browse live career fairs and explore opportunities from top companies at virtual career fairs."
+            buttonLabel="Browse All Fairs"
+            buttonOnClick={() => navigate("/fairs")}
             colorTheme="pink"
           />
         </Grid>
@@ -587,9 +577,8 @@ function renderRoleSection(
       return <AdminSection navigate={navigate} />
     case "student":
       return (
-        <StudentSection 
+        <StudentSection
           navigate={navigate}
-          isLive={props.isLive}
           jobInvitationsCount={props.jobInvitationsCount}
           newInvitationsCount={props.newInvitationsCount}
           loadingInvitations={props.loadingInvitations}

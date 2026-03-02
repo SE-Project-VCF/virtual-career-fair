@@ -397,10 +397,10 @@ export default function FairList() {
           <TextField
             label="Invite Code"
             value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value.toUpperCase().slice(0, 8))}
+            onChange={(e) => setInviteCode(e.target.value.toUpperCase().slice(0, 12))}
             fullWidth
             autoFocus
-            slotProps={{ htmlInput: { maxLength: 8, style: { textTransform: "uppercase", letterSpacing: 2 } } }}
+            slotProps={{ htmlInput: { maxLength: 12, style: { textTransform: "uppercase", letterSpacing: 2 } } }}
             onKeyDown={(e) => { if (e.key === "Enter") handleJoinFair() }}
           />
           {joinError && (

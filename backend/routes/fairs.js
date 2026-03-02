@@ -1,15 +1,30 @@
 const express = require("express");
 const router = express.Router();
+const rateLimit = require("express-rate-limit");
 const { db, auth } = require("../firebase");
 const admin = require("firebase-admin");
 const {
   removeUndefined,
   generateInviteCode,
+  encryptInviteCode,
+  decryptInviteCode,
+  hmacInviteCode,
   parseUTCToTimestamp,
   verifyAdmin,
   evaluateFairStatusForFair,
   verifyFirebaseToken,
 } = require("../helpers");
+
+// Rate limiter for enrollment endpoint (prevent brute force on invite codes)
+const enrollmentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 enrollment attempts per window
+  message: "Too many enrollment attempts, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip rate limiting in test environment
+  skip: (req) => process.env.NODE_ENV === "test",
+});
 
 
 async function getRequestingRoleFromAuthHeader(authHeader) {
@@ -35,7 +50,7 @@ function buildHttpError(status, message) {
 async function resolveFairIdFromInviteCode(fairId, inviteCode) {
   if (!inviteCode) return fairId;
 
-  const fairSnap = await db.collection("fairs").where("inviteCode", "==", inviteCode).get();
+  const fairSnap = await db.collection("fairs").where("inviteCodeHmac", "==", hmacInviteCode(inviteCode)).get();
   if (fairSnap.empty) throw buildHttpError(400, "Invalid invite code");
 
   return fairSnap.docs[0].id;
@@ -186,15 +201,20 @@ async function verifyCompanyAccess(userId, companyId) {
 router.get("/api/fairs", async (_req, res) => {
   try {
     const snap = await db.collection("fairs").orderBy("createdAt", "desc").get();
+    const now = Date.now();
     const fairs = snap.docs.map((doc) => {
       const data = doc.data();
+      const startMs = data.startTime ? data.startTime.toMillis() : null;
+      const endMs = data.endTime ? data.endTime.toMillis() : null;
+      const isScheduledLive = startMs !== null && endMs !== null && now >= startMs && now <= endMs;
+      const isLive = data.isLive === true || isScheduledLive;
       return {
         id: doc.id,
         name: data.name,
         description: data.description || null,
-        isLive: data.isLive || false,
-        startTime: data.startTime ? data.startTime.toMillis() : null,
-        endTime: data.endTime ? data.endTime.toMillis() : null,
+        isLive,
+        startTime: startMs,
+        endTime: endMs,
         createdAt: data.createdAt ? data.createdAt.toMillis() : null,
       };
     });
@@ -231,24 +251,39 @@ router.get("/api/fairs/my-enrollments", verifyFirebaseToken, async (req, res) =>
   }
 });
 
-/* GET /api/fairs/:fairId - public: single fair detail */
+/* GET /api/fairs/:fairId - public: single fair detail (invite code only returned to admins) */
 router.get("/api/fairs/:fairId", async (req, res) => {
   const { fairId } = req.params;
   try {
     const fairDoc = await db.collection("fairs").doc(fairId).get();
     if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
     const data = fairDoc.data();
-    return res.json({
+
+    const requestingRole = await getRequestingRoleFromAuthHeader(req.headers.authorization);
+    const isAdmin = requestingRole === "administrator";
+
+    let inviteCode;
+    if (isAdmin && data.inviteCodeEncrypted) {
+      try {
+        inviteCode = decryptInviteCode(data.inviteCodeEncrypted);
+      } catch (error_) {
+        console.error("Failed to decrypt invite code:", error_);
+      }
+    }
+
+    const response = {
       id: fairDoc.id,
       name: data.name,
       description: data.description || null,
       isLive: data.isLive || false,
       startTime: data.startTime ? data.startTime.toMillis() : null,
       endTime: data.endTime ? data.endTime.toMillis() : null,
-      inviteCode: data.inviteCode,
       createdAt: data.createdAt ? data.createdAt.toMillis() : null,
       updatedAt: data.updatedAt ? data.updatedAt.toMillis() : null,
-    });
+    };
+    if (inviteCode !== undefined) response.inviteCode = inviteCode;
+
+    return res.json(response);
   } catch (err) {
     console.error("GET /api/fairs/:fairId error:", err);
     return res.status(500).json({ error: "Failed to get fair" });
@@ -279,7 +314,7 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
     return res.status(adminError.status).json({ error: adminError.error });
   }
 
-  if (!name || !name.trim()) {
+  if (!name?.trim()) {
     return res.status(400).json({ error: "Fair name is required" });
   }
 
@@ -292,20 +327,23 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ error: "startTime must be before endTime" });
     }
 
+    const rawCode = generateInviteCode();
     const fairData = removeUndefined({
       name: name.trim(),
       description: description ? description.trim() : null,
       isLive: false,
       startTime: parsedStart,
       endTime: parsedEnd,
-      inviteCode: generateInviteCode(),
+      inviteCodeEncrypted: encryptInviteCode(rawCode),
+      inviteCodeHmac: hmacInviteCode(rawCode),
       createdAt: admin.firestore.Timestamp.now(),
       createdBy: adminUid,
       updatedAt: admin.firestore.Timestamp.now(),
     });
 
     const fairRef = await db.collection("fairs").add(fairData);
-    return res.status(201).json({ id: fairRef.id, ...fairData });
+    // Return plaintext code to admin; encrypted blob stays server-side
+    return res.status(201).json({ id: fairRef.id, ...fairData, inviteCode: rawCode });
   } catch (err) {
     console.error("POST /api/fairs error:", err);
     return res.status(500).json({ error: "Failed to create fair" });
@@ -318,9 +356,8 @@ router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { userId, name, description, startTime, endTime } = req.body;
   const adminUid = req.user.uid;
 
-
-  const accessError = await ensureAdminOrCompanyAccess(userId || adminUid, companyId);
-  if (accessError) return res.status(accessError.status).json({ error: accessError.error });
+  const adminError = await verifyAdmin(userId || adminUid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
 
   try {
     const fairDoc = await db.collection("fairs").doc(fairId).get();
@@ -353,9 +390,8 @@ router.delete("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { userId } = req.body;
   const adminUid = req.user.uid;
 
-
-  const accessError = await ensureAdminOrCompanyAccess(userId || adminUid, companyId);
-  if (accessError) return res.status(accessError.status).json({ error: accessError.error });
+  const adminError = await verifyAdmin(userId || adminUid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
 
   try {
     const fairDoc = await db.collection("fairs").doc(fairId).get();
@@ -420,15 +456,16 @@ router.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async
     const fairDoc = await db.collection("fairs").doc(fairId).get();
     if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
 
-    const newInviteCode = generateInviteCode();
+    const rawCode = generateInviteCode();
 
     await db.collection("fairs").doc(fairId).update({
-      inviteCode: newInviteCode,
+      inviteCodeEncrypted: encryptInviteCode(rawCode),
+      inviteCodeHmac: hmacInviteCode(rawCode),
       updatedAt: admin.firestore.Timestamp.now(),
       updatedBy: adminUid,
     });
 
-    return res.json({ inviteCode: newInviteCode });
+    return res.json({ inviteCode: rawCode });
   } catch (err) {
     console.error("POST /api/fairs/:fairId/refresh-code error:", err);
     return res.status(500).json({ error: "Failed to refresh invite code" });
@@ -440,7 +477,7 @@ router.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async
 ======================================================= */
 
 /* POST /api/fairs/:fairId/enroll - enroll company in fair */
-router.post("/api/fairs/:fairId/enroll", verifyFirebaseToken, async (req, res) => {
+router.post("/api/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const { companyId, inviteCode } = req.body;
   const requestingUid = req.user.uid;
@@ -717,7 +754,7 @@ router.post("/api/fairs/:fairId/jobs", verifyFirebaseToken, async (req, res) => 
   const requestingUid = req.user.uid;
 
   if (!companyId) return res.status(400).json({ error: "companyId is required" });
-  if (!name || !name.trim()) return res.status(400).json({ error: "Job name is required" });
+  if (!name?.trim()) return res.status(400).json({ error: "Job name is required" });
 
   try {
     const fairDoc = await db.collection("fairs").doc(fairId).get();

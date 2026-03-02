@@ -248,12 +248,12 @@ describe("GET /api/fairs/:fairId", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns fair data", async () => {
+  it("returns fair data without invite code for unauthenticated caller", async () => {
     setupFairsDbMock({ fairData: FAIR_DATA });
     const res = await request(app).get("/api/fairs/fair-id");
     expect(res.status).toBe(200);
     expect(res.body.name).toBe("Spring Fair");
-    expect(res.body.inviteCode).toBe("ABCD1234");
+    expect(res.body.inviteCode).toBeUndefined();
   });
 });
 

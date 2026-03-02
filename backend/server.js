@@ -5,7 +5,7 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
-const { removeUndefined, generateInviteCode, validateJobInput, verifyAdmin, verifyFirebaseToken } = require("./helpers");
+const { removeUndefined, generateInviteCode, encryptInviteCode, decryptInviteCode, hmacInviteCode, validateJobInput, verifyAdmin, verifyFirebaseToken } = require("./helpers");
 
 
 // Fair routes (multi-fair support)
@@ -105,15 +105,16 @@ app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (r
     const fairDoc = await db.collection("fairs").doc(fairId).get();
     if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
 
-    const newInviteCode = generateInviteCode();
+    const rawCode = generateInviteCode();
 
     await db.collection("fairs").doc(fairId).update({
-      inviteCode: newInviteCode,
+      inviteCodeEncrypted: encryptInviteCode(rawCode),
+      inviteCodeHmac: hmacInviteCode(rawCode),
       updatedAt: admin.firestore.Timestamp.now(),
       updatedBy: adminUid,
     });
 
-    return res.json({ inviteCode: newInviteCode });
+    return res.json({ inviteCode: rawCode });
   } catch (err) {
     console.error("POST /api/fairs/:fairId/refresh-invite-code error:", err);
     return res.status(500).json({ error: "Failed to refresh invite code" });
@@ -203,7 +204,7 @@ app.post("/api/sync-stream-user", verifyFirebaseToken, async (req, res) => {
     }
 
     const username =
-      email && email.includes("@")
+      email?.includes("@")
         ? email.split("@")[0]
         : email || uid;
 
@@ -254,11 +255,11 @@ app.post("/api/register-user", async (req, res) => {
     });
 
     let companyId = null;
-    let inviteCode = null;
+    let plainInviteCode = null;
 
     // Company owner setup
     if (role === "companyOwner") {
-      inviteCode = generateInviteCode();
+      plainInviteCode = generateInviteCode();
 
       const companyRef = db.collection("companies").doc();
       companyId = companyRef.id;
@@ -268,13 +269,14 @@ app.post("/api/register-user", async (req, res) => {
           companyId,
           companyName,
           ownerId: userRecord.uid,
-          inviteCode,
+          inviteCodeEncrypted: encryptInviteCode(plainInviteCode),
+          inviteCodeHmac: hmacInviteCode(plainInviteCode),
           createdAt: admin.firestore.Timestamp.now(),
         })
       );
     }
 
-    // Save user in Firestore
+    // Save user in Firestore (invite code is not stored on the user doc)
     const docData = removeUndefined({
       uid: userRecord.uid,
       firstName,
@@ -283,7 +285,6 @@ app.post("/api/register-user", async (req, res) => {
       role,
       companyId,
       companyName: role === "companyOwner" ? companyName : undefined,
-      inviteCode,
       emailVerified: true,
       createdAt: admin.firestore.Timestamp.now(),
     });
@@ -353,7 +354,7 @@ app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
 
     for (const u of users) {
       const username =
-        u.email && u.email.includes("@")
+        u.email?.includes("@")
           ? u.email.split("@")[0]
           : u.email || "";
 
@@ -415,7 +416,7 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
     const sanitizedName = name.trim().replaceAll('\0', '');
     const sanitizedDescription = description.trim().replaceAll('\0', '');
     const sanitizedMajors = majorsAssociated.trim().replaceAll('\0', '');
-    const sanitizedAppLink = applicationLink?.trim() ? applicationLink.trim().replaceAll('\0', '') : undefined;
+    const sanitizedAppLink = applicationLink?.trim().replaceAll('\0', '') || undefined;
 
     const jobRef = await db.collection("jobs").add(
       removeUndefined({
@@ -490,20 +491,20 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
     const { name, description, majorsAssociated, applicationLink } = req.body;
 
     // Validate required fields
-    if (!name || !name.trim()) {
+    if (!name?.trim()) {
       return res.status(400).json({ success: false, error: "Job title is required" });
     }
 
-    if (!description || !description.trim()) {
+    if (!description?.trim()) {
       return res.status(400).json({ success: false, error: "Job description is required" });
     }
 
-    if (!majorsAssociated || !majorsAssociated.trim()) {
+    if (!majorsAssociated?.trim()) {
       return res.status(400).json({ success: false, error: "Skills are required" });
     }
 
     // Validate application link format if provided
-    if (applicationLink && applicationLink.trim()) {
+    if (applicationLink?.trim()) {
       try {
         new URL(applicationLink.trim());
       } catch (err) {
@@ -532,7 +533,7 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
         name: name.trim(),
         description: description.trim(),
         majorsAssociated: majorsAssociated.trim(),
-        applicationLink: applicationLink && applicationLink.trim() ? applicationLink.trim() : null,
+        applicationLink: applicationLink?.trim() || null,
         updatedAt: admin.firestore.Timestamp.now(),
       })
     );
@@ -714,8 +715,9 @@ app.post("/api/job-invitations/send", async (req, res) => {
 app.get("/api/job-invitations/received", async (req, res) => {
   try {
     const { userId, status } = req.query;
+    const userIdStr = typeof userId === "string" ? userId : "";
 
-    console.log(`Fetching job invitations for student ${userId}`);
+    console.log(`Fetching job invitations for student ${userIdStr}`);
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
@@ -740,7 +742,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
     }
 
     const invitationsSnapshot = await query.get();
-    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student ${userId}`);
+    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student ${userIdStr}`);
 
     // Get job and company details for each invitation
     const invitations = await Promise.all(
@@ -996,7 +998,8 @@ app.get("/api/students", async (req, res) => {
 
     if (boothId) {
       // Find students who visited this specific booth
-      console.log(`Filtering students who visited booth: ${boothId}`);
+      const boothIdStr = typeof boothId === "string" ? boothId : "";
+      console.log(`Filtering students who visited booth: ${boothIdStr}`);
       
       // Get all students first
       const allStudentsQuery = db.collection("users").where("role", "==", "student");
@@ -1026,7 +1029,7 @@ app.get("/api/students", async (req, res) => {
       });
       
       students = (await Promise.all(studentPromises)).filter(s => s !== null);
-      console.log(`Found ${students.length} students who visited booth ${boothId}`);
+      console.log(`Found ${students.length} students who visited booth ${boothIdStr}`);
     } else {
       // Get all students (existing logic)
       let query = db.collection("users").where("role", "==", "student");
@@ -1045,7 +1048,7 @@ app.get("/api/students", async (req, res) => {
     }
 
     // Apply search filter if provided
-    if (search && search.trim()) {
+    if (search?.trim()) {
       const searchLower = search.toLowerCase().trim();
       students = students.filter((student) => {
         const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
@@ -1057,7 +1060,7 @@ app.get("/api/students", async (req, res) => {
     }
 
     // Apply major filter if provided
-    if (major && major.trim()) {
+    if (major?.trim()) {
       const majorLower = major.toLowerCase().trim();
       students = students.filter((student) =>
         student.major.toLowerCase().includes(majorLower)
@@ -1312,39 +1315,30 @@ app.post("/api/update-invite-code", async (req, res) => {
       inviteCode = generateInviteCode();
     }
 
-    // Update the invite code using a transaction to prevent race conditions
-    // We cannot use queries inside transactions, so we fetch the company doc first
-    // and use optimistic locking by reading all companies outside the transaction
-    // then doing a final atomic check inside
+    // Duplicate check: compare by HMAC so we never store/compare plaintext
+    const newHmac = hmacInviteCode(inviteCode);
     const companiesSnapshot = await db.collection("companies").get();
     const companiesWithCode = companiesSnapshot.docs.filter(
-      (doc) => doc.data().inviteCode === inviteCode && doc.id !== companyId
+      (doc) => doc.data().inviteCodeHmac === newHmac && doc.id !== companyId
     );
 
     if (companiesWithCode.length > 0) {
       return res.status(400).json({ error: "This invite code is already in use by another company" });
     }
 
-    // Use transaction for atomic update with version checking
+    // Atomic update — store encrypted blob + HMAC index; no plaintext
     await db.runTransaction(async (transaction) => {
-      // Read the company doc to ensure it exists and get current state
       const companyRef = db.collection("companies").doc(companyId);
-      const companyDoc = await transaction.get(companyRef);
+      const companySnap = await transaction.get(companyRef);
 
-      if (!companyDoc.exists) {
+      if (!companySnap.exists) {
         throw new Error("Company not found");
       }
 
-      // Perform atomic update on company
       transaction.update(companyRef, {
-        inviteCode: inviteCode,
+        inviteCodeEncrypted: encryptInviteCode(inviteCode),
+        inviteCodeHmac: newHmac,
         inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
-      });
-
-      // Also update the owner's user document with the new invite code
-      const ownerRef = db.collection("users").doc(companyDoc.data().ownerId);
-      transaction.update(ownerRef, {
-        inviteCode: inviteCode,
       });
     });
 
@@ -1352,6 +1346,120 @@ app.post("/api/update-invite-code", async (req, res) => {
   } catch (err) {
     console.error("Error updating invite code:", err);
     return res.status(500).json({ error: "Failed to update invite code" });
+  }
+});
+
+/* ----------------------------------------------------
+   CREATE COMPANY (Auth required — company owners)
+---------------------------------------------------- */
+app.post("/api/companies", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { companyName } = req.body;
+    const ownerId = req.user.uid;
+
+    if (!companyName?.trim()) {
+      return res.status(400).json({ error: "Company name is required" });
+    }
+
+    const userDoc = await db.collection("users").doc(ownerId).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().role !== "companyOwner") {
+      return res.status(403).json({ error: "Only company owners can create companies" });
+    }
+
+    const rawCode = generateInviteCode();
+    const companyRef = db.collection("companies").doc();
+    const companyId = companyRef.id;
+
+    await companyRef.set(removeUndefined({
+      companyId,
+      companyName: companyName.trim(),
+      ownerId,
+      inviteCodeEncrypted: encryptInviteCode(rawCode),
+      inviteCodeHmac: hmacInviteCode(rawCode),
+      createdAt: admin.firestore.Timestamp.now(),
+    }));
+
+    // Update user doc with companyId (no invite code stored on user)
+    await db.collection("users").doc(ownerId).update({ companyId, companyName: companyName.trim() });
+
+    return res.status(201).json({ companyId, inviteCode: rawCode });
+  } catch (err) {
+    console.error("POST /api/companies error:", err);
+    return res.status(500).json({ error: "Failed to create company" });
+  }
+});
+
+/* ----------------------------------------------------
+   LINK REPRESENTATIVE TO COMPANY via invite code
+---------------------------------------------------- */
+app.post("/api/link-company", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { inviteCode } = req.body;
+    const userId = req.user.uid;
+
+    if (!inviteCode?.trim()) {
+      return res.status(400).json({ error: "Invite code is required" });
+    }
+
+    const codeHmac = hmacInviteCode(inviteCode.trim());
+    const companiesSnap = await db.collection("companies").where("inviteCodeHmac", "==", codeHmac).get();
+    if (companiesSnap.empty) return res.status(400).json({ error: "Invalid invite code." });
+
+    const companyDoc = companiesSnap.docs[0];
+    const companyId = companyDoc.id;
+    const { companyName, representativeIDs = [] } = companyDoc.data();
+
+    const userDoc = await db.collection("users").doc(userId).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().companyId === companyId) {
+      return res.status(400).json({ error: "You are already linked to this company." });
+    }
+
+    await db.runTransaction(async (transaction) => {
+      transaction.update(db.collection("companies").doc(companyId), {
+        representativeIDs: [...new Set([...representativeIDs, userId])],
+      });
+      transaction.update(db.collection("users").doc(userId), { companyId, companyName });
+    });
+
+    return res.json({ companyId, companyName });
+  } catch (err) {
+    console.error("POST /api/link-company error:", err);
+    return res.status(500).json({ error: "Failed to link company" });
+  }
+});
+
+/* ----------------------------------------------------
+   GET COMPANY INVITE CODE (owner or admin only)
+---------------------------------------------------- */
+app.get("/api/companies/:companyId/invite-code", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const requestingUid = req.user.uid;
+
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) return res.status(404).json({ error: "Company not found" });
+
+    const { ownerId, inviteCodeEncrypted } = companyDoc.data();
+
+    const userDoc = await db.collection("users").doc(requestingUid).get();
+    const isAdmin = userDoc.exists && userDoc.data().role === "administrator";
+    const isOwner = ownerId === requestingUid;
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: "Only the company owner or an admin can view the invite code" });
+    }
+
+    if (!inviteCodeEncrypted) {
+      return res.status(404).json({ error: "No invite code found. Please generate one." });
+    }
+
+    const inviteCode = decryptInviteCode(inviteCodeEncrypted);
+    return res.json({ inviteCode });
+  } catch (err) {
+    console.error("GET /api/companies/:companyId/invite-code error:", err);
+    return res.status(500).json({ error: "Failed to retrieve invite code" });
   }
 });
 
