@@ -3,7 +3,8 @@ export type FormFieldType =
   | "longText"
   | "singleSelect"
   | "multiSelect"
-  | "checkbox";
+  | "checkbox"
+  | "file";
 
 export interface FormField {
   id: string;

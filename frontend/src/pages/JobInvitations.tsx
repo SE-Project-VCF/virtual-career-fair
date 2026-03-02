@@ -13,7 +13,6 @@ import {
   Tabs,
   Tab,
   IconButton,
-  Tooltip,
   Divider,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -22,9 +21,10 @@ import BusinessIcon from "@mui/icons-material/Business";
 import PersonIcon from "@mui/icons-material/Person";
 import LaunchIcon from "@mui/icons-material/Launch";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import { authUtils } from "../utils/auth";
 import ProfileMenu from "./ProfileMenu";
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog";
+import type { ApplicationForm } from "../types/applicationForm";
 
 interface JobInvitation {
   id: string;
@@ -40,10 +40,12 @@ interface JobInvitation {
   message?: string;
   job: {
     id: string;
+    companyId: string;
     name: string;
     description: string;
     majorsAssociated: string;
     applicationLink: string | null;
+    applicationForm?: ApplicationForm | null;
   } | null;
   company: {
     id: string;
@@ -66,6 +68,8 @@ export default function JobInvitations() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentTab, setCurrentTab] = useState<"all" | "sent" | "viewed" | "clicked">("all");
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const [selectedInvitationForApply, setSelectedInvitationForApply] = useState<JobInvitation | null>(null);
 
   useEffect(() => {
     
@@ -163,8 +167,13 @@ export default function JobInvitations() {
           )
         );
 
-        // Open application link if available
-        if (invitation.job?.applicationLink) {
+        const hasPublishedForm =
+          invitation.job?.applicationForm && invitation.job.applicationForm.status === "published";
+
+        if (hasPublishedForm) {
+          setSelectedInvitationForApply(invitation);
+          setApplyDialogOpen(true);
+        } else if (invitation.job?.applicationLink) {
           window.open(invitation.job.applicationLink, "_blank");
         }
       } catch (err) {
@@ -418,7 +427,8 @@ export default function JobInvitations() {
                     >
                       View Full Details
                     </Button>
-                    {invitation.job?.applicationLink && (
+                    {(invitation.job?.applicationLink ||
+                      invitation.job?.applicationForm?.status === "published") && (
                       <Button
                         variant="contained"
                         endIcon={<LaunchIcon />}
@@ -440,6 +450,19 @@ export default function JobInvitations() {
           </Box>
         )}
       </Container>
+
+      {selectedInvitationForApply && selectedInvitationForApply.job && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false);
+            setSelectedInvitationForApply(null);
+          }}
+          job={selectedInvitationForApply.job}
+          boothId={selectedInvitationForApply.company?.boothId || undefined}
+          studentId={user?.uid || null}
+        />
+      )}
     </Box>
   );
 }

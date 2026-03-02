@@ -479,6 +479,7 @@ app.get("/api/jobs", async (req, res) => {
         majorsAssociated: data.majorsAssociated,
         applicationLink: data.applicationLink || null,
         createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        applicationForm: data.applicationForm || null,
       });
     });
 
@@ -839,10 +840,12 @@ app.get("/api/job-invitations/received", async (req, res) => {
             const jobData = jobDoc.data();
             jobDetails = {
               id: jobDoc.id,
+              companyId: jobData.companyId,
               name: jobData.name,
               description: jobData.description,
               majorsAssociated: jobData.majorsAssociated,
               applicationLink: jobData.applicationLink || null,
+              applicationForm: jobData.applicationForm || null,
             };
           }
         } catch (err) {

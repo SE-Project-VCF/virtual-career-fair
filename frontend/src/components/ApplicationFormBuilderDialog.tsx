@@ -572,9 +572,16 @@ export default function ApplicationFormBuilderDialog({
                                         <MenuItem value="singleSelect">Single select</MenuItem>
                                         <MenuItem value="multiSelect">Multi select</MenuItem>
                                         <MenuItem value="checkbox">Checkbox</MenuItem>
+                                        <MenuItem value="file">File upload</MenuItem>
                                       </Select>
                                     </FormControl>
                                   </Box>
+
+                                  {field.type === "file" && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      Candidates will upload a file in this field.
+                                    </Typography>
+                                  )}
 
                                   {(field.type === "singleSelect" || field.type === "multiSelect") && (
                                     <TextField
