@@ -38,6 +38,10 @@ vi.mock("../../firebase", () => ({
     currentUser: {
       getIdToken: vi.fn().mockResolvedValue("mock-token"),
     },
+    onAuthStateChanged: vi.fn((callback: any) => {
+      callback({ getIdToken: vi.fn().mockResolvedValue("mock-token") })
+      return vi.fn()
+    }),
   },
 }))
 
@@ -143,8 +147,8 @@ describe("Dashboard", () => {
         expect(screen.getByText("Browse Company Booths")).toBeInTheDocument()
       })
 
-      const viewBoothsButton = screen.getByRole("button", { name: /view all booths/i })
-      expect(viewBoothsButton).toBeDisabled()
+      const viewBoothsButton = screen.getByRole("button", { name: /browse all fairs/i })
+      expect(viewBoothsButton).toBeEnabled()
     })
 
     it("navigates to booths page when button clicked (when fair is live)", async () => {
@@ -165,7 +169,7 @@ describe("Dashboard", () => {
       })
 
       // Note: button is disabled when fair not live, so this just verifies it exists
-      expect(screen.getByRole("button", { name: /view all booths/i })).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: /browse all fairs/i })).toBeInTheDocument()
     })
   })
 

@@ -41,6 +41,13 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../../firebase", () => ({
   db: {},
+  auth: {
+    currentUser: {
+      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+      uid: "owner-1",
+    },
+  },
+  storage: {},
 }));
 
 // Import after mocks
@@ -118,6 +125,21 @@ describe("Company", () => {
     (addDoc as any).mockResolvedValue({ id: "new-job" });
     (deleteDoc as any).mockResolvedValue(undefined);
     (arrayRemove as any).mockImplementation((v: unknown) => v);
+
+    // Mock fetch for invite code API
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ inviteCode: "INVITE123" }),
+        });
+      }
+      // Default for other fetch calls
+      return Promise.resolve({
+        ok: false,
+        json: async () => ({ error: "Not found" }),
+      });
+    });
   });
 
   const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
@@ -137,7 +159,7 @@ describe("Company", () => {
   it("shows error when company not found", async () => {
     (getDoc as any).mockImplementation(() => Promise.resolve({ exists: () => false }));
     renderComp();
-    expect(await screen.findByText(/company not found/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText(/company not found/i)).toBeInTheDocument();
   });
 
   it("denies access to non-owner company owners", async () => {
@@ -176,18 +198,18 @@ describe("Company", () => {
   it("displays company name after loading", async () => {
     renderComp();
     // Use getByRole to specifically target the h4 heading
-    expect(await screen.findByRole('heading', { name: /Tech Corp/i, level: 4 }, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Tech Corp/i, level: 4 })).toBeInTheDocument();
   });
 
   it("displays invite code", async () => {
     renderComp();
-    expect(await screen.findByText(/INVITE123/, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText(/INVITE123/)).toBeInTheDocument();
   });
 
   it("copies invite code to clipboard", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+    await screen.findByText(/INVITE123/);
 
     const copyButtons = screen.queryAllByTestId("ContentCopyIcon");
     if (copyButtons.length > 0) {
@@ -200,7 +222,7 @@ describe("Company", () => {
     // Replace the mock implementation for this test
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error("copy failed"));
     renderComp();
-    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+    await screen.findByText(/INVITE123/);
 
     const copyButtons = screen.queryAllByTestId("ContentCopyIcon");
     if (copyButtons.length > 0) {
@@ -217,7 +239,7 @@ describe("Company", () => {
       inviteCode: "NEWCODE",
     });
     renderComp();
-    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+    await screen.findByText(/INVITE123/);
 
     const refreshButtons = screen.queryAllByTestId("RefreshIcon");
     if (refreshButtons.length > 0) {
@@ -235,7 +257,7 @@ describe("Company", () => {
       inviteCode: "CUSTOM",
     });
     renderComp();
-    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+    await screen.findByText(/INVITE123/);
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
@@ -258,7 +280,7 @@ describe("Company", () => {
   it("cancels invite code edit", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+    await screen.findByText(/INVITE123/);
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
@@ -278,7 +300,7 @@ describe("Company", () => {
      error: "Invite code must be at least 6 characters long",
     });
     renderComp();
-    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+    await screen.findByText(/INVITE123/);
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
@@ -301,7 +323,7 @@ describe("Company", () => {
   it("blocks invite code save when length is invalid", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+    await screen.findByText(/INVITE123/);
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
@@ -326,13 +348,13 @@ describe("Company", () => {
 
   it("displays representatives list", async () => {
     renderComp();
-    expect(await screen.findByText(/John Doe/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText(/John Doe/i)).toBeInTheDocument();
   });
 
   it("deletes representative", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByText(/John Doe/i, {}, { timeout: 3000 });
+    await screen.findByText(/John Doe/i);
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
@@ -349,7 +371,7 @@ describe("Company", () => {
     const user = userEvent.setup();
     (updateDoc as any).mockRejectedValueOnce(new Error("remove failed"));
     renderComp();
-    await screen.findByText(/John Doe/i, {}, { timeout: 3000 });
+    await screen.findByText(/John Doe/i);
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
@@ -366,13 +388,13 @@ describe("Company", () => {
 
   it("displays job postings", async () => {
     renderComp();
-    expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Software Engineer/i)).toBeInTheDocument();
   });
 
   it("opens add job dialog", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
@@ -384,7 +406,7 @@ describe("Company", () => {
   it("creates new job", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
@@ -409,7 +431,7 @@ describe("Company", () => {
   it("validates job title required", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
@@ -426,7 +448,7 @@ describe("Company", () => {
   it("validates application link URL", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
@@ -449,7 +471,7 @@ describe("Company", () => {
   it("edits existing job", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+    await screen.findByText(/Software Engineer/i);
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
@@ -460,7 +482,7 @@ describe("Company", () => {
   it("updates existing job and clears application link", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+    await screen.findByText(/Software Engineer/i);
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
@@ -486,7 +508,7 @@ describe("Company", () => {
   it("deletes job", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+    await screen.findByText(/Software Engineer/i);
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
@@ -506,7 +528,7 @@ describe("Company", () => {
     const user = userEvent.setup();
     (deleteDoc as any).mockRejectedValueOnce(new Error("delete failed"));
     renderComp();
-    await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+    await screen.findByText(/Software Engineer/i);
 
     // Find delete buttons for jobs specifically via tooltip title
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
@@ -539,7 +561,7 @@ describe("Company", () => {
   it("navigates to booth when booth ID exists", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const boothButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Booth") || b.textContent?.includes("booth"));
     if (boothButtons.length > 0) {
@@ -551,7 +573,7 @@ describe("Company", () => {
   it("navigates back on back button", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const backButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Back"));
     if (backButtons.length > 0) {
@@ -563,7 +585,7 @@ describe("Company", () => {
   it("opens delete company dialog", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
    const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
     if (deleteButtons.length > 0) {
@@ -576,7 +598,7 @@ describe("Company", () => {
     const user = userEvent.setup();
     (authUtils.deleteCompany as any).mockResolvedValue({ success: true });
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
     if (deleteButtons.length > 0) {
@@ -599,7 +621,7 @@ describe("Company", () => {
       error: "Failed to delete",
     });
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
     if (deleteButtons.length > 0) {
@@ -608,7 +630,7 @@ describe("Company", () => {
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
-        expect(await screen.findByText(/Failed to delete/i, {}, { timeout: 3000 })).toBeInTheDocument();
+        expect(await screen.findByText(/Failed to delete/i)).toBeInTheDocument();
       }
     }
   });
@@ -616,14 +638,14 @@ describe("Company", () => {
   it("handles API errors gracefully", async () => {
     (getDoc as any).mockRejectedValue(new Error("Network error"));
     renderComp();
-    expect(await screen.findByText(/failed to load company/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText(/failed to load company/i)).toBeInTheDocument();
   });
 
   it("handles job fetch errors", async () => {
     (getDocs as any).mockRejectedValue(new Error("Job fetch error"));
     renderComp();
     // Company should still load
-    expect(await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Tech Corp/i })).toBeInTheDocument();
   });
 
   it("allows representatives to view company", async () => {
@@ -632,13 +654,13 @@ describe("Company", () => {
       role: "representative",
     });
     renderComp();
-    expect(await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Tech Corp/i })).toBeInTheDocument();
   });
 
   it("allows empty application link in job", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
@@ -667,7 +689,7 @@ describe("Company", () => {
     });
     
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
     // Jobs should be displayed (sorted order tested in component)
   });
 
@@ -680,13 +702,13 @@ describe("Company", () => {
     });
     
     renderComp();
-    expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Software Engineer/i)).toBeInTheDocument();
   });
 
   it("clears error on successful operation", async () => {
     (getDoc as any).mockRejectedValueOnce(new Error("Error"));
     renderComp();
-    await screen.findByText(/failed to load company/i, {}, { timeout: 3000 });
+    await screen.findByText(/failed to load company/i);
     
     // Simulate successful retry by re-rendering
     vi.clearAllMocks();
@@ -705,7 +727,7 @@ describe("Company", () => {
   it("displays success message on job creation", async () => {
     const user = userEvent.setup();
     renderComp();
-    await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+    await screen.findByRole('heading', { name: /Tech Corp/i });
 
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
@@ -745,7 +767,7 @@ describe("Company", () => {
       });
 
       renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+      await screen.findByRole('heading', { name: /Tech Corp/i });
 
       await waitFor(() => {
         expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -768,7 +790,7 @@ describe("Company", () => {
       });
 
       renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+      await screen.findByRole('heading', { name: /Tech Corp/i });
 
       await waitFor(() => {
         const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
@@ -847,7 +869,7 @@ describe("Company", () => {
       });
 
       renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+      await screen.findByRole('heading', { name: /Tech Corp/i });
 
       await waitFor(async () => {
         const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
@@ -882,7 +904,7 @@ describe("Company", () => {
       });
 
       renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+      await screen.findByRole('heading', { name: /Tech Corp/i });
 
       await waitFor(() => {
         const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
@@ -915,7 +937,7 @@ describe("Company", () => {
       });
 
       renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+      await screen.findByRole('heading', { name: /Tech Corp/i });
 
       await waitFor(() => {
         // Check if stats numbers are displayed (they might be in various formats)

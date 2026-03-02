@@ -29,6 +29,11 @@ vi.mock("firebase/auth", () => ({
   getAuth: vi.fn(() => ({
     currentUser: mockCurrentUser,
     signOut: mockSignOut,
+    onAuthStateChanged: vi.fn((callback: any) => {
+      const unsub = vi.fn()
+      queueMicrotask(() => callback(mockCurrentUser))
+      return unsub
+    }),
   })),
   GoogleAuthProvider: MockGoogleAuthProvider,
   createUserWithEmailAndPassword: vi.fn(),
@@ -36,6 +41,13 @@ vi.mock("firebase/auth", () => ({
   sendEmailVerification: vi.fn(),
   signOut: mockSignOut,
   signInWithPopup: vi.fn(),
+  onAuthStateChanged: vi.fn((auth, callback) => {
+    const unsub = vi.fn()
+    // Call the callback asynchronously to avoid temporal dead zone issues
+    queueMicrotask(() => callback(mockCurrentUser))
+    // Return an unsubscribe function
+    return unsub
+  }),
 }))
 
 // Mock firebase/firestore
@@ -124,3 +136,13 @@ Object.defineProperty(globalThis, "matchMedia", {
 // Suppress console.error/warn in tests
 vi.spyOn(console, "error").mockImplementation(() => {})
 vi.spyOn(console, "warn").mockImplementation(() => {})
+
+// Mock global fetch - default to 404 for unmocked endpoints
+globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+  // Return a default 404 response for unmocked fetch calls
+  return Promise.resolve({
+    ok: false,
+    status: 404,
+    json: async () => ({ error: "Not found" }),
+  })
+})

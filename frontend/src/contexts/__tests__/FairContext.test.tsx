@@ -152,7 +152,10 @@ describe("FairProvider", () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    expect(mockFetch).toHaveBeenCalledWith("http://localhost:5000/api/fairs/fair-42")
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:5000/api/fairs/fair-42",
+      expect.objectContaining({ headers: expect.any(Object) })
+    )
     expect(mockFetch).toHaveBeenCalledWith("http://localhost:5000/api/fairs/fair-42/status")
   })
 })

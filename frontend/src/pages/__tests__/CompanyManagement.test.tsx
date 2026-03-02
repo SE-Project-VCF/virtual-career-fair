@@ -29,6 +29,12 @@ vi.mock("../../utils/auth", () => ({
 vi.mock("firebase/firestore");
 vi.mock("../../firebase", () => ({
   db: {},
+  auth: {
+    currentUser: {
+      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+    },
+  },
+  storage: {},
 }));
 
 vi.mock("../ProfileMenu", () => ({
@@ -82,6 +88,33 @@ describe("CompanyManagement", () => {
         mockCompanyData.forEach((item) => callback(item));
       },
       docs: mockCompanyData,
+    });
+
+    // Mock fetch for invite code API - return different codes per company
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/companies/company-1/invite-code')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ inviteCode: "TECH123" }),
+        });
+      }
+      if (url.includes('/api/companies/company-2/invite-code')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ inviteCode: "SOFT456" }),
+        });
+      }
+      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ inviteCode: "CODE000" }),
+        });
+      }
+      // Default for other fetch calls
+      return Promise.resolve({
+        ok: false,
+        json: async () => ({ error: "Not found" }),
+      });
     });
   });
 
@@ -399,10 +432,10 @@ describe("CompanyManagement", () => {
       const editButtons = screen.getAllByRole("button", { name: /edit invite code/i });
       await user.click(editButtons[0]);
 
-      // Edit the invite code
-      const inviteCodeInput = screen.getByDisplayValue("TECH123");
-      await user.clear(inviteCodeInput);
-      await user.type(inviteCodeInput, "CUSTOM123");
+      // Edit the invite code - use getAllByDisplayValue since both companies are shown
+      const inviteCodeInputs = screen.getAllByDisplayValue("TECH123");
+      await user.clear(inviteCodeInputs[0]);
+      await user.type(inviteCodeInputs[0], "CUSTOM123");
 
       // Save
       const saveButton = screen.getByRole("button", { name: /save/i });
@@ -453,9 +486,9 @@ describe("CompanyManagement", () => {
       await user.click(editButtons[0]);
 
       // Enter too short code
-      const inviteCodeInput = screen.getByDisplayValue("TECH123");
-      await user.clear(inviteCodeInput);
-      await user.type(inviteCodeInput, "AB");
+      const inviteCodeInputs = screen.getAllByDisplayValue("TECH123");
+      await user.clear(inviteCodeInputs[0]);
+      await user.type(inviteCodeInputs[0], "AB");
 
       // Try to save
       const saveButton = screen.getByRole("button", { name: /save/i });

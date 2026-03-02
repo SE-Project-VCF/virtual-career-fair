@@ -68,6 +68,7 @@ describe("FairLanding", () => {
 
   it("shows loading spinner while loading", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: true,
       fair: null,
       isLive: false,
@@ -81,6 +82,7 @@ describe("FairLanding", () => {
 
   it("shows not found alert when fair is null", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: null,
       isLive: false,
@@ -94,6 +96,7 @@ describe("FairLanding", () => {
 
   it("renders fair name and not live chip", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -109,12 +112,13 @@ describe("FairLanding", () => {
 
     renderFairLanding()
 
-    expect(screen.getByText("Spring Fair")).toBeInTheDocument()
+    expect(screen.getAllByText("Spring Fair")[0]).toBeInTheDocument()
     expect(screen.getByText("Not Live")).toBeInTheDocument()
   })
 
   it("renders Live Now chip when fair is live", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -135,6 +139,7 @@ describe("FairLanding", () => {
 
   it("Browse Booths button is disabled when fair not live", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -163,6 +168,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -196,6 +202,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -231,6 +238,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -267,6 +275,7 @@ describe("FairLanding", () => {
 
   it("shows fair description when present", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -291,6 +300,7 @@ describe("FairLanding", () => {
     const endMs = new Date("2025-03-15T17:00:00Z").getTime()
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -314,6 +324,7 @@ describe("FairLanding", () => {
 
   it("shows TBD when startTime and endTime are null", () => {
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -344,6 +355,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -377,6 +389,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -412,6 +425,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -452,6 +466,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -498,6 +513,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -543,6 +559,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -589,6 +606,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -622,6 +640,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -660,6 +679,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -705,6 +725,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
       isLive: false,
@@ -741,6 +762,7 @@ describe("FairLanding", () => {
     const user = userEvent.setup()
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: null,
       isLive: false,
@@ -758,6 +780,7 @@ describe("FairLanding", () => {
     const user = userEvent.setup()
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -773,7 +796,9 @@ describe("FairLanding", () => {
 
     renderFairLanding()
 
-    await user.click(screen.getByRole("button", { name: /← all fairs/i }))
+    // Back button is an IconButton with ArrowBackIcon, find it by testid
+    const backButton = screen.getByTestId("ArrowBackIcon").closest("button")!
+    await user.click(backButton)
 
     expect(mockNavigate).toHaveBeenCalledWith("/fairs")
   })
@@ -782,6 +807,7 @@ describe("FairLanding", () => {
     const user = userEvent.setup()
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -813,6 +839,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
@@ -840,6 +867,7 @@ describe("FairLanding", () => {
     })
 
     vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
       loading: false,
       fair: {
         id: "f1",
