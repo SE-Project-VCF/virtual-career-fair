@@ -1026,14 +1026,21 @@ export default function Company() {
                           </Box>
                           
                           {job.applicationForm && (
-                            <Box sx={{ mt: 1 }}>
+                            <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
                               <Chip
                                 icon={<DescriptionIcon sx={{ fontSize: 16 }} />}
-                                label="Application Form Available"
+                                label={
+                                  job.applicationForm.status === "published"
+                                    ? "Application Form: Published"
+                                    : "Application Form: Draft"
+                                }
                                 size="small"
                                 sx={{
-                                  bgcolor: "rgba(56, 133, 96, 0.08)",
-                                  color: "#388560",
+                                  bgcolor:
+                                    job.applicationForm.status === "published"
+                                      ? "rgba(56, 133, 96, 0.1)"
+                                      : "rgba(0, 0, 0, 0.04)",
+                                  color: job.applicationForm.status === "published" ? "#388560" : "text.secondary",
                                   fontWeight: 500,
                                 }}
                               />

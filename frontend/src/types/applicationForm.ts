@@ -17,6 +17,9 @@ export interface ApplicationForm {
   title: string;
   description?: string;
   fields: FormField[];
+  status: "draft" | "published";
+  fairScheduleId?: string;
+  publishedAt?: number | null;
   updatedAt?: number | null;
 }
 
