@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Container,
@@ -8,6 +8,13 @@ import {
   Button,
   CircularProgress,
   Card,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItemButton,
+  Chip,
 } from "@mui/material"
 import ProfileMenu from "./ProfileMenu"
 import { doc, getDoc, setDoc } from "firebase/firestore"
@@ -20,6 +27,8 @@ export default function StudentProfilePage() {
 
   // Get user from localStorage like BoothEditor does
   const user = authUtils.getCurrentUser()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const loadTailoredResumesDone = useRef(false)
 
   const [major, setMajor] = useState("")
   const [year, setYear] = useState("")
@@ -30,6 +39,11 @@ export default function StudentProfilePage() {
   const [loading, setLoading] = useState(false)
 
   const [uploadPct, setUploadPct] = useState<number | null>(null)
+
+  // Tailored resumes state
+  const [tailoredResumes, setTailoredResumes] = useState<any[]>([])
+  const [tailoredDialogOpen, setTailoredDialogOpen] = useState(false)
+  const [loadingTailored, setLoadingTailored] = useState(false)
 
   // If user is not authenticated, redirect to login
   useEffect(() => {
@@ -62,6 +76,51 @@ export default function StudentProfilePage() {
 
     fetchProfile()
   }, [user])
+
+  // Load tailored resumes
+  const loadTailoredResumes = async () => {
+    if (!user) return
+    try {
+      setLoadingTailored(true)
+      setError("")
+      const token = await authUtils.getIdToken()
+      if (!token) {
+        // Auth not ready yet, silently skip
+        setLoadingTailored(false)
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/resume/tailored`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) throw new Error("Failed to load tailored resumes")
+
+      const data = await response.json()
+      setTailoredResumes(data.resumes || [])
+    } catch (err: any) {
+      console.error("Error loading tailored resumes:", err)
+      setError(err?.message || "Failed to load tailored resumes")
+    } finally {
+      setLoadingTailored(false)
+    }
+  }
+
+  // Load tailored resumes when component mounts - only once
+  useEffect(() => {
+    if (!user || loadTailoredResumesDone.current) return
+    loadTailoredResumesDone.current = true
+    loadTailoredResumes()
+  }, [user])
+
+  const handleViewTailoredResume = (resumeId: string) => {
+    setTailoredDialogOpen(false)
+    navigate(`/dashboard/tailored-resume/${resumeId}`)
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -283,17 +342,33 @@ export default function StudentProfilePage() {
               )}
 
               {!resumeFile && resumeUrl && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
-                    Resume uploaded successfully
-                  </Typography>
-                  <Button 
-                    variant="outlined"
-                    color="primary" 
-                    onClick={handleViewResume}
-                  >
-                    View Your Resume
-                  </Button>
+                <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
+                  <Box>
+                    <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
+                      Resume uploaded successfully
+                    </Typography>
+                    <Button 
+                      variant="outlined"
+                      color="primary" 
+                      onClick={handleViewResume}
+                    >
+                      View Your Resume
+                    </Button>
+                  </Box>
+                  {tailoredResumes.length > 0 && (
+                    <Box>
+                      <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
+                        {tailoredResumes.length} tailored resume(s)
+                      </Typography>
+                      <Button 
+                        variant="outlined"
+                        color="secondary" 
+                        onClick={() => setTailoredDialogOpen(true)}
+                      >
+                        View Tailored Resumes
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               )}
             </Box>
@@ -317,6 +392,68 @@ export default function StudentProfilePage() {
           </form>
         </Card>
       </Container>
+
+      {/* Tailored Resumes Dialog */}
+      <Dialog open={tailoredDialogOpen} onClose={() => setTailoredDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Select a Tailored Resume</DialogTitle>
+        <DialogContent>
+          {loadingTailored ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : tailoredResumes.length === 0 ? (
+            <Typography variant="body2" sx={{ color: "gray", py: 2 }}>
+              No tailored resumes yet. Create one from your job invitations!
+            </Typography>
+          ) : (
+            <List>
+              {tailoredResumes.map((resume) => (
+                <ListItemButton
+                  key={resume.id}
+                  onClick={() => handleViewTailoredResume(resume.id)}
+                  sx={{
+                    mb: 1,
+                    border: "1px solid #eee",
+                    borderRadius: 1,
+                    "&:hover": { bgcolor: "#f5f5f5" },
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    p: 2,
+                  }}
+                >
+                  {/* Title and Patches */}
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 1, width: "100%" }}>
+                    <Typography variant="body1" sx={{ fontWeight: 500, flex: 1 }}>
+                      {resume.jobContext?.jobTitle}
+                    </Typography>
+                    <Chip
+                      label={`${resume.acceptedPatches?.length || 0} patches`}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Box>
+
+                  {/* Created Date and Notes */}
+                  <Box sx={{ width: "100%" }}>
+                    <Typography variant="caption" sx={{ color: "gray" }}>
+                      Created: {new Date(resume.createdAt?.toMillis?.()).toLocaleDateString()}
+                    </Typography>
+                    {resume.studentNotes && (
+                      <Typography variant="caption" sx={{ display: "block", color: "gray", mt: 0.5 }}>
+                        Notes: {resume.studentNotes.substring(0, 60)}...
+                      </Typography>
+                    )}
+                  </Box>
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTailoredDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

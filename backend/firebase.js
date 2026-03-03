@@ -18,14 +18,18 @@ function getServiceAccount() {
   return require("./privateKey.json");
 }
 
+const DEFAULT_BUCKET = "careerfairdb-48105.firebasestorage.app"; // your current value
+
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(getServiceAccount()),
-    storageBucket: "careerfairdb-48105.firebasestorage.app",
+    // Prefer env var in prod, fallback to your current bucket for local/dev
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || DEFAULT_BUCKET,
   });
 }
 
 const db = admin.firestore();
 const auth = admin.auth();
+const bucket = admin.storage().bucket(); // ✅ this uses storageBucket from initializeApp
 
-module.exports = { db, auth };
+module.exports = { db, auth, bucket };

@@ -12,9 +12,17 @@ import { API_URL } from "../config";
 
 async function syncStreamUser(uid: string, email: string, firstName?: string, lastName?: string) {
   try {
-    await fetch(`${API_URL}/api/sync-stream-user`, {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) {
+      throw new Error("No Firebase ID token available (user not logged in).");
+    }
+
+    const res = await fetch(`${API_URL}/api/sync-stream-user`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
         uid,
         email,
@@ -22,6 +30,12 @@ async function syncStreamUser(uid: string, email: string, firstName?: string, la
         lastName: lastName || "",
       }),
     });
+
+    // Helpful: surface backend error details instead of silently ignoring
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`sync-stream-user failed: ${res.status} ${text}`);
+    }
   } catch (err) {
     console.error("Stream sync failed:", err);
     throw new Error("Failed to sync chat user. Chat features may not work properly.");
@@ -255,7 +269,7 @@ export const authUtils = {
       // --------------------------------------------------------
       // CASE 3: USER DOES NOT EXIST — REGISTRATION MODE
       // --------------------------------------------------------
-      
+
       // Tell frontend to collect profile info
       return {
         success: true,
@@ -604,3 +618,39 @@ export const authUtils = {
     }
   },
 };
+
+export async function parseMyResume(): Promise<any> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Not logged in");
+
+  const res = await fetch(`${API_URL}/api/resume/parse`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Parse failed");
+  return data;
+}
+
+export async function tailorMyResume(jobDescription: string, boothId?: string, roleTitle?: string) {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Not logged in");
+
+  const res = await fetch(`${API_URL}/api/resume/tailor`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ jobDescription, boothId, roleTitle }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Tailor failed");
+  return data;
+}
+
