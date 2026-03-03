@@ -513,8 +513,8 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
     if (applicationLink?.trim()) {
       try {
         new URL(applicationLink.trim());
-      } catch (err) {
-        console.error("Invalid application URL provided:", err.message);
+      } catch {
+        console.error("Invalid application URL provided");
         return res.status(400).json({ success: false, error: "Invalid application URL format" });
       }
     }
@@ -696,7 +696,7 @@ app.post("/api/job-invitations/send", async (req, res) => {
         message: message || undefined,
       });
 
-      console.log(`Creating invitation ${invitationRef.id} for student ${sanitizeLog(studentId)}:`, invitationData);
+      console.log(`Creating invitation ${invitationRef.id} for student ${sanitizeLog(studentId)}`);
       
       batch.set(invitationRef, invitationData);
     }
