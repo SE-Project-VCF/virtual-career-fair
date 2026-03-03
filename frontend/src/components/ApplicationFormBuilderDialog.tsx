@@ -27,8 +27,7 @@ import AddIcon from "@mui/icons-material/Add";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
-import { collection, getDocs, Timestamp } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { auth } from "../firebase";
 import { API_URL } from "../config";
 import type { ApplicationForm, FormField, FormFieldType } from "../types/applicationForm";
 
@@ -46,14 +45,6 @@ interface FieldErrors {
   options?: string;
 }
 
-interface FairScheduleOption {
-  id: string;
-  name: string | null;
-  description: string | null;
-  startTime: number | null;
-  endTime: number | null;
-}
-
 export default function ApplicationFormBuilderDialog({
   open,
   onClose,
@@ -69,73 +60,8 @@ export default function ApplicationFormBuilderDialog({
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, FieldErrors>>({});
   const [formStatus, setFormStatus] = useState<"draft" | "published">("draft");
-  const [fairSchedules, setFairSchedules] = useState<FairScheduleOption[]>([]);
-  const [fairScheduleId, setFairScheduleId] = useState("");
-  const [fairSelectionError, setFairSelectionError] = useState("");
-  const [loadingFairs, setLoadingFairs] = useState(false);
 
   const hasExistingForm = useMemo(() => !!initialForm, [initialForm]);
-
-  const selectedFair = useMemo(
-    () => fairSchedules.find((schedule) => schedule.id === fairScheduleId) ?? null,
-    [fairSchedules, fairScheduleId],
-  );
-
-  const isActiveForSubmissions = useMemo(() => {
-    if (formStatus !== "published" || !selectedFair || !selectedFair.startTime || !selectedFair.endTime) {
-      return false;
-    }
-    const now = Date.now();
-    return now >= selectedFair.startTime && now <= selectedFair.endTime;
-  }, [formStatus, selectedFair]);
-
-  const fetchFairSchedules = async () => {
-    try {
-      setLoadingFairs(true);
-      const now = Date.now();
-      const snapshot = await getDocs(collection(db, "fairSchedules"));
-      const options: FairScheduleOption[] = [];
-
-      snapshot.forEach((scheduleDoc) => {
-        const data = scheduleDoc.data();
-
-        let startTime: number | null = null;
-        let endTime: number | null = null;
-
-        if (data.startTime) {
-          startTime =
-            data.startTime instanceof Timestamp ? data.startTime.toMillis() : (data.startTime as number | null);
-        }
-        if (data.endTime) {
-          endTime = data.endTime instanceof Timestamp ? data.endTime.toMillis() : (data.endTime as number | null);
-        }
-
-        if (endTime && endTime >= now) {
-          options.push({
-            id: scheduleDoc.id,
-            name: data.name || null,
-            description: data.description || null,
-            startTime,
-            endTime,
-          });
-        }
-      });
-
-      options.sort((a, b) => {
-        if (!a.startTime && !b.startTime) return 0;
-        if (!a.startTime) return 1;
-        if (!b.startTime) return -1;
-        return a.startTime - b.startTime;
-      });
-
-      setFairSchedules(options);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("Error fetching fair schedules:", err);
-    } finally {
-      setLoadingFairs(false);
-    }
-  };
 
   useEffect(() => {
     if (open) {
@@ -144,7 +70,6 @@ export default function ApplicationFormBuilderDialog({
         setFormDescription(initialForm.description ?? "");
         setFields(initialForm.fields ?? []);
         setFormStatus(initialForm.status ?? "draft");
-        setFairScheduleId(initialForm.fairScheduleId ?? "");
       } else {
         setFormTitle(`Application for ${jobName}`);
         setFormDescription("");
@@ -157,11 +82,9 @@ export default function ApplicationFormBuilderDialog({
           },
         ]);
         setFormStatus("draft");
-        setFairScheduleId("");
       }
       setError("");
       setFieldErrors({});
-      void fetchFairSchedules();
     }
   }, [open, initialForm, jobName]);
 
@@ -283,16 +206,6 @@ export default function ApplicationFormBuilderDialog({
       return false;
     }
 
-    if (formStatus === "published" && !fairScheduleId) {
-      setFairSelectionError("Select a fair for this published form.");
-      if (!error) {
-        setError("Please select a fair for this published form.");
-      }
-      return false;
-    }
-
-    setFairSelectionError("");
-
     setError("");
     return true;
   };
@@ -310,7 +223,6 @@ export default function ApplicationFormBuilderDialog({
       title: formTitle.trim(),
       status: formStatus,
       ...(formDescription.trim() ? { description: formDescription.trim() } : {}),
-      ...(formStatus === "published" && fairScheduleId ? { fairScheduleId } : {}),
       ...(formStatus === "published" ? { publishedAt: now } : {}),
       fields: fields.map((field) => {
         const base: FormField = {
@@ -397,12 +309,6 @@ export default function ApplicationFormBuilderDialog({
           </Typography>
         </Box>
 
-        {isActiveForSubmissions && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            This application form is currently live for the selected fair. Unpublish it to make structural changes.
-          </Alert>
-        )}
-
         {error && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
             {error}
@@ -416,7 +322,7 @@ export default function ApplicationFormBuilderDialog({
             required
             value={formTitle}
             onChange={(e) => setFormTitle(e.target.value)}
-            disabled={isActiveForSubmissions}
+
           />
           <TextField
             fullWidth
@@ -426,57 +332,23 @@ export default function ApplicationFormBuilderDialog({
             value={formDescription}
             onChange={(e) => setFormDescription(e.target.value)}
             placeholder="Share context or instructions for candidates about this application."
-            disabled={isActiveForSubmissions}
+
           />
         </Box>
 
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", mb: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
           <FormControlLabel
             control={
               <Switch
                 checked={formStatus === "published"}
                 onChange={(e) => {
-                  const nextStatus: "draft" | "published" = e.target.checked ? "published" : "draft";
-                  setFormStatus(nextStatus);
+                  setFormStatus(e.target.checked ? "published" : "draft");
                 }}
                 color="primary"
               />
             }
             label={formStatus === "published" ? "Published" : "Draft"}
           />
-
-          <FormControl size="small" sx={{ minWidth: 220 }}>
-            <InputLabel id="fair-select-label">Fair</InputLabel>
-            <Select
-              labelId="fair-select-label"
-              label="Fair"
-              value={fairScheduleId}
-              onChange={(e) => {
-                setFairScheduleId(e.target.value as string);
-                setFairSelectionError("");
-              }}
-              disabled={loadingFairs || fairSchedules.length === 0}
-            >
-              <MenuItem value="">
-                <em>No fair selected</em>
-              </MenuItem>
-              {fairSchedules.map((schedule) => (
-                <MenuItem key={schedule.id} value={schedule.id}>
-                  {schedule.name || "Untitled fair"}
-                </MenuItem>
-              ))}
-            </Select>
-            {fairSelectionError && (
-              <Typography variant="caption" color="error">
-                {fairSelectionError}
-              </Typography>
-            )}
-            {!loadingFairs && fairSchedules.length === 0 && (
-              <Typography variant="caption" color="text.secondary">
-                No upcoming or active fairs. Forms can be prepared as drafts but not published yet.
-              </Typography>
-            )}
-          </FormControl>
         </Box>
 
         <Divider sx={{ mb: 2 }} />
@@ -567,7 +439,7 @@ export default function ApplicationFormBuilderDialog({
                                       onChange={(e) => handleFieldChange(field.id, "label", e.target.value)}
                                       error={!!errorsForField.label}
                                       helperText={errorsForField.label}
-                                      disabled={isActiveForSubmissions}
+
                                     />
 
                                     <FormControl size="small" sx={{ minWidth: 160 }}>
@@ -579,7 +451,7 @@ export default function ApplicationFormBuilderDialog({
                                         onChange={(e) =>
                                           handleFieldTypeChange(field.id, e.target.value as FormFieldType)
                                         }
-                                        disabled={isActiveForSubmissions}
+
                                       >
                                         <MenuItem value="shortText">Short text</MenuItem>
                                         <MenuItem value="longText">Long text</MenuItem>
@@ -606,7 +478,7 @@ export default function ApplicationFormBuilderDialog({
                                       onChange={(e) => handleOptionsChange(field.id, e.target.value)}
                                       error={!!errorsForField.options}
                                       helperText={errorsForField.options || "Example: Yes, No, Maybe"}
-                                      disabled={isActiveForSubmissions}
+
                                     />
                                   )}
 
@@ -616,7 +488,7 @@ export default function ApplicationFormBuilderDialog({
                                         <Checkbox
                                           checked={field.required}
                                           onChange={(e) => handleFieldChange(field.id, "required", e.target.checked)}
-                                          disabled={isActiveForSubmissions}
+
                                         />
                                       }
                                       label="Required"
@@ -627,7 +499,7 @@ export default function ApplicationFormBuilderDialog({
                                       color="error"
                                       onClick={() => handleDeleteField(field.id)}
                                       sx={{ ml: 1 }}
-                                      disabled={isActiveForSubmissions}
+
                                     >
                                       <DeleteIcon fontSize="small" />
                                     </IconButton>
@@ -684,7 +556,7 @@ export default function ApplicationFormBuilderDialog({
                 background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
               },
             }}
-            disabled={isActiveForSubmissions}
+
           >
             Add field
           </Button>

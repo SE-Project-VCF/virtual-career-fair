@@ -10,7 +10,6 @@ import {
   DialogTitle,
   FormControl,
   FormControlLabel,
-  InputLabel,
   MenuItem,
   Select,
   TextField,
@@ -178,101 +177,128 @@ export default function JobApplicationFormDialog({
     }
   };
 
+  const renderFieldLabel = (field: FormField) => (
+    <Typography variant="body2" fontWeight={600} sx={{ mb: 0.75 }}>
+      {field.label}
+      {field.required && (
+        <Typography component="span" color="error" variant="body2">
+          {" "}*
+        </Typography>
+      )}
+    </Typography>
+  );
+
   const renderField = (field: FormField) => {
     const value = values[field.id];
 
     switch (field.type as FormFieldType) {
       case "shortText":
         return (
-          <TextField
-            fullWidth
-            label={field.label}
-            required={field.required}
-            value={(value as string) || ""}
-            onChange={(e) => handleChange(field, e.target.value)}
-            error={!!errors[field.id]}
-            helperText={errors[field.id]}
-          />
+          <Box>
+            {renderFieldLabel(field)}
+            <TextField
+              fullWidth
+              value={(value as string) || ""}
+              onChange={(e) => handleChange(field, e.target.value)}
+              error={!!errors[field.id]}
+              helperText={errors[field.id]}
+            />
+          </Box>
         );
       case "longText":
         return (
-          <TextField
-            fullWidth
-            multiline
-            minRows={3}
-            label={field.label}
-            required={field.required}
-            value={(value as string) || ""}
-            onChange={(e) => handleChange(field, e.target.value)}
-            error={!!errors[field.id]}
-            helperText={errors[field.id]}
-          />
+          <Box>
+            {renderFieldLabel(field)}
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              value={(value as string) || ""}
+              onChange={(e) => handleChange(field, e.target.value)}
+              error={!!errors[field.id]}
+              helperText={errors[field.id]}
+            />
+          </Box>
         );
       case "singleSelect":
         return (
-          <FormControl fullWidth error={!!errors[field.id]}>
-            <InputLabel>{field.label}</InputLabel>
-            <Select
-              label={field.label}
-              value={(value as string) || ""}
-              onChange={(e) => handleChange(field, e.target.value)}
-              required={field.required}
-            >
-              {(field.options ?? []).map((opt) => (
-                <MenuItem key={opt} value={opt}>
-                  {opt}
+          <Box>
+            {renderFieldLabel(field)}
+            <FormControl fullWidth error={!!errors[field.id]}>
+              <Select
+                displayEmpty
+                value={(value as string) || ""}
+                onChange={(e) => handleChange(field, e.target.value)}
+              >
+                <MenuItem value="" disabled>
+                  <em>Select an option</em>
                 </MenuItem>
-              ))}
-            </Select>
-            {errors[field.id] && (
-              <Typography variant="caption" color="error">
-                {errors[field.id]}
-              </Typography>
-            )}
-          </FormControl>
+                {(field.options ?? []).map((opt) => (
+                  <MenuItem key={opt} value={opt}>
+                    {opt}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors[field.id] && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                  {errors[field.id]}
+                </Typography>
+              )}
+            </FormControl>
+          </Box>
         );
       case "multiSelect":
         return (
-          <FormControl fullWidth error={!!errors[field.id]}>
-            <InputLabel>{field.label}</InputLabel>
-            <Select
-              multiple
-              label={field.label}
-              value={(value as string[]) || []}
-              onChange={(e) => handleChange(field, e.target.value as string[])}
-            >
-              {(field.options ?? []).map((opt) => (
-                <MenuItem key={opt} value={opt}>
-                  {opt}
-                </MenuItem>
-              ))}
-            </Select>
-            {errors[field.id] && (
-              <Typography variant="caption" color="error">
-                {errors[field.id]}
-              </Typography>
-            )}
-          </FormControl>
+          <Box>
+            {renderFieldLabel(field)}
+            <FormControl fullWidth error={!!errors[field.id]}>
+              <Select
+                multiple
+                displayEmpty
+                value={(value as string[]) || []}
+                onChange={(e) => handleChange(field, e.target.value as string[])}
+                renderValue={(selected) =>
+                  (selected as string[]).length === 0 ? (
+                    <em style={{ color: "rgba(0,0,0,0.4)" }}>Select options</em>
+                  ) : (
+                    (selected as string[]).join(", ")
+                  )
+                }
+              >
+                {(field.options ?? []).map((opt) => (
+                  <MenuItem key={opt} value={opt}>
+                    {opt}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors[field.id] && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                  {errors[field.id]}
+                </Typography>
+              )}
+            </FormControl>
+          </Box>
         );
       case "checkbox":
         return (
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={Boolean(value)}
-                onChange={(e) => handleChange(field, e.target.checked)}
-              />
-            }
-            label={field.label}
-          />
+          <Box>
+            {renderFieldLabel(field)}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={Boolean(value)}
+                  onChange={(e) => handleChange(field, e.target.checked)}
+                />
+              }
+              label="Yes"
+              sx={{ ml: 0 }}
+            />
+          </Box>
         );
       case "file":
         return (
           <Box>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              {field.label}
-              {field.required && " *"}
-            </Typography>
+            {renderFieldLabel(field)}
             <Button variant="outlined" component="label" size="small">
               Choose file
               <input
@@ -290,7 +316,7 @@ export default function JobApplicationFormDialog({
               </Typography>
             )}
             {errors[field.id] && (
-              <Typography variant="caption" color="error" display="block">
+              <Typography variant="caption" color="error" display="block" sx={{ mt: 0.5 }}>
                 {errors[field.id]}
               </Typography>
             )}
