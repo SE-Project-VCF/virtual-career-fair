@@ -19,7 +19,7 @@ import {
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
 import BusinessIcon from "@mui/icons-material/Business"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
@@ -331,6 +331,15 @@ export default function Company() {
   const handleSaveJob = async () => {
     if (!company) return
 
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
+
     // Reset errors
     setJobErrors({})
 
@@ -417,6 +426,15 @@ export default function Company() {
   const handleDeleteJobConfirm = async () => {
     if (!jobToDelete || !company) return
 
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
+
     try {
       setDeletingJob(true)
       setError("")
@@ -443,6 +461,15 @@ export default function Company() {
 
   const handleDeleteConfirm = async () => {
     if (!representativeToDelete || !company || !isOwner) return
+
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
 
     try {
       setDeleting(true)
@@ -496,6 +523,15 @@ export default function Company() {
   const handleDeleteCompanyConfirm = async () => {
     if (!company || !userId || !isOwner) return
 
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
+
     try {
       setDeletingCompany(true)
       setError("")
@@ -528,6 +564,15 @@ export default function Company() {
   const handleRegenerateInviteCode = async () => {
     if (!company || !userId) return
 
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
+
     try {
       setUpdatingInviteCode(true)
       setError("")
@@ -555,6 +600,15 @@ export default function Company() {
     const trimmedCode = editedInviteCode.trim()
     if (!trimmedCode || trimmedCode.length < 4 || trimmedCode.length > 20) {
       setError("Invite code must be 4-20 characters")
+      return
+    }
+
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
       return
     }
 

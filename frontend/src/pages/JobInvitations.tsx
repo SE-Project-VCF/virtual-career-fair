@@ -13,7 +13,6 @@ import {
   Tabs,
   Tab,
   IconButton,
-  Tooltip,
   Divider,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -22,7 +21,7 @@ import BusinessIcon from "@mui/icons-material/Business";
 import PersonIcon from "@mui/icons-material/Person";
 import LaunchIcon from "@mui/icons-material/Launch";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import VisibilityIcon from "@mui/icons-material/Visibility";
+import EditIcon from "@mui/icons-material/Edit";
 import { authUtils } from "../utils/auth";
 import ProfileMenu from "./ProfileMenu";
 
@@ -181,6 +180,10 @@ export default function JobInvitations() {
     } else {
       setError("This company doesn't have a booth set up yet.");
     }
+  };
+
+  const handleTailorResume = (invitation: JobInvitation) => {
+    navigate(`/invitations/${invitation.id}/tailor-simple`);
   };
 
   const formatDateTime = (timestamp: number | undefined) => {
@@ -403,7 +406,7 @@ export default function JobInvitations() {
                   <Divider sx={{ my: 2 }} />
 
                   {/* Actions */}
-                  <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+                  <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end", flexWrap: "wrap" }}>
                     <Button
                       variant="outlined"
                       onClick={() => handleViewJob(invitation)}
@@ -418,6 +421,23 @@ export default function JobInvitations() {
                     >
                       View Full Details
                     </Button>
+                    {invitation.job && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<EditIcon />}
+                        onClick={() => handleTailorResume(invitation)}
+                        sx={{
+                          borderColor: "#ff9800",
+                          color: "#ff9800",
+                          "&:hover": {
+                            borderColor: "#f57c00",
+                            bgcolor: "rgba(255, 152, 0, 0.05)",
+                          },
+                        }}
+                      >
+                        Tailor Resume
+                      </Button>
+                    )}
                     {invitation.job?.applicationLink && (
                       <Button
                         variant="contained"
