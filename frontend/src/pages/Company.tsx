@@ -41,7 +41,6 @@ import ProfileMenu from "./ProfileMenu"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
-import SubmissionsViewerDialog from "../components/SubmissionsViewerDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
@@ -128,7 +127,6 @@ export default function Company() {
   const [deleteFormDialogOpen, setDeleteFormDialogOpen] = useState(false)
   const [jobToDeleteForm, setJobToDeleteForm] = useState<Job | null>(null)
   const [deletingForm, setDeletingForm] = useState(false)
-  const [submissionsViewerOpen, setSubmissionsViewerOpen] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -1125,7 +1123,7 @@ export default function Company() {
                                   <Tooltip title="View submissions">
                                     <IconButton
                                       size="small"
-                                      onClick={() => setSubmissionsViewerOpen(true)}
+                                      onClick={() => navigate(`/company/${company?.id}/submissions`)}
                                       sx={{ color: "#388560" }}
                                     >
                                       <AssignmentIcon fontSize="small" />
@@ -1576,15 +1574,6 @@ export default function Company() {
         </DialogActions>
       </Dialog>
 
-      {/* Submissions Viewer Dialog */}
-      {company && (
-        <SubmissionsViewerDialog
-          open={submissionsViewerOpen}
-          onClose={() => setSubmissionsViewerOpen(false)}
-          companyId={company.id}
-          jobs={jobs}
-        />
-      )}
     </Box>
   )
 }

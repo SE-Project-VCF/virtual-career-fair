@@ -18,6 +18,7 @@ import JobInvitations from "./pages/JobInvitations"
 import TailorResumeSimplePage from "./pages/TailorResumeSimplePage"
 import TailoredResumeViewPage from "./pages/TailoredResumeViewPage"
 import TailoredResumesPage from "./pages/TailoredResumesPage"
+import SubmissionsPage from "./pages/SubmissionsPage"
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />
+        <Route path="/company/:companyId/submissions" element={<SubmissionsPage />} />
         <Route path="/booths" element={<Booths />} />
         <Route path="/booth/:boothId" element={<BoothView />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
