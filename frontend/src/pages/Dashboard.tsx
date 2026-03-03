@@ -17,6 +17,8 @@ import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu"
 import EventList from "../components/EventList"
 import NotificationBell from "../components/NotificationBell"
+import { parseMyResume } from "../utils/auth";
+import { tailorMyResume } from "../utils/auth"; // adjust path
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -37,11 +39,48 @@ export default function Dashboard() {
   const [newInvitationsCount, setNewInvitationsCount] = useState(0)
   const [loadingInvitations, setLoadingInvitations] = useState(false)
 
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await parseMyResume();
+        console.log("✅ RESUME PARSE RESULT:", result);
+      } catch (e) {
+        console.error("❌ RESUME PARSE ERROR:", e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Prevent spam on refresh
+        if (sessionStorage.getItem("tailorTestOnce")) return;
+
+        const jobDescription = `
+Frontend Intern
+- Build React components
+- Work with Firebase/Firestore
+- Write clean TypeScript
+- Collaborate in GitHub PR workflow
+`;
+
+        const result = await tailorMyResume(jobDescription, "testBoothId", "Frontend Intern");
+        console.log("🧠 TAILOR RESULT:", result);
+
+        sessionStorage.setItem("tailorTestOnce", "1");
+      } catch (e) {
+        console.error("❌ TAILOR ERROR:", e);
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
       navigate("/")
       return
     }
+
 
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
@@ -823,8 +862,8 @@ export default function Dashboard() {
                   <Card
                     sx={{
                       bgcolor: "white",
-                      border: newInvitationsCount > 0 
-                        ? "2px solid rgba(176, 58, 108, 0.5)" 
+                      border: newInvitationsCount > 0
+                        ? "2px solid rgba(176, 58, 108, 0.5)"
                         : "1px solid rgba(176, 58, 108, 0.3)",
                       transition: "transform 0.2s, box-shadow 0.2s",
                       "&:hover": {
@@ -849,7 +888,7 @@ export default function Dashboard() {
                         {loadingInvitations ? "..." : jobInvitationsCount}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        {newInvitationsCount > 0 
+                        {newInvitationsCount > 0
                           ? `${newInvitationsCount} new invitation${newInvitationsCount !== 1 ? "s" : ""}`
                           : "Companies have invited you to apply"}
                       </Typography>
