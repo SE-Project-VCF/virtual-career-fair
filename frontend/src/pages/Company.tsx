@@ -34,9 +34,14 @@ import AddIcon from "@mui/icons-material/Add"
 import LaunchIcon from "@mui/icons-material/Launch"
 import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
+import DescriptionIcon from "@mui/icons-material/Description"
+import AssignmentIcon from "@mui/icons-material/Assignment"
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import ProfileMenu from "./ProfileMenu"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
+import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -70,6 +75,7 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  applicationForm?: ApplicationForm
 }
 
 interface JobInvitationStats {
@@ -116,6 +122,11 @@ export default function Company() {
   const [deletingJob, setDeletingJob] = useState(false)
   const [statsDialogOpen, setStatsDialogOpen] = useState(false)
   const [selectedJobForStats, setSelectedJobForStats] = useState<Job | null>(null)
+  const [applicationFormDialogOpen, setApplicationFormDialogOpen] = useState(false)
+  const [selectedJobForForm, setSelectedJobForForm] = useState<Job | null>(null)
+  const [deleteFormDialogOpen, setDeleteFormDialogOpen] = useState(false)
+  const [jobToDeleteForm, setJobToDeleteForm] = useState<Job | null>(null)
+  const [deletingForm, setDeletingForm] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -220,7 +231,6 @@ export default function Company() {
   const fetchJobs = async (companyId: string) => {
     try {
       setLoadingJobs(true)
-      console.log("Fetching jobs for company:", companyId)
       
       const jobsRef = collection(db, "jobs")
       const q = query(jobsRef, where("companyId", "==", companyId))
@@ -229,6 +239,7 @@ export default function Company() {
       const jobsList: Job[] = []
       jobsSnapshot.forEach((doc) => {
         const data = doc.data()
+        const applicationFormData = data.applicationForm as ApplicationForm | undefined
         jobsList.push({
           id: doc.id,
           companyId: data.companyId,
@@ -237,6 +248,7 @@ export default function Company() {
           majorsAssociated: data.majorsAssociated,
           applicationLink: data.applicationLink || null,
           createdAt: data.createdAt?.toMillis?.() || data.createdAt || null,
+          applicationForm: applicationFormData
         })
       })
       
@@ -248,7 +260,6 @@ export default function Company() {
         return b.createdAt - a.createdAt
       })
       
-      console.log("Fetched jobs:", jobsList.length, "jobs")
       setJobs(jobsList)
       
       // Fetch stats for each job
@@ -301,6 +312,59 @@ export default function Company() {
   const handleViewStatsClick = (job: Job) => {
     setSelectedJobForStats(job)
     setStatsDialogOpen(true)
+  }
+
+  const handleManageApplicationFormClick = (job: Job) => {
+    setSelectedJobForForm(job)
+    setApplicationFormDialogOpen(true)
+  }
+
+  const handleDeleteFormClick = (job: Job) => {
+    setJobToDeleteForm(job)
+    setDeleteFormDialogOpen(true)
+  }
+
+  const handleDeleteFormConfirm = async () => {
+    if (!jobToDeleteForm) return
+
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => navigate("/login"), 1500)
+      return
+    }
+
+    try {
+      setDeletingForm(true)
+      setError("")
+
+      const token = await auth.currentUser.getIdToken()
+      const response = await fetch(
+        `${API_URL}/api/jobs/${jobToDeleteForm.id}/form`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to delete form.")
+      }
+
+      setJobs((prev) =>
+        prev.map((job) =>
+          job.id === jobToDeleteForm.id ? { ...job, applicationForm: undefined } : job
+        )
+      )
+      setSuccess("Application form deleted.")
+      setDeleteFormDialogOpen(false)
+      setJobToDeleteForm(null)
+    } catch (err: any) {
+      console.error("Error deleting form:", err)
+      setError(err?.message || "Failed to delete application form.")
+    } finally {
+      setDeletingForm(false)
+    }
   }
 
   const handleCreateJobClick = () => {
@@ -393,7 +457,6 @@ export default function Company() {
         setJobDialogOpen(false)
       } else {
         // Create new job
-        console.log("Creating job for company:", company.id, company.companyName)
         
         const jobsRef = collection(db, "jobs")
         const jobData: any = {
@@ -1047,6 +1110,37 @@ export default function Company() {
                                     <EditIcon fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
+                                <Tooltip title={job.applicationForm ? "Edit application form" : "Create application form"}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleManageApplicationFormClick(job)}
+                                    sx={{ color: job.applicationForm ? "#388560" : "text.secondary" }}
+                                  >
+                                    <DescriptionIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                {job.applicationForm && (
+                                  <Tooltip title="View submissions">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => navigate(`/company/${company?.id}/submissions`)}
+                                      sx={{ color: "#388560" }}
+                                    >
+                                      <AssignmentIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                {job.applicationForm && (
+                                  <Tooltip title="Delete application form">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => handleDeleteFormClick(job)}
+                                      sx={{ color: "#d32f2f" }}
+                                    >
+                                      <DeleteSweepIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
                                 <Tooltip title="Delete job posting">
                                   <IconButton
                                     size="small"
@@ -1060,6 +1154,28 @@ export default function Company() {
                             </Box>
                           </Box>
                           
+                          {job.applicationForm && (
+                            <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
+                              <Chip
+                                icon={<DescriptionIcon sx={{ fontSize: 16 }} />}
+                                label={
+                                  job.applicationForm.status === "published"
+                                    ? "Application Form: Published"
+                                    : "Application Form: Draft"
+                                }
+                                size="small"
+                                sx={{
+                                  bgcolor:
+                                    job.applicationForm.status === "published"
+                                      ? "rgba(56, 133, 96, 0.1)"
+                                      : "rgba(0, 0, 0, 0.04)",
+                                  color: job.applicationForm.status === "published" ? "#388560" : "text.secondary",
+                                  fontWeight: 500,
+                                }}
+                              />
+                            </Box>
+                          )}
+
                           {/* Job Invitation Stats */}
                           {jobStats[job.id] && jobStats[job.id].totalSent > 0 && (
                             <Box 
@@ -1418,6 +1534,46 @@ export default function Company() {
           jobTitle={selectedJobForStats.name}
         />
       )}
+
+      {/* Application Form Builder Dialog */}
+      {selectedJobForForm && (
+        <ApplicationFormBuilderDialog
+          open={applicationFormDialogOpen}
+          onClose={() => {
+            setApplicationFormDialogOpen(false)
+            setSelectedJobForForm(null)
+          }}
+          jobId={selectedJobForForm.id}
+          jobName={selectedJobForForm.name}
+          initialForm={selectedJobForForm.applicationForm}
+          onSaved={(updatedForm) => {
+            setJobs((prev) =>
+              prev.map((job) =>
+                job.id === selectedJobForForm.id ? { ...job, applicationForm: updatedForm } : job
+              )
+            )
+          }}
+        />
+      )}
+
+      {/* Delete Application Form Confirmation Dialog */}
+      <Dialog open={deleteFormDialogOpen} onClose={() => { if (!deletingForm) { setDeleteFormDialogOpen(false); setJobToDeleteForm(null) } }}>
+        <DialogTitle>Delete Application Form</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the application form for <strong>{jobToDeleteForm?.name}</strong>? This action cannot be undone and students will no longer be able to apply through this form.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setDeleteFormDialogOpen(false); setJobToDeleteForm(null) }} disabled={deletingForm}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteFormConfirm} color="error" variant="contained" disabled={deletingForm}>
+            {deletingForm ? "Deleting..." : "Delete Form"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
     </Box>
   )
 }

@@ -778,6 +778,7 @@ app.get("/api/jobs", async (req, res) => {
         majorsAssociated: data.majorsAssociated,
         applicationLink: data.applicationLink || null,
         createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        applicationForm: data.applicationForm || null,
       });
     });
 
@@ -891,6 +892,115 @@ app.delete("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error("Error deleting job:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   CREATE / UPDATE APPLICATION FORM ON A JOB
+---------------------------------------------------- */
+app.put("/api/jobs/:id/form", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const formData = req.body;
+
+    if (!formData || typeof formData !== "object") {
+      return res.status(400).json({ success: false, error: "Form data is required" });
+    }
+
+    const jobRef = db.collection("jobs").doc(id);
+    const jobDoc = await jobRef.get();
+
+    if (!jobDoc.exists) {
+      return res.status(404).json({ success: false, error: "Job not found" });
+    }
+
+    const jobData = jobDoc.data();
+    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(404).json({ success: false, error: "Company not found" });
+    }
+
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).json({ success: false, error: "Not authorized for this company" });
+    }
+
+    await jobRef.update({ applicationForm: formData });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Error saving application form:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   DELETE APPLICATION FORM FROM A JOB
+---------------------------------------------------- */
+app.delete("/api/jobs/:id/form", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const jobRef = db.collection("jobs").doc(id);
+    const jobDoc = await jobRef.get();
+
+    if (!jobDoc.exists) {
+      return res.status(404).json({ success: false, error: "Job not found" });
+    }
+
+    const jobData = jobDoc.data();
+    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(404).json({ success: false, error: "Company not found" });
+    }
+
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).json({ success: false, error: "Not authorized for this company" });
+    }
+
+    await jobRef.update({ applicationForm: admin.firestore.FieldValue.delete() });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting application form:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   GET ALL SUBMISSIONS FOR A COMPANY
+---------------------------------------------------- */
+app.get("/api/companies/:companyId/submissions", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { companyId } = req.params;
+
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(404).json({ success: false, error: "Company not found" });
+    }
+
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).json({ success: false, error: "Not authorized for this company" });
+    }
+
+    const snapshot = await db
+      .collection("jobApplications")
+      .where("companyId", "==", companyId)
+      .get();
+
+    const submissions = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.submittedAt ?? 0) - (a.submittedAt ?? 0));
+
+    return res.json({ success: true, submissions });
+  } catch (err) {
+    console.error("Error fetching submissions:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1138,10 +1248,12 @@ app.get("/api/job-invitations/received", async (req, res) => {
             const jobData = jobDoc.data();
             jobDetails = {
               id: jobDoc.id,
+              companyId: jobData.companyId,
               name: jobData.name,
               description: jobData.description,
               majorsAssociated: jobData.majorsAssociated,
               applicationLink: jobData.applicationLink || null,
+              applicationForm: jobData.applicationForm || null,
             };
           }
         } catch (err) {
