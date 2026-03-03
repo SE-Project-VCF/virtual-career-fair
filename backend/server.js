@@ -8,6 +8,12 @@ const admin = require("firebase-admin");
 const { removeUndefined, generateInviteCode, encryptInviteCode, decryptInviteCode, hmacInviteCode, validateJobInput, verifyAdmin, verifyFirebaseToken } = require("./helpers");
 
 
+// Sanitize user-controlled values before logging to prevent log injection (S5145)
+function sanitizeLog(value) {
+  if (typeof value !== "string") return String(value);
+  return value.replaceAll(/[\x00-\x1f\x7f]/g, "_");
+}
+
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
 
@@ -672,8 +678,8 @@ app.post("/api/job-invitations/send", async (req, res) => {
     const batch = db.batch();
     const invitationIds = [];
 
-    console.log(`Creating ${studentIds.length} job invitation(s) for job ${jobId}`);
-    console.log(`Sent by user ${userId} from company ${companyId}`);
+    console.log(`Creating ${studentIds.length} job invitation(s) for job ${sanitizeLog(jobId)}`);
+    console.log(`Sent by user ${sanitizeLog(userId)} from company ${sanitizeLog(companyId)}`);
 
     for (const studentId of studentIds) {
       const invitationRef = db.collection("jobInvitations").doc();
@@ -690,7 +696,7 @@ app.post("/api/job-invitations/send", async (req, res) => {
         message: message || undefined,
       });
 
-      console.log(`Creating invitation ${invitationRef.id} for student ${studentId}:`, invitationData);
+      console.log(`Creating invitation ${invitationRef.id} for student ${sanitizeLog(studentId)}:`, invitationData);
       
       batch.set(invitationRef, invitationData);
     }
@@ -717,7 +723,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
     const { userId, status } = req.query;
     const userIdStr = typeof userId === "string" ? userId : "";
 
-    console.log(`Fetching job invitations for student ${userIdStr}`);
+    console.log(`Fetching job invitations for student ${sanitizeLog(userIdStr)}`);
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
@@ -742,7 +748,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
     }
 
     const invitationsSnapshot = await query.get();
-    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student ${userIdStr}`);
+    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student ${sanitizeLog(userIdStr)}`);
 
     // Get job and company details for each invitation
     const invitations = await Promise.all(
@@ -999,7 +1005,7 @@ app.get("/api/students", async (req, res) => {
     if (boothId) {
       // Find students who visited this specific booth
       const boothIdStr = typeof boothId === "string" ? boothId : "";
-      console.log(`Filtering students who visited booth: ${boothIdStr}`);
+      console.log(`Filtering students who visited booth: ${sanitizeLog(boothIdStr)}`);
       
       // Get all students first
       const allStudentsQuery = db.collection("users").where("role", "==", "student");
@@ -1029,7 +1035,7 @@ app.get("/api/students", async (req, res) => {
       });
       
       students = (await Promise.all(studentPromises)).filter(s => s !== null);
-      console.log(`Found ${students.length} students who visited booth ${boothIdStr}`);
+      console.log(`Found ${students.length} students who visited booth ${sanitizeLog(boothIdStr)}`);
     } else {
       // Get all students (existing logic)
       let query = db.collection("users").where("role", "==", "student");
