@@ -27,8 +27,9 @@ import AddIcon from "@mui/icons-material/Add";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
-import { collection, doc, getDocs, Timestamp, updateDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, getDocs, Timestamp } from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { API_URL } from "../config";
 import type { ApplicationForm, FormField, FormFieldType } from "../types/applicationForm";
 
 interface ApplicationFormBuilderDialogProps {
@@ -332,10 +333,23 @@ export default function ApplicationFormBuilderDialog({
       setSaving(true);
       setError("");
 
-      const jobRef = doc(db, "jobs", jobId);
-      await updateDoc(jobRef, {
-        applicationForm: formToSave,
-      });
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch(
+        `${API_URL}/api/jobs/${jobId}/form`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(formToSave),
+        },
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to save application form.");
+      }
 
       if (onSaved) {
         onSaved(formToSave);
