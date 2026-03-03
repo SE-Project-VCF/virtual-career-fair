@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Usage: ./generate-github-report <SprintNumber> <GitHubUsername> <StartDate> <EndDate> [Name]
-# Example: ./generate-github-report 2 austinmoser 2026-02-03 2026-02-17 AustinMoser
+# Usage: ./generate-github-report.sh <SprintNumber> <GitHubUsername> <StartDate> <EndDate> [Name] [GitAuthor]
+# Example: ./generate-github-report.sh 2 austinmosercs-ux 2026-02-03 2026-02-17 AustinMoser austinmoser
 set -e
 
-SPRINT="${1:?Usage: ./generate-github-report <SprintNumber> <GitHubUsername> <StartDate> <EndDate> [Name]}"
+SPRINT="${1:?Usage: ./generate-github-report <SprintNumber> <GitHubUsername> <StartDate> <EndDate> [Name] [GitAuthor]}"
 GH_USER="${2:?Missing GitHub username}"
 START="${3:?Missing start date (YYYY-MM-DD)}"
 END="${4:?Missing end date (YYYY-MM-DD)}"
 NAME="${5:-$GH_USER}"
+GIT_AUTHOR="${6:-$GH_USER}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 REPORT="Sprint-${SPRINT}-GitHub-Report_${NAME}.md"
 
@@ -41,21 +42,21 @@ PR_COUNT=$(PR_JSON="$PR_JSON" node -e "console.log(JSON.parse(process.env.PR_JSO
 echo "Counting commits..."
 COMMIT_COUNT=$(git -C "$ROOT" log \
   --oneline \
-  --author="$GH_USER" \
+  --author="$GIT_AUTHOR" \
   --after="${START}" \
   --before="${END} 23:59:59" \
   | wc -l | tr -d ' ')
 
 FIRST_COMMIT=$(git -C "$ROOT" log \
   --oneline \
-  --author="$GH_USER" \
+  --author="$GIT_AUTHOR" \
   --after="${START}" \
   --before="${END} 23:59:59" \
   --format="%as" | tail -1)
 
 LAST_COMMIT=$(git -C "$ROOT" log \
   --oneline \
-  --author="$GH_USER" \
+  --author="$GIT_AUTHOR" \
   --after="${START}" \
   --before="${END} 23:59:59" \
   --format="%as" | head -1)
