@@ -65,13 +65,13 @@ describe("TailorResumeSimplePage", () => {
 
   it("redirects to login when no user", async () => {
     vi.mocked(authUtils.getCurrentUser).mockReturnValue(null);
-    globalThis.fetch = vi.fn(() => new Promise(() => {}));
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch;
     renderPage();
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/login"));
   });
 
   it("shows loading spinner while fetching invitation", () => {
-    globalThis.fetch = vi.fn(() => new Promise(() => {}));
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch;
     renderPage();
     expect(screen.getByRole("progressbar")).toBeDefined();
   });
@@ -164,8 +164,11 @@ describe("TailorResumeSimplePage", () => {
     fireEvent.click(screen.getByRole("button", { name: /generate changes/i }));
 
     await waitFor(() => expect(screen.getByText(/changes summary/i)).toBeDefined());
-    // All 3 changes auto-approved
-    expect(screen.getByText(/approved: 3/i)).toBeDefined();
+    // All 3 changes auto-approved - check the summary paragraph's text content
+    await waitFor(() => {
+      const summaryEl = screen.getByText(/total suggested changes/i);
+      expect(summaryEl.textContent).toMatch(/approved:?\s*3/i);
+    });
     expect(screen.getByText(/edits: 1/i)).toBeDefined();
     expect(screen.getByText(/additions: 1/i)).toBeDefined();
     expect(screen.getByText(/removals: 1/i)).toBeDefined();
@@ -224,7 +227,7 @@ describe("TailorResumeSimplePage", () => {
     await waitFor(() => screen.getByRole("button", { name: /save tailored resume/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /save tailored resume/i }));
-    expect(screen.getByText("Confirm Save")).toBeDefined();
+    expect(screen.getByRole("heading", { name: /confirm save/i })).toBeDefined();
     expect(screen.getByText(/3 approved changes/i)).toBeDefined();
   });
 
@@ -236,10 +239,10 @@ describe("TailorResumeSimplePage", () => {
     renderPage();
     await waitFor(() => fireEvent.click(screen.getByRole("button", { name: /generate changes/i })));
     await waitFor(() => fireEvent.click(screen.getByRole("button", { name: /save tailored resume/i })));
-    await waitFor(() => screen.getByText("Confirm Save"));
+    await waitFor(() => screen.getByRole("heading", { name: /confirm save/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() => expect(screen.queryByText("Confirm Save")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /confirm save/i })).toBeNull());
   });
 
   it("saves resume and navigates to new resume page", async () => {
@@ -254,7 +257,7 @@ describe("TailorResumeSimplePage", () => {
     renderPage();
     await waitFor(() => fireEvent.click(screen.getByRole("button", { name: /generate changes/i })));
     await waitFor(() => fireEvent.click(screen.getByRole("button", { name: /save tailored resume/i })));
-    await waitFor(() => screen.getByText("Confirm Save"));
+    await waitFor(() => screen.getByRole("heading", { name: /confirm save/i }));
     fireEvent.click(screen.getByRole("button", { name: /confirm save/i }));
 
     await waitFor(() => expect(screen.getByText("Saved!")).toBeDefined());
@@ -272,7 +275,7 @@ describe("TailorResumeSimplePage", () => {
     renderPage();
     await waitFor(() => fireEvent.click(screen.getByRole("button", { name: /generate changes/i })));
     await waitFor(() => fireEvent.click(screen.getByRole("button", { name: /save tailored resume/i })));
-    await waitFor(() => screen.getByText("Confirm Save"));
+    await waitFor(() => screen.getByRole("heading", { name: /confirm save/i }));
     fireEvent.click(screen.getByRole("button", { name: /confirm save/i }));
 
     await waitFor(() =>
@@ -332,7 +335,7 @@ describe("TailorResumeSimplePage", () => {
     renderPage();
     await waitFor(() => fireEvent.click(screen.getByRole("button", { name: /generate changes/i })));
     await waitFor(() =>
-      expect(screen.getByText(/original resume/i)).toBeDefined()
+      expect(screen.getByRole("heading", { name: /original resume/i })).toBeDefined()
     );
     expect(screen.getByText("My original resume text.")).toBeDefined();
   });

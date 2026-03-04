@@ -52,7 +52,7 @@ const renderPage = () =>
 
 describe("TailoredResumesPage", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     vi.mocked(authUtils.getCurrentUser).mockReturnValue(mockUser as any);
     vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token");
   });
@@ -66,7 +66,7 @@ describe("TailoredResumesPage", () => {
   });
 
   it("shows loading spinner initially", () => {
-    globalThis.fetch = vi.fn(() => new Promise(() => {})); // never resolves
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch; // never resolves
     renderPage();
     expect(screen.getByRole("progressbar")).toBeDefined();
   });
@@ -203,14 +203,12 @@ describe("TailoredResumesPage", () => {
       json: async () => ({ resumes: [makeResume("r1", "SWE")] }),
     });
 
-    // Mock URL.createObjectURL and anchor click
-    const createObjectURL = vi.fn(() => "blob:fake-url");
-    const revokeObjectURL = vi.fn();
-    Object.defineProperty(globalThis, "URL", {
-      value: { createObjectURL, revokeObjectURL },
-      writable: true,
-    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTitle("Download Resume")).toBeDefined());
 
+    // Mock URL and DOM methods AFTER rendering so React can mount
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake-url");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const clickSpy = vi.fn();
     const appendSpy = vi.spyOn(document.body, "appendChild").mockImplementation((el: any) => {
       el.click = clickSpy;
@@ -218,13 +216,13 @@ describe("TailoredResumesPage", () => {
     });
     const removeSpy = vi.spyOn(document.body, "removeChild").mockImplementation(() => ({} as any));
 
-    renderPage();
-    await waitFor(() => expect(screen.getByTitle("Download Resume")).toBeDefined());
     fireEvent.click(screen.getByTitle("Download Resume"));
 
     expect(createObjectURL).toHaveBeenCalled();
     expect(clickSpy).toHaveBeenCalled();
 
+    createObjectURL.mockRestore();
+    revokeObjectURL.mockRestore();
     appendSpy.mockRestore();
     removeSpy.mockRestore();
   });

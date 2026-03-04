@@ -7,7 +7,7 @@ import {
   type StructuredResume,
 } from "../resumeFormatter";
 
-const fullResume: StructuredResume = {
+const fullResume = {
   summary: { text: "Experienced software engineer." },
   skills: { items: ["React", "TypeScript", "Node.js"] },
   experience: [
@@ -159,7 +159,7 @@ describe("countChanges", () => {
       ...fullResume,
       experience: [
         {
-          ...fullResume.experience![0],
+          ...fullResume.experience[0],
           bullets: [
             { bulletId: "b1", text: "Built REST APIs" }, // changed
             { bulletId: "b2", text: "Led migrations" },
@@ -178,7 +178,7 @@ describe("countChanges", () => {
       ...fullResume,
       experience: [
         {
-          ...fullResume.experience![0],
+          ...fullResume.experience[0],
           bullets: [{ bulletId: "b2", text: "Led migrations" }], // b1 removed
         },
       ],
@@ -192,7 +192,7 @@ describe("countChanges", () => {
       ...fullResume,
       experience: [
         {
-          ...fullResume.experience![0],
+          ...fullResume.experience[0],
           bullets: [
             { bulletId: "b1", text: "Built APIs" },
             { bulletId: "b2", text: "Led migrations" },
@@ -210,7 +210,7 @@ describe("countChanges", () => {
       ...fullResume,
       projects: [
         {
-          ...fullResume.projects![0],
+          ...fullResume.projects[0],
           bullets: [{ bulletId: "b3", text: "Deployed to GCP" }], // changed
         },
       ],

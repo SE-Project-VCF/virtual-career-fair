@@ -136,31 +136,10 @@ class PatchValidator {
     let confidence = 1;
 
     // 1. Basic structure validation
-    if (!patch.opId || !patch.type || !patch.target) {
-      issues.push({
-        level: "error",
-        message: "Patch missing opId, type, or target"
-      });
+    const structureCheck = this._validateBasicStructure(patch);
+    if (structureCheck) {
+      issues.push(structureCheck);
       return { valid: false, confidence: 0, issues, concerns };
-    }
-
-    if (!["replace_summary", "replace_bullet", "insert_bullet", "remove_skill", "remove_bullet", "suppress_section"].includes(patch.type)) {
-      issues.push({
-        level: "error",
-        message: `Unknown patch type: ${patch.type}`
-      });
-      return { valid: false, confidence: 0, issues, concerns };
-    }
-
-    // Removal patches don't require afterText
-    if (!["remove_skill", "remove_bullet", "suppress_section"].includes(patch.type)) {
-      if (typeof patch.afterText !== "string" || patch.afterText.length === 0) {
-        issues.push({
-          level: "error",
-          message: "afterText must be non-empty string"
-        });
-        return { valid: false, confidence: 0, issues, concerns };
-      }
     }
 
     // 2. Type-specific validation
@@ -174,13 +153,8 @@ class PatchValidator {
     // 3. Hallucination detection
     const hallucination = this.detectHallucinations(patch);
     if (hallucination.detected) {
-      issues.push({
-        level: hallucination.severity,
-        message: hallucination.message,
-        details: hallucination.details
-      });
+      issues.push({ level: hallucination.severity, message: hallucination.message, details: hallucination.details });
       confidence *= hallucination.confidence;
-
       if (hallucination.severity === "error") {
         return { valid: false, confidence, issues, concerns };
       }
@@ -196,29 +170,10 @@ class PatchValidator {
       confidence *= skillCheck.confidence;
     }
 
-    // 5. Length sanity check (only for replace/insert patches)
-    const beforeText = patch.beforeText || "";
-    const afterText = patch.afterText || "";
-    
-    if (!["remove_skill", "remove_bullet", "suppress_section"].includes(patch.type)) {
-      if (afterText.length > beforeText.length * 2) {
-        concerns.push({
-          type: "length",
-          message: `afterText is ${Math.round((afterText.length / beforeText.length - 1) * 100)}% longer than beforeText`,
-          severity: "warning"
-        });
-        confidence *= 0.9;
-      }
-
-      if (afterText.length < beforeText.length * 0.5 && patch.type === "replace_bullet") {
-        concerns.push({
-          type: "truncation",
-          message: "Replacement significantly shorter than original",
-          severity: "flag"
-        });
-        confidence *= 0.85;
-      }
-    }
+    // 5. Length sanity check
+    const lengthCheck = this._validateLengthSanity(patch);
+    concerns.push(...lengthCheck.concerns);
+    confidence *= lengthCheck.confidence;
 
     return {
       valid: issues.filter(i => i.level === "error").length === 0,
@@ -229,106 +184,156 @@ class PatchValidator {
   }
 
   /**
-   * Type-specific validation
+   * Basic structure validation — returns an issue object or null
+   */
+  _validateBasicStructure(patch) {
+    if (!patch.opId || !patch.type || !patch.target) {
+      return { level: "error", message: "Patch missing opId, type, or target" };
+    }
+
+    const validTypes = ["replace_summary", "replace_bullet", "insert_bullet", "remove_skill", "remove_bullet", "suppress_section"];
+    if (!validTypes.includes(patch.type)) {
+      return { level: "error", message: `Unknown patch type: ${patch.type}` };
+    }
+
+    const removalTypes = ["remove_skill", "remove_bullet", "suppress_section"];
+    if (!removalTypes.includes(patch.type) && (typeof patch.afterText !== "string" || patch.afterText.length === 0)) {
+      return { level: "error", message: "afterText must be non-empty string" };
+    }
+
+    return null;
+  }
+
+  /**
+   * Length sanity check for replace/insert patches
+   */
+  _validateLengthSanity(patch) {
+    const concerns = [];
+    let confidence = 1;
+    const removalTypes = ["remove_skill", "remove_bullet", "suppress_section"];
+
+    if (removalTypes.includes(patch.type)) {
+      return { concerns, confidence };
+    }
+
+    const beforeText = patch.beforeText || "";
+    const afterText = patch.afterText || "";
+
+    if (afterText.length > beforeText.length * 2) {
+      concerns.push({
+        type: "length",
+        message: `afterText is ${Math.round((afterText.length / beforeText.length - 1) * 100)}% longer than beforeText`,
+        severity: "warning"
+      });
+      confidence *= 0.9;
+    }
+
+    if (afterText.length < beforeText.length * 0.5 && patch.type === "replace_bullet") {
+      concerns.push({ type: "truncation", message: "Replacement significantly shorter than original", severity: "flag" });
+      confidence *= 0.85;
+    }
+
+    return { concerns, confidence };
+  }
+
+  /**
+   * Type-specific validation - dispatches to per-type validators
    */
   validateByType(patch) {
+    const validators = {
+      replace_summary: () => this._validateReplaceSummary(patch),
+      replace_bullet: () => this._validateReplaceBullet(patch),
+      insert_bullet: () => this._validateInsertBullet(patch),
+      remove_skill: () => this._validateRemoveSkill(patch),
+      remove_bullet: () => this._validateRemoveBullet(patch),
+      suppress_section: () => this._validateSuppressSection(patch),
+    };
+
+    const validator = validators[patch.type];
+    return validator ? validator() : { valid: true, confidence: 1, issues: [] };
+  }
+
+  _validateReplaceSummary(patch) {
+    const issues = [];
+    if (patch.beforeText !== this.summaryText) {
+      issues.push({ level: "error", message: "beforeText does not match original summary" });
+      return { valid: false, confidence: 0, issues };
+    }
+    return { valid: true, confidence: 1, issues };
+  }
+
+  _validateReplaceBullet(patch) {
+    const issues = [];
+    if (!patch.target.bulletId) {
+      issues.push({ level: "error", message: "replace_bullet patch missing target.bulletId" });
+      return { valid: false, confidence: 0, issues };
+    }
+
+    const bulletInfo = this.bulletMap.get(patch.target.bulletId);
+    if (!bulletInfo) {
+      issues.push({ level: "error", message: `Bullet not found: ${patch.target.bulletId}` });
+      return { valid: false, confidence: 0, issues };
+    }
+
+    if (patch.beforeText !== bulletInfo.text) {
+      issues.push({ level: "error", message: `beforeText does not match bullet ${patch.target.bulletId}` });
+      return { valid: false, confidence: 0, issues };
+    }
+    return { valid: true, confidence: 1, issues };
+  }
+
+  _validateInsertBullet(patch) {
+    const issues = [];
+    if (!patch.target.parentId) {
+      issues.push({ level: "error", message: "insert_bullet patch missing target.parentId (exp/proj id)" });
+      return { valid: false, confidence: 0, issues };
+    }
+    return { valid: true, confidence: 0.8, issues };
+  }
+
+  _validateRemoveSkill(patch) {
     const issues = [];
     let confidence = 1;
 
-    if (patch.type === "replace_summary") {
-      if (patch.beforeText !== this.summaryText) {
-        issues.push({
-          level: "error",
-          message: "beforeText does not match original summary"
-        });
-        return { valid: false, confidence: 0, issues };
-      }
-    } else if (patch.type === "replace_bullet") {
-      if (!patch.target.bulletId) {
-        issues.push({
-          level: "error",
-          message: "replace_bullet patch missing target.bulletId"
-        });
-        return { valid: false, confidence: 0, issues };
-      }
-
-      const bulletInfo = this.bulletMap.get(patch.target.bulletId);
-      if (!bulletInfo) {
-        issues.push({
-          level: "error",
-          message: `Bullet not found: ${patch.target.bulletId}`
-        });
-        return { valid: false, confidence: 0, issues };
-      }
-
-      if (patch.beforeText !== bulletInfo.text) {
-        issues.push({
-          level: "error",
-          message: `beforeText does not match bullet ${patch.target.bulletId}`
-        });
-        return { valid: false, confidence: 0, issues };
-      }
-    } else if (patch.type === "insert_bullet") {
-      if (!patch.target.parentId) {
-        issues.push({
-          level: "error",
-          message: "insert_bullet patch missing target.parentId (exp/proj id)"
-        });
-        return { valid: false, confidence: 0, issues };
-      }
-
-      // For new bullets, we're more conservative
-      confidence *= 0.8;
-    } else if (patch.type === "remove_skill") {
-      // Removal patches just need target.skillName or target.section
-      if (!patch.target || !patch.target.skillName) {
-        issues.push({
-          level: "error",
-          message: "remove_skill patch missing target.skillName"
-        });
-        return { valid: false, confidence: 0, issues };
-      }
-      // Verify skill exists in resume
-      const skillExists = this.resume?.skills?.items?.some(
-        s => s.toLowerCase() === patch.target.skillName.toLowerCase()
-      );
-      if (!skillExists) {
-        issues.push({
-          level: "warning",
-          message: `Skill "${patch.target.skillName}" not found in resume skills`
-        });
-        confidence *= 0.7;
-      }
-    } else if (patch.type === "remove_bullet") {
-      // Similar to replace_bullet, but confirms the bullet exists
-      if (!patch.target.bulletId) {
-        issues.push({
-          level: "error",
-          message: "remove_bullet patch missing target.bulletId"
-        });
-        return { valid: false, confidence: 0, issues };
-      }
-
-      const bulletInfo = this.bulletMap.get(patch.target.bulletId);
-      if (!bulletInfo) {
-        issues.push({
-          level: "warning",
-          message: `Bullet not found: ${patch.target.bulletId}`
-        });
-        confidence *= 0.7;
-      }
-    } else if (patch.type === "suppress_section") {
-      // Suppressing entire section (experience entry or project)
-      if (!patch.target || !patch.target.parentId) {
-        issues.push({
-          level: "error",
-          message: "suppress_section patch missing target.parentId"
-        });
-        return { valid: false, confidence: 0, issues };
-      }
+    if (!patch.target?.skillName) {
+      issues.push({ level: "error", message: "remove_skill patch missing target.skillName" });
+      return { valid: false, confidence: 0, issues };
     }
 
+    const skillExists = this.resume?.skills?.items?.some(
+      s => s.toLowerCase() === patch.target.skillName.toLowerCase()
+    );
+    if (!skillExists) {
+      issues.push({ level: "warning", message: `Skill "${patch.target.skillName}" not found in resume skills` });
+      confidence *= 0.7;
+    }
     return { valid: true, confidence, issues };
+  }
+
+  _validateRemoveBullet(patch) {
+    const issues = [];
+    let confidence = 1;
+
+    if (!patch.target.bulletId) {
+      issues.push({ level: "error", message: "remove_bullet patch missing target.bulletId" });
+      return { valid: false, confidence: 0, issues };
+    }
+
+    const bulletInfo = this.bulletMap.get(patch.target.bulletId);
+    if (!bulletInfo) {
+      issues.push({ level: "warning", message: `Bullet not found: ${patch.target.bulletId}` });
+      confidence *= 0.7;
+    }
+    return { valid: true, confidence, issues };
+  }
+
+  _validateSuppressSection(patch) {
+    const issues = [];
+    if (!patch.target?.parentId) {
+      issues.push({ level: "error", message: "suppress_section patch missing target.parentId" });
+      return { valid: false, confidence: 0, issues };
+    }
+    return { valid: true, confidence: 1, issues };
   }
 
   /**
@@ -375,7 +380,7 @@ class PatchValidator {
       };
     }
 
-    return { detected: false, severity: null, confidence: 1.0 };
+    return { detected: false, severity: null, confidence: 1 };
   }
 
   /**
@@ -385,7 +390,7 @@ class PatchValidator {
     const patterns = [
       /\d{4}(?:-\d{4})?/g,      // Years: 2022, 2022-2023
       /\d+(?:\.\d+)?%/g,        // Percentages: 50%, 99.9%
-      /\$\d+(?:K|M)?/g,         // Money: $10K, $5M
+      /\$\d+[KM]?/g,         // Money: $10K, $5M
       /\d+\+(?:\s*users?|views?)/gi, // Usage counts: 10K+ users
       /\b(?:first|second|top)\s+\d+/gi, // Ordinals: top 10
       /v?\d+\.\d+(?:\.\d+)?/g   // Versions: v3.2.1

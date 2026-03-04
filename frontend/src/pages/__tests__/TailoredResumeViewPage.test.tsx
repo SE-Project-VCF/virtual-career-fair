@@ -84,20 +84,20 @@ const renderPage = () =>
 
 describe("TailoredResumeViewPage", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     vi.mocked(authUtils.getCurrentUser).mockReturnValue(mockUser as any);
     vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token");
   });
 
   it("redirects to login when no user", async () => {
     vi.mocked(authUtils.getCurrentUser).mockReturnValue(null);
-    globalThis.fetch = vi.fn(() => new Promise(() => {}));
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch;
     renderPage();
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/login"));
   });
 
   it("shows loading spinner initially", () => {
-    globalThis.fetch = vi.fn(() => new Promise(() => {}));
+    globalThis.fetch = vi.fn(() => new Promise(() => {})) as typeof fetch;
     renderPage();
     expect(screen.getByRole("progressbar")).toBeDefined();
   });
@@ -129,7 +129,7 @@ describe("TailoredResumeViewPage", () => {
     });
     renderPage();
     await waitFor(() =>
-      expect(screen.getByText("Frontend Engineer")).toBeDefined()
+      expect(screen.getAllByText("Frontend Engineer").length).toBeGreaterThan(0)
     );
     expect(screen.getByText("My tailored resume text.")).toBeDefined();
   });
@@ -152,7 +152,7 @@ describe("TailoredResumeViewPage", () => {
     });
     renderPage();
     await waitFor(() =>
-      expect(screen.getByText("Backend Engineer")).toBeDefined()
+      expect(screen.getAllByText("Backend Engineer").length).toBeGreaterThan(0)
     );
     // Should show formatted text for structured resume
     expect(screen.getByText(/experienced dev/i)).toBeDefined();
@@ -248,12 +248,12 @@ describe("TailoredResumeViewPage", () => {
       json: async () => ({ data: makePlainTextResume() }),
     });
 
-    const createObjectURL = vi.fn(() => "blob:fake");
-    Object.defineProperty(globalThis, "URL", {
-      value: { createObjectURL, revokeObjectURL: vi.fn() },
-      writable: true,
-    });
+    renderPage();
+    await waitFor(() => screen.getByRole("button", { name: /download/i }));
 
+    // Mock URL and DOM methods AFTER rendering so React can mount
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const clickSpy = vi.fn();
     const appendSpy = vi.spyOn(document.body, "appendChild").mockImplementation((el: any) => {
       el.click = clickSpy;
@@ -261,13 +261,13 @@ describe("TailoredResumeViewPage", () => {
     });
     const removeSpy = vi.spyOn(document.body, "removeChild").mockImplementation(() => ({} as any));
 
-    renderPage();
-    await waitFor(() => screen.getByRole("button", { name: /download/i }));
     fireEvent.click(screen.getByRole("button", { name: /download/i }));
 
     expect(createObjectURL).toHaveBeenCalled();
     expect(clickSpy).toHaveBeenCalled();
 
+    createObjectURL.mockRestore();
+    revokeObjectURL.mockRestore();
     appendSpy.mockRestore();
     removeSpy.mockRestore();
   });

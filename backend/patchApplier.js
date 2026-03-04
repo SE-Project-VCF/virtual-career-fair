@@ -130,85 +130,127 @@ class PatchApplier {
   }
 
   /**
+   * Find a bullet by ID across section entries (experience or projects)
+   * @returns {{ bullet: Object, entryIdx: number, bulletIdx: number }|null}
+   */
+  static _findBulletById(entries, bulletId) {
+    for (let i = 0; i < entries.length; i++) {
+      const bullets = entries[i].bullets || [];
+      for (let j = 0; j < bullets.length; j++) {
+        if (bullets[j].bulletId === bulletId) {
+          return { bullet: bullets[j], entryIdx: i, bulletIdx: j };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Search for a bullet across experience and/or projects based on section filter
+   * @returns {{ bullet: Object }|null}
+   */
+  static _findBulletAcrossSections(resume, bulletId, section) {
+    if (!section || section === "experience") {
+      const result = this._findBulletById(resume.experience || [], bulletId);
+      if (result) return result;
+    }
+    if (!section || section === "projects") {
+      const result = this._findBulletById(resume.projects || [], bulletId);
+      if (result) return result;
+    }
+    return null;
+  }
+
+  /**
+   * Insert a bullet into an entry's bullet list at the specified position
+   */
+  static _insertBulletAtPosition(entry, newBullet, afterBulletId) {
+    if (afterBulletId) {
+      const idx = (entry.bullets || []).findIndex(b => b.bulletId === afterBulletId);
+      if (idx === -1) {
+        entry.bullets.push(newBullet);
+      } else {
+        entry.bullets.splice(idx + 1, 0, newBullet);
+      }
+    } else {
+      entry.bullets ??= [];
+      entry.bullets.push(newBullet);
+    }
+  }
+
+  /**
+   * Find bullet index in entry by ID, falling back to text match
+   */
+  static _findBulletIdx(entry, bulletId, removedText) {
+    const bullets = entry.bullets || [];
+    let idx = bullets.findIndex(b => b.bulletId === bulletId);
+    if (idx === -1 && removedText) {
+      idx = bullets.findIndex(b =>
+        b.text.toLowerCase().includes(removedText.toLowerCase())
+      );
+    }
+    return idx;
+  }
+
+  /**
+   * Get skill text from a skill item (string or object)
+   */
+  static _getSkillText(skill) {
+    return (typeof skill === 'string' ? skill : skill.name || skill).toLowerCase();
+  }
+
+  /**
+   * Find experience entry index by parentId with multi-strategy matching
+   */
+  static _findExperienceIdx(experience, parentId, removedText) {
+    let idx = experience.findIndex(e => e.expId === parentId || e.id === parentId);
+
+    if (idx === -1 && removedText) {
+      const cleanText = removedText.toLowerCase().replaceAll(/[–\-\s]+/g, ' ').trim();
+      idx = experience.findIndex(e => {
+        const fullText = `${e.title || ''} ${e.company || ''}`.toLowerCase().replaceAll(/[–\-\s]+/g, ' ').trim();
+        return fullText.includes(cleanText) || cleanText.includes(fullText);
+      });
+    }
+
+    if (idx === -1) {
+      const keywords = parentId.split(/[–\-\s]+/).filter(w => w.length > 2).map(w => w.toLowerCase());
+      idx = experience.findIndex(e => {
+        const fullText = `${e.title || ''} ${e.company || ''}`.toLowerCase();
+        const matchCount = keywords.filter(kw => fullText.includes(kw)).length;
+        return matchCount >= Math.max(1, keywords.length - 1);
+      });
+    }
+
+    return idx;
+  }
+
+  /**
    * Replace bullet in experience or projects
    */
   static patchReplaceBullet(resume, target, beforeText, afterText, opId) {
     const { bulletId, section } = target;
 
     if (!bulletId) {
-      return {
-        success: false,
-        resume,
-        error: "target.bulletId is missing"
-      };
+      return { success: false, resume, error: "target.bulletId is missing" };
     }
 
     const updated = structuredClone(resume);
+    const match = this._findBulletAcrossSections(updated, bulletId, section);
 
-    // Find and replace bullet
-    let found = false;
-
-    // Search experience
-    if (!section || section === "experience") {
-      for (const exp of updated.experience || []) {
-        for (const bullet of exp.bullets || []) {
-          if (bullet.bulletId === bulletId) {
-            if (bullet.text !== beforeText) {
-              return {
-                success: false,
-                resume,
-                error: `beforeText does not match bullet ${bulletId}`
-              };
-            }
-
-            bullet.text = afterText;
-            if (!bullet.appliedPatches) bullet.appliedPatches = [];
-            bullet.appliedPatches.push(opId);
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
+    if (!match) {
+      return { success: false, resume, error: `Bullet not found: ${bulletId}` };
     }
 
-    // Search projects if not found
-    if (!found && (!section || section === "projects")) {
-      for (const proj of updated.projects || []) {
-        for (const bullet of proj.bullets || []) {
-          if (bullet.bulletId === bulletId) {
-            if (bullet.text !== beforeText) {
-              return {
-                success: false,
-                resume,
-                error: `beforeText does not match bullet ${bulletId}`
-              };
-            }
-
-            bullet.text = afterText;
-            if (!bullet.appliedPatches) bullet.appliedPatches = [];
-            bullet.appliedPatches.push(opId);
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
+    if (match.bullet.text !== beforeText) {
+      return { success: false, resume, error: `beforeText does not match bullet ${bulletId}` };
     }
 
-    if (!found) {
-      return {
-        success: false,
-        resume,
-        error: `Bullet not found: ${bulletId}`
-      };
-    }
+    match.bullet.text = afterText;
+    match.bullet.appliedPatches ??= [];
+    match.bullet.appliedPatches.push(opId);
 
-    return {
-      success: true,
-      resume: updated,
-      error: null
-    };
+    return { success: true, resume: updated, error: null };
   }
 
   /**
@@ -226,68 +268,24 @@ class PatchApplier {
     }
 
     const updated = structuredClone(resume);
-    let found = false;
+    const entries = section === "experience" ? (updated.experience || []) : (updated.projects || []);
+    const entry = entries.find(e => e.id === parentId || e.title === parentId);
 
-    if (section === "experience") {
-      for (const exp of updated.experience || []) {
-        if (exp.id === parentId || exp.title === parentId) {
-          const newBullet = {
-            bulletId: `bullet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-            text: afterText,
-            appliedPatches: [opId]
-          };
-
-          // Insert after specific bullet if provided
-          if (afterBulletId) {
-            const idx = (exp.bullets || []).findIndex(b => b.bulletId === afterBulletId);
-            if (idx !== -1) {
-              exp.bullets.splice(idx + 1, 0, newBullet);
-            } else {
-              exp.bullets.push(newBullet);
-            }
-          } else {
-            if (!exp.bullets) exp.bullets = [];
-            exp.bullets.push(newBullet);
-          }
-
-          found = true;
-          break;
-        }
-      }
-    } else if (section === "projects") {
-      for (const proj of updated.projects || []) {
-        if (proj.id === parentId || proj.title === parentId) {
-          const newBullet = {
-            bulletId: `bullet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-            text: afterText,
-            appliedPatches: [opId]
-          };
-
-          if (afterBulletId) {
-            const idx = (proj.bullets || []).findIndex(b => b.bulletId === afterBulletId);
-            if (idx !== -1) {
-              proj.bullets.splice(idx + 1, 0, newBullet);
-            } else {
-              proj.bullets.push(newBullet);
-            }
-          } else {
-            if (!proj.bullets) proj.bullets = [];
-            proj.bullets.push(newBullet);
-          }
-
-          found = true;
-          break;
-        }
-      }
-    }
-
-    if (!found) {
+    if (!entry) {
       return {
         success: false,
         resume,
         error: `Parent section not found: ${section}/${parentId}`
       };
     }
+
+    const newBullet = {
+      bulletId: `bullet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+      text: afterText,
+      appliedPatches: [opId]
+    };
+
+    this._insertBulletAtPosition(entry, newBullet, afterBulletId);
 
     return {
       success: true,
@@ -313,57 +311,23 @@ class PatchApplier {
     const updated = structuredClone(resume);
     let found = false;
 
-    // Search experience
-    if (!section || section === "experience") {
-      for (const exp of updated.experience || []) {
-        // Try exact ID match first
-        let bulletIdx = (exp.bullets || []).findIndex(b => b.bulletId === bulletId);
-        
-        // Fall back to text matching
-        if (bulletIdx === -1 && removedText) {
-          bulletIdx = (exp.bullets || []).findIndex(b => 
-            b.text.toLowerCase().includes(removedText.toLowerCase())
-          );
-        }
-        
-        if (bulletIdx !== -1) {
-          exp.bullets.splice(bulletIdx, 1);
-          found = true;
-          break;
-        }
+    const sectionsToSearch = [];
+    if (!section || section === "experience") sectionsToSearch.push(...(updated.experience || []));
+    if (!found && (!section || section === "projects")) sectionsToSearch.push(...(updated.projects || []));
+
+    for (const entry of sectionsToSearch) {
+      const bulletIdx = this._findBulletIdx(entry, bulletId, removedText);
+      if (bulletIdx !== -1) {
+        entry.bullets.splice(bulletIdx, 1);
+        found = true;
+        break;
       }
     }
 
-    // Search projects if not found
-    if (!found && (!section || section === "projects")) {
-      for (const proj of updated.projects || []) {
-        // Try exact ID match first
-        let bulletIdx = (proj.bullets || []).findIndex(b => b.bulletId === bulletId);
-        
-        // Fall back to text matching
-        if (bulletIdx === -1 && removedText) {
-          bulletIdx = (proj.bullets || []).findIndex(b => 
-            b.text.toLowerCase().includes(removedText.toLowerCase())
-          );
-        }
-        
-        if (bulletIdx !== -1) {
-          proj.bullets.splice(bulletIdx, 1);
-          found = true;
-          break;
-        }
-      }
-    }
-
-    // If section is education or leadership_activities (which aren't in structured resume),
-    // return success since they don't exist to remove anyway
+    // Non-parsed sections (education, leadership_activities) don't exist to remove from
     if (!found && (section === "education" || section === "leadership_activities")) {
       console.log(`[PatchApplier] Skipping bullet removal from non-parsed section: ${section}`);
-      return {
-        success: true,
-        resume: updated,
-        error: null
-      };
+      return { success: true, resume: updated, error: null };
     }
 
     if (!found) {
@@ -374,11 +338,7 @@ class PatchApplier {
       };
     }
 
-    return {
-      success: true,
-      resume: updated,
-      error: null
-    };
+    return { success: true, resume: updated, error: null };
   }
 
   /**
@@ -388,54 +348,44 @@ class PatchApplier {
     const { skillName } = target;
 
     if (!skillName) {
-      return {
-        success: false,
-        resume,
-        error: "target.skillName is missing"
-      };
+      return { success: false, resume, error: "target.skillName is missing" };
     }
 
     const updated = structuredClone(resume);
-    
+
     if (!updated.skills?.items) {
-      return {
-        success: false,
-        resume,
-        error: "No skills section found"
-      };
+      return { success: false, resume, error: "No skills section found" };
     }
 
     // Try exact case-insensitive match
     let skillIdx = updated.skills.items.findIndex(
-      s => (typeof s === 'string' ? s : s.name || s).toLowerCase() === skillName.toLowerCase()
+      s => this._getSkillText(s) === skillName.toLowerCase()
     );
 
-    // If not found, try partial match (first few words)
+    // Fall back to partial match
     if (skillIdx === -1) {
-      const searchTerms = skillName.split(/\s+/).slice(0, 2).join(' ').toLowerCase();
-      skillIdx = updated.skills.items.findIndex(s => {
-        const itemText = (typeof s === 'string' ? s : s.name || s).toLowerCase();
-        return itemText.includes(searchTerms) || searchTerms.includes(itemText.split(/\s+/)[0]);
-      });
+      skillIdx = this._findSkillByPartialMatch(updated.skills.items, skillName);
     }
 
     if (skillIdx === -1) {
-      console.log(`[PatchApplier] Skill not found: "${skillName}". Available skills:`, 
+      console.log(`[PatchApplier] Skill not found: "${skillName}". Available skills:`,
         JSON.stringify(updated.skills.items.slice(0, 10)));
-      return {
-        success: false,
-        resume,
-        error: `Skill not found: ${skillName}`
-      };
+      return { success: false, resume, error: `Skill not found: ${skillName}` };
     }
 
     updated.skills.items.splice(skillIdx, 1);
+    return { success: true, resume: updated, error: null };
+  }
 
-    return {
-      success: true,
-      resume: updated,
-      error: null
-    };
+  /**
+   * Find skill index by partial match (first few words)
+   */
+  static _findSkillByPartialMatch(items, skillName) {
+    const searchTerms = skillName.split(/\s+/).slice(0, 2).join(' ').toLowerCase();
+    return items.findIndex(s => {
+      const itemText = this._getSkillText(s);
+      return itemText.includes(searchTerms) || searchTerms.includes(itemText.split(/\s+/)[0]);
+    });
   }
 
   /**
@@ -446,100 +396,70 @@ class PatchApplier {
     const { section, parentId, removedText } = target;
 
     if (!section) {
-      return {
-        success: false,
-        resume,
-        error: "target.section is missing"
-      };
+      return { success: false, resume, error: "target.section is missing" };
     }
 
     const updated = structuredClone(resume);
 
-    // If parentId is specified, hide just that item (job/project)
     if (parentId) {
-      if (section === "experience") {
-        // Try exact ID match first
-        let jobIdx = (updated.experience || []).findIndex(
-          e => e.expId === parentId || e.id === parentId
-        );
-        
-        // If not found, try matching by title/company/text content (normalize for punctuation)
-        if (jobIdx === -1 && removedText) {
-          const cleanRemovedText = removedText.toLowerCase().replaceAll(/[–\-\s]+/g, ' ').trim();
-          jobIdx = (updated.experience || []).findIndex(e => {
-            const fullText = `${e.title || ''} ${e.company || ''}`.toLowerCase().replaceAll(/[–\-\s]+/g, ' ').trim();
-            return fullText.includes(cleanRemovedText) || cleanRemovedText.includes(fullText);
-          });
-        }
-        
-        // Last resort: match keywords from parentId (split by dash/spaces, match key words)
-        if (jobIdx === -1) {
-          const keywords = parentId.split(/[–\-\s]+/).filter(w => w.length > 2).map(w => w.toLowerCase());
-          jobIdx = (updated.experience || []).findIndex(e => {
-            const fullText = `${e.title || ''} ${e.company || ''}`.toLowerCase();
-            // Match if majority of keywords found
-            const matchCount = keywords.filter(kw => fullText.includes(kw)).length;
-            return matchCount >= Math.max(1, keywords.length - 1);
-          });
-        }
-        
-        if (jobIdx === -1) {
-          console.log(`[PatchApplier] Could not match experience: "${parentId}". Available:`, 
-            (updated.experience || []).map(e => `"${e.title}" @ "${e.company}"`).slice(0, 3).join(' | '));
-          return {
-            success: false,
-            resume,
-            error: `Experience entry not found: ${parentId}`
-          };
-        }
-        updated.experience.splice(jobIdx, 1);
-      } else if (section === "projects") {
-        let projIdx = (updated.projects || []).findIndex(
-          p => p.projId === parentId || p.id === parentId
-        );
-        
-        // If not found, try matching by name/text content
-        if (projIdx === -1 && removedText) {
-          projIdx = (updated.projects || []).findIndex(p =>
-            (p.name || '').toLowerCase().includes(removedText.toLowerCase())
-          );
-        }
-        
-        if (projIdx === -1) {
-          return {
-            success: false,
-            resume,
-            error: `Project not found: ${parentId}`
-          };
-        }
-        updated.projects.splice(projIdx, 1);
-      } else {
-        return {
-          success: false,
-          resume,
-          error: `Cannot suppress subsection of: ${section}`
-        };
+      return this._suppressSubsection(updated, resume, section, parentId, removedText);
+    }
+
+    return this._suppressEntireSection(updated, section);
+  }
+
+  /**
+   * Suppress a single item (job/project) within a section
+   */
+  static _suppressSubsection(updated, originalResume, section, parentId, removedText) {
+    if (section === "experience") {
+      const jobIdx = this._findExperienceIdx(updated.experience || [], parentId, removedText);
+      if (jobIdx === -1) {
+        console.log(`[PatchApplier] Could not match experience: "${parentId}". Available:`,
+          (updated.experience || []).map(e => `"${e.title}" @ "${e.company}"`).slice(0, 3).join(' | '));
+        return { success: false, resume: originalResume, error: `Experience entry not found: ${parentId}` };
       }
-    } else if (section === "experience") {
-      // Hide entire section
+      updated.experience.splice(jobIdx, 1);
+    } else if (section === "projects") {
+      const projIdx = this._findProjectIdx(updated.projects || [], parentId, removedText);
+      if (projIdx === -1) {
+        return { success: false, resume: originalResume, error: `Project not found: ${parentId}` };
+      }
+      updated.projects.splice(projIdx, 1);
+    } else {
+      return { success: false, resume: originalResume, error: `Cannot suppress subsection of: ${section}` };
+    }
+
+    return { success: true, resume: updated, error: null };
+  }
+
+  /**
+   * Suppress an entire section (experience, projects, skills)
+   */
+  static _suppressEntireSection(updated, section) {
+    if (section === "experience") {
       updated.experience = [];
     } else if (section === "projects") {
       updated.projects = [];
     } else if (section === "skills") {
       updated.skills = { items: [] };
     } else {
-      return {
-        success: false,
-        resume,
-        error: `Unknown section to suppress: ${section}`
-      };
+      return { success: false, resume: updated, error: `Unknown section to suppress: ${section}` };
     }
+    return { success: true, resume: updated, error: null };
+  }
 
-    return {
-      success: true,
-      resume: updated,
-      error: null
-    };
+  /**
+   * Find project entry index by parentId with fallback text matching
+   */
+  static _findProjectIdx(projects, parentId, removedText) {
+    let idx = projects.findIndex(p => p.projId === parentId || p.id === parentId);
+    if (idx === -1 && removedText) {
+      idx = projects.findIndex(p =>
+        (p.name || '').toLowerCase().includes(removedText.toLowerCase())
+      );
+    }
+    return idx;
   }
 
   /**
@@ -557,53 +477,17 @@ class PatchApplier {
     }
 
     const updated = structuredClone(resume);
-    let found = false;
+    const match = this._findBulletAcrossSections(updated, bulletId, section);
 
-    // Search experience
-    if (!section || section === "experience") {
-      for (const exp of updated.experience || []) {
-        for (const bullet of exp.bullets || []) {
-          if (bullet.bulletId === bulletId) {
-            bullet.text = condensedText;
-            if (!bullet.appliedPatches) bullet.appliedPatches = [];
-            bullet.appliedPatches.push(opId);
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
+    if (!match) {
+      return { success: false, resume, error: `Bullet not found: ${bulletId}` };
     }
 
-    // Search projects if not found
-    if (!found && (!section || section === "projects")) {
-      for (const proj of updated.projects || []) {
-        for (const bullet of proj.bullets || []) {
-          if (bullet.bulletId === bulletId) {
-            bullet.text = condensedText;
-            if (!bullet.appliedPatches) bullet.appliedPatches = [];
-            bullet.appliedPatches.push(opId);
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
-    }
+    match.bullet.text = condensedText;
+    match.bullet.appliedPatches ??= [];
+    match.bullet.appliedPatches.push(opId);
 
-    if (!found) {
-      return {
-        success: false,
-        resume,
-        error: `Bullet not found: ${bulletId}`
-      };
-    }
-
-    return {
-      success: true,
-      resume: updated,
-      error: null
-    };
+    return { success: true, resume: updated, error: null };
   }
 
   /**
