@@ -2940,7 +2940,7 @@ function extractTextFromReason(reason, patchType) {
   if (words.length === 0) return null;
 
   if (patchType === "suppress_section") {
-    const match = reasonWords.match(/["']?([A-Z][a-z0-9\s&-]+?)["']?\s+(project|job|role|position|experience)/i);
+    const match = reasonWords.match(/["']?([A-Z][a-z0-9\s&-]{1,50}?)["']?\s+(?:project|job|role|position|experience)/i);
     return match ? match[1] : reasonWords.substring(0, 50);
   }
   return words.slice(0, 3).join(" ");

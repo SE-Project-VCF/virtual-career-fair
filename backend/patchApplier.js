@@ -279,8 +279,9 @@ class PatchApplier {
       };
     }
 
+    const crypto = require("crypto");
     const newBullet = {
-      bulletId: `bullet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+      bulletId: `bullet_${Date.now()}_${crypto.randomUUID().slice(0, 9)}`,
       text: afterText,
       appliedPatches: [opId]
     };
