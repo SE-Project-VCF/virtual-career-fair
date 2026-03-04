@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Badge, Tooltip } from "@mui/material"
-import { authUtils } from "../utils/auth"
+import { authUtils, parseMyResume, tailorMyResume } from "../utils/auth"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db, auth } from "../firebase"
 import { API_URL } from "../config"
@@ -16,8 +16,6 @@ import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu"
 import EventList from "../components/EventList"
 import NotificationBell from "../components/NotificationBell"
-import { parseMyResume } from "../utils/auth";
-import { tailorMyResume } from "../utils/auth"; // adjust path
 
 // Helper function to get fair status message based on user role
 function getFairStatusMessage(role: string | undefined): string {

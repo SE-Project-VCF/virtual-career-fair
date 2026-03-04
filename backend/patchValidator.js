@@ -59,7 +59,7 @@ class PatchValidator {
       this.jobDescription
         .split(/\s+/)
         .filter(w => w.length > 3)
-        .map(w => w.replace(/[^a-z0-9]/g, ""))
+        .map(w => w.replaceAll(/[^a-z0-9]/g, ""))
         .filter(Boolean)
     );
   }
@@ -133,7 +133,7 @@ class PatchValidator {
   validatePatch(patch) {
     const issues = [];
     const concerns = [];
-    let confidence = 1.0;
+    let confidence = 1;
 
     // 1. Basic structure validation
     if (!patch.opId || !patch.type || !patch.target) {
@@ -191,6 +191,7 @@ class PatchValidator {
       const skillCheck = this.validateSkillAlignment(patch);
       if (skillCheck.concerns) {
         concerns.push(...skillCheck.concerns);
+        skillCheck.concerns.forEach(c => issues.push({ level: c.severity || "flag", message: c.message }));
       }
       confidence *= skillCheck.confidence;
     }
@@ -232,7 +233,7 @@ class PatchValidator {
    */
   validateByType(patch) {
     const issues = [];
-    let confidence = 1.0;
+    let confidence = 1;
 
     if (patch.type === "replace_summary") {
       if (patch.beforeText !== this.summaryText) {
@@ -336,7 +337,7 @@ class PatchValidator {
   detectHallucinations(patch) {
     // Skip hallucination check for removal patches (they don't have afterText)
     if (["remove_skill", "remove_bullet", "suppress_section"].includes(patch.type)) {
-      return { detected: false, severity: null, confidence: 1.0 };
+      return { detected: false, severity: null, confidence: 1 };
     }
 
     const beforeText = patch.beforeText || "";
@@ -355,7 +356,7 @@ class PatchValidator {
           details: newNumbers
         };
       }
-      return { detected: false, severity: null, confidence: 1.0 };
+      return { detected: false, severity: null, confidence: 1 };
     }
 
     // For replace operations
@@ -404,7 +405,7 @@ class PatchValidator {
    */
   validateSkillAlignment(patch) {
     let concerns = [];
-    let confidence = 1.0;
+    let confidence = 1;
 
     // Extract new tokens introduced
     const beforeTokens = new Set(this.tokenize(patch.beforeText || ""));
@@ -417,8 +418,9 @@ class PatchValidator {
     // Check if new tokens align with job
     const suspiciousTokens = newTokens.filter(t => {
       // Common generic words to ignore
-      const generic = ["and", "the", "with", "for", "to", "from", "using", "built", 
-                       "created", "worked", "led", "was", "were", "can", "able"];
+      const generic = ["and", "the", "with", "for", "to", "from", "using", "built",
+                       "created", "worked", "led", "was", "were", "can", "able", "backend",
+                       "frontend", "fullstack", "scalable", "robust", "efficient"];
       if (generic.includes(t)) return false;
 
       // Check if in job keywords
@@ -428,9 +430,16 @@ class PatchValidator {
     });
 
     if (suspiciousTokens.length > 0) {
+      // Preserve original casing for display
+      const afterTextRaw = patch.afterText || "";
+      const suspiciousOriginalCase = suspiciousTokens.map(st => {
+        const match = afterTextRaw.match(new RegExp(String.raw`\b${st}\b`, "i"));
+        return match ? match[0] : st;
+      });
+
       concerns.push({
         type: "skill_alignment",
-        message: `New terms not found in job description: ${suspiciousTokens.slice(0, 3).join(", ")}`,
+        message: `New terms not found in job description: ${suspiciousOriginalCase.slice(0, 3).join(", ")}`,
         severity: "flag",
         tokens: suspiciousTokens.slice(0, 5)
       });
@@ -446,7 +455,7 @@ class PatchValidator {
   tokenize(text) {
     return (text || "")
       .toLowerCase()
-      .replace(/[^a-z0-9+.#%/\-\s]/g, " ")
+      .replaceAll(/[^a-z0-9+.#%/\-\s]/g, " ")
       .split(/\s+/)
       .filter(t => t.length > 0);
   }

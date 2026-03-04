@@ -31,8 +31,7 @@ import {
   query,
   where,
 } from "firebase/firestore"
-import { db, storage, auth } from "../firebase"
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage"
+import { db, auth } from "../firebase"
 import { useFair } from "../contexts/FairContext"
 import { API_URL } from "../config"
 
@@ -122,7 +121,7 @@ export default function BoothEditor() {
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoUploadProgress, setLogoUploadProgress] = useState(0)
-  const [logoSignedUrl, setLogoSignedUrl] = useState<string | null>(null)
+  const [_logoSignedUrl, setLogoSignedUrl] = useState<string | null>(null) // NOSONAR - only setter is needed
 
   // Stable derived values for effects/guards
   const userId = useMemo(() => user?.uid ?? null, [user?.uid])

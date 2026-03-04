@@ -52,18 +52,18 @@ app.disable('x-powered-by'); // Disable Express version disclosure
 const PORT = process.env.PORT || 5000;
 
 // CORS configuration - allow multiple origins
-const allowedOrigins = [
+const allowedOrigins = new Set([
   "http://localhost:5173",
   "http://localhost:5174",
   "http://127.0.0.1:5173",
   "https://virtual-career-fair-git-dev-ninapellis-projects.vercel.app",
   process.env.FRONTEND_URL,
-].filter(Boolean);
+].filter(Boolean));
 
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true); // allow curl / no-origin
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (allowedOrigins.has(origin)) return callback(null, true);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
@@ -75,7 +75,7 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: "1mb" }));
 
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 const { extractTextFromBuffer, toStructuredResume } = require("./resumeParser");
 const PatchValidator = require("./patchValidator");
 const PatchApplier = require("./patchApplier");
@@ -268,7 +268,7 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
 
     // Create storage reference using Admin SDK
     const bucket = admin.storage().bucket();
-    const fileName = `${Date.now()}-${file.originalname.replace(/[^\w.\-() ]/g, "_")}`;
+    const fileName = `${Date.now()}-${file.originalname.replaceAll(/[^\w.\-() ]/g, "_")}`;
     const filePath = `resumes/${userId}/${fileName}`;
     const fileRef = bucket.file(filePath);
 
@@ -375,7 +375,7 @@ app.get("/api/get-resume-url/:userId", verifyFirebaseToken, async (req, res) => 
     }
 
     // Get the most recent file (last one in the list is usually the newest)
-    const latestFile = files[files.length - 1];
+    const latestFile = files.at(-1);
 
     // Generate a signed URL valid for 1 hour
     const [signedUrl] = await latestFile.getSignedUrl({
@@ -422,7 +422,7 @@ app.post("/api/upload-booth-logo", verifyFirebaseToken, upload.single("file"), a
 
     // Create storage reference using Admin SDK
     const bucket = admin.storage().bucket();
-    const fileName = `${Date.now()}-${file.originalname.replace(/[^\w.\-() ]/g, "_")}`;
+    const fileName = `${Date.now()}-${file.originalname.replaceAll(/[^\w.\-() ]/g, "_")}`;
     const filePath = `boothLogos/${companyId}/${userId}/${fileName}`;
     const fileRef = bucket.file(filePath);
 
@@ -465,7 +465,7 @@ app.get("/api/get-booth-logo-url/:companyId", verifyFirebaseToken, async (req, r
     }
 
     // Get the most recent file
-    const latestFile = files[files.length - 1];
+    const latestFile = files.at(-1);
 
     // Generate a signed URL valid for 1 hour
     const [signedUrl] = await latestFile.getSignedUrl({
@@ -1106,68 +1106,7 @@ app.post("/api/job-invitations/send", async (req, res) => {
     await batch.commit();
     console.log(`Successfully created ${invitationIds.length} invitation(s)`);
 
-    // Chat invitations are no longer supported - invitations are only sent via dashboard notifications
-    // The code below is kept for reference but will not be executed
-    if (sentVia === "chat") {
-      try {
-        // Get sender details
-        const senderDoc = await db.collection("users").doc(userId).get();
-        const senderData = senderDoc.data();
-        const senderName = `${senderData.firstName || ""} ${senderData.lastName || ""}`.trim() || "Representative";
-
-        // Get company details
-        const companyDoc = await db.collection("companies").doc(companyId).get();
-        const companyName = companyDoc.exists ? companyDoc.data().companyName : "Our Company";
-
-        // Send a chat message to each student
-        for (const studentId of studentIds) {
-          try {
-            // Create or get 1-on-1 channel between sender and student
-            const channelId = [userId, studentId].sort().join("-");
-            const channel = streamServer.channel("messaging", channelId, {
-              members: [userId, studentId],
-              created_by_id: userId,
-            });
-
-            await channel.create();
-
-            // Send the job invitation message
-            const messageText = message
-              ? `🎯 **Job Opportunity: ${jobData.name}**\n\n${companyName} has invited you to apply for this position!\n\n"${message}"\n\n👉 View details and apply: [Click here to view invitation]`
-              : `🎯 **Job Opportunity: ${jobData.name}**\n\n${companyName} has invited you to apply for this position!\n\n👉 View details and apply: [Click here to view invitation]`;
-
-            await channel.sendMessage({
-              text: messageText,
-              user_id: userId,
-              attachments: [{
-                type: "job_invitation",
-                title: jobData.name,
-                title_link: `/dashboard/job-invitations`,
-                text: jobData.description.substring(0, 200) + (jobData.description.length > 200 ? "..." : ""),
-                fields: [
-                  {
-                    title: "Company",
-                    value: companyName,
-                    short: true,
-                  },
-                  {
-                    title: "Skills Required",
-                    value: jobData.majorsAssociated,
-                    short: true,
-                  }
-                ],
-              }],
-            });
-          } catch (chatErr) {
-            console.error(`Failed to send chat message to student ${studentId}:`, chatErr);
-            // Continue with other students even if one fails
-          }
-        }
-      } catch (chatErr) {
-        console.error("Error sending chat messages:", chatErr);
-        // Don't fail the entire request if chat fails, invitations are still created
-      }
-    }
+    // Chat invitations are no longer supported - only dashboard notifications are used
 
     return res.json({
       success: true,
@@ -1472,7 +1411,7 @@ app.get("/api/students", async (req, res) => {
 
     if (boothId) {
       // Find students who visited this specific booth
-      console.log(`Filtering students who visited booth: ${boothId}`);
+      console.log(`Filtering students who visited booth: ${JSON.stringify(boothId)}`);
 
       // Get all students first
       const allStudentsQuery = db.collection("users").where("role", "==", "student");
@@ -2115,7 +2054,7 @@ app.get("/api/public/fair-schedules", async (req, res) => {
 ---------------------------------------------------- */
 app.post("/api/fair-schedules", async (req, res) => {
   try {
-    const { userId, name, startTime, endTime, description, enabled } = req.body;
+    const { userId, name, startTime, endTime, description } = req.body;
 
     const adminCheck = await verifyAdmin(userId);
     if (adminCheck) {
@@ -2129,8 +2068,6 @@ app.post("/api/fair-schedules", async (req, res) => {
     // Parse dates as UTC to ensure consistent storage
     const start = parseUTCToTimestamp(startTime);
     const end = parseUTCToTimestamp(endTime);
-    const now = admin.firestore.Timestamp.now();
-
     if (end.toMillis() <= start.toMillis()) {
       return res.status(400).json({ error: "End time must be after start time" });
     }
@@ -2165,6 +2102,23 @@ app.post("/api/fair-schedules", async (req, res) => {
   }
 });
 
+/**
+ * Resolves schedule times for updates, using existing values as fallback.
+ * Returns { start, end } or null if validation fails.
+ */
+function resolveScheduleTimes(existingData, startTime, endTime) {
+  const start = startTime === undefined
+    ? existingData.startTime
+    : parseUTCToTimestamp(startTime);
+  const end = endTime === undefined
+    ? existingData.endTime
+    : parseUTCToTimestamp(endTime);
+
+  if (!start || !end) return { error: "Both start time and end time are required" };
+  if (end.toMillis() <= start.toMillis()) return { error: "End time must be after start time" };
+  return { start, end };
+}
+
 /* ----------------------------------------------------
    UPDATE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
@@ -2195,25 +2149,12 @@ app.put("/api/fair-schedules/:id", async (req, res) => {
     if (description !== undefined) updateData.description = description || null;
 
     if (startTime !== undefined || endTime !== undefined) {
-      // Get existing times if not provided
-      const existingData = scheduleDoc.data();
-      const start = startTime !== undefined
-        ? parseUTCToTimestamp(startTime)
-        : existingData.startTime;
-      const end = endTime !== undefined
-        ? parseUTCToTimestamp(endTime)
-        : existingData.endTime;
-
-      if (!start || !end) {
-        return res.status(400).json({ error: "Both start time and end time are required" });
+      const timeResult = resolveScheduleTimes(scheduleDoc.data(), startTime, endTime);
+      if (timeResult.error) {
+        return res.status(400).json({ error: timeResult.error });
       }
-
-      if (end.toMillis() <= start.toMillis()) {
-        return res.status(400).json({ error: "End time must be after start time" });
-      }
-
-      updateData.startTime = start;
-      updateData.endTime = end;
+      updateData.startTime = timeResult.start;
+      updateData.endTime = timeResult.end;
     }
 
     await scheduleRef.update(updateData);
@@ -2568,7 +2509,7 @@ function extractFirstJsonObject(text) {
 function normalizeTokens(s) {
   return (s || "")
     .toLowerCase()
-    .replace(/[^a-z0-9+.#%/\- ]/g, " ")
+    .replaceAll(/[^a-z0-9+.#%/\- ]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
 }
@@ -2582,11 +2523,45 @@ function containsNewNumbers(beforeText, afterText) {
   return false;
 }
 
-function verifyPatches(structured, patchResponse) {
-  const issues = [];
-  const allowedSkills = new Set((structured?.skills?.items || []).map(s => (s || "").toLowerCase()));
+const GENERIC_VERBS = new Set(["and", "the", "with", "for", "to", "from", "using", "built", "created", "worked", "led", "used"]);
 
-  // Build lookup of bulletId -> text
+/**
+ * Finds suspicious new tokens in afterText that aren't in the original or allowed skills.
+ */
+function findSuspiciousTokens(original, afterText, allowedSkills) {
+  const origTokens = new Set(normalizeTokens(original));
+  const newTokens = normalizeTokens(afterText).filter(t => !origTokens.has(t));
+  return newTokens.filter(t =>
+    t.length >= 3 && !GENERIC_VERBS.has(t) && !allowedSkills.has(t)
+  );
+}
+
+/**
+ * Parses Gemini JSON response, attempting extraction if direct parse fails.
+ * Returns { parsed } on success, or { error, raw } on failure.
+ */
+function parseGeminiJson(text) {
+  try {
+    return { parsed: JSON.parse(text) };
+  } catch (error_) {
+    console.warn("JSON.parse failed, attempting extraction:", error_.message);
+    const extracted = extractFirstJsonObject(text);
+    if (!extracted) {
+      return { error: "Gemini did not return valid JSON", raw: (text || "").slice(0, 1500) };
+    }
+    try {
+      return { parsed: JSON.parse(extracted) };
+    } catch (error__) {
+      console.warn("Extracted JSON also failed to parse:", error__.message);
+      return { error: "Gemini returned malformed JSON", raw: extracted.slice(0, 1500) };
+    }
+  }
+}
+
+/**
+ * Build a Map of bulletId -> text from structured experience and projects.
+ */
+function buildBulletMap(structured) {
   const bulletMap = new Map();
   for (const exp of structured.experience || []) {
     for (const b of exp.bullets || []) bulletMap.set(b.bulletId, b.text);
@@ -2594,7 +2569,23 @@ function verifyPatches(structured, patchResponse) {
   for (const proj of structured.projects || []) {
     for (const b of proj.bullets || []) bulletMap.set(b.bulletId, b.text);
   }
+  return bulletMap;
+}
 
+/**
+ * Resolve original text for a patch type. Returns null for unknown types.
+ */
+function resolveOriginalText(type, summaryText, bulletMap, targetBulletId) {
+  if (type === "replace_summary") return summaryText;
+  if (type === "replace_bullet") return bulletMap.get(targetBulletId) || "";
+  if (type === "insert_bullet") return "";
+  return null;
+}
+
+function verifyPatches(structured, patchResponse) {
+  const issues = [];
+  const allowedSkills = new Set((structured?.skills?.items || []).map(s => (s || "").toLowerCase()));
+  const bulletMap = buildBulletMap(structured);
   const summaryText = structured?.summary?.text || "";
 
   const verifiedPatches = [];
@@ -2609,14 +2600,8 @@ function verifyPatches(structured, patchResponse) {
     }
 
     // Determine beforeText from original
-    let original = "";
-    if (type === "replace_summary") {
-      original = summaryText;
-    } else if (type === "replace_bullet") {
-      original = bulletMap.get(p.target.bulletId) || "";
-    } else if (type === "insert_bullet") {
-      original = ""; // inserting new bullet; we must verify it doesn't introduce new facts
-    } else {
+    const original = resolveOriginalText(type, summaryText, bulletMap, p.target.bulletId);
+    if (original === null) {
       issues.push({ opId: p.opId, level: "reject", reason: `Unknown patch type: ${type}` });
       continue;
     }
@@ -2627,28 +2612,8 @@ function verifyPatches(structured, patchResponse) {
       continue;
     }
 
-    // Enforce: no new numeric claims (fabricated metrics)
-    if (containsNewNumbers(original, afterText)) {
-      issues.push({ opId: p.opId, level: "reject", reason: "Introduces new numbers/metrics not present in original text" });
-      continue;
-    }
-
-    // Enforce: no new “skills/tools” tokens unless already in resume skills list
-    // (Simple heuristic: flag capitalized tokens / common tool-like tokens. We’ll use token diff.)
-    const origTokens = new Set(normalizeTokens(original));
-    const newTokens = normalizeTokens(afterText).filter(t => !origTokens.has(t));
-
-    // If patch introduces brand/tool-like tokens not in skills list, flag it
-    const suspiciousNew = newTokens.filter(t => {
-      // ignore tiny tokens and generic verbs
-      if (t.length < 3) return false;
-      if (["and", "the", "with", "for", "to", "from", "using", "built", "created", "worked", "led", "used"].includes(t)) return false;
-      // allow if already in skills
-      if (allowedSkills.has(t)) return false;
-      // otherwise suspicious
-      return true;
-    });
-
+    // Flag suspicious new tokens not in resume skills list
+    const suspiciousNew = findSuspiciousTokens(original, afterText, allowedSkills);
     if (suspiciousNew.length > 0) {
       issues.push({
         opId: p.opId,
@@ -2656,7 +2621,6 @@ function verifyPatches(structured, patchResponse) {
         reason: "Introduces potentially new tools/skills not in resume skills list",
         tokens: suspiciousNew.slice(0, 10),
       });
-      // We *flag* rather than reject; user can decide, and we can tighten later.
     }
 
     verifiedPatches.push(p);
@@ -2764,28 +2728,11 @@ ${schema}
     const text = result.response.text();
 
     // 4) Parse JSON robustly
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch (e1) {
-      const extracted = extractFirstJsonObject(text);
-      if (!extracted) {
-        return res.status(500).json({
-          ok: false,
-          error: "Gemini did not return valid JSON",
-          raw: (text || "").slice(0, 1500),
-        });
-      }
-      try {
-        parsed = JSON.parse(extracted);
-      } catch (e2) {
-        return res.status(500).json({
-          ok: false,
-          error: "Gemini returned malformed JSON",
-          raw: extracted.slice(0, 1500),
-        });
-      }
+    const jsonResult = parseGeminiJson(text);
+    if (jsonResult.error) {
+      return res.status(500).json({ ok: false, error: jsonResult.error, raw: jsonResult.raw });
     }
+    const parsed = jsonResult.parsed;
 
     // 5) Shape check
     if (!parsed || !Array.isArray(parsed.patches)) {
@@ -2979,6 +2926,155 @@ app.post("/api/resume/tailored/simple/save", verifyFirebaseToken, async (req, re
     return res.status(500).json({ ok: false, error: e.message || "Failed to save tailored resume" });
   }
 });
+
+/**
+ * Attempt to extract meaningful text from a patch's reason field.
+ * Returns null if no useful text could be extracted.
+ */
+function extractTextFromReason(reason, patchType) {
+  const quotedMatch = reason.match(/"([^"]+)"/);
+  if (quotedMatch) return quotedMatch[1];
+
+  const reasonWords = reason.split(/[,:]/)[0].trim();
+  const words = reasonWords.split(/\s+/);
+  if (words.length === 0) return null;
+
+  if (patchType === "suppress_section") {
+    const match = reasonWords.match(/["']?([A-Z][a-z0-9\s&-]+?)["']?\s+(project|job|role|position|experience)/i);
+    return match ? match[1] : reasonWords.substring(0, 50);
+  }
+  return words.slice(0, 3).join(" ");
+}
+
+/**
+ * Extracts removedText for a removal patch using multiple strategies.
+ */
+function extractRemovedText(patch) {
+  // Strategy 1: Use skillName for skill removals
+  if (patch.type === "remove_skill" && patch.target?.skillName) {
+    return patch.target.skillName;
+  }
+  // Strategy 2: Use beforeText for bullet removals
+  if (patch.type === "remove_bullet" && patch.beforeText) {
+    return patch.beforeText;
+  }
+  // Strategy 3: Extract from reason field
+  if (patch.reason) {
+    const fromReason = extractTextFromReason(patch.reason, patch.type);
+    if (fromReason) return fromReason;
+  }
+  return patch.type === "suppress_section" ? "(project/job)" : "(item)";
+}
+
+/**
+ * Normalize a removal patch by ensuring removedText and removalReason fields exist.
+ */
+function normalizeRemovalPatch(patch, idx) {
+  if (!["remove_skill", "remove_bullet", "suppress_section"].includes(patch.type)) {
+    return patch;
+  }
+
+  console.log(`[TAILOR] Processing removal patch ${idx}:`, {
+    type: patch.type,
+    hasRemovedText: !!patch.removedText,
+    removedTextValue: patch.removedText,
+    skillName: patch.target?.skillName,
+    beforeText: patch.beforeText,
+    reason: patch.reason
+  });
+
+  if (!patch.removedText || patch.removedText === "undefined" || patch.removedText === null) {
+    patch.removedText = extractRemovedText(patch);
+  }
+
+  if (!patch.removalReason || patch.removalReason === "undefined" || patch.removalReason === null) {
+    patch.removalReason = patch.reason || "Not relevant to this position";
+  }
+
+  console.log(`[TAILOR] After normalization patch ${idx}:`, {
+    removedText: patch.removedText,
+    removalReason: patch.removalReason
+  });
+  return patch;
+}
+
+/**
+ * Find a matching experience entry by text search.
+ */
+function findMatchingExperience(entries, removedText, parentId) {
+  const searchText = (removedText || parentId).toLowerCase();
+  return entries.find(exp => {
+    const fullText = `${exp.title || ''} ${exp.company || ''}`.toLowerCase();
+    return fullText.includes(searchText) || searchText.includes((exp.title || '').toLowerCase());
+  });
+}
+
+/**
+ * Find a matching project entry by text search.
+ */
+function findMatchingProject(entries, removedText, parentId) {
+  const searchText = (removedText || parentId).toLowerCase();
+  return entries.find(proj => (proj.name || '').toLowerCase().includes(searchText));
+}
+
+/**
+ * Map parentId for a suppress_section patch to the actual expId/projId.
+ */
+function mapSuppressSectionParentId(patch, structured) {
+  const { section, parentId, removedText } = patch.target;
+
+  if (section === "experience") {
+    const matchedExp = findMatchingExperience(structured.experience || [], removedText, parentId);
+    if (matchedExp) {
+      console.log(`[TAILOR] Mapped experience parentId "${parentId}" to expId "${matchedExp.expId}"`);
+      patch.target.parentId = matchedExp.expId;
+    } else {
+      console.log(`[TAILOR] WARNING: Could not map experience parentId "${parentId}". Will try text match in applier.`);
+    }
+  } else if (section === "projects") {
+    const matchedProj = findMatchingProject(structured.projects || [], removedText, parentId);
+    if (matchedProj) {
+      console.log(`[TAILOR] Mapped project parentId "${parentId}" to projId "${matchedProj.projId}"`);
+      patch.target.parentId = matchedProj.projId;
+    }
+  }
+}
+
+/**
+ * Map text-based parentIds in patches to actual expIds/projIds from structured resume.
+ */
+function mapPatchParentIds(patch, structured) {
+  if (patch.type === "suppress_section" && patch.target?.parentId) {
+    mapSuppressSectionParentId(patch, structured);
+  }
+  
+  // For remove_bullet patches, log text matching info
+  if (patch.type === "remove_bullet" && patch.target?.bulletId) {
+    const { section, removedText } = patch.target;
+    if (section === "education" || section === "leadership_activities") {
+      console.log(`[TAILOR] ${section} bullet removal will be matched by text: "${removedText}"`);
+    }
+  }
+  
+  return patch;
+}
+
+/**
+ * Log debug information for the tailor/v2 endpoint.
+ * Extracted to reduce cognitive complexity of the main handler.
+ */
+function logTailorV2Debug(parsed, validation) {
+  const patchCount = parsed.patches?.length || 0;
+  const validCount = validation.patches?.length || 0;
+  console.log(`[TAILOR] Parsed ${patchCount} patches, ${parsed.skill_suggestions?.length || 0} skill suggestions`);
+  console.log(`[TAILOR] Validation: ${validCount} valid, ${validation.summary?.errorCount || 0} errors`);
+
+  if (patchCount > 0 && validCount > 0) {
+    console.log(`[TAILOR] Validation filtered: sent ${patchCount}, got back ${validCount}, lost ${patchCount - validCount}`);
+  }
+
+  console.log("[TAILOR] Validation summary:", JSON.stringify(validation.summary, null, 2));
+}
 
 /* ============================================================
    IMPROVED RESUME TAILOR ENDPOINT WITH PATCH VALIDATION
@@ -3268,200 +3364,27 @@ ${schema}`;
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
-    console.log("[TAILOR] Gemini raw response (first 1000 chars):", text.slice(0, 1000));
     console.log("[TAILOR] Gemini response length:", text.length);
 
     // 4) Parse JSON robustly
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch (e1) {
-      const extracted = extractFirstJsonObject(text);
-      if (!extracted) {
-        return res.status(500).json({
-          ok: false,
-          error: "Gemini did not return valid JSON",
-          raw: (text || "").slice(0, 1500),
-        });
-      }
-      try {
-        parsed = JSON.parse(extracted);
-      } catch (e2) {
-        return res.status(500).json({
-          ok: false,
-          error: "Gemini returned malformed JSON",
-          raw: extracted.slice(0, 1500),
-        });
-      }
+    const jsonResult = parseGeminiJson(text);
+    if (jsonResult.error) {
+      return res.status(500).json({ ok: false, error: jsonResult.error, raw: jsonResult.raw });
     }
+    let parsed = jsonResult.parsed;
 
-    console.log("[TAILOR] Parsed patches count:", parsed.patches?.length || 0);
-    console.log("[TAILOR] Parsed skill_suggestions count:", parsed.skill_suggestions?.length || 0);
-    if (parsed.patches?.length > 0) {
-      console.log("[TAILOR] Full first patch:", JSON.stringify(parsed.patches[0], null, 2));
-    }
-
-    // 4.5) Clean and normalize patches - ensure required fields exist
+    // 4.5) Clean, normalize, and map patches
     if (Array.isArray(parsed.patches)) {
-      parsed.patches = parsed.patches.map((patch, idx) => {
-        // For removal patches, ensure removedText and removalReason exist
-        if (["remove_skill", "remove_bullet", "suppress_section"].includes(patch.type)) {
-          console.log(`[TAILOR] Processing removal patch ${idx}:`, {
-            type: patch.type,
-            hasRemovedText: !!patch.removedText,
-            removedTextValue: patch.removedText,
-            skillName: patch.target?.skillName,
-            beforeText: patch.beforeText,
-            reason: patch.reason
-          });
-
-          // Attempt to populate removedText - try multiple strategies
-          if (!patch.removedText || patch.removedText === "undefined" || patch.removedText === null) {
-            // Strategy 1: Use skillName for skill removals
-            if (patch.type === "remove_skill" && patch.target?.skillName) {
-              patch.removedText = patch.target.skillName;
-            } 
-            // Strategy 2: Use beforeText for bullet removals
-            else if (patch.type === "remove_bullet" && patch.beforeText) {
-              patch.removedText = patch.beforeText;
-            }
-            // Strategy 3: Extract from reason field - look for quoted text or first noun phrase
-            else if (patch.reason) {
-              // Try to extract from quotes: "something" → something
-              const quotedMatch = patch.reason.match(/"([^"]+)"/);
-              if (quotedMatch) {
-                patch.removedText = quotedMatch[1];
-              } else {
-                // Extract first meaningful phrase (first 3-5 words or until a comma)
-                const reasonWords = patch.reason.split(/[,:]/)[0].trim();
-                // Try to get just the key noun/concept (last few words of the first clause)
-                const words = reasonWords.split(/\s+/);
-                if (words.length > 0) {
-                  // For suppress_section, try to extract project/job name
-                  if (patch.type === "suppress_section") {
-                    const match = reasonWords.match(/["']?([A-Z][a-zA-Z0-9\s&-]+?)["']?\s+(project|job|role|position|experience)/i);
-                    patch.removedText = match ? match[1] : reasonWords.substring(0, 50);
-                  } else {
-                    patch.removedText = words.slice(0, 3).join(" ");
-                  }
-                }
-              }
-            }
-            
-            // Final fallback
-            if (!patch.removedText) {
-              patch.removedText = patch.type === "suppress_section" ? "(project/job)" : "(item)";
-            }
-          }
-
-          // Populate removalReason
-          if (!patch.removalReason || patch.removalReason === "undefined" || patch.removalReason === null) {
-            patch.removalReason = patch.reason || "Not relevant to this position";
-          }
-
-          console.log(`[TAILOR] After normalization patch ${idx}:`, {
-            removedText: patch.removedText,
-            removalReason: patch.removalReason
-          });
-        }
-        return patch;
-      });
-    }
-
-    console.log("[TAILOR] After normalization, first patch:", JSON.stringify((parsed.patches || [])[0], null, 2));
-
-    // 4.6) MAP PARENTIDS: Convert text-based parentIds to actual expIds/projIds
-    if (Array.isArray(parsed.patches)) {
-      parsed.patches = parsed.patches.map((patch) => {
-        // For suppress_section patches, map parentId to actual experience/project ID
-        if (patch.type === "suppress_section" && patch.target?.parentId) {
-          const { section, parentId, removedText } = patch.target;
-          
-          if (section === "experience") {
-            // Try to find matching experience entry by title, company, or removedText
-            const matchedExp = (structured.experience || []).find(exp => {
-              const fullText = `${exp.title || ''} ${exp.company || ''}`.toLowerCase();
-              const searchText = (removedText || parentId).toLowerCase();
-              return fullText.includes(searchText) || searchText.includes((exp.title || '').toLowerCase());
-            });
-            
-            if (matchedExp) {
-              console.log(`[TAILOR] Mapped experience parentId "${parentId}" to expId "${matchedExp.expId}"`);
-              patch.target.parentId = matchedExp.expId;
-            } else {
-              console.log(`[TAILOR] WARNING: Could not map experience parentId "${parentId}". Will try text match in applier.`);
-            }
-          } 
-          else if (section === "projects") {
-            // Try to find matching project entry
-            const matchedProj = (structured.projects || []).find(proj => {
-              const searchText = (removedText || parentId).toLowerCase();
-              return (proj.name || '').toLowerCase().includes(searchText);
-            });
-            
-            if (matchedProj) {
-              console.log(`[TAILOR] Mapped project parentId "${parentId}" to projId "${matchedProj.projId}"`);
-              patch.target.parentId = matchedProj.projId;
-            }
-          }
-        }
-        
-        // For remove_bullet patches, map bulletId to actual bullet ID if possible
-        if (patch.type === "remove_bullet" && patch.target?.bulletId) {
-          const { section, bulletId, removedText } = patch.target;
-          
-          if (section === "education") {
-            // Education bullets don't have individual IDs, so we'll match by text
-            console.log(`[TAILOR] Education bullet removal will be matched by text: "${removedText}"`);
-          } 
-          else if (section === "leadership_activities") {
-            // Leadership activities bullets also matched by text
-            console.log(`[TAILOR] Leadership bullet removal will be matched by text: "${removedText}"`);
-          }
-        }
-        
-        return patch;
-      });
+      parsed.patches = parsed.patches
+        .map((patch, idx) => normalizeRemovalPatch(patch, idx))
+        .map((patch) => mapPatchParentIds(patch, structured));
     }
 
     // 5) Enhanced patch validation
     const validator = new PatchValidator(structured, jobDescription);
     const validation = validator.validatePatches(parsed.patches || []);
 
-    console.log("[TAILOR] Validation result - valid patches:", validation.patches?.length || 0);
-    console.log("[TAILOR] Validation issues:", validation.summary?.errorCount || 0, "errors");
-    console.log("[TAILOR] Total patches from Gemini:", parsed.patches?.length || 0);
-    console.log("[TAILOR] Patches sent to validation:", parsed.patches?.length || 0, "Patches returned from validation:", validation.patches?.length || 0);
-    
-    if (parsed.patches && validation.patches) {
-      const sentCount = parsed.patches.length;
-      const returnedCount = validation.patches.length;
-      console.log(`[TAILOR] Validation filtered: sent ${sentCount}, got back ${returnedCount}, lost ${sentCount - returnedCount}`);
-      
-      // Compare what went in vs what came out
-      for (let i = 0; i < Math.min(parsed.patches.length, validation.patches.length); i++) {
-        const sent = parsed.patches[i];
-        const received = validation.patches[i];
-        if (sent.removedText !== received.removedText) {
-          console.log(`[TAILOR] Patch ${i} removedText changed: "${sent.removedText}" → "${received.removedText}"`);
-        }
-      }
-    }
-    
-    console.log("[TAILOR] Validation summary:", JSON.stringify(validation.summary, null, 2));
-    
-    if (validation.issues?.length > 0) {
-      console.log("[TAILOR] Validation issues detail:", JSON.stringify(validation.issues.slice(0, 5), null, 2));
-    }
-    
-    if (validation.patches?.length > 0) {
-      console.log("[TAILOR] First validated patch removedText:", validation.patches[0].removedText);
-      console.log("[TAILOR] First validated patch removalReason:", validation.patches[0].removalReason);
-    }
-    
-    // Log all parsed patches with their fields
-    console.log("[TAILOR] All parsed patches types:", parsed.patches?.map(p => p.type).join(", ") || "none");
-    console.log("[TAILOR] All parsed patches have removedText:", parsed.patches?.map(p => ({ type: p.type, hasRemovedText: !!p.removedText, removedText: p.removedText?.substring(0, 50) })).join(" | ") || "none");
+    logTailorV2Debug(parsed, validation);
 
     // 6) Cache the patches for later save operation
     if (invitationId) {
@@ -3471,13 +3394,6 @@ ${schema}`;
         jobDescription,
         requiredSkills
       });
-    }
-
-    // Log FINAL response patches to confirm fields are present
-    console.log("[TAILOR] FINAL RESPONSE - validation.patches count:", validation.patches?.length || 0);
-    if (validation.patches?.length > 0) {
-      console.log("[TAILOR] FINAL - First patch:", JSON.stringify(validation.patches[0], null, 2));
-      console.log("[TAILOR] FINAL - All patches removedText:", validation.patches?.map((p, i) => ({ idx: i, type: p.type, removedText: p.removedText, removalReason: p.removalReason })));
     }
 
     return res.json({
@@ -3595,14 +3511,14 @@ app.post("/api/resume/tailored/save", verifyFirebaseToken, async (req, res) => {
     const applyResult = PatchApplier.applyPatches(structured, acceptedPatches);
     
     console.log(`[Save Endpoint] Apply completed. Success: ${applyResult.success}`);
-    if (!applyResult.success) {
+    if (applyResult.success) {
+      console.log(`[Save Endpoint] All ${applyResult.appliedCount} patches applied successfully`);
+    } else {
       console.log(`[Save Endpoint] FAILURES - ${applyResult.errors?.length || 0} patches failed:`);
       applyResult.errors?.forEach((err, i) => {
         console.log(`[Save Endpoint]   Error ${i}: opId=${err.opId}, error="${err.error}"`);
       });
       console.log(`[Save Endpoint] Applied count: ${applyResult.appliedCount}/${acceptedPatches.length}`);
-    } else {
-      console.log(`[Save Endpoint] All ${applyResult.appliedCount} patches applied successfully`);
     }
     
     if (!applyResult.success) {
@@ -3618,7 +3534,7 @@ app.post("/api/resume/tailored/save", verifyFirebaseToken, async (req, res) => {
     // 6) Final validation
     const finalValidator = new PatchValidator(tailoredResume);
     const finalValidation = finalValidator.validatePatches([]);
-    if (!finalValidation.valid && finalValidation.issues.filter(i => i.level === "error").length > 0) {
+    if (!finalValidation.valid && finalValidation.issues.some(i => i.level === "error")) {
       return res.status(400).json({
         ok: false,
         error: "Final resume validation failed",

@@ -88,7 +88,7 @@ describe("Company", () => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
     mockUseParams.mockReturnValue({ id: "company-1" });
-    
+
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
       role: "companyOwner",
@@ -213,7 +213,8 @@ describe("Company", () => {
 
     const copyButtons = screen.queryAllByTestId("ContentCopyIcon");
     if (copyButtons.length > 0) {
-      await user.click(copyButtons[0].closest("button")!);
+      const btn = copyButtons[0].closest("button");
+      if (btn) await user.click(btn);
     }
   });
 
@@ -226,7 +227,8 @@ describe("Company", () => {
 
     const copyButtons = screen.queryAllByTestId("ContentCopyIcon");
     if (copyButtons.length > 0) {
-      await user.click(copyButtons[0].closest("button")!);
+      const btn = copyButtons[0].closest("button");
+      if (btn) await user.click(btn);
     }
 
     expect(await screen.findByText(/failed to copy to clipboard/i)).toBeInTheDocument();
@@ -243,7 +245,8 @@ describe("Company", () => {
 
     const refreshButtons = screen.queryAllByTestId("RefreshIcon");
     if (refreshButtons.length > 0) {
-      await user.click(refreshButtons[0].closest("button")!);
+      const btn = refreshButtons[0].closest("button");
+      if (btn) await user.click(btn);
       await waitFor(() => {
         expect(authUtils.updateInviteCode).toHaveBeenCalled();
       });
@@ -261,7 +264,8 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[0].closest("button")!);
+      const editBtn = editButtons[0].closest("button");
+      if (editBtn) await user.click(editBtn);
 
       const inputs = screen.queryAllByRole("textbox");
       const inviteInput = inputs.find(i => ('value' in i && (i as HTMLInputElement).value.includes("INVITE")) || i.getAttribute("label")?.includes("Invite"));
@@ -271,7 +275,8 @@ describe("Company", () => {
 
         const saveButtons = screen.queryAllByTestId("SaveIcon");
         if (saveButtons.length > 0) {
-          await user.click(saveButtons[0].closest("button")!);
+          const saveBtn = saveButtons[0].closest("button");
+          if (saveBtn) await user.click(saveBtn);
         }
       }
     }
@@ -284,11 +289,13 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[0].closest("button")!);
+      const editBtn = editButtons[0].closest("button");
+      if (editBtn) await user.click(editBtn);
 
       const cancelButtons = screen.queryAllByTestId("CancelIcon");
       if (cancelButtons.length > 0) {
-        await user.click(cancelButtons[0].closest("button")!);
+        const cancelBtn = cancelButtons[0].closest("button");
+        if (cancelBtn) await user.click(cancelBtn);
       }
     }
   });
@@ -304,7 +311,8 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[0].closest("button")!);
+      const editBtn = editButtons[0].closest("button");
+      if (editBtn) await user.click(editBtn);
 
       const inputs = screen.queryAllByRole("textbox");
       const inviteInput = inputs.find(i => 'value' in i && (i as HTMLInputElement).value.includes("INVITE"));
@@ -314,7 +322,8 @@ describe("Company", () => {
 
         const saveButtons = screen.queryAllByTestId("SaveIcon");
         if (saveButtons.length > 0) {
-          await user.click(saveButtons[0].closest("button")!);
+          const saveBtn = saveButtons[0].closest("button");
+          if (saveBtn) await user.click(saveBtn);
         }
       }
     }
@@ -327,7 +336,8 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[0].closest("button")!);
+      const editBtn = editButtons[0].closest("button");
+      if (editBtn) await user.click(editBtn);
 
       const inputs = screen.queryAllByRole("textbox");
       const inviteInput = inputs.find(i => 'value' in i && (i as HTMLInputElement).value.includes("INVITE"));
@@ -337,7 +347,8 @@ describe("Company", () => {
 
         const saveButtons = screen.queryAllByTestId("SaveIcon");
         if (saveButtons.length > 0) {
-          await user.click(saveButtons[0].closest("button")!);
+          const saveBtn = saveButtons[0].closest("button");
+          if (saveBtn) await user.click(saveBtn);
         }
       }
     }
@@ -358,8 +369,9 @@ describe("Company", () => {
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
-      await user.click(deleteButtons[0].closest("button")!);
-      
+      const deleteBtn = deleteButtons[0].closest("button");
+      if (deleteBtn) await user.click(deleteBtn);
+
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
@@ -375,7 +387,8 @@ describe("Company", () => {
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
-      await user.click(deleteButtons[0].closest("button")!);
+      const deleteBtn = deleteButtons[0].closest("button");
+      if (deleteBtn) await user.click(deleteBtn);
 
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Remove");
       if (confirmButtons.length > 0) {
@@ -411,13 +424,13 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
-      
+
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -436,7 +449,7 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -453,13 +466,13 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const titleInput = screen.getByLabelText(/job title/i);
       const linkInput = screen.getByLabelText(/application link/i);
-      
+
       await user.type(titleInput, "Job");
       await user.type(linkInput, "not-a-url");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -475,7 +488,8 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons.at(-1)!.closest("button")!);
+      const btn = editButtons.at(-1)?.closest("button");
+      if (btn) await user.click(btn);
     }
   });
 
@@ -486,7 +500,8 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons.at(-1)!.closest("button")!);
+      const btn = editButtons.at(-1)?.closest("button");
+      if (btn) await user.click(btn);
     }
 
     const linkInput = screen.getByLabelText(/application url/i);
@@ -512,8 +527,9 @@ describe("Company", () => {
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
-      await user.click(deleteButtons.at(-1)!.closest("button")!);
-      
+      const btn = deleteButtons.at(-1)?.closest("button");
+      if (btn) await user.click(btn);
+
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
@@ -603,7 +619,7 @@ describe("Company", () => {
     const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
     if (deleteButtons.length > 0) {
       await user.click(deleteButtons[0]);
-      
+
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
@@ -626,7 +642,7 @@ describe("Company", () => {
     const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
     if (deleteButtons.length > 0) {
       await user.click(deleteButtons[0]);
-      
+
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
@@ -665,10 +681,10 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
-      const titleInput = screen.getByLabelText(/job title/i);      
+
+      const titleInput = screen.getByLabelText(/job title/i);
       await user.type(titleInput, "New Job");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -679,7 +695,7 @@ describe("Company", () => {
   it("sorts jobs by creation date", async () => {
     const job1 = { ...mockJobData, createdAt: { toMillis: () => 1000 } };
     const job2 = { ...mockJobData, createdAt: { toMillis: () => 2000 } };
-    
+
     (getDocs as any).mockResolvedValue({
       forEach: (cb: any) => {
         cb({ id: "job-1", data: () => job1 });
@@ -687,7 +703,7 @@ describe("Company", () => {
       },
       empty: false,
     });
-    
+
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i });
     // Jobs should be displayed (sorted order tested in component)
@@ -695,12 +711,12 @@ describe("Company", () => {
 
   it("handles jobs with no creation date", async () => {
     const jobNoDate = { ...mockJobData, createdAt: null };
-    
+
     (getDocs as any).mockResolvedValue({
       forEach: (cb: any) => cb({ id: "job-1", data: () => jobNoDate }),
       empty: false,
     });
-    
+
     renderComp();
     expect(await screen.findByText(/Software Engineer/i)).toBeInTheDocument();
   });
@@ -709,7 +725,7 @@ describe("Company", () => {
     (getDoc as any).mockRejectedValueOnce(new Error("Error"));
     renderComp();
     await screen.findByText(/failed to load company/i);
-    
+
     // Simulate successful retry by re-rendering
     vi.clearAllMocks();
     (getDoc as any).mockImplementation((docRef: any) => {
@@ -732,13 +748,13 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
-      
+
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -802,7 +818,7 @@ describe("Company", () => {
 
     it("opens JobInviteStatsDialog when View Details is clicked", async () => {
       const user = userEvent.setup();
-      
+
       (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -846,7 +862,7 @@ describe("Company", () => {
         const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
         if (viewDetailsButton) {
           await user.click(viewDetailsButton);
-          
+
           await waitFor(() => {
             expect(screen.getByText("Invitation Details")).toBeInTheDocument();
           });
@@ -856,7 +872,7 @@ describe("Company", () => {
 
     it("closes JobInviteStatsDialog when Close is clicked", async () => {
       const user = userEvent.setup();
-      
+
       (globalThis.fetch as any).mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -875,13 +891,13 @@ describe("Company", () => {
         const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
         if (viewDetailsButton) {
           await user.click(viewDetailsButton);
-          
+
           await waitFor(async () => {
             const dialogTitle = screen.queryByText("Invitation Details");
             if (dialogTitle) {
               const closeButton = screen.getByRole("button", { name: /close/i });
               await user.click(closeButton);
-              
+
               await waitFor(() => {
                 expect(screen.queryByText("Invitation Details")).not.toBeInTheDocument();
               });
@@ -967,7 +983,7 @@ describe("Company", () => {
     };
 
     beforeEach(() => {
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
       });
@@ -1022,7 +1038,8 @@ describe("Company", () => {
 
       const submissionIcons = screen.queryAllByTestId("AssignmentIcon");
       if (submissionIcons.length > 0) {
-        await user.click(submissionIcons[0].closest("button")!);
+        const btn = submissionIcons[0].closest("button");
+        if (btn) await user.click(btn);
         expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("submissions"));
       }
     });
@@ -1034,7 +1051,8 @@ describe("Company", () => {
 
       const descIcons = screen.queryAllByTestId("DescriptionIcon");
       if (descIcons.length > 0) {
-        await user.click(descIcons[0].closest("button")!);
+        const btn = descIcons[0].closest("button");
+        if (btn) await user.click(btn);
         expect(await screen.findByRole("dialog")).toBeInTheDocument();
       }
     });
@@ -1073,7 +1091,8 @@ describe("Company", () => {
 
       const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
       if (deleteSweepIcons.length > 0) {
-        await user.click(deleteSweepIcons[0].closest("button")!);
+        const btn = deleteSweepIcons[0].closest("button");
+        if (btn) await user.click(btn);
         expect(await screen.findByText(/Delete Application Form/i)).toBeInTheDocument();
       }
     });
@@ -1090,7 +1109,8 @@ describe("Company", () => {
 
       const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
       if (deleteSweepIcons.length > 0) {
-        await user.click(deleteSweepIcons[0].closest("button")!);
+        const btn = deleteSweepIcons[0].closest("button");
+        if (btn) await user.click(btn);
         await screen.findByText(/Delete Application Form/i);
 
         const cancelButtons = screen.queryAllByRole("button").filter(
@@ -1105,7 +1125,7 @@ describe("Company", () => {
       }
 
       // API should not have been called for form deletion
-      const deleteCalls = (global.fetch as any).mock.calls.filter((call: any[]) =>
+      const deleteCalls = (globalThis.fetch as any).mock.calls.filter((call: any[]) =>
         call[1]?.method === "DELETE"
       );
       expect(deleteCalls.length).toBe(0);
@@ -1115,7 +1135,7 @@ describe("Company", () => {
       const user = userEvent.setup();
 
       // First call returns stats (0), second call is the DELETE /api/jobs/:id/form
-      (global.fetch as any)
+      (globalThis.fetch as any)
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
@@ -1135,7 +1155,8 @@ describe("Company", () => {
 
       const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
       if (deleteSweepIcons.length > 0) {
-        await user.click(deleteSweepIcons[0].closest("button")!);
+        const btn = deleteSweepIcons[0].closest("button");
+        if (btn) await user.click(btn);
         await screen.findByText(/Delete Application Form/i);
 
         const deleteFormButtons = screen.queryAllByRole("button").filter(
@@ -1153,7 +1174,11 @@ describe("Company", () => {
     it("shows error when form deletion API call fails", async () => {
       const user = userEvent.setup();
 
-      (global.fetch as any)
+      (globalThis.fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ inviteCode: "INVITE123" }),
+        })
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
@@ -1173,7 +1198,8 @@ describe("Company", () => {
 
       const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
       if (deleteSweepIcons.length > 0) {
-        await user.click(deleteSweepIcons[0].closest("button")!);
+        const btn = deleteSweepIcons[0].closest("button");
+        if (btn) await user.click(btn);
         await screen.findByText(/Delete Application Form/i);
 
         const deleteFormButtons = screen.queryAllByRole("button").filter(
@@ -1195,7 +1221,7 @@ describe("Company", () => {
         uid: "rep-1",
         role: "representative",
       });
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
       });

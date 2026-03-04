@@ -26,23 +26,174 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import type { DropResult } from "@hello-pangea/dnd";
+import type { DropResult, DroppableProvided, DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import { auth } from "../firebase";
 import { API_URL } from "../config";
 import type { ApplicationForm, FormField, FormFieldType } from "../types/applicationForm";
 
 interface ApplicationFormBuilderDialogProps {
-  open: boolean;
-  onClose: () => void;
-  jobId: string;
-  jobName: string;
-  initialForm?: ApplicationForm;
-  onSaved?: (form: ApplicationForm) => void;
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly jobId: string;
+  readonly jobName: string;
+  readonly initialForm?: ApplicationForm;
+  readonly onSaved?: (form: ApplicationForm) => void;
 }
 
 interface FieldErrors {
   label?: string;
   options?: string;
+}
+
+interface FieldCardProps {
+  readonly field: FormField;
+  readonly index: number;
+  readonly errors: FieldErrors;
+  readonly onLabelChange: (value: string) => void;
+  readonly onTypeChange: (type: FormFieldType) => void;
+  readonly onOptionsChange: (value: string) => void;
+  readonly onRequiredChange: (checked: boolean) => void;
+  readonly onDelete: () => void;
+}
+
+function FieldCard({ field, index, errors, onLabelChange, onTypeChange, onOptionsChange, onRequiredChange, onDelete }: FieldCardProps) {
+  const optionsValue = (field.options ?? []).join(", ");
+
+  return (
+    <Draggable key={field.id} draggableId={field.id} index={index}>
+      {(providedDraggable: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+        <Paper
+          ref={providedDraggable.innerRef}
+          {...providedDraggable.draggableProps}
+          sx={{
+            p: 1.5,
+            borderRadius: 1,
+            border: "1px solid",
+            borderColor: snapshot.isDragging ? "primary.main" : "rgba(0,0,0,0.12)",
+            boxShadow: snapshot.isDragging ? "0 4px 12px rgba(56, 133, 96, 0.25)" : "none",
+            backgroundColor: "background.paper",
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+            <Box
+              {...providedDraggable.dragHandleProps}
+              sx={{
+                mt: 0.5,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: snapshot.isDragging ? "primary.main" : "text.disabled",
+                cursor: "grab",
+              }}
+            >
+              <DragIndicatorIcon fontSize="small" />
+            </Box>
+
+            <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Field label"
+                  required
+                  value={field.label}
+                  onChange={(e) => onLabelChange(e.target.value)}
+                  error={!!errors.label}
+                  helperText={errors.label}
+                />
+
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel id={`field-type-label-${field.id}`}>Type</InputLabel>
+                  <Select
+                    labelId={`field-type-label-${field.id}`}
+                    label="Type"
+                    value={field.type}
+                    onChange={(e) => onTypeChange(e.target.value as FormFieldType)}
+                  >
+                    <MenuItem value="shortText">Short text</MenuItem>
+                    <MenuItem value="longText">Long text</MenuItem>
+                    <MenuItem value="singleSelect">Single select</MenuItem>
+                    <MenuItem value="multiSelect">Multi select</MenuItem>
+                    <MenuItem value="checkbox">Checkbox</MenuItem>
+                    <MenuItem value="file">File upload</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+
+              {field.type === "file" && (
+                <Typography variant="caption" color="text.secondary">
+                  Candidates will upload a file in this field.
+                </Typography>
+              )}
+
+              {(field.type === "singleSelect" || field.type === "multiSelect") && (
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Options (comma-separated)"
+                  value={optionsValue}
+                  onChange={(e) => onOptionsChange(e.target.value)}
+                  error={!!errors.options}
+                  helperText={errors.options || "Example: Yes, No, Maybe"}
+                />
+              )}
+
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={field.required}
+                      onChange={(e) => onRequiredChange(e.target.checked)}
+                    />
+                  }
+                  label="Required"
+                />
+
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={onDelete}
+                  sx={{ ml: 1 }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            </Box>
+          </Box>
+
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}>
+            <Chip size="small" label={`Question ${index + 1}`} />
+            {field.type === "shortText" && (
+              <Chip size="small" label="Short text" variant="outlined" />
+            )}
+            {field.type === "longText" && (
+              <Chip size="small" label="Long text" variant="outlined" />
+            )}
+            {field.type === "singleSelect" && (
+              <Chip size="small" label="Single select" variant="outlined" />
+            )}
+            {field.type === "multiSelect" && (
+              <Chip size="small" label="Multi select" variant="outlined" />
+            )}
+            {field.type === "checkbox" && (
+              <Chip size="small" label="Checkbox" variant="outlined" />
+            )}
+            {field.required && (
+              <Chip size="small" color="primary" label="Required" />
+            )}
+          </Box>
+        </Paper>
+      )}
+    </Draggable>
+  );
+}
+
+function getUpdatedOptions(field: FormField, newType: FormFieldType): string[] | undefined {
+  if (newType !== "singleSelect" && newType !== "multiSelect") return undefined;
+  return field.options && field.options.length > 0 ? field.options : [""];
 }
 
 export default function ApplicationFormBuilderDialog({
@@ -126,16 +277,7 @@ export default function ApplicationFormBuilderDialog({
     setFields((prev) =>
       prev.map((field) =>
         field.id === id
-          ? {
-              ...field,
-              type,
-              options:
-                type === "singleSelect" || type === "multiSelect"
-                  ? field.options && field.options.length > 0
-                    ? field.options
-                    : [""]
-                  : undefined,
-            }
+          ? { ...field, type, options: getUpdatedOptions(field, type) }
           : field,
       ),
     );
@@ -287,8 +429,8 @@ export default function ApplicationFormBuilderDialog({
       onClose={handleClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: { maxHeight: "90vh" },
+      slotProps={{
+        paper: { sx: { maxHeight: "90vh" } },
       }}
     >
       <DialogTitle>
@@ -305,7 +447,9 @@ export default function ApplicationFormBuilderDialog({
           <InfoOutlinedIcon sx={{ color: "text.secondary", mt: 0.5 }} fontSize="small" />
           <Typography variant="body2" color="text.secondary">
             Define the questions candidates will answer when applying to this job during the virtual career fair.
-            {hasExistingForm ? " You can edit, reorder, or remove existing fields at any time." : " Start by customizing the title and your first question."}
+            {hasExistingForm
+              ? " You can edit, reorder, or remove existing fields at any time."
+              : " Start by customizing the title and your first question."}
           </Typography>
         </Box>
 
@@ -322,7 +466,6 @@ export default function ApplicationFormBuilderDialog({
             required
             value={formTitle}
             onChange={(e) => setFormTitle(e.target.value)}
-
           />
           <TextField
             fullWidth
@@ -332,7 +475,6 @@ export default function ApplicationFormBuilderDialog({
             value={formDescription}
             onChange={(e) => setFormDescription(e.target.value)}
             placeholder="Share context or instructions for candidates about this application."
-
           />
         </Box>
 
@@ -389,150 +531,21 @@ export default function ApplicationFormBuilderDialog({
           ) : (
             <DragDropContext onDragEnd={handleDragEnd}>
               <Droppable droppableId="application-form-fields">
-                {(providedDroppable) => (
+                {(providedDroppable: DroppableProvided) => (
                   <Box ref={providedDroppable.innerRef} {...providedDroppable.droppableProps} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                    {fields.map((field, index) => {
-                      const errorsForField = fieldErrors[field.id] || {};
-                      const optionsValue = (field.options ?? []).join(", ");
-
-                      return (
-                        <Draggable key={field.id} draggableId={field.id} index={index}>
-                          {(providedDraggable, snapshot) => (
-                            <Paper
-                              ref={providedDraggable.innerRef}
-                              {...providedDraggable.draggableProps}
-                              sx={{
-                                p: 1.5,
-                                borderRadius: 1,
-                                border: "1px solid",
-                                borderColor: snapshot.isDragging ? "primary.main" : "rgba(0,0,0,0.12)",
-                                boxShadow: snapshot.isDragging ? "0 4px 12px rgba(56, 133, 96, 0.25)" : "none",
-                                backgroundColor: "background.paper",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 1,
-                              }}
-                            >
-                              <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5 }}>
-                                <Box
-                                  {...providedDraggable.dragHandleProps}
-                                  sx={{
-                                    mt: 0.5,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    color: snapshot.isDragging ? "primary.main" : "text.disabled",
-                                    cursor: "grab",
-                                  }}
-                                >
-                                  <DragIndicatorIcon fontSize="small" />
-                                </Box>
-
-                                <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
-                                  <Box sx={{ display: "flex", gap: 1 }}>
-                                    <TextField
-                                      fullWidth
-                                      size="small"
-                                      label="Field label"
-                                      required
-                                      value={field.label}
-                                      onChange={(e) => handleFieldChange(field.id, "label", e.target.value)}
-                                      error={!!errorsForField.label}
-                                      helperText={errorsForField.label}
-
-                                    />
-
-                                    <FormControl size="small" sx={{ minWidth: 160 }}>
-                                      <InputLabel id={`field-type-label-${field.id}`}>Type</InputLabel>
-                                      <Select
-                                        labelId={`field-type-label-${field.id}`}
-                                        label="Type"
-                                        value={field.type}
-                                        onChange={(e) =>
-                                          handleFieldTypeChange(field.id, e.target.value as FormFieldType)
-                                        }
-
-                                      >
-                                        <MenuItem value="shortText">Short text</MenuItem>
-                                        <MenuItem value="longText">Long text</MenuItem>
-                                        <MenuItem value="singleSelect">Single select</MenuItem>
-                                        <MenuItem value="multiSelect">Multi select</MenuItem>
-                                        <MenuItem value="checkbox">Checkbox</MenuItem>
-                                        <MenuItem value="file">File upload</MenuItem>
-                                      </Select>
-                                    </FormControl>
-                                  </Box>
-
-                                  {field.type === "file" && (
-                                    <Typography variant="caption" color="text.secondary">
-                                      Candidates will upload a file in this field.
-                                    </Typography>
-                                  )}
-
-                                  {(field.type === "singleSelect" || field.type === "multiSelect") && (
-                                    <TextField
-                                      fullWidth
-                                      size="small"
-                                      label="Options (comma-separated)"
-                                      value={optionsValue}
-                                      onChange={(e) => handleOptionsChange(field.id, e.target.value)}
-                                      error={!!errorsForField.options}
-                                      helperText={errorsForField.options || "Example: Yes, No, Maybe"}
-
-                                    />
-                                  )}
-
-                                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <FormControlLabel
-                                      control={
-                                        <Checkbox
-                                          checked={field.required}
-                                          onChange={(e) => handleFieldChange(field.id, "required", e.target.checked)}
-
-                                        />
-                                      }
-                                      label="Required"
-                                    />
-
-                                    <IconButton
-                                      size="small"
-                                      color="error"
-                                      onClick={() => handleDeleteField(field.id)}
-                                      sx={{ ml: 1 }}
-
-                                    >
-                                      <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                  </Box>
-                                </Box>
-                              </Box>
-
-                              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}>
-                                <Chip size="small" label={`Question ${index + 1}`} />
-                                {field.type === "shortText" && (
-                                  <Chip size="small" label="Short text" variant="outlined" />
-                                )}
-                                {field.type === "longText" && (
-                                  <Chip size="small" label="Long text" variant="outlined" />
-                                )}
-                                {field.type === "singleSelect" && (
-                                  <Chip size="small" label="Single select" variant="outlined" />
-                                )}
-                                {field.type === "multiSelect" && (
-                                  <Chip size="small" label="Multi select" variant="outlined" />
-                                )}
-                                {field.type === "checkbox" && (
-                                  <Chip size="small" label="Checkbox" variant="outlined" />
-                                )}
-                                {field.required && (
-                                  <Chip size="small" color="primary" label="Required" />
-                                )}
-                              </Box>
-                            </Paper>
-                          )}
-                        </Draggable>
-                      );
-                    })}
+                    {fields.map((field, index) => (
+                      <FieldCard
+                        key={field.id}
+                        field={field}
+                        index={index}
+                        errors={fieldErrors[field.id] || {}}
+                        onLabelChange={(value) => handleFieldChange(field.id, "label", value)}
+                        onTypeChange={(type) => handleFieldTypeChange(field.id, type)}
+                        onOptionsChange={(value) => handleOptionsChange(field.id, value)}
+                        onRequiredChange={(checked) => handleFieldChange(field.id, "required", checked)}
+                        onDelete={() => handleDeleteField(field.id)}
+                      />
+                    ))}
                     {providedDroppable.placeholder}
                   </Box>
                 )}
@@ -556,13 +569,12 @@ export default function ApplicationFormBuilderDialog({
                 background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
               },
             }}
-
           >
             Add field
           </Button>
 
           <Typography variant="caption" color="text.secondary">
-            {fields.length} field{fields.length !== 1 ? "s" : ""} configured
+            {fields.length} field{fields.length === 1 ? "" : "s"} configured
           </Typography>
         </Box>
       </DialogContent>
@@ -588,4 +600,3 @@ export default function ApplicationFormBuilderDialog({
     </Dialog>
   );
 }
-

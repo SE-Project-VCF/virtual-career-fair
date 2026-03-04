@@ -5,7 +5,6 @@ import { BrowserRouter } from "react-router-dom";
 import BoothEditor from "../BoothEditor";
 import * as authUtils from "../../utils/auth";
 import * as firestore from "firebase/firestore";
-import * as storage from "firebase/storage";
 
 const mockNavigate = vi.fn();
 
@@ -22,6 +21,7 @@ vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
     isAuthenticated: vi.fn(),
+    getIdToken: vi.fn(),
   },
 }));
 
@@ -96,6 +96,13 @@ describe("BoothEditor", () => {
       role: "companyOwner",
     });
     (authUtils.authUtils.isAuthenticated as any).mockReturnValue(true);
+    (authUtils.authUtils.getIdToken as any).mockResolvedValue("mock-token");
+
+    // Default fetch mock
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ filePath: "uploads/logo.png" }),
+    });
 
     // Default mock for getDoc
     (firestore.getDoc as any).mockResolvedValue(mockCompanyDoc);
@@ -871,20 +878,6 @@ describe("BoothEditor", () => {
       globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
       globalThis.URL.revokeObjectURL = vi.fn();
 
-      const mockUploadTask = {
-        on: vi.fn((_event, onProgress, _onError, onComplete) => {
-          // Simulate progress
-          onProgress({ bytesTransferred: 50, totalBytes: 100 });
-          // Simulate completion
-          setTimeout(() => onComplete(), 0);
-        }),
-        snapshot: { ref: {} },
-      };
-
-      (storage.uploadBytesResumable as any).mockReturnValue(mockUploadTask);
-      (storage.getDownloadURL as any).mockResolvedValue("https://example.com/uploaded-logo.png");
-      (storage.ref as any).mockReturnValue({});
-
       renderBoothEditor();
 
       await waitFor(() => {
@@ -923,8 +916,10 @@ describe("BoothEditor", () => {
       await user.click(screen.getByRole("button", { name: /create booth/i }));
 
       await waitFor(() => {
-        expect(storage.uploadBytesResumable).toHaveBeenCalled();
-        expect(storage.getDownloadURL).toHaveBeenCalled();
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          expect.stringContaining("/api/upload-booth-logo"),
+          expect.objectContaining({ method: "POST" })
+        );
       });
     });
 
@@ -932,16 +927,10 @@ describe("BoothEditor", () => {
       const user = userEvent.setup();
       globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
 
-      const mockUploadTask = {
-        on: vi.fn((_event, _onProgress, onError) => {
-          // Simulate upload error
-          setTimeout(() => onError(new Error("Upload failed")), 0);
-        }),
-        snapshot: { ref: {} },
-      };
-
-      (storage.uploadBytesResumable as any).mockReturnValue(mockUploadTask);
-      (storage.ref as any).mockReturnValue({});
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "Upload failed" }),
+      });
 
       renderBoothEditor();
 

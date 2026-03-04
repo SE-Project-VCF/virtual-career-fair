@@ -169,7 +169,7 @@ export default function JobInvitations() {
         );
 
         const hasPublishedForm =
-          invitation.job?.applicationForm && invitation.job.applicationForm.status === "published";
+          invitation.job?.applicationForm?.status === "published";
 
         if (hasPublishedForm) {
           setSelectedInvitationForApply(invitation);
@@ -473,7 +473,7 @@ export default function JobInvitations() {
         )}
       </Container>
 
-      {selectedInvitationForApply && selectedInvitationForApply.job && (
+      {selectedInvitationForApply?.job && (
         <JobApplicationFormDialog
           open={applyDialogOpen}
           onClose={() => {

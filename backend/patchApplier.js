@@ -16,7 +16,7 @@ class PatchApplier {
     const errors = [];
     
     // Deep copy to avoid mutating original
-    let tailoredResume = JSON.parse(JSON.stringify(originalResume));
+    let tailoredResume = structuredClone(originalResume);
     let appliedCount = 0;
 
     if (!Array.isArray(acceptedPatches)) {
@@ -36,18 +36,16 @@ class PatchApplier {
         appliedCount++;
         tailoredResume = result.resume;
       } else {
-        // LENIENT: Log but don't fail - skill/job might not exist in this resume
         console.log(`[PatchApplier] Skipping patch ${patch.opId}: ${result.error}`);
-        // DON'T add to errors - let it pass
+        errors.push(`Patch ${patch.opId}: ${result.error}`);
       }
     }
 
-    // Always return success if we processed all patches, even if some didn't apply
     return {
-      success: true,  // CHANGED: Always true now
+      success: errors.length === 0,
       tailoredResume,
       appliedCount,
-      errors: errors.length > 0 ? errors : null
+      errors
     };
   }
 
@@ -115,7 +113,7 @@ class PatchApplier {
       };
     }
 
-    const updated = JSON.parse(JSON.stringify(resume));
+    const updated = structuredClone(resume);
     updated.summary.text = afterText;
     
     // Track patch if not already tracking
@@ -145,7 +143,7 @@ class PatchApplier {
       };
     }
 
-    const updated = JSON.parse(JSON.stringify(resume));
+    const updated = structuredClone(resume);
 
     // Find and replace bullet
     let found = false;
@@ -227,14 +225,14 @@ class PatchApplier {
       };
     }
 
-    const updated = JSON.parse(JSON.stringify(resume));
+    const updated = structuredClone(resume);
     let found = false;
 
     if (section === "experience") {
       for (const exp of updated.experience || []) {
         if (exp.id === parentId || exp.title === parentId) {
           const newBullet = {
-            bulletId: `bullet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            bulletId: `bullet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
             text: afterText,
             appliedPatches: [opId]
           };
@@ -260,7 +258,7 @@ class PatchApplier {
       for (const proj of updated.projects || []) {
         if (proj.id === parentId || proj.title === parentId) {
           const newBullet = {
-            bulletId: `bullet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            bulletId: `bullet_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
             text: afterText,
             appliedPatches: [opId]
           };
@@ -312,7 +310,7 @@ class PatchApplier {
       };
     }
 
-    const updated = JSON.parse(JSON.stringify(resume));
+    const updated = structuredClone(resume);
     let found = false;
 
     // Search experience
@@ -397,9 +395,9 @@ class PatchApplier {
       };
     }
 
-    const updated = JSON.parse(JSON.stringify(resume));
+    const updated = structuredClone(resume);
     
-    if (!updated.skills || !updated.skills.items) {
+    if (!updated.skills?.items) {
       return {
         success: false,
         resume,
@@ -455,7 +453,7 @@ class PatchApplier {
       };
     }
 
-    const updated = JSON.parse(JSON.stringify(resume));
+    const updated = structuredClone(resume);
 
     // If parentId is specified, hide just that item (job/project)
     if (parentId) {
@@ -467,9 +465,9 @@ class PatchApplier {
         
         // If not found, try matching by title/company/text content (normalize for punctuation)
         if (jobIdx === -1 && removedText) {
-          const cleanRemovedText = removedText.toLowerCase().replace(/[–\-\s]+/g, ' ').trim();
+          const cleanRemovedText = removedText.toLowerCase().replaceAll(/[–\-\s]+/g, ' ').trim();
           jobIdx = (updated.experience || []).findIndex(e => {
-            const fullText = `${e.title || ''} ${e.company || ''}`.toLowerCase().replace(/[–\-\s]+/g, ' ').trim();
+            const fullText = `${e.title || ''} ${e.company || ''}`.toLowerCase().replaceAll(/[–\-\s]+/g, ' ').trim();
             return fullText.includes(cleanRemovedText) || cleanRemovedText.includes(fullText);
           });
         }
@@ -522,21 +520,19 @@ class PatchApplier {
           error: `Cannot suppress subsection of: ${section}`
         };
       }
-    } else {
+    } else if (section === "experience") {
       // Hide entire section
-      if (section === "experience") {
-        updated.experience = [];
-      } else if (section === "projects") {
-        updated.projects = [];
-      } else if (section === "skills") {
-        updated.skills = { items: [] };
-      } else {
-        return {
-          success: false,
-          resume,
-          error: `Unknown section to suppress: ${section}`
-        };
-      }
+      updated.experience = [];
+    } else if (section === "projects") {
+      updated.projects = [];
+    } else if (section === "skills") {
+      updated.skills = { items: [] };
+    } else {
+      return {
+        success: false,
+        resume,
+        error: `Unknown section to suppress: ${section}`
+      };
     }
 
     return {
@@ -560,7 +556,7 @@ class PatchApplier {
       };
     }
 
-    const updated = JSON.parse(JSON.stringify(resume));
+    const updated = structuredClone(resume);
     let found = false;
 
     // Search experience

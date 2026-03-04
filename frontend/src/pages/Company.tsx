@@ -363,226 +363,6 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
   )
 }
 
-function JobPostingsSection({
-  jobs,
-  loadingJobs,
-  jobStats,
-  handleCreateJobClick,
-  handleInviteStudentsClick,
-  handleEditJobClick,
-  handleDeleteJobClick,
-  handleViewStatsClick,
-}: Readonly<{
-  jobs: Job[]
-  loadingJobs: boolean
-  jobStats: Record<string, JobInvitationStats>
-  handleCreateJobClick: () => void
-  handleInviteStudentsClick: (job: Job) => void
-  handleEditJobClick: (job: Job) => void
-  handleDeleteJobClick: (job: Job) => void
-  handleViewStatsClick: (job: Job) => void
-}>) {
-  return (
-    <Grid size={{ xs: 12 }}>
-      <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
-        <CardContent sx={{ p: 3 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 1 }}>
-              <WorkIcon sx={{ color: "#388560" }} />
-              Job Postings ({jobs.length})
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleCreateJobClick}
-              sx={{
-                background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                },
-              }}
-            >
-              Create Job Posting
-            </Button>
-          </Box>
-
-          {loadingJobs && (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-              <CircularProgress size={24} />
-            </Box>
-          )}
-          {!loadingJobs && jobs.length === 0 && (
-            <Box sx={{ textAlign: "center", py: 4 }}>
-              <WorkIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-                No job postings yet. Create your first job posting to attract students!
-              </Typography>
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleCreateJobClick}
-                sx={{
-                  borderColor: "#388560",
-                  color: "#388560",
-                  "&:hover": {
-                    borderColor: "#2d6b4d",
-                    bgcolor: "rgba(56, 133, 96, 0.05)",
-                  },
-                }}
-              >
-                Create Job Posting
-              </Button>
-            </Box>
-          )}
-          {!loadingJobs && jobs.length > 0 && (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {jobs.map((job) => (
-                <Card
-                  key={job.id}
-                  sx={{
-                    border: "1px solid rgba(56, 133, 96, 0.2)",
-                    borderRadius: 2,
-                    transition: "box-shadow 0.2s",
-                    "&:hover": {
-                      boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
-                    },
-                  }}
-                >
-                  <CardContent sx={{ p: 2.5 }}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1.5 }}>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                          {job.name}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, whiteSpace: "pre-wrap" }}>
-                          {job.description}
-                        </Typography>
-                        <Box sx={{ mb: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
-                            Required Skills:
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {job.majorsAssociated}
-                          </Typography>
-                        </Box>
-                        {job.applicationLink && (
-                          <Chip
-                            icon={<LaunchIcon sx={{ fontSize: 16 }} />}
-                            label="Application Link Available"
-                            size="small"
-                            sx={{
-                              bgcolor: "rgba(56, 133, 96, 0.1)",
-                              color: "#388560",
-                              fontWeight: 500,
-                            }}
-                          />
-                        )}
-                      </Box>
-                      <Box sx={{ display: "flex", gap: 1, ml: 2, flexDirection: "column" }}>
-                        <Box sx={{ display: "flex", gap: 1 }}>
-                          <Tooltip title="Invite students to apply">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleInviteStudentsClick(job)}
-                              sx={{
-                                color: "#388560",
-                                bgcolor: "rgba(56, 133, 96, 0.08)",
-                                "&:hover": {
-                                  bgcolor: "rgba(56, 133, 96, 0.15)",
-                                }
-                              }}
-                            >
-                              <SendIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Edit job posting">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEditJobClick(job)}
-                              sx={{ color: "#388560" }}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete job posting">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleDeleteJobClick(job)}
-                              sx={{ color: "#d32f2f" }}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </Box>
-                    </Box>
-
-                    {jobStats[job.id] && jobStats[job.id].totalSent > 0 && (
-                      <Box
-                        sx={{
-                          mt: 2,
-                          pt: 2,
-                          borderTop: "1px solid rgba(56, 133, 96, 0.15)",
-                          display: "flex",
-                          gap: 3,
-                          alignItems: "center",
-                          justifyContent: "space-between"
-                        }}
-                      >
-                        <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                            <BarChartIcon sx={{ fontSize: 18, color: "#388560" }} />
-                            <Typography variant="caption" fontWeight="600" color="text.secondary">
-                              Invitation Stats:
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: "flex", gap: 2 }}>
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">
-                                Sent: <strong>{jobStats[job.id].totalSent}</strong>
-                              </Typography>
-                            </Box>
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">
-                                Viewed: <strong>{jobStats[job.id].totalViewed}</strong> ({jobStats[job.id].viewRate}%)
-                              </Typography>
-                            </Box>
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">
-                                Clicked: <strong>{jobStats[job.id].totalClicked}</strong> ({jobStats[job.id].clickRate}%)
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </Box>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleViewStatsClick(job)}
-                          sx={{
-                            borderColor: "#388560",
-                            color: "#388560",
-                            fontSize: "0.75rem",
-                            "&:hover": {
-                              borderColor: "#2d6b4d",
-                              bgcolor: "rgba(56, 133, 96, 0.05)",
-                            },
-                          }}
-                        >
-                          View Details
-                        </Button>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-          )}
-        </CardContent>
-      </Card>
-    </Grid>
-  )
-}
-
 function DeleteCompanyCard({ isOwner, handleDeleteCompanyClick }: Readonly<{
   isOwner: boolean
   handleDeleteCompanyClick: () => void
@@ -1334,11 +1114,12 @@ export default function Company() {
                   </Button>
                 </Box>
 
-                {loadingJobs ? (
+                {loadingJobs && (
                   <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                     <CircularProgress size={24} />
                   </Box>
-                ) : jobs.length === 0 ? (
+                )}
+                {!loadingJobs && jobs.length === 0 && (
                   <Box sx={{ textAlign: "center", py: 4 }}>
                     <WorkIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
@@ -1360,7 +1141,8 @@ export default function Company() {
                       Create Job Posting
                     </Button>
                   </Box>
-                ) : (
+                )}
+                {!loadingJobs && jobs.length > 0 && (
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {jobs.map((job) => (
                       <Card
@@ -1451,7 +1233,7 @@ export default function Company() {
                                   </Tooltip>
                                 )}
                                 {job.applicationForm && (
-                                  <Tooltip title="Delete application form">
+                                  <Tooltip title="Remove form">
                                     <IconButton
                                       size="small"
                                       onClick={() => handleDeleteFormClick(job)}
