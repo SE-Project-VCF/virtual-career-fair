@@ -19,9 +19,14 @@ import AddIcon from "@mui/icons-material/Add"
 import LaunchIcon from "@mui/icons-material/Launch"
 import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
+import DescriptionIcon from "@mui/icons-material/Description"
+import AssignmentIcon from "@mui/icons-material/Assignment"
+import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import ProfileMenu from "./ProfileMenu"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
+import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -53,6 +58,7 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  applicationForm?: ApplicationForm
 }
 
 interface JobInvitationStats {
@@ -654,6 +660,11 @@ export default function Company() {
   const [deletingJob, setDeletingJob] = useState(false)
   const [statsDialogOpen, setStatsDialogOpen] = useState(false)
   const [selectedJobForStats, setSelectedJobForStats] = useState<Job | null>(null)
+  const [applicationFormDialogOpen, setApplicationFormDialogOpen] = useState(false)
+  const [selectedJobForForm, setSelectedJobForForm] = useState<Job | null>(null)
+  const [deleteFormDialogOpen, setDeleteFormDialogOpen] = useState(false)
+  const [jobToDeleteForm, setJobToDeleteForm] = useState<Job | null>(null)
+  const [deletingForm, setDeletingForm] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -776,8 +787,7 @@ export default function Company() {
   const fetchJobs = async (companyId: string) => {
     try {
       setLoadingJobs(true)
-      console.log("Fetching jobs for company:", companyId)
-
+      
       const jobsRef = collection(db, "jobs")
       const q = query(jobsRef, where("companyId", "==", companyId))
       const jobsSnapshot = await getDocs(q)
@@ -785,6 +795,7 @@ export default function Company() {
       const jobsList: Job[] = []
       jobsSnapshot.forEach((doc) => {
         const data = doc.data()
+        const applicationFormData = data.applicationForm as ApplicationForm | undefined
         jobsList.push({
           id: doc.id,
           companyId: data.companyId,
@@ -793,6 +804,7 @@ export default function Company() {
           majorsAssociated: data.majorsAssociated,
           applicationLink: data.applicationLink || null,
           createdAt: data.createdAt?.toMillis?.() || data.createdAt || null,
+          applicationForm: applicationFormData
         })
       })
 
@@ -803,8 +815,7 @@ export default function Company() {
         if (!b.createdAt) return -1
         return b.createdAt - a.createdAt
       })
-
-      console.log("Fetched jobs:", jobsList.length, "jobs")
+      
       setJobs(jobsList)
 
       // Fetch stats for each job
@@ -866,6 +877,59 @@ export default function Company() {
     setJobErrors({})
   }
 
+  const handleManageApplicationFormClick = (job: Job) => {
+    setSelectedJobForForm(job)
+    setApplicationFormDialogOpen(true)
+  }
+
+  const handleDeleteFormClick = (job: Job) => {
+    setJobToDeleteForm(job)
+    setDeleteFormDialogOpen(true)
+  }
+
+  const handleDeleteFormConfirm = async () => {
+    if (!jobToDeleteForm) return
+
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => navigate("/login"), 1500)
+      return
+    }
+
+    try {
+      setDeletingForm(true)
+      setError("")
+
+      const token = await auth.currentUser.getIdToken()
+      const response = await fetch(
+        `${API_URL}/api/jobs/${jobToDeleteForm.id}/form`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to delete form.")
+      }
+
+      setJobs((prev) =>
+        prev.map((job) =>
+          job.id === jobToDeleteForm.id ? { ...job, applicationForm: undefined } : job
+        )
+      )
+      setSuccess("Application form deleted.")
+      setDeleteFormDialogOpen(false)
+      setJobToDeleteForm(null)
+    } catch (err: any) {
+      console.error("Error deleting form:", err)
+      setError(err?.message || "Failed to delete application form.")
+    } finally {
+      setDeletingForm(false)
+    }
+  }
+
   const handleCreateJobClick = () => {
     setEditingJob(null)
     setJobForm({ title: "", description: "", skills: "", applicationLink: "" })
@@ -911,6 +975,16 @@ export default function Company() {
   const handleSaveJob = async () => {
     if (!company) return
 
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
+
+    // Reset errors
     setJobErrors({})
     const errors = validateJobForm()
 
@@ -936,6 +1010,15 @@ export default function Company() {
 
   const handleDeleteJobConfirm = async () => {
     if (!jobToDelete || !company) return
+
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
 
     try {
       setDeletingJob(true)
@@ -963,6 +1046,15 @@ export default function Company() {
 
   const handleDeleteConfirm = async () => {
     if (!representativeToDelete || !company || !isOwner) return
+
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
 
     try {
       setDeleting(true)
@@ -1006,6 +1098,15 @@ export default function Company() {
   const handleDeleteCompanyConfirm = async () => {
     if (!company || !userId || !isOwner) return
 
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
+
     try {
       setDeletingCompany(true)
       setError("")
@@ -1039,6 +1140,15 @@ export default function Company() {
   const handleRegenerateInviteCode = async () => {
     if (!company || !userId) return
 
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
+      return
+    }
+
     try {
       setUpdatingInviteCode(true)
       setError("")
@@ -1066,6 +1176,15 @@ export default function Company() {
     const trimmedCode = editedInviteCode.trim()
     if (!trimmedCode || trimmedCode.length < 4 || trimmedCode.length > 20) {
       setError("Invite code must be 4-20 characters")
+      return
+    }
+
+    // Check if user is authenticated with Firebase
+    if (!auth.currentUser) {
+      setError("Your session has expired. Please log in again.")
+      setTimeout(() => {
+        navigate("/login")
+      }, 1500)
       return
     }
 
@@ -1192,16 +1311,255 @@ export default function Company() {
           />
 
           {/* Job Postings Card */}
-          <JobPostingsSection
-            jobs={jobs}
-            loadingJobs={loadingJobs}
-            jobStats={jobStats}
-            handleCreateJobClick={handleCreateJobClick}
-            handleInviteStudentsClick={handleInviteStudentsClick}
-            handleEditJobClick={handleEditJobClick}
-            handleDeleteJobClick={handleDeleteJobClick}
-            handleViewStatsClick={handleViewStatsClick}
-          />
+          <Grid size={{ xs: 12 }}>
+            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 1 }}>
+                    <WorkIcon sx={{ color: "#388560" }} />
+                    Job Postings ({jobs.length})
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={handleCreateJobClick}
+                    sx={{
+                      background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                      "&:hover": {
+                        background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                      },
+                    }}
+                  >
+                    Create Job Posting
+                  </Button>
+                </Box>
+
+                {loadingJobs ? (
+                  <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                ) : jobs.length === 0 ? (
+                  <Box sx={{ textAlign: "center", py: 4 }}>
+                    <WorkIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
+                    <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                      No job postings yet. Create your first job posting to attract students!
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<AddIcon />}
+                      onClick={handleCreateJobClick}
+                      sx={{
+                        borderColor: "#388560",
+                        color: "#388560",
+                        "&:hover": {
+                          borderColor: "#2d6b4d",
+                          bgcolor: "rgba(56, 133, 96, 0.05)",
+                        },
+                      }}
+                    >
+                      Create Job Posting
+                    </Button>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {jobs.map((job) => (
+                      <Card
+                        key={job.id}
+                        sx={{
+                          border: "1px solid rgba(56, 133, 96, 0.2)",
+                          borderRadius: 2,
+                          transition: "box-shadow 0.2s",
+                          "&:hover": {
+                            boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                          },
+                        }}
+                      >
+                        <CardContent sx={{ p: 2.5 }}>
+                          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 1.5 }}>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                                {job.name}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, whiteSpace: "pre-wrap" }}>
+                                {job.description}
+                              </Typography>
+                              <Box sx={{ mb: 1 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                                  Required Skills:
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {job.majorsAssociated}
+                                </Typography>
+                              </Box>
+                              {job.applicationLink && (
+                                <Chip
+                                  icon={<LaunchIcon sx={{ fontSize: 16 }} />}
+                                  label="Application Link Available"
+                                  size="small"
+                                  sx={{
+                                    bgcolor: "rgba(56, 133, 96, 0.1)",
+                                    color: "#388560",
+                                    fontWeight: 500,
+                                  }}
+                                />
+                              )}
+                            </Box>
+                            <Box sx={{ display: "flex", gap: 1, ml: 2, flexDirection: "column" }}>
+                              <Box sx={{ display: "flex", gap: 1 }}>
+                                <Tooltip title="Invite students to apply">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleInviteStudentsClick(job)}
+                                    sx={{ 
+                                      color: "#388560",
+                                      bgcolor: "rgba(56, 133, 96, 0.08)",
+                                      "&:hover": {
+                                        bgcolor: "rgba(56, 133, 96, 0.15)",
+                                      }
+                                    }}
+                                  >
+                                    <SendIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Edit job posting">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleEditJobClick(job)}
+                                    sx={{ color: "#388560" }}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title={job.applicationForm ? "Edit application form" : "Create application form"}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleManageApplicationFormClick(job)}
+                                    sx={{ color: job.applicationForm ? "#388560" : "text.secondary" }}
+                                  >
+                                    <DescriptionIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                {job.applicationForm && (
+                                  <Tooltip title="View submissions">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => navigate(`/company/${company?.id}/submissions`)}
+                                      sx={{ color: "#388560" }}
+                                    >
+                                      <AssignmentIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                {job.applicationForm && (
+                                  <Tooltip title="Delete application form">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => handleDeleteFormClick(job)}
+                                      sx={{ color: "#d32f2f" }}
+                                    >
+                                      <DeleteSweepIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                <Tooltip title="Delete job posting">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleDeleteJobClick(job)}
+                                    sx={{ color: "#d32f2f" }}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            </Box>
+                          </Box>
+                          
+                          {job.applicationForm && (
+                            <Box sx={{ mt: 1, display: "flex", gap: 1, flexWrap: "wrap" }}>
+                              <Chip
+                                icon={<DescriptionIcon sx={{ fontSize: 16 }} />}
+                                label={
+                                  job.applicationForm.status === "published"
+                                    ? "Application Form: Published"
+                                    : "Application Form: Draft"
+                                }
+                                size="small"
+                                sx={{
+                                  bgcolor:
+                                    job.applicationForm.status === "published"
+                                      ? "rgba(56, 133, 96, 0.1)"
+                                      : "rgba(0, 0, 0, 0.04)",
+                                  color: job.applicationForm.status === "published" ? "#388560" : "text.secondary",
+                                  fontWeight: 500,
+                                }}
+                              />
+                            </Box>
+                          )}
+
+                          {/* Job Invitation Stats */}
+                          {jobStats[job.id] && jobStats[job.id].totalSent > 0 && (
+                            <Box 
+                              sx={{ 
+                                mt: 2, 
+                                pt: 2, 
+                                borderTop: "1px solid rgba(56, 133, 96, 0.15)",
+                                display: "flex",
+                                gap: 3,
+                                alignItems: "center",
+                                justifyContent: "space-between"
+                              }}
+                            >
+                              <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                  <BarChartIcon sx={{ fontSize: 18, color: "#388560" }} />
+                                  <Typography variant="caption" fontWeight="600" color="text.secondary">
+                                    Invitation Stats:
+                                  </Typography>
+                                </Box>
+                                <Box sx={{ display: "flex", gap: 2 }}>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                      Sent: <strong>{jobStats[job.id].totalSent}</strong>
+                                    </Typography>
+                                  </Box>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                      Viewed: <strong>{jobStats[job.id].totalViewed}</strong> ({jobStats[job.id].viewRate}%)
+                                    </Typography>
+                                  </Box>
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                      Clicked: <strong>{jobStats[job.id].totalClicked}</strong> ({jobStats[job.id].clickRate}%)
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </Box>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => handleViewStatsClick(job)}
+                                sx={{
+                                  borderColor: "#388560",
+                                  color: "#388560",
+                                  fontSize: "0.75rem",
+                                  "&:hover": {
+                                    borderColor: "#2d6b4d",
+                                    bgcolor: "rgba(56, 133, 96, 0.05)",
+                                  },
+                                }}
+                              >
+                                View Details
+                              </Button>
+                            </Box>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
 
           {/* Delete Company Card (Owner only) */}
           <DeleteCompanyCard
@@ -1403,6 +1761,46 @@ export default function Company() {
           jobTitle={selectedJobForStats.name}
         />
       )}
+
+      {/* Application Form Builder Dialog */}
+      {selectedJobForForm && (
+        <ApplicationFormBuilderDialog
+          open={applicationFormDialogOpen}
+          onClose={() => {
+            setApplicationFormDialogOpen(false)
+            setSelectedJobForForm(null)
+          }}
+          jobId={selectedJobForForm.id}
+          jobName={selectedJobForForm.name}
+          initialForm={selectedJobForForm.applicationForm}
+          onSaved={(updatedForm) => {
+            setJobs((prev) =>
+              prev.map((job) =>
+                job.id === selectedJobForForm.id ? { ...job, applicationForm: updatedForm } : job
+              )
+            )
+          }}
+        />
+      )}
+
+      {/* Delete Application Form Confirmation Dialog */}
+      <Dialog open={deleteFormDialogOpen} onClose={() => { if (!deletingForm) { setDeleteFormDialogOpen(false); setJobToDeleteForm(null) } }}>
+        <DialogTitle>Delete Application Form</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the application form for <strong>{jobToDeleteForm?.name}</strong>? This action cannot be undone and students will no longer be able to apply through this form.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setDeleteFormDialogOpen(false); setJobToDeleteForm(null) }} disabled={deletingForm}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteFormConfirm} color="error" variant="contained" disabled={deletingForm}>
+            {deletingForm ? "Deleting..." : "Delete Form"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
     </Box>
   )
 }

@@ -16,6 +16,8 @@ import ChatIcon from "@mui/icons-material/Chat"
 import ProfileMenu from "./ProfileMenu"
 import EventList from "../components/EventList"
 import NotificationBell from "../components/NotificationBell"
+import { parseMyResume } from "../utils/auth";
+import { tailorMyResume } from "../utils/auth"; // adjust path
 
 // Helper function to get fair status message based on user role
 function getFairStatusMessage(role: string | undefined): string {
@@ -619,10 +621,47 @@ export default function Dashboard() {
   const [newInvitationsCount, setNewInvitationsCount] = useState(0)
   const [loadingInvitations, setLoadingInvitations] = useState(false)
 
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await parseMyResume();
+        console.log("✅ RESUME PARSE RESULT:", result);
+      } catch (e) {
+        console.error("❌ RESUME PARSE ERROR:", e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Prevent spam on refresh
+        if (sessionStorage.getItem("tailorTestOnce")) return;
+
+        const jobDescription = `
+Frontend Intern
+- Build React components
+- Work with Firebase/Firestore
+- Write clean TypeScript
+- Collaborate in GitHub PR workflow
+`;
+
+        const result = await tailorMyResume(jobDescription, "testBoothId", "Frontend Intern");
+        console.log("🧠 TAILOR RESULT:", result);
+
+        sessionStorage.setItem("tailorTestOnce", "1");
+      } catch (e) {
+        console.error("❌ TAILOR ERROR:", e);
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
       navigate("/")
     }
+
 
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation

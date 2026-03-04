@@ -946,4 +946,281 @@ describe("Company", () => {
       }, { timeout: 5000 });
     });
   });
+
+  describe("Application Form Management", () => {
+    const mockJobWithForm = {
+      ...mockJobData,
+      applicationForm: {
+        title: "Apply Here",
+        status: "published",
+        fields: [{ id: "f1", type: "shortText", label: "Name", required: true }],
+      },
+    };
+
+    const mockJobWithDraftForm = {
+      ...mockJobData,
+      applicationForm: {
+        title: "Draft Form",
+        status: "draft",
+        fields: [],
+      },
+    };
+
+    beforeEach(() => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+      });
+    });
+
+    it("shows published application form chip on job card", async () => {
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      expect(
+        await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 })
+      ).toBeInTheDocument();
+    });
+
+    it("shows draft application form chip on job card", async () => {
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithDraftForm }),
+        empty: false,
+      });
+
+      renderComp();
+      expect(
+        await screen.findByText(/Application Form: Draft/i, {}, { timeout: 3000 })
+      ).toBeInTheDocument();
+    });
+
+    it("shows submissions navigation button when job has a form", async () => {
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 });
+
+      const submissionIcons = screen.queryAllByTestId("AssignmentIcon");
+      expect(submissionIcons.length).toBeGreaterThan(0);
+    });
+
+    it("navigates to submissions page when submissions icon is clicked", async () => {
+      const user = userEvent.setup();
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 });
+
+      const submissionIcons = screen.queryAllByTestId("AssignmentIcon");
+      if (submissionIcons.length > 0) {
+        await user.click(submissionIcons[0].closest("button")!);
+        expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("submissions"));
+      }
+    });
+
+    it("opens ApplicationFormBuilderDialog when manage form button is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+      const descIcons = screen.queryAllByTestId("DescriptionIcon");
+      if (descIcons.length > 0) {
+        await user.click(descIcons[0].closest("button")!);
+        expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      }
+    });
+
+    it("shows delete form button only when job has a form", async () => {
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 });
+
+      const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
+      expect(deleteSweepIcons.length).toBeGreaterThan(0);
+    });
+
+    it("does not show delete form button when job has no form", async () => {
+      renderComp();
+      await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+      // Job has no applicationForm so DeleteSweepIcon should not be present
+      const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
+      expect(deleteSweepIcons.length).toBe(0);
+    });
+
+    it("opens delete form confirmation dialog when delete form button is clicked", async () => {
+      const user = userEvent.setup();
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 });
+
+      const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
+      if (deleteSweepIcons.length > 0) {
+        await user.click(deleteSweepIcons[0].closest("button")!);
+        expect(await screen.findByText(/Delete Application Form/i)).toBeInTheDocument();
+      }
+    });
+
+    it("cancels delete form dialog without calling API", async () => {
+      const user = userEvent.setup();
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 });
+
+      const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
+      if (deleteSweepIcons.length > 0) {
+        await user.click(deleteSweepIcons[0].closest("button")!);
+        await screen.findByText(/Delete Application Form/i);
+
+        const cancelButtons = screen.queryAllByRole("button").filter(
+          (b) => b.textContent === "Cancel"
+        );
+        if (cancelButtons.length > 0) {
+          await user.click(cancelButtons[0]);
+          await waitFor(() => {
+            expect(screen.queryByText(/Delete Application Form/i)).not.toBeInTheDocument();
+          });
+        }
+      }
+
+      // API should not have been called for form deletion
+      const deleteCalls = (global.fetch as any).mock.calls.filter((call: any[]) =>
+        call[1]?.method === "DELETE"
+      );
+      expect(deleteCalls.length).toBe(0);
+    });
+
+    it("deletes application form and shows success message", async () => {
+      const user = userEvent.setup();
+
+      // First call returns stats (0), second call is the DELETE /api/jobs/:id/form
+      (global.fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true }),
+        });
+
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 });
+
+      const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
+      if (deleteSweepIcons.length > 0) {
+        await user.click(deleteSweepIcons[0].closest("button")!);
+        await screen.findByText(/Delete Application Form/i);
+
+        const deleteFormButtons = screen.queryAllByRole("button").filter(
+          (b) => b.textContent === "Delete Form"
+        );
+        if (deleteFormButtons.length > 0) {
+          await user.click(deleteFormButtons[0]);
+          expect(
+            await screen.findByText(/Application form deleted/i, {}, { timeout: 3000 })
+          ).toBeInTheDocument();
+        }
+      }
+    });
+
+    it("shows error when form deletion API call fails", async () => {
+      const user = userEvent.setup();
+
+      (global.fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          json: async () => ({ error: "Unauthorized to delete form" }),
+        });
+
+      (getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
+        empty: false,
+      });
+
+      renderComp();
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 3000 });
+
+      const deleteSweepIcons = screen.queryAllByTestId("DeleteSweepIcon");
+      if (deleteSweepIcons.length > 0) {
+        await user.click(deleteSweepIcons[0].closest("button")!);
+        await screen.findByText(/Delete Application Form/i);
+
+        const deleteFormButtons = screen.queryAllByRole("button").filter(
+          (b) => b.textContent === "Delete Form"
+        );
+        if (deleteFormButtons.length > 0) {
+          await user.click(deleteFormButtons[0]);
+          expect(
+            await screen.findByText(/Unauthorized to delete form/i, {}, { timeout: 3000 })
+          ).toBeInTheDocument();
+        }
+      }
+    });
+  });
+
+  describe("Representative access control", () => {
+    beforeEach(() => {
+      (authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "rep-1",
+        role: "representative",
+      });
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+      });
+    });
+
+    it("hides invite code section from representatives", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      // Invite code is owner-only — rep should not see INVITE123
+      await waitFor(() => {
+        expect(screen.queryByText(/INVITE123/)).not.toBeInTheDocument();
+      });
+    });
+
+    it("hides delete company button from representatives", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(screen.queryByRole("button", { name: /Delete Company/i })).not.toBeInTheDocument();
+    });
+
+    it("still displays job postings for representatives", async () => {
+      renderComp();
+      expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+  });
 });

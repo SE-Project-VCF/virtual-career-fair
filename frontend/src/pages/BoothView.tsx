@@ -28,6 +28,8 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
 import NotificationBell from "../components/NotificationBell"
 
@@ -57,6 +59,7 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  applicationForm?: ApplicationForm | null
 }
 
 async function checkBoothAccess(
@@ -137,6 +140,8 @@ export default function BoothView() {
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false)
+  const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
 
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
@@ -469,7 +474,23 @@ export default function BoothView() {
                               <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
                                 {job.name}
                               </Typography>
-                              {job.applicationLink && (
+                              {job.applicationForm && job.applicationForm.status === "published" ? (
+                                <Button
+                                  variant="contained"
+                                  onClick={() => {
+                                    setSelectedJobForApply(job)
+                                    setApplyDialogOpen(true)
+                                  }}
+                                  sx={{
+                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                    "&:hover": {
+                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                                    },
+                                  }}
+                                >
+                                  Apply Now
+                                </Button>
+                              ) : job.applicationLink ? (
                                 <Button
                                   variant="contained"
                                   href={job.applicationLink}
@@ -484,7 +505,7 @@ export default function BoothView() {
                                 >
                                   Apply Now
                                 </Button>
-                              )}
+                              ) : null}
                             </Box>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
                               {job.description}
@@ -676,6 +697,19 @@ export default function BoothView() {
           </Grid>
         </Grid>
       </Container>
+
+      {selectedJobForApply && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false)
+            setSelectedJobForApply(null)
+          }}
+          job={selectedJobForApply}
+          boothId={booth?.id}
+          studentId={user?.role === "student" ? user.uid : null}
+        />
+      )}
     </Box>
   )
 }
