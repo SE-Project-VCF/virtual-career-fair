@@ -57,14 +57,14 @@ Generated: 2026-03-03
 
 | Sprint | Line Coverage |
 |--------|--------------|
-| Sprint 1 | _(update manually)_ |
+| Sprint 1 | 82.95% |
 | Sprint 2 | 75.18% |
 
 **Frontend**
 
 | Sprint | Line Coverage |
 |--------|--------------|
-| Sprint 1 | _(update manually)_ |
+| Sprint 1 | 89.93% |
 | Sprint 2 | 92.03% |
 
 ---
