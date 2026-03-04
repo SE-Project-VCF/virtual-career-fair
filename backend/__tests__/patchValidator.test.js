@@ -221,7 +221,7 @@ describe("PatchValidator", () => {
         target: { section: "summary" },
         beforeText: "Experienced full-stack developer with 5 years of experience in web development.",
         afterText: "Experienced React and Node.js developer with 5 years of expertise building scalable web applications and REST APIs.",
-        confidence: 0.90
+        confidence: 0.9
       }
     ];
 

@@ -73,7 +73,7 @@ export default function JobInvitations() {
   const [selectedInvitationForApply, setSelectedInvitationForApply] = useState<JobInvitation | null>(null);
 
   useEffect(() => {
-    
+
     const fetchInvitations = async () => {
       if (!user) return;
 
@@ -104,7 +104,7 @@ export default function JobInvitations() {
       }
     };
 
-    if (user && user.role === "student") {
+    if (user?.role === "student") {
       fetchInvitations();
     } else {
       setError("You must be logged in as a student to view invitations");
@@ -169,7 +169,7 @@ export default function JobInvitations() {
         );
 
         const hasPublishedForm =
-          invitation.job?.applicationForm && invitation.job.applicationForm.status === "published";
+          invitation.job?.applicationForm?.status === "published";
 
         if (hasPublishedForm) {
           setSelectedInvitationForApply(invitation);
@@ -207,9 +207,9 @@ export default function JobInvitations() {
     const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
     return date.toLocaleDateString();
   };
 
@@ -226,7 +226,7 @@ export default function JobInvitations() {
 
   const newInvitationsCount = invitations.filter((inv) => inv.status === "sent").length;
 
-  if (!user || user.role !== "student") {
+  if (user?.role !== "student") {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Alert severity="error">
@@ -258,7 +258,7 @@ export default function JobInvitations() {
                   Job Invitations
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
-                  {invitations.length} invitation{invitations.length !== 1 ? "s" : ""} received
+                  {invitations.length} invitation{invitations.length > 1 ? "s" : ""} received
                   {newInvitationsCount > 0 && ` • ${newInvitationsCount} new`}
                 </Typography>
               </Box>
@@ -473,7 +473,7 @@ export default function JobInvitations() {
         )}
       </Container>
 
-      {selectedInvitationForApply && selectedInvitationForApply.job && (
+      {selectedInvitationForApply?.job && (
         <JobApplicationFormDialog
           open={applyDialogOpen}
           onClose={() => {

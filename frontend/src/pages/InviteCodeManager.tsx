@@ -15,8 +15,8 @@ import {
   Divider
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import { doc, getDoc } from "firebase/firestore"
-import { db } from "../firebase"
+import { auth } from "../firebase"
+import { API_URL } from "../config"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import BusinessIcon from "@mui/icons-material/Business"
 import ShareIcon from "@mui/icons-material/Share"
@@ -42,15 +42,26 @@ export default function InviteCodeManager() {
 
   const fetchInviteCode = async () => {
     try {
-      const companyDoc = await getDoc(doc(db, "company", user?.uid ?? ""))
-      
-      if (companyDoc.exists()) {
-        const data = companyDoc.data()
-        setInviteCode(data.inviteCode || "")
-        setCompanyName(data.companyName || "")
-      } else {
+      const companyId = user?.companyId
+      if (!companyId) {
         setError("Company profile not found.")
+        return
       }
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        setError("Not authenticated.")
+        return
+      }
+      const res = await fetch(`${API_URL}/api/companies/${companyId}/invite-code`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        setError("Failed to load invite code.")
+        return
+      }
+      const data = await res.json()
+      setInviteCode(data.inviteCode ?? "")
+      setCompanyName(user?.companyName ?? "")
     } catch (err) {
       console.error("Error fetching invite code:", err)
       setError("Failed to load invite code.")

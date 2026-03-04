@@ -2,5 +2,8 @@
   "dependencies": {
     "multer": "^2.1.0",
     "vitest": "^4.0.18"
+  },
+  "devDependencies": {
+    "sonarqube-scanner": "^4.3.4"
   }
 }

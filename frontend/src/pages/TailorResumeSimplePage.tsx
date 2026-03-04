@@ -51,7 +51,6 @@ export default function TailorResumeSimplePage() {
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [studentNotes, setStudentNotes] = useState("");
-  const [invitationData, setInvitationData] = useState<any>(null);
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
 
   useEffect(() => {
@@ -84,7 +83,6 @@ export default function TailorResumeSimplePage() {
         }
 
         const invData = await invRes.json();
-        setInvitationData(invData.data);
         setJobTitle(invData.data.job?.name || "Unknown Job");
         setJobDescription(invData.data.job?.description || "");
       } catch (err: any) {
@@ -237,7 +235,7 @@ export default function TailorResumeSimplePage() {
             <Chip
               label={change.type.toUpperCase()}
               size="small"
-              color={change.type === "edit" ? "info" : change.type === "add" ? "success" : "warning"}
+              color={({ edit: "info", add: "success", remove: "warning" } as const)[change.type]}
             />
           </Box>
           <Button

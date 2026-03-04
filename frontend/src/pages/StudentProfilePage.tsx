@@ -27,6 +27,7 @@ export default function StudentProfilePage() {
 
   // Get user from localStorage like BoothEditor does
   const user = authUtils.getCurrentUser()
+  const isAuthenticated = authUtils.isAuthenticated()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const loadTailoredResumesDone = useRef(false)
 
@@ -47,10 +48,10 @@ export default function StudentProfilePage() {
 
   // If user is not authenticated, redirect to login
   useEffect(() => {
-    if (!user) {
+    if (!isAuthenticated) {
       navigate("/login")
     }
-  }, [navigate, user])
+  }, [navigate, isAuthenticated])
 
   // Load existing profile data once the user is ready
   useEffect(() => {
@@ -135,7 +136,7 @@ export default function StudentProfilePage() {
       return
     }
 
-    const gradYear = parseInt(year, 10)
+    const gradYear = Number.parseInt(year, 10)
     if (Number.isNaN(gradYear) || gradYear < 2023 || gradYear > 2035) {
       setError("Enter a realistic graduation year (2023-2035).")
       return
@@ -208,8 +209,8 @@ export default function StudentProfilePage() {
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
+    const file = e.target.files?.[0]
+    if (file) {
       if (file.type !== "application/pdf") {
         setError("Only PDF files are allowed.")
         return
@@ -324,18 +325,17 @@ export default function StudentProfilePage() {
             {/* Resume Upload */}
             <Box sx={{ mb: 3 }}>
               <Button variant="contained" component="label" disabled={loading}>
-                Upload Resume (PDF)
-                <input 
+                <span>Upload Resume (PDF)</span>
+                <input
                   id="resume-file-input"
                   name="resume"
-                  type="file" 
-                  hidden 
+                  type="file"
+                  hidden
                   onChange={handleFileChange}
-                  accept=".pdf"
                 />
               </Button>
 
-              {resumeFile && <Typography sx={{ mt: 1 }}>Selected: {resumeFile.name}</Typography>}
+              {resumeFile && <Typography sx={{ mt: 1 }}>{resumeFile.name}</Typography>}
 
               {uploadPct !== null && (
                 <Typography sx={{ mt: 1 }}>Uploading: {uploadPct}%</Typography>
@@ -347,12 +347,12 @@ export default function StudentProfilePage() {
                     <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
                       Resume uploaded successfully
                     </Typography>
-                    <Button 
+                    <Button
                       variant="outlined"
-                      color="primary" 
+                      color="primary"
                       onClick={handleViewResume}
                     >
-                      View Your Resume
+                      View Existing Resume
                     </Button>
                   </Box>
                   {tailoredResumes.length > 0 && (
@@ -397,15 +397,17 @@ export default function StudentProfilePage() {
       <Dialog open={tailoredDialogOpen} onClose={() => setTailoredDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Select a Tailored Resume</DialogTitle>
         <DialogContent>
-          {loadingTailored ? (
+          {loadingTailored && (
             <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
               <CircularProgress />
             </Box>
-          ) : tailoredResumes.length === 0 ? (
+          )}
+          {!loadingTailored && tailoredResumes.length === 0 && (
             <Typography variant="body2" sx={{ color: "gray", py: 2 }}>
               No tailored resumes yet. Create one from your job invitations!
             </Typography>
-          ) : (
+          )}
+          {!loadingTailored && tailoredResumes.length > 0 && (
             <List>
               {tailoredResumes.map((resume) => (
                 <ListItemButton

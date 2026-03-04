@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, renderHook, act } from "@testing-library/react";
-import { User as FirebaseUser } from "firebase/auth";
+import { waitFor, renderHook, act } from "@testing-library/react";
+import type { User as FirebaseUser } from "firebase/auth";
 
 // Mock firebase auth - create the mock implementation inline
 vi.mock("../../firebase", () => ({
@@ -33,12 +33,10 @@ const localStorageMock = {
 };
 
 // Spy on the methods so we can track calls
-const getItemSpy = vi.spyOn(localStorageMock, "getItem");
 const setItemSpy = vi.spyOn(localStorageMock, "setItem");
 const removeItemSpy = vi.spyOn(localStorageMock, "removeItem");
-const clearSpy = vi.spyOn(localStorageMock, "clear");
 
-Object.defineProperty(window, "localStorage", {
+Object.defineProperty(globalThis, "localStorage", {
   value: localStorageMock,
   writable: true,
   configurable: true,
@@ -57,7 +55,7 @@ describe("AuthProvider", () => {
   describe("Initialization", () => {
     it("initializes with null user when localStorage is empty", () => {
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        if (typeof callback === 'function') callback(null);
         return vi.fn();
       });
 
@@ -85,7 +83,7 @@ describe("AuthProvider", () => {
 
       // Fire with a Firebase user so onAuthStateChanged doesn't clear currentUser
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(mockFirebaseUser);
+        if (typeof callback === 'function') callback(mockFirebaseUser);
         return vi.fn();
       });
 
@@ -101,7 +99,9 @@ describe("AuthProvider", () => {
 
     it("starts with loading=true and sets to false after auth state resolves", async () => {
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        setTimeout(() => callback(null), 10);
+        setTimeout(() => {
+          if (typeof callback === 'function') callback(null);
+        }, 10);
         return vi.fn();
       });
 
@@ -125,7 +125,9 @@ describe("AuthProvider", () => {
       } as FirebaseUser;
 
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        setTimeout(() => callback(mockFirebaseUser), 10);
+        setTimeout(() => {
+          if (typeof callback === 'function') callback(mockFirebaseUser);
+        }, 10);
         return vi.fn();
       });
 
@@ -153,8 +155,8 @@ describe("AuthProvider", () => {
 
       // Initially fire with a Firebase user so currentUser is preserved
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        authCallback = callback;
-        callback(mockFirebaseUser);
+        authCallback = typeof callback === 'function' ? callback : null;
+        if (typeof callback === 'function') callback(mockFirebaseUser);
         return vi.fn();
       });
 
@@ -191,7 +193,7 @@ describe("AuthProvider", () => {
       } as FirebaseUser;
 
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(mockFirebaseUser);
+        if (typeof callback === 'function') callback(mockFirebaseUser);
         return vi.fn();
       });
 
@@ -209,7 +211,7 @@ describe("AuthProvider", () => {
   describe("LocalStorage Synchronization", () => {
     it("saves currentUser to localStorage when setCurrentUser is called", async () => {
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        if (typeof callback === 'function') callback(null);
         return vi.fn();
       });
 
@@ -244,7 +246,7 @@ describe("AuthProvider", () => {
 
       localStorageStore["currentUser"] = JSON.stringify(storedUser);
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        if (typeof callback === 'function') callback(null);
         return vi.fn();
       });
 
@@ -277,7 +279,7 @@ describe("AuthProvider", () => {
 
       // Fire with a Firebase user so onAuthStateChanged doesn't clear currentUser
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(mockFirebaseUser);
+        if (typeof callback === 'function') callback(mockFirebaseUser);
         return vi.fn();
       });
 
@@ -294,7 +296,7 @@ describe("AuthProvider", () => {
   describe("setCurrentUser Function", () => {
     it("updates currentUser state", async () => {
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        if (typeof callback === 'function') callback(null);
         return vi.fn();
       });
 
@@ -319,7 +321,7 @@ describe("AuthProvider", () => {
 
     it("triggers localStorage update effect", async () => {
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        if (typeof callback === 'function') callback(null);
         return vi.fn();
       });
 
@@ -364,7 +366,7 @@ describe("useAuth Hook", () => {
   describe("Within Provider", () => {
     it("returns context value when used within AuthProvider", () => {
       mockOnAuthStateChanged.mockImplementation((callback) => {
-        callback(null);
+        if (typeof callback === 'function') callback(null);
         return vi.fn();
       });
 
