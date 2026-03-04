@@ -81,7 +81,7 @@ describe("POST /api/register-user", () => {
   it("returns 400 when email is missing", async () => {
     const res = await request(app)
       .post("/api/register-user")
-      .send({ password: "pass123", role: "student" });
+      .send({ password: "pass123", role: "student" }); // NOSONAR - test fixture password
     expect(res.status).toBe(400);
   });
 
@@ -95,14 +95,14 @@ describe("POST /api/register-user", () => {
   it("returns 400 when role is missing", async () => {
     const res = await request(app)
       .post("/api/register-user")
-      .send({ email: "test@test.com", password: "pass123" });
+      .send({ email: "test@test.com", password: "pass123" }); // NOSONAR - test fixture password
     expect(res.status).toBe(400);
   });
 
   it("returns 403 when role is administrator", async () => {
     const res = await request(app)
       .post("/api/register-user")
-      .send({ email: "test@test.com", password: "pass123", role: "administrator" });
+      .send({ email: "test@test.com", password: "pass123", role: "administrator" }); // NOSONAR - test fixture password
     expect(res.status).toBe(403);
   });
 
@@ -116,7 +116,7 @@ describe("POST /api/register-user", () => {
         firstName: "John",
         lastName: "Doe",
         email: "john@test.com",
-        password: "pass123",
+        password: "pass123", // NOSONAR - test fixture password
         role: "student",
       });
 
@@ -140,7 +140,7 @@ describe("POST /api/register-user", () => {
         firstName: "Jane",
         lastName: "Smith",
         email: "jane@company.com",
-        password: "pass123",
+        password: "pass123", // NOSONAR - test fixture password
         role: "companyOwner",
         companyName: "Acme Corp",
       });
@@ -159,7 +159,7 @@ describe("POST /api/register-user", () => {
       .post("/api/register-user")
       .send({
         email: "test@test.com",
-        password: "pass123",
+        password: "pass123", // NOSONAR - test fixture password
         role: "student",
       });
 
@@ -174,7 +174,7 @@ describe("POST /api/register-user", () => {
       .post("/api/register-user")
       .send({
         email: "test@test.com",
-        password: "pass123",
+        password: "pass123", // NOSONAR - test fixture password
         role: "student",
       });
 
@@ -190,7 +190,7 @@ describe("POST /api/create-admin", () => {
   it("returns 400 when email is missing", async () => {
     const res = await request(app)
       .post("/api/create-admin")
-      .send({ password: "pass", adminSecret: "test-admin-secret" });
+      .send({ password: "pass", adminSecret: "test-admin-secret" }); // NOSONAR - test fixture password
     expect(res.status).toBe(400);
   });
 
@@ -204,14 +204,14 @@ describe("POST /api/create-admin", () => {
   it("returns 400 when adminSecret is missing", async () => {
     const res = await request(app)
       .post("/api/create-admin")
-      .send({ email: "a@b.com", password: "pass" });
+      .send({ email: "a@b.com", password: "pass" }); // NOSONAR - test fixture password
     expect(res.status).toBe(400);
   });
 
   it("returns 403 when adminSecret is wrong", async () => {
     const res = await request(app)
       .post("/api/create-admin")
-      .send({ email: "a@b.com", password: "pass", adminSecret: "wrong-secret" });
+      .send({ email: "a@b.com", password: "pass", adminSecret: "wrong-secret" }); // NOSONAR - test fixture password
     expect(res.status).toBe(403);
   });
 
@@ -223,7 +223,7 @@ describe("POST /api/create-admin", () => {
 
     const res = await request(app)
       .post("/api/create-admin")
-      .send({ email: "admin@test.com", password: "pass", adminSecret: "test-admin-secret" });
+      .send({ email: "admin@test.com", password: "pass", adminSecret: "test-admin-secret" }); // NOSONAR - test fixture password
     expect(res.status).toBe(400);
   });
 
@@ -238,7 +238,7 @@ describe("POST /api/create-admin", () => {
 
     const res = await request(app)
       .post("/api/create-admin")
-      .send({ email: "user@test.com", password: "pass", adminSecret: "test-admin-secret" });
+      .send({ email: "user@test.com", password: "pass", adminSecret: "test-admin-secret" }); // NOSONAR - test fixture password
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -258,7 +258,7 @@ describe("POST /api/create-admin", () => {
         firstName: "Admin",
         lastName: "User",
         email: "newadmin@test.com",
-        password: "pass",
+        password: "pass", // NOSONAR - test fixture password
         adminSecret: "test-admin-secret",
       });
 
@@ -282,7 +282,7 @@ describe("POST /api/create-admin", () => {
         .post("/api/create-admin")
         .send({
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -305,7 +305,7 @@ describe("POST /api/create-admin", () => {
           firstName: "John",
           lastName: "Doe",
           email: "john.doe@example.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -330,7 +330,7 @@ describe("POST /api/create-admin", () => {
         .post("/api/create-admin")
         .send({
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -354,7 +354,7 @@ describe("POST /api/create-admin", () => {
         .send({
           firstName: "John",
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -377,7 +377,7 @@ describe("POST /api/create-admin", () => {
         .send({
           lastName: "Doe",
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -401,7 +401,7 @@ describe("POST /api/create-admin", () => {
           firstName: "John",
           lastName: "Doe",
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -421,7 +421,7 @@ describe("POST /api/create-admin", () => {
         .post("/api/create-admin")
         .send({
           email: "test@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -443,7 +443,7 @@ describe("POST /api/create-admin", () => {
         .post("/api/create-admin")
         .send({
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -461,7 +461,7 @@ describe("POST /api/create-admin", () => {
         .post("/api/create-admin")
         .send({
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -482,7 +482,7 @@ describe("POST /api/create-admin", () => {
         .post("/api/create-admin")
         .send({
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 
@@ -508,7 +508,7 @@ describe("POST /api/create-admin", () => {
         .post("/api/create-admin")
         .send({
           email: "admin@test.com",
-          password: "pass",
+          password: "pass", // NOSONAR - test fixture password
           adminSecret: "test-admin-secret",
         });
 

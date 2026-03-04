@@ -1,18 +1,18 @@
 // console.js
 const admin = require("firebase-admin");
-const readline = require("readline");
+const readline = require("node:readline");
 
 // Only initialize Firebase when running as CLI (not in tests)
 let db;
-if (process.env.NODE_ENV !== "test") {
+if (process.env.NODE_ENV === "test") {
+  // In test environment, db will be mocked
+  db = require("./firebase").db;
+} else {
   const serviceAccount = require("./privateKey.json");
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
   db = admin.firestore();
-} else {
-  // In test environment, db will be mocked
-  db = require("./firebase").db;
 }
 const rl = readline.createInterface({
   input: process.stdin,
@@ -153,7 +153,7 @@ Commands:
           });
           return;
 
-        case "update":
+        case "update": {
           const [id] = rest;
           if (!id) return console.log("❌ Must provide document ID");
           readJSON(`Enter JSON to update document '${id}'`, async (err, data) => {
@@ -162,6 +162,7 @@ Commands:
             startConsole();
           });
           return;
+        }
 
         case "delete":
           await deleteDocument(collection, args);

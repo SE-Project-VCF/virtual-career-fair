@@ -6,7 +6,14 @@ import {
   sendEmailVerification,
   signInWithPopup,
 } from "firebase/auth"
-import { setDoc, getDoc, getDocs, deleteDoc, updateDoc } from "firebase/firestore"
+import { setDoc, getDoc, deleteDoc, updateDoc } from "firebase/firestore"
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  // Reset globalThis.fetch to default mock before each test
+  globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: "Not found" }) })
+  localStorage.clear()
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -20,7 +27,7 @@ describe("authUtils.registerUser", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.registerUser("test@test.com", "pass123", "student", {
       firstName: "John",
@@ -52,7 +59,7 @@ describe("authUtils.login", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.login("test@test.com", "pass123")
 
@@ -99,7 +106,7 @@ describe("authUtils.loginUser", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.loginUser("test@test.com", "pass123", "student")
 
@@ -131,7 +138,7 @@ describe("authUtils.loginWithGoogle", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.loginWithGoogle("student", false)
 
@@ -211,18 +218,27 @@ describe("authUtils.logout / getCurrentUser / isAuthenticated", () => {
 
 describe("authUtils.createCompany", () => {
   it("creates company successfully", async () => {
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp-1", inviteCode: "ABC123" }),
+    })
 
     const result = await authUtils.createCompany("Tech Corp", "owner-1")
 
     expect(result.success).toBe(true)
-    expect(result.companyId).toBeDefined()
-    expect(setDoc).toHaveBeenCalled()
+    expect(result.companyId).toBe("comp-1")
+    expect(result.inviteCode).toBe("ABC123")
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/companies"),
+      expect.objectContaining({ method: "POST" })
+    )
   })
 
   it("returns error on failure", async () => {
-    vi.mocked(setDoc).mockRejectedValue(new Error("Database error"))
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Failed to create company" }),
+    })
 
     const result = await authUtils.createCompany("Tech Corp", "owner-1")
 
@@ -230,16 +246,18 @@ describe("authUtils.createCompany", () => {
     expect(result.error).toBeDefined()
   })
 
-  it("updates user document with company info", async () => {
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ role: "companyOwner" }),
-    } as any)
+  it("updates localStorage with company info", async () => {
+    localStorage.setItem("currentUser", JSON.stringify({ uid: "owner-1", email: "test@test.com", role: "companyOwner" }))
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp-1", inviteCode: "ABC123" }),
+    })
 
     await authUtils.createCompany("Tech Corp", "owner-1")
 
-    expect(setDoc).toHaveBeenCalledTimes(2) // Once for company, once for user
+    const stored = JSON.parse(localStorage.getItem("currentUser")!)
+    expect(stored.companyId).toBe("comp-1")
+    expect(stored.companyName).toBe("Tech Corp")
   })
 })
 
@@ -302,7 +320,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner-1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "RAND1234" }),
     } as any)
@@ -311,7 +329,7 @@ describe("authUtils.updateInviteCode", () => {
 
     expect(result.success).toBe(true)
     expect(result.inviteCode).toBeDefined()
-    expect(global.fetch).toHaveBeenCalled()
+    expect(globalThis.fetch).toHaveBeenCalled()
   })
 
   it("validates custom invite code", async () => {
@@ -319,7 +337,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner-1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "CUSTOM123" }),
     } as any)
@@ -336,7 +354,7 @@ describe("authUtils.updateInviteCode", () => {
       data: () => ({ ownerId: "owner-1" }),
     } as any)
     // Backend returns 400 when invite code is already in use
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       json: async () => ({ error: "Invite code already in use" }),
     } as any)
@@ -392,21 +410,27 @@ describe("authUtils error handling", () => {
       exists: () => true,
       data: () => ({ role: "student" }),
     } as any)
-    global.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
 
     const result = await authUtils.login("test@test.com", "pass123")
 
-    expect(result.success).toBe(false)
+    // Stream sync failures are non-blocking; login still succeeds
+    expect(result.success).toBe(true)
   })
 
   it("handles missing email in Google login", async () => {
     vi.mocked(signInWithPopup).mockResolvedValue({
       user: { uid: "u1", email: null },
     } as any)
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => false,
+    } as any)
 
     const result = await authUtils.loginWithGoogle("student", false)
 
+    // No account found in login mode → success: false
     expect(result.success).toBe(false)
+    expect(result.error).toContain("No account found")
   })
 
   it("handles error in registerUser sync", async () => {
@@ -415,12 +439,13 @@ describe("authUtils error handling", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockRejectedValue(new Error("Sync failed"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Sync failed"))
 
     const result = await authUtils.registerUser("test@test.com", "pass123", "student")
 
-    expect(result.success).toBe(false)
-    expect(result.error).toContain("Failed to sync chat user")
+    // Stream sync failures are non-blocking; registration still succeeds
+    expect(result.success).toBe(true)
+    expect(result.needsVerification).toBe(true)
   })
 })
 
@@ -433,7 +458,7 @@ describe("authUtils.login - role verification", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.login("test@test.com", "pass123")
 
@@ -452,12 +477,12 @@ describe("authUtils.login - role verification", () => {
       exists: () => true,
       data: () => ({ role: "student", firstName: "John", lastName: "Doe" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.login("test@test.com", "pass123")
 
     expect(result.success).toBe(true)
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/sync-stream-user"),
       expect.any(Object)
     )
@@ -482,7 +507,7 @@ describe("authUtils.loginUser - role-specific validation", () => {
       exists: () => true,
       data: () => ({ role: "representative", companyId: "comp1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const result = await authUtils.loginUser("test@test.com", "pass123", "representative")
 
@@ -553,7 +578,7 @@ describe("authUtils.registerUser - additional cases", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     await authUtils.registerUser("test@test.com", "pass123", "student", {
       firstName: "John",
@@ -573,7 +598,7 @@ describe("authUtils.registerUser - additional cases", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     const additionalData = { school: "MIT", major: "CS" }
     await authUtils.registerUser("test@test.com", "pass123", "student", additionalData)
@@ -590,14 +615,14 @@ describe("authUtils.registerUser - additional cases", () => {
     } as any)
     vi.mocked(sendEmailVerification).mockResolvedValue(undefined)
     vi.mocked(setDoc).mockResolvedValue(undefined)
-    global.fetch = vi.fn().mockResolvedValue({ ok: true })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true })
 
     await authUtils.registerUser("test@test.com", "pass123", "student", {
       firstName: "Jane",
       lastName: "Smith",
     })
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/sync-stream-user"),
       expect.objectContaining({
         body: expect.stringContaining("Jane"),
@@ -607,70 +632,65 @@ describe("authUtils.registerUser - additional cases", () => {
 })
 
 describe("authUtils.createCompany - additional cases", () => {
-  it("does not update user if they already have companyId", async () => {
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ role: "companyOwner", companyId: "existing-company" }),
-    } as any)
+  it("updates localStorage when user exists", async () => {
+    localStorage.setItem("currentUser", JSON.stringify({ uid: "owner-1", email: "test@test.com", role: "companyOwner" }))
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp-new", inviteCode: "CODE456" }),
+    })
 
-    await authUtils.createCompany("New Corp", "owner-1")
+    const result = await authUtils.createCompany("New Corp", "owner-1")
 
-    // setDoc should only be called once (for company), not twice (for user update)
-    expect(vi.mocked(setDoc).mock.calls.length).toBe(1)
+    expect(result.success).toBe(true)
+    const stored = JSON.parse(localStorage.getItem("currentUser")!)
+    expect(stored.companyId).toBe("comp-new")
   })
 
-  it("updates user if they don't have companyId yet", async () => {
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ role: "companyOwner" }),
-    } as any)
+  it("does not update localStorage when user not in storage", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp-new", inviteCode: "CODE456" }),
+    })
 
-    await authUtils.createCompany("New Corp", "owner-1")
+    const result = await authUtils.createCompany("New Corp", "owner-1")
 
-    // setDoc should be called twice (for company and user)
-    expect(vi.mocked(setDoc).mock.calls.length).toBe(2)
+    expect(result.success).toBe(true)
+    expect(localStorage.getItem("currentUser")).toBeNull()
   })
 
-  it("generates unique invite code with correct format", async () => {
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => false,
-    } as any)
+  it("returns invite code from API response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp-1", inviteCode: "UNIQUE789" }),
+    })
 
     const result = await authUtils.createCompany("Tech Startup", "owner-1")
 
     expect(result.success).toBe(true)
-    expect(result.companyId).toBeDefined()
-    
-    const callArgs = vi.mocked(setDoc).mock.calls[0]
-    const companyData = callArgs[1] as any
-    expect(companyData.inviteCode).toMatch(/^[A-F0-9]+$/)
+    expect(result.inviteCode).toBe("UNIQUE789")
   })
 })
 
 describe("authUtils.createCompany", () => {
   it("creates company successfully", async () => {
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ role: "companyOwner" }),
-    } as any)
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp-1", inviteCode: "CODE789" }),
+    })
 
     const result = await authUtils.createCompany("Test Co", "owner1")
 
     expect(result.success).toBe(true)
-    expect(result.companyId).toBeDefined()
+    expect(result.companyId).toBe("comp-1")
   })
 
   it("handles error", async () => {
-    vi.mocked(setDoc).mockRejectedValue(new Error("Firestore error"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
 
     const result = await authUtils.createCompany("Test Co", "owner1")
 
     expect(result.success).toBe(false)
-    expect(result.error).toBe("Firestore error")
+    expect(result.error).toBe("Network error")
   })
 })
 
@@ -726,7 +746,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1", inviteCode: "OLD" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "NEWCODE1" }),
     } as any)
@@ -767,7 +787,7 @@ describe("authUtils.updateInviteCode", () => {
       data: () => ({ ownerId: "owner1" }),
     } as any)
     // Backend returns 400 when invite code is already in use
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       json: async () => ({ error: "Invite code already in use" }),
     } as any)
@@ -783,7 +803,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "RAND1234" }),
     } as any)
@@ -800,7 +820,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "RAND5678" }),
     } as any)
@@ -816,7 +836,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockRejectedValue(new Error("Update failed"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Update failed"))
 
     const result = await authUtils.updateInviteCode("comp1", "owner1", "NEWCODE")
 
@@ -840,7 +860,7 @@ describe("authUtils.updateInviteCode", () => {
       exists: () => true,
       data: () => ({ ownerId: "owner1" }),
     } as any)
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, inviteCode: "CUSTOM123" }),
     } as any)
@@ -895,23 +915,12 @@ describe("authUtils.verifyAndLogin", () => {
 
 describe("authUtils.linkRepresentativeToCompany", () => {
   it("links representative to company successfully", async () => {
-    const mockSnapshot = {
-      forEach: vi.fn((callback: any) => {
-        callback({
-          id: "comp1",
-          data: () => ({ inviteCode: "INVITE123", companyName: "Tech Corp" }),
-        })
-      }),
-    }
-    vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ role: "representative" }),
-    } as any)
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp1", companyName: "Tech Corp" }),
+    })
 
-    localStorage.setItem("currentUser", JSON.stringify({ uid: "rep1", email: "rep@test.com" }))
+    localStorage.setItem("currentUser", JSON.stringify({ uid: "rep1", email: "rep@test.com", role: "representative" }))
 
     const result = await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
 
@@ -921,9 +930,10 @@ describe("authUtils.linkRepresentativeToCompany", () => {
   })
 
   it("returns error for invalid invite code", async () => {
-    vi.mocked(getDocs).mockResolvedValue({
-      forEach: vi.fn(),
-    } as any)
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Invalid invite code." }),
+    })
 
     const result = await authUtils.linkRepresentativeToCompany("INVALID", "rep1")
 
@@ -931,94 +941,51 @@ describe("authUtils.linkRepresentativeToCompany", () => {
     expect(result.error).toContain("Invalid invite code")
   })
 
-  it("returns error when already linked to company", async () => {
-    const mockSnapshot = {
-      forEach: vi.fn((callback: any) => {
-        callback({
-          id: "comp1",
-          data: () => ({ inviteCode: "INVITE123", companyName: "Tech Corp" }),
-        })
-      }),
-    }
-    vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
-    vi.mocked(getDoc).mockResolvedValueOnce({
-      exists: () => true,
-      data: () => ({ companyId: "comp1" }),
-    } as any)
+  it("returns error from API when already linked to company", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "You are already linked to this company" }),
+    })
 
     const result = await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
 
-    expect(result.success).toBe(false)
-    expect(result.error).toContain("already linked to this company")
-  })
-
-  it("updates company's representativeIDs array", async () => {
-    const mockSnapshot = {
-      forEach: vi.fn((callback: any) => {
-        callback({
-          id: "comp1",
-          data: () => ({ inviteCode: "INVITE123", companyName: "Tech Corp" }),
-        })
-      }),
-    }
-    vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
-    // User not yet linked to any company (no companyId)
-    vi.mocked(getDoc).mockResolvedValueOnce({
-      exists: () => true,
-      data: () => ({ role: "representative" }),
-    } as any)
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
-
-    await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
-
-    expect(updateDoc).toHaveBeenCalled()
-  })
-
-  it("does not add rep twice to representativeIDs", async () => {
-    const mockSnapshot = {
-      forEach: vi.fn((callback: any) => {
-        callback({
-          id: "comp1",
-          data: () => ({ inviteCode: "INVITE123", companyName: "Tech Corp" }),
-        })
-      }),
-    }
-    vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
-    // User doc shows rep is already linked to this company
-    vi.mocked(getDoc).mockResolvedValueOnce({
-      exists: () => true,
-      data: () => ({ companyId: "comp1", role: "representative" }),
-    } as any)
-
-    localStorage.setItem("currentUser", JSON.stringify({ uid: "rep1", email: "rep@test.com" }))
-
-    const result = await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
-
-    // Should return error when rep is already linked to this company
     expect(result.success).toBe(false)
     expect(result.error).toContain("already linked")
-    // Should not call updateDoc when rep is already linked
-    expect(updateDoc).not.toHaveBeenCalled()
+  })
+
+  it("sends invite code uppercased and trimmed", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp1", companyName: "Tech Corp" }),
+    })
+
+    await authUtils.linkRepresentativeToCompany("  invite123  ", "rep1")
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/link-company"),
+      expect.objectContaining({
+        body: expect.stringContaining("INVITE123"),
+      })
+    )
+  })
+
+  it("does not update localStorage when user not in storage", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp1", companyName: "Tech Corp" }),
+    })
+
+    const result = await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
+
+    expect(result.success).toBe(true)
+    expect(localStorage.getItem("currentUser")).toBeNull()
   })
 
   it("updates localStorage with new company info", async () => {
-    const mockSnapshot = {
-      forEach: vi.fn((callback: any) => {
-        callback({
-          id: "comp1",
-          data: () => ({ inviteCode: "INVITE123", companyName: "Tech Corp" }),
-        })
-      }),
-    }
-    vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
-    // User not yet linked to any company (no companyId)
-    vi.mocked(getDoc).mockResolvedValueOnce({
-      exists: () => true,
-      data: () => ({ role: "representative" }),
-    } as any)
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp1", companyName: "Tech Corp" }),
+    })
 
     localStorage.setItem("currentUser", JSON.stringify({ uid: "rep1", email: "rep@test.com", role: "representative" }))
 
@@ -1031,7 +998,7 @@ describe("authUtils.linkRepresentativeToCompany", () => {
   })
 
   it("handles error during linking", async () => {
-    vi.mocked(getDocs).mockRejectedValue(new Error("Database error"))
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Database error"))
 
     const result = await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
 
@@ -1040,34 +1007,22 @@ describe("authUtils.linkRepresentativeToCompany", () => {
   })
 
   it("handles case-insensitive invite code", async () => {
-    const mockSnapshot = {
-      forEach: vi.fn((callback: any) => {
-        callback({
-          id: "comp1",
-          data: () => ({ inviteCode: "INVITE123", companyName: "Tech Corp" }),
-        })
-      }),
-    }
-    vi.mocked(getDocs).mockResolvedValue(mockSnapshot as any)
-    vi.mocked(getDoc).mockResolvedValue({
-      exists: () => true,
-      data: () => ({ role: "representative" }),
-    } as any)
-    vi.mocked(setDoc).mockResolvedValue(undefined)
-    vi.mocked(updateDoc).mockResolvedValue(undefined)
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ companyId: "comp1", companyName: "Tech Corp" }),
+    })
 
     const result = await authUtils.linkRepresentativeToCompany("invite123", "rep1")
 
     expect(result.success).toBe(true)
   })
 
-  it("handles error when fetching companies", async () => {
-    vi.clearAllMocks()
-    vi.mocked(getDocs).mockRejectedValue(new Error("Firestore error"))
+  it("handles network error when fetching", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
 
     const result = await authUtils.linkRepresentativeToCompany("INVITE123", "rep1")
 
     expect(result.success).toBe(false)
-    expect(result.error).toBe("Firestore error")
+    expect(result.error).toBe("Network error")
   })
 })

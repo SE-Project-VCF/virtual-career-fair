@@ -2,8 +2,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import ChatHeader from "../chat/ChatHeader";
-import AddCommentIcon from "@mui/icons-material/AddComment";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 describe("ChatHeader", () => {
   it("renders the title", () => {
@@ -191,7 +189,7 @@ describe("ChatHeader", () => {
   });
 
   it("renders new chat button with icon element", () => {
-    const { container } = render(
+    render(
       <ChatHeader title="Test" onNewChat={vi.fn()} />
     );
     
@@ -201,7 +199,7 @@ describe("ChatHeader", () => {
   });
 
   it("renders back button with icon element", () => {
-    const { container } = render(
+    render(
       <ChatHeader title="Test" onBack={vi.fn()} />
     );
     

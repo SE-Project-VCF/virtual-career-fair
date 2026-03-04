@@ -20,18 +20,22 @@ vi.mock("../../utils/auth", () => ({
   },
 }));
 
-vi.mock("firebase/firestore", () => ({
-  doc: vi.fn(),
-  getDoc: vi.fn(),
+vi.mock("../../config", () => ({
+  API_URL: "http://localhost:5000",
 }));
 
 vi.mock("../../firebase", () => ({
   db: {},
+  auth: {
+    currentUser: {
+      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+    },
+  },
+  storage: {},
 }));
 
 // Import after mocking
 import { authUtils } from "../../utils/auth";
-import * as firestore from "firebase/firestore";
 
 const renderInviteCodeManager = () => {
   return render(
@@ -50,13 +54,12 @@ describe("InviteCodeManager", () => {
       role: "company",
       email: "owner@company.com",
       companyName: "Tech Corp",
+      companyId: "comp-1",
     });
-    (firestore.getDoc as any).mockResolvedValue({
-      exists: () => true,
-      data: () => ({
-        inviteCode: "INVITE123",
-        companyName: "Tech Corp",
-      }),
+    // Mock fetch to return invite code from API
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ inviteCode: "INVITE123" }),
     });
   });
 
@@ -133,11 +136,14 @@ describe("InviteCodeManager", () => {
     });
   });
 
-  it("loads company data from firestore on mount", async () => {
+  it("loads company data from API on mount", async () => {
     renderInviteCodeManager();
 
     await waitFor(() => {
-      expect(firestore.getDoc).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/companies/comp-1/invite-code"),
+        expect.any(Object)
+      );
     });
   });
 
@@ -329,9 +335,12 @@ describe("InviteCodeManager", () => {
 
   // Error Handling Tests
   it("displays error message when company profile not found", async () => {
-    (firestore.getDoc as any).mockResolvedValue({
-      exists: () => false,
-      data: () => ({}),
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "company-1",
+      role: "company",
+      email: "owner@company.com",
+      companyName: "Tech Corp",
+      // No companyId - triggers "Company profile not found"
     });
 
     renderInviteCodeManager();
@@ -341,9 +350,9 @@ describe("InviteCodeManager", () => {
     });
   });
 
-  it("displays error message when firestore fetch fails", async () => {
-    (firestore.getDoc as any).mockRejectedValue(
-      new Error("Firestore error")
+  it("displays error message when API fetch fails", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(
+      new Error("Network error")
     );
 
     renderInviteCodeManager();

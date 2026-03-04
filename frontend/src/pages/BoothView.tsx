@@ -18,7 +18,6 @@ import {
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
-import { evaluateFairStatus } from "../utils/fairStatus"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -29,6 +28,8 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
 import NotificationBell from "../components/NotificationBell"
 
@@ -58,6 +59,63 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  applicationForm?: ApplicationForm | null
+}
+
+async function checkBoothAccess(
+  user: ReturnType<typeof import("../utils/auth").authUtils.getCurrentUser>,
+  boothId: string,
+  fairIsLive: boolean
+): Promise<{ hasAccess: boolean; error?: string }> {
+  if (fairIsLive) {
+    return { hasAccess: true }
+  }
+
+  // Only company owners and representatives can view booths when not live
+  if (!user || (user.role !== "companyOwner" && user.role !== "representative")) {
+    return {
+      hasAccess: false,
+      error: "The career fair is not currently live. You can only view your own booth.",
+    }
+  }
+
+  const companiesRef = collection(db, "companies")
+
+  if (user.role === "companyOwner") {
+    const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+    const ownerSnapshot = await getDocs(ownerQuery)
+    for (const companyDoc of ownerSnapshot.docs) {
+      if (companyDoc.data().boothId === boothId) {
+        return { hasAccess: true }
+      }
+    }
+  } else if (user.role === "representative" && user.companyId) {
+    const companyDoc = await getDoc(doc(db, "companies", user.companyId))
+    if (companyDoc.exists() && companyDoc.data().boothId === boothId) {
+      return { hasAccess: true }
+    }
+  }
+
+  return {
+    hasAccess: false,
+    error: "You don't have access to view this booth. The career fair is not currently live.",
+  }
+}
+
+async function findCompanyIdForBooth(boothId: string, boothData: Booth): Promise<string | undefined> {
+  if (boothData.companyId) {
+    return boothData.companyId
+  }
+
+  const companiesRef = collection(db, "companies")
+  const companiesSnapshot = await getDocs(companiesRef)
+  for (const companyDoc of companiesSnapshot.docs) {
+    if (companyDoc.data().boothId === boothId) {
+      return companyDoc.id
+    }
+  }
+
+  return undefined
 }
 
 const INDUSTRY_LABELS: Record<string, string> = {
@@ -82,6 +140,8 @@ export default function BoothView() {
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false)
+  const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
 
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
@@ -133,6 +193,49 @@ export default function BoothView() {
     fetchBooth()
   }, [boothId, navigate])
 
+  const trackStudentBoothView = async (boothData: Booth) => {
+    try {
+      if (user?.uid && user.role === "student") {
+        await trackBoothView(user.uid, {
+          boothId: boothData.id,
+          companyName: boothData.companyName,
+          industry: boothData.industry,
+          location: boothData.location,
+          logoUrl: boothData.logoUrl,
+        });
+      }
+    } catch (err) {
+      console.warn("History tracking failed:", err);
+    }
+  }
+
+  const loadBoothData = async (id: string, fairIsLive: boolean) => {
+    const boothDoc = await getDoc(doc(db, "booths", id))
+    if (!isMountedRef.current) return null
+
+    if (!boothDoc.exists()) {
+      setError("Booth not found")
+      setLoading(false)
+      return null
+    }
+
+    const boothData = {
+      id: boothDoc.id,
+      ...boothDoc.data(),
+    } as Booth
+
+    const { hasAccess, error: accessError } = await checkBoothAccess(user, boothId!, fairIsLive)
+    if (!hasAccess) {
+      if (isMountedRef.current) {
+        setError(accessError ?? "You don't have access to view this booth.")
+        setLoading(false)
+      }
+      return null
+    }
+
+    return boothData
+  }
+
   const fetchBooth = async () => {
     if (!boothId) return
 
@@ -141,105 +244,25 @@ export default function BoothView() {
       setLoading(true)
       setError("")
 
-      // Check if fair is live
-      const status = await evaluateFairStatus()
-      if (!isMountedRef.current) return
-      const fairIsLive = status.isLive
-
-      const boothDoc = await getDoc(doc(db, "booths", boothId))
-      if (!isMountedRef.current) return
-
-      if (!boothDoc.exists()) {
-        setError("Booth not found")
-        setLoading(false)
-        return
-      }
-
-      const boothData = {
-        id: boothDoc.id,
-        ...boothDoc.data(),
-      } as Booth
-
-      // If fair is not live, check if user has access
-      if (!fairIsLive) {
-        // Only company owners and representatives can view booths when not live
-        if (!user || (user.role !== "companyOwner" && user.role !== "representative")) {
-          setError("The career fair is not currently live. You can only view your own booth.")
-          setLoading(false)
-          return
-        }
-
-        // Check if this booth belongs to the user's company
-        let hasAccess = false
-        const companiesRef = collection(db, "companies")
-
-        if (user.role === "companyOwner") {
-          // Get all companies owned by this user
-          const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
-          const ownerSnapshot = await getDocs(ownerQuery)
-          ownerSnapshot.forEach((doc) => {
-            const companyData = doc.data()
-            if (companyData.boothId === boothId) {
-              hasAccess = true
-            }
-          })
-        } else if (user.role === "representative" && user.companyId) {
-          // Check if the representative's company owns this booth
-          const companyDoc = await getDoc(doc(db, "companies", user.companyId))
-          if (companyDoc.exists()) {
-            const companyData = companyDoc.data()
-            if (companyData.boothId === boothId) {
-              hasAccess = true
-            }
-          }
-        }
-
-        if (!hasAccess) {
-          if (isMountedRef.current) {
-            setError("You don't have access to view this booth. The career fair is not currently live.")
-            setLoading(false)
-          }
-          return
-        }
-      }
-
-      if (!isMountedRef.current) return
-      setBooth(boothData)
-
-      // ✅ Track booth views for the student's History tab
-      // We only record history for authenticated students.
-      // (Company reps/owners viewing booths shouldn't clutter student history.)
+      let fairIsLive = false
       try {
-        if (user?.uid && user.role === "student") {
-          await trackBoothView(user.uid, {
-            boothId: boothData.id,
-            companyName: boothData.companyName,
-            industry: boothData.industry,
-            location: boothData.location,
-            logoUrl: boothData.logoUrl,
-          });
+        const fairsRes = await fetch(`${API_URL}/api/fairs`)
+        if (fairsRes.ok) {
+          const fairsData = await fairsRes.json()
+          fairIsLive = (fairsData.fairs || []).some((f: { isLive: boolean }) => f.isLive)
         }
       } catch (err) {
-        // If history fails, we don't want the whole Booth page to fail.
-        console.warn("History tracking failed:", err);
+        console.error("Error fetching fairs:", err)
       }
+      if (!isMountedRef.current) return
 
+      const boothData = await loadBoothData(boothId, fairIsLive)
+      if (!boothData || !isMountedRef.current) return
 
-      // Get companyId from booth or look it up from companies
-      let companyId = boothData.companyId
-      if (!companyId) {
-        // Try to find companyId by looking up companies with this boothId
-        const companiesRef = collection(db, "companies")
-        const companiesSnapshot = await getDocs(companiesRef)
-        companiesSnapshot.forEach((doc) => {
-          const companyData = doc.data()
-          if (companyData.boothId === boothId) {
-            companyId = doc.id
-          }
-        })
-      }
+      setBooth(boothData)
+      await trackStudentBoothView(boothData)
 
-      // Fetch jobs for this company if companyId is available
+      const companyId = await findCompanyIdForBooth(boothId, boothData)
       if (companyId) {
         fetchJobs(companyId)
       }
@@ -422,11 +445,12 @@ export default function BoothView() {
                 </Box>
 
                 {/* Job Postings */}
-                {loadingJobs ? (
+                {loadingJobs && (
                   <Box sx={{ mb: 4, display: "flex", justifyContent: "center", alignItems: "center", py: 4 }}>
                     <CircularProgress />
                   </Box>
-                ) : jobs.length > 0 ? (
+                )}
+                {!loadingJobs && jobs.length > 0 && (
                   <Box sx={{ mb: 4 }}>
                     <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
                       <WorkIcon sx={{ color: "#388560" }} />
@@ -450,7 +474,23 @@ export default function BoothView() {
                               <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
                                 {job.name}
                               </Typography>
-                              {job.applicationLink && (
+                              {job.applicationForm && job.applicationForm.status === "published" ? (
+                                <Button
+                                  variant="contained"
+                                  onClick={() => {
+                                    setSelectedJobForApply(job)
+                                    setApplyDialogOpen(true)
+                                  }}
+                                  sx={{
+                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                    "&:hover": {
+                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                                    },
+                                  }}
+                                >
+                                  Apply Now
+                                </Button>
+                              ) : job.applicationLink ? (
                                 <Button
                                   variant="contained"
                                   href={job.applicationLink}
@@ -465,7 +505,7 @@ export default function BoothView() {
                                 >
                                   Apply Now
                                 </Button>
-                              )}
+                              ) : null}
                             </Box>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
                               {job.description}
@@ -483,7 +523,7 @@ export default function BoothView() {
                       ))}
                     </Box>
                   </Box>
-                ) : null}
+                )}
 
 
                 {/* Links */}
@@ -650,13 +690,26 @@ export default function BoothView() {
                   {jobs.length}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Open Position{jobs.length !== 1 ? "s" : ""}
+                  Open Position{jobs.length === 1 ? "" : "s"}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
       </Container>
+
+      {selectedJobForApply && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false)
+            setSelectedJobForApply(null)
+          }}
+          job={selectedJobForApply}
+          boothId={booth?.id}
+          studentId={user?.role === "student" ? user.uid : null}
+        />
+      )}
     </Box>
   )
 }

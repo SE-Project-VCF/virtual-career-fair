@@ -166,8 +166,8 @@ describe("NewChatDialog", () => {
     const userResult = screen.getByText("John Doe");
     await user.click(userResult);
 
-    const recipientEmail = screen.getByLabelText(/recipient email/i) as HTMLInputElement;
-    expect(recipientEmail.value).toBe("john@example.com");
+    const recipientEmail = screen.getByLabelText(/recipient email/i);
+    expect(recipientEmail).toHaveValue("john@example.com");
   });
 
   it("disables start chat button when no user is selected", () => {

@@ -1,11 +1,35 @@
 const admin = require("firebase-admin");
-const serviceAccount = require("./privateKey.json"); // your downloaded key
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+function getServiceAccount() {
+  // Production / Render path
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+    // Fix escaped newlines in private key (important in env vars)
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
+    }
+
+    return serviceAccount;
+  }
+
+  // Local dev path (keep privateKey.json uncommitted)
+  // eslint-disable-next-line global-require, import/no-dynamic-require
+  return require("./privateKey.json");
+}
+
+const DEFAULT_BUCKET = "careerfairdb-48105.firebasestorage.app"; // your current value
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(getServiceAccount()),
+    // Prefer env var in prod, fallback to your current bucket for local/dev
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || DEFAULT_BUCKET,
+  });
+}
 
 const db = admin.firestore();
 const auth = admin.auth();
+const bucket = admin.storage().bucket(); // ✅ this uses storageBucket from initializeApp
 
-module.exports = { db, auth };
+module.exports = { db, auth, bucket };

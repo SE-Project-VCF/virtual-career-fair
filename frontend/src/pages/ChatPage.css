@@ -1,0 +1,88 @@
+.chat-page {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.chat-main-wrapper {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-messages-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-messages-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-message-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.chat-input-bar {
+  border-top: 1px solid #e0e0e0;
+  padding: 16px;
+  background-color: #fff;
+}
+
+.chat-file-upload-label {
+  cursor: pointer;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.chat-file-upload-input {
+  display: none;
+}
+
+.chat-textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.chat-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: #666;
+}
+
+.chat-center-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+}
+
+.chat-center-content {
+  text-align: center;
+}
+
+.chat-not-available {
+  color: #999;
+  margin-top: 16px;
+}
+
+.chat-loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100%;
+}

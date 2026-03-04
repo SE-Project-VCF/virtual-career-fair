@@ -1,18 +1,14 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material"
+import { Box, TextField, Button, Typography, Alert, Paper, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import LoginIcon from "@mui/icons-material/Login"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
 import TrendingUpIcon from "@mui/icons-material/TrendingUp"
 import GoogleIcon from "@mui/icons-material/Google"
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-} from "@mui/material"
+import Visibility from "@mui/icons-material/Visibility"
+import VisibilityOff from "@mui/icons-material/VisibilityOff"
 import { doc, setDoc } from "firebase/firestore"
 import { auth, db } from "../firebase"
 
@@ -22,6 +18,7 @@ export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
 
   // Google profile completion popup state
   const [showProfileDialog, setShowProfileDialog] = useState(false)
@@ -45,12 +42,10 @@ export default function Login() {
 
     if (result.success) {
       navigate("/dashboard")
+    } else if (result.needsVerification) {
+      setError("Please verify your email before logging in. Check your inbox for a verification link.")
     } else {
-      if (result.needsVerification) {
-        setError("Please verify your email before logging in. Check your inbox for a verification link.")
-      } else {
-        setError(result.error || "Login failed.")
-      }
+      setError(result.error || "Login failed.")
     }
   }
 
@@ -270,11 +265,22 @@ export default function Login() {
             <TextField
               fullWidth
               label="Password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               margin="normal"
               required
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={() => setShowPassword((v) => !v)} edge="end" aria-label="toggle password visibility">
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
               sx={{
                 mb: 3,
                 "& .MuiOutlinedInput-root": {

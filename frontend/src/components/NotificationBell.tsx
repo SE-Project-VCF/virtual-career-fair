@@ -40,7 +40,7 @@ export default function NotificationBell() {
 
   const fetchInvitations = useCallback(async () => {
     const currentUser = authUtils.getCurrentUser();
-    if (!currentUser || currentUser.role !== "student") return;
+    if (currentUser?.role !== "student") return;
 
     try {
       const response = await fetch(
@@ -84,7 +84,7 @@ export default function NotificationBell() {
     navigate("/dashboard/job-invitations");
   };
 
-  const handleInvitationClick = (invitationId: string) => {
+  const handleInvitationClick = () => {
     handleClose();
     navigate("/dashboard/job-invitations");
   };
@@ -104,9 +104,11 @@ export default function NotificationBell() {
   };
 
   // Only show for students
-  if (!user || user.role !== "student") {
+  if (user?.role !== "student") {
     return null;
   }
+
+  const invitationLabel = unreadCount === 1 ? "invitation" : "invitations";
 
   return (
     <>
@@ -129,11 +131,13 @@ export default function NotificationBell() {
         anchorEl={anchorEl}
         open={open}
         onClose={handleClose}
-        PaperProps={{
-          sx: {
-            width: 360,
-            maxHeight: 480,
-            mt: 1.5,
+        slotProps={{
+          paper: {
+            sx: {
+              width: 360,
+              maxHeight: 480,
+              mt: 1.5,
+            },
           },
         }}
         transformOrigin={{ horizontal: "right", vertical: "top" }}
@@ -146,7 +150,7 @@ export default function NotificationBell() {
           </Typography>
           {unreadCount > 0 && (
             <Typography variant="caption" color="text.secondary">
-              {unreadCount} new invitation{unreadCount !== 1 ? "s" : ""}
+              {unreadCount} new {invitationLabel}
             </Typography>
           )}
         </Box>
@@ -166,7 +170,7 @@ export default function NotificationBell() {
             invitations.map((invitation) => (
               <MenuItem
                 key={invitation.id}
-                onClick={() => handleInvitationClick(invitation.id)}
+                onClick={handleInvitationClick}
                 sx={{
                   py: 1.5,
                   px: 2,

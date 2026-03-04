@@ -40,6 +40,7 @@ jest.mock("../helpers", () => {
 const request = require("supertest");
 const app = require("../server");
 const { db } = require("../firebase");
+const { hmacInviteCode } = require("../helpers");
 
 describe("POST /api/update-invite-code", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -108,29 +109,24 @@ describe("POST /api/update-invite-code", () => {
   });
 
   it("returns 400 when invite code is already in use", async () => {
-    // The server calls: db.collection("companies").doc(companyId).get()
-    // then: db.collection("companies").get()  (to check for duplicates)
-    let callCount = 0;
+    const takenCode = "TAKEN123";
+    const takenHmac = hmacInviteCode(takenCode);
     db.collection.mockImplementation(() => ({
       doc: jest.fn(() => ({
         get: jest.fn().mockResolvedValue(
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
-      get: jest.fn().mockImplementation(() => {
-        callCount++;
-        // Second .get() is the companies snapshot for duplicate checking
-        return Promise.resolve({
-          docs: [
-            { id: "other-company-id", data: () => ({ inviteCode: "TAKEN123" }) },
-          ],
-        });
+      get: jest.fn().mockResolvedValue({
+        docs: [
+          { id: "other-company-id", data: () => ({ inviteCodeHmac: takenHmac }) },
+        ],
       }),
     }));
 
     const res = await request(app)
       .post("/api/update-invite-code")
-      .send({ companyId: "c1", userId: "user1", newInviteCode: "TAKEN123" });
+      .send({ companyId: "c1", userId: "user1", newInviteCode: takenCode });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("already in use");
   });
@@ -146,9 +142,11 @@ describe("POST /api/update-invite-code", () => {
     }));
 
     db.runTransaction.mockImplementation(async (callback) => {
-      const companyRef = { exists: true };
       const transaction = {
-        get: jest.fn().mockResolvedValue({ exists: true }),
+        get: jest.fn().mockResolvedValue({ 
+          exists: true,
+          data: () => ({ ownerId: "user1" })
+        }),
         update: jest.fn(),
       };
       await callback(transaction);
@@ -175,7 +173,10 @@ describe("POST /api/update-invite-code", () => {
 
     db.runTransaction.mockImplementation(async (callback) => {
       const transaction = {
-        get: jest.fn().mockResolvedValue({ exists: true }),
+        get: jest.fn().mockResolvedValue({ 
+          exists: true,
+          data: () => ({ ownerId: "user1" })
+        }),
         update: jest.fn(),
       };
       await callback(transaction);
@@ -187,7 +188,7 @@ describe("POST /api/update-invite-code", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.inviteCode).toMatch(/^[A-Z0-9]{8}$/);
+    expect(res.body.inviteCode).toMatch(/^[A-Z0-9]{12}$/);
   });
 
   it("returns 500 when database operation fails", async () => {
