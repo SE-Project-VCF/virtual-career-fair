@@ -1046,45 +1046,72 @@ export default function BoothEditor() {
             </Box>
 
             {/* Submit Buttons */}
-            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
-              <Button
-                variant="outlined"
-                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
-                disabled={saving || logoUploading}
-                sx={{
-                  borderColor: "#388560",
-                  color: "#388560",
-                  "&:hover": {
-                    borderColor: "#2d6b4d",
-                    bgcolor: "rgba(56, 133, 96, 0.05)",
-                  },
-                }}
-              >
-                Cancel
-              </Button>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
+              <Box sx={{ display: "flex", gap: 2 }}>
+                {(() => {
+                  const activeBoothId = fairId ? fairBoothId : company.boothId;
+                  if (activeBoothId) {
+                    return (
+                      <Button
+                        variant="outlined"
+                        onClick={() => navigate(`/booth/${activeBoothId}/visitors`)}
+                        sx={{
+                          borderColor: "#b03a6c",
+                          color: "#b03a6c",
+                          "&:hover": {
+                            borderColor: "#8b2854",
+                            bgcolor: "rgba(176, 58, 108, 0.05)",
+                          },
+                        }}
+                      >
+                        View Visitors
+                      </Button>
+                    );
+                  }
+                  return null;
+                })()}
+              </Box>
 
-              {(() => {
-                const activeBoothId = fairId ? fairBoothId : company.boothId
-                const savingText = activeBoothId ? "Updating..." : "Creating..."
-                const defaultText = activeBoothId ? "Update Booth" : "Create Booth"
-                const buttonText = saving ? savingText : defaultText
-                return (
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-                    disabled={saving || logoUploading}
-                    sx={{
-                      background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                      "&:hover": {
-                        background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                      },
-                    }}
-                  >
-                    {buttonText}
-                  </Button>
-                )
-              })()}
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
+                  disabled={saving || logoUploading}
+                  sx={{
+                    borderColor: "#388560",
+                    color: "#388560",
+                    "&:hover": {
+                      borderColor: "#2d6b4d",
+                      bgcolor: "rgba(56, 133, 96, 0.05)",
+                    },
+                  }}
+                >
+                  Cancel
+                </Button>
+
+                {(() => {
+                  const activeBoothId = fairId ? fairBoothId : company.boothId;
+                  const savingText = activeBoothId ? "Updating..." : "Creating...";
+                  const defaultText = activeBoothId ? "Update Booth" : "Create Booth";
+                  const buttonText = saving ? savingText : defaultText;
+                  return (
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
+                      disabled={saving || logoUploading}
+                      sx={{
+                        background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                        "&:hover": {
+                          background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                        },
+                      }}
+                    >
+                      {buttonText}
+                    </Button>
+                  );
+                })()}
+              </Box>
             </Box>
           </form>
         </Card>

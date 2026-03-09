@@ -9,6 +9,7 @@ import Company from "./pages/Company"
 import BoothEditor from "./pages/BoothEditor"
 import Booths from "./pages/Booths"
 import BoothView from "./pages/BoothView"
+import BoothVisitorsPage from "./pages/BoothVisitorsPage"
 import EmailVerificationPending from "./pages/EmailVerificationPending"
 import VerifyEmail from "./pages/VerifyEmail"
 import ChatPage from "./pages/ChatPage"
@@ -72,6 +73,7 @@ function App() {
         <Route path="/company/:companyId/submissions" element={<SubmissionsPage />} />
         <Route path="/booths" element={<Booths />} />
         <Route path="/booth/:boothId" element={<BoothView />} />
+        <Route path="/booth/:boothId/visitors" element={<BoothVisitorsPage />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/profile" element={<StudentProfilePage />} />

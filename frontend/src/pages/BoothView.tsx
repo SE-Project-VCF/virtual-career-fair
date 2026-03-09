@@ -149,8 +149,10 @@ export default function BoothView() {
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      // Track when user leaves the booth
+      trackStudentBoothLeave()
     }
-  }, [])
+  }, [boothId, user?.uid])
 
   const handleStartChat = async () => {
     try {
@@ -186,16 +188,22 @@ export default function BoothView() {
   };
 
   useEffect(() => {
+    console.log("[BOOTHREAD] useEffect fired - boothId:", boothId);
     if (!boothId) {
+      console.log("[BOOTHREAD] No boothId, navigating to /booths");
       navigate("/booths")
       return
     }
+    console.log("[BOOTHREAD] Calling fetchBooth");
     fetchBooth()
   }, [boothId, navigate])
 
   const trackStudentBoothView = async (boothData: Booth) => {
     try {
+      console.log("[BOOTH-VIEW] trackStudentBoothView called", { user, boothId: boothData.id });
       if (user?.uid && user.role === "student") {
+        console.log("[BOOTH-VIEW] User is student, tracking...");
+        // Track in local history
         await trackBoothView(user.uid, {
           boothId: boothData.id,
           companyName: boothData.companyName,
@@ -203,9 +211,52 @@ export default function BoothView() {
           location: boothData.location,
           logoUrl: boothData.logoUrl,
         });
+
+        // Track in backend for company analytics
+        const token = await authUtils.getIdToken();
+        console.log("[BOOTH-VIEW] Got token:", !!token);
+        if (token) {
+          try {
+            const url = `${API_URL}/api/booth/${boothData.id}/track-view`;
+            console.log("[BOOTH-VIEW] Calling track-view endpoint:", url);
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+            console.log("[BOOTH-VIEW] Track-view response:", response.status, response.ok);
+          } catch (err) {
+            console.warn("Backend booth tracking failed:", err);
+          }
+        } else {
+          console.log("[BOOTH-VIEW] No token available");
+        }
+      } else {
+        console.log("[BOOTH-VIEW] User is not a student or not logged in", { uid: user?.uid, role: user?.role });
       }
     } catch (err) {
       console.warn("History tracking failed:", err);
+    }
+  }
+
+  const trackStudentBoothLeave = async () => {
+    try {
+      if (user?.uid && user.role === "student" && boothId) {
+        const token = await authUtils.getIdToken();
+        if (token) {
+          await fetch(`${API_URL}/api/booth/${boothId}/track-leave`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Booth leave tracking failed:", err);
     }
   }
 
@@ -237,6 +288,7 @@ export default function BoothView() {
   }
 
   const fetchBooth = async () => {
+    console.log("[FETCHBOOTH] Called with boothId:", boothId);
     if (!boothId) return
 
     try {
@@ -259,6 +311,7 @@ export default function BoothView() {
       const boothData = await loadBoothData(boothId, fairIsLive)
       if (!boothData || !isMountedRef.current) return
 
+      console.log("[FETCHBOOTH] About to call trackStudentBoothView with:", { boothId: boothData.id, user })
       setBooth(boothData)
       await trackStudentBoothView(boothData)
 

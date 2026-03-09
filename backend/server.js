@@ -3820,6 +3820,306 @@ app.delete("/api/resume/tailored/:tailoredResumeId", verifyFirebaseToken, async 
 });
 
 /* ============================================================
+   BOOTH VISITOR TRACKING
+============================================================ */
+
+/**
+ * POST /api/booth/:boothId/track-view
+ * Track when a student views a booth
+ */
+app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const studentId = req.user.uid;
+
+    console.log(`[TRACK-VIEW] Booth: ${boothId}, Student: ${studentId}`);
+
+    if (!boothId || !studentId) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    // Get student data
+    const studentDoc = await db.collection("users").doc(studentId).get();
+    if (!studentDoc.exists) {
+      console.log(`[TRACK-VIEW] Student not found: ${studentId}`);
+      return res.status(404).json({ success: false, error: "Student not found" });
+    }
+
+    const studentData = studentDoc.data();
+    console.log(`[TRACK-VIEW] Student data: ${studentData.firstName} ${studentData.lastName}`);
+    const now = admin.firestore.Timestamp.now();
+
+    // Update or create visitor record in boothVisitors subcollection
+    const visitorRef = db.collection("boothVisitors").doc(boothId).collection("studentVisits").doc(studentId);
+    const existingVisit = await visitorRef.get();
+
+    if (existingVisit.exists) {
+      // Update existing visitor
+      await visitorRef.update({
+        lastViewedAt: now,
+        lastActivityAt: now,
+        isCurrentlyViewing: true,
+        viewCount: admin.firestore.FieldValue.increment(1),
+      });
+      console.log(`[TRACK-VIEW] Updated existing visitor record`);
+    } else {
+      // Create new visitor record
+      await visitorRef.set({
+        studentId,
+        firstName: studentData.firstName || "",
+        lastName: studentData.lastName || "",
+        email: studentData.email || "",
+        major: studentData.major || "",
+        firstViewedAt: now,
+        lastViewedAt: now,
+        lastActivityAt: now,
+        viewCount: 1,
+        isCurrentlyViewing: true,
+      });
+      console.log(`[TRACK-VIEW] Created new visitor record`);
+    }
+
+    // Update booth's currentVisitors array
+    const boothRef = db.collection("booths").doc(boothId);
+    const boothDoc = await boothRef.get();
+
+    if (boothDoc.exists) {
+      const boothData = boothDoc.data();
+      const currentVisitors = boothData.currentVisitors || [];
+
+      // Add to current visitors if not already there
+      if (!currentVisitors.includes(studentId)) {
+        await boothRef.update({
+          currentVisitors: admin.firestore.FieldValue.arrayUnion(studentId),
+          totalVisitorsCount: admin.firestore.FieldValue.increment(1),
+          updatedAt: now,
+        });
+        console.log(`[TRACK-VIEW] Added to currentVisitors array`);
+      } else {
+        // Already viewing, just update timestamp
+        await boothRef.update({
+          updatedAt: now,
+        });
+        console.log(`[TRACK-VIEW] Already in currentVisitors, updated timestamp`);
+      }
+    }
+
+    console.log(`[TRACK-VIEW] Success - returning response`);
+    res.json({ success: true, boothId, tracked: true });
+  } catch (err) {
+    console.error("Error tracking booth view:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/booth/:boothId/track-leave
+ * Remove student from current visitors when they leave booth
+ */
+app.post("/api/booth/:boothId/track-leave", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const studentId = req.user.uid;
+
+    if (!boothId || !studentId) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    const now = admin.firestore.Timestamp.now();
+
+    // Mark as not currently viewing
+    const visitorRef = db.collection("boothVisitors").doc(boothId).collection("studentVisits").doc(studentId);
+    const visitorExists = await visitorRef.get();
+
+    if (visitorExists.exists) {
+      await visitorRef.update({
+        isCurrentlyViewing: false,
+        lastActivityAt: now,
+      });
+    }
+
+    // Remove from booth's currentVisitors array
+    const boothRef = db.collection("booths").doc(boothId);
+    await boothRef.update({
+      currentVisitors: admin.firestore.FieldValue.arrayRemove(studentId),
+      updatedAt: now,
+    });
+
+    res.json({ success: true, boothId, tracked: false });
+  } catch (err) {
+    console.error("Error tracking booth leave:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/booth/:boothId/current-visitors
+ * Get list of students currently viewing the booth
+ */
+app.get("/api/booth/:boothId/current-visitors", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+
+    if (!boothId) {
+      return res.status(400).json({ success: false, error: "Missing boothId" });
+    }
+
+    const boothRef = db.collection("booths").doc(boothId);
+    const boothDoc = await boothRef.get();
+
+    if (!boothDoc.exists) {
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothData = boothDoc.data();
+    const currentVisitorIds = boothData.currentVisitors || [];
+
+    // Get details of current visitors
+    const visitorDetails = [];
+    for (const visitorId of currentVisitorIds) {
+      const visitorRef = boothRef.collection("studentVisits").doc(visitorId);
+      const visitorDoc = await visitorRef.get();
+      if (visitorDoc.exists) {
+        const data = visitorDoc.data();
+        visitorDetails.push({
+          studentId: visitorId,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          major: data.major,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      boothId,
+      currentVisitorCount: currentVisitorIds.length,
+      currentVisitors: visitorDetails,
+    });
+  } catch (err) {
+    console.error("Error fetching current visitors:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/booth-visitors/:boothId
+ * Get all visitors of a booth (with filtering and sorting)
+ * Only accessible by company owner or representative
+ */
+app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const { filter = "all", search, major, sort = "recent" } = req.query;
+    const userId = req.user.uid;
+
+    console.log(`[GET-VISITORS] Booth: ${boothId}, User: ${userId}`);
+
+    if (!boothId) {
+      return res.status(400).json({ success: false, error: "Missing boothId" });
+    }
+
+    // Get booth
+    const boothDoc = await db.collection("booths").doc(boothId).get();
+    if (!boothDoc.exists) {
+      console.log(`[GET-VISITORS] Booth not found: ${boothId}`);
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothData = boothDoc.data();
+    const boothCompanyId = boothData.companyId;
+    console.log(`[GET-VISITORS] Booth company ID: ${boothCompanyId}`);
+
+    // Get user data to verify authorization
+    const userDoc = await db.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      console.log(`[GET-VISITORS] User not found: ${userId}`);
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+    const userCompanyId = userData.companyId;
+    console.log(`[GET-VISITORS] User company ID: ${userCompanyId}`);
+
+    // Check authorization: user's company must match booth's company
+    if (userCompanyId !== boothCompanyId) {
+      console.log(`[GET-VISITORS] Auth failed: company mismatch`);
+      return res.status(403).json({ success: false, error: "Not authorized to view booth visitors" });
+    }
+
+    console.log(`[GET-VISITORS] Auth passed, fetching visitor records...`);
+
+    // Get all student visits for this booth
+    const visitsSnapshot = await db
+      .collection("boothVisitors")
+      .doc(boothId)
+      .collection("studentVisits")
+      .get();
+
+    let visitors = visitsSnapshot.docs.map((doc) => ({
+      studentId: doc.id,
+      ...doc.data(),
+    }));
+
+    console.log(`[GET-VISITORS] Found ${visitors.length} total visitor records`);
+
+    // Apply filter
+    if (filter === "current") {
+      visitors = visitors.filter((v) => v.isCurrentlyViewing === true);
+    } else if (filter === "previous") {
+      visitors = visitors.filter((v) => v.isCurrentlyViewing === false);
+    }
+
+    // Apply search filter
+    if (search && search.trim()) {
+      const searchLower = search.toLowerCase().trim();
+      visitors = visitors.filter((v) => {
+        const fullName = `${v.firstName} ${v.lastName}`.toLowerCase();
+        return fullName.includes(searchLower) || v.email.toLowerCase().includes(searchLower);
+      });
+    }
+
+    // Apply major filter
+    if (major && major.trim()) {
+      const majorLower = major.toLowerCase().trim();
+      visitors = visitors.filter((v) =>
+        v.major.toLowerCase().includes(majorLower)
+      );
+    }
+
+    // Apply sorting
+    if (sort === "name") {
+      visitors.sort((a, b) =>
+        `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+      );
+    } else if (sort === "viewCount") {
+      visitors.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
+    } else {
+      // Default: recent (lastViewedAt descending)
+      visitors.sort(
+        (a, b) =>
+          (b.lastViewedAt?.toMillis?.() || 0) - (a.lastViewedAt?.toMillis?.() || 0)
+      );
+    }
+
+    const currentCount = visitors.filter((v) => v.isCurrentlyViewing).length;
+
+    console.log(`[GET-VISITORS] Returning ${visitors.length} visitors (${currentCount} currently viewing)`);
+
+    res.json({
+      success: true,
+      boothId,
+      totalVisitors: visitors.length,
+      currentlyViewing: currentCount,
+      visitors,
+    });
+  } catch (err) {
+    console.error("Error fetching booth visitors:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================================================
    PATCH CACHE STATS (DEBUG ENDPOINT)
 ============================================================ */
 app.get("/api/debug/patch-cache", verifyFirebaseToken, async (req, res) => {
