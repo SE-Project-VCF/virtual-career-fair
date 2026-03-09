@@ -86,9 +86,10 @@ function getNavItems(user: User | null): NavItem[] {
 export interface BaseLayoutProps {
   children: React.ReactNode
   showChat?: boolean
+  pageTitle?: string
 }
 
-export default function BaseLayout({ children, showChat = true }: BaseLayoutProps) {
+export default function BaseLayout({ children, showChat = true, pageTitle }: BaseLayoutProps) {
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const user = authUtils.getCurrentUser()
@@ -111,7 +112,7 @@ export default function BaseLayout({ children, showChat = true }: BaseLayoutProp
       >
         <Container maxWidth="lg">
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            {/* Left: hamburger + branding */}
+            {/* Left: hamburger + branding + page title */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
               <Tooltip title="Navigation menu">
                 <IconButton
@@ -146,6 +147,17 @@ export default function BaseLayout({ children, showChat = true }: BaseLayoutProp
                   Virtual Career Fair
                 </Typography>
               </Box>
+              {pageTitle && (
+                <>
+                  <Box sx={{ width: "1px", height: 32, bgcolor: "rgba(255,255,255,0.3)", mx: 0.5 }} />
+                  <Typography
+                    variant="h6"
+                    sx={{ fontWeight: 600, color: "white", letterSpacing: "-0.3px" }}
+                  >
+                    {pageTitle}
+                  </Typography>
+                </>
+              )}
             </Box>
 
             {/* Right: actions */}
