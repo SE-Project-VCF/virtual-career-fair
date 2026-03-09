@@ -21,7 +21,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SaveIcon from "@mui/icons-material/Save";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import ProfileMenu from "./ProfileMenu";
+import BaseLayout from "../components/BaseLayout";
 import { authUtils } from "../utils/auth";
 import { API_URL } from "../config";
 import { formatPlainTextResume } from "../utils/resumeFormatter";
@@ -326,22 +326,16 @@ export default function TailorResumeSimplePage() {
   }
 
   return (
+    <BaseLayout pageTitle={`Tailor Resume for ${jobTitle}`}>
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <ProfileMenu />
-
-      {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/dashboard/job-invitations")}
-          variant="outlined"
-        >
-          Back
-        </Button>
-        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
-          Tailor Resume for {jobTitle}
-        </Typography>
-      </Box>
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate("/dashboard/job-invitations")}
+        variant="outlined"
+        sx={{ mb: 3 }}
+      >
+        Back
+      </Button>
 
       {/* Alerts */}
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
@@ -491,5 +485,6 @@ export default function TailorResumeSimplePage() {
         </DialogActions>
       </Dialog>
     </Container>
+    </BaseLayout>
   );
 }

@@ -23,8 +23,7 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
-import ProfileMenu from "./ProfileMenu"
-import NotificationBell from "../components/NotificationBell"
+import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, query, where } from "firebase/firestore"
@@ -193,25 +192,7 @@ export default function FairBoothView() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <Box
-        sx={{
-          bgcolor: "primary.main",
-          color: "white",
-          py: 2,
-          px: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="h6" fontWeight="bold">Virtual Career Fair</Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <NotificationBell />
-          <ProfileMenu />
-        </Box>
-      </Box>
-
+    <BaseLayout pageTitle={booth?.companyName ?? "Booth"}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -371,6 +352,6 @@ export default function FairBoothView() {
           </Grid>
         )}
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }

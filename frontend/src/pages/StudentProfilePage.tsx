@@ -16,7 +16,7 @@ import {
   ListItemButton,
   Chip,
 } from "@mui/material"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
@@ -253,39 +253,9 @@ export default function StudentProfilePage() {
   if (!user) return null
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Container
-          maxWidth="lg"
-          sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-        >
-          <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-            Job Goblin - Virtual Career Fair
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {/* Other buttons can be added here */}
-            <ProfileMenu />
-          </Box>
-        </Container>
-      </Box>
-
-      {/* Profile Form */}
-      <Container maxWidth="sm" sx={{ py: 6 }}>
+    <BaseLayout pageTitle="Customize Profile">
+      <Container maxWidth="sm" sx={{ py: 4 }}>
         <Card sx={{ p: 4, borderRadius: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 3 }}>
-            Customize Profile
-          </Typography>
 
           <form onSubmit={handleSave}>
             {error && (
@@ -456,6 +426,6 @@ export default function StudentProfilePage() {
           <Button onClick={() => setTailoredDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   )
 }

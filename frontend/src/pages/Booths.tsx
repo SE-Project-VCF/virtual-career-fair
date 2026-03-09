@@ -22,8 +22,7 @@ import EventIcon from "@mui/icons-material/Event"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import WorkIcon from "@mui/icons-material/Work"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import ProfileMenu from "./ProfileMenu"
-import NotificationBell from "../components/NotificationBell"
+import BaseLayout from "../components/BaseLayout"
 
 interface Booth {
   id: string
@@ -241,73 +240,7 @@ export default function Booths() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                Job Goblin - Virtual Career Fair
-              </Typography>
-              <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.9)", mt: 1 }}>
-                Explore opportunities from top companies
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              {user && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  {/* Dashboard button (existing) */}
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate("/dashboard")}
-                    sx={{
-                      color: "white",
-                      borderColor: "white",
-                      "&:hover": {
-                        borderColor: "white",
-                        bgcolor: "rgba(255,255,255,0.1)",
-                      },
-                    }}
-                  >
-                    Dashboard
-                  </Button>
-
-                  {/* Booth History button (NEW) - only for students, ALWAYS enabled */}
-                  {user.role === "student" && (
-                    <Button
-                      variant="outlined"
-                      onClick={() => navigate("/dashboard/booth-history")}
-                      sx={{
-                        color: "white",
-                        borderColor: "white",
-                        "&:hover": {
-                          borderColor: "white",
-                          bgcolor: "rgba(255,255,255,0.1)",
-                        },
-                      }}
-                    >
-                      Booth History
-                    </Button>
-                  )}
-                </Box>
-              )}
-
-              <NotificationBell />
-
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Browse Booths">
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Fair Name and Description Banner - Show when active */}
         {isLive && (scheduleName || scheduleDescription) && (
@@ -590,7 +523,7 @@ export default function Booths() {
           </>
         )}
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }
 

@@ -22,7 +22,7 @@ import BarChartIcon from "@mui/icons-material/BarChart"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
@@ -1018,35 +1018,11 @@ export default function Company() {
   const saveButtonLabel = getSaveButtonLabel(savingJob, editingJob)
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton onClick={() => navigate(isOwner ? "/companies" : "/dashboard")} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                {company.companyName}
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle={company.companyName}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(isOwner ? "/companies" : "/dashboard")} sx={{ mb: 3 }}>
+          {isOwner ? "Companies" : "Dashboard"}
+        </Button>
         {error && (
           <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError("")}>
             {error}
@@ -1583,7 +1559,7 @@ export default function Company() {
         </DialogActions>
       </Dialog>
 
-    </Box>
+    </BaseLayout>
   )
 }
 

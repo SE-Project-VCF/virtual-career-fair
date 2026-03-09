@@ -22,7 +22,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
-import ProfileMenu from "./ProfileMenu";
+import BaseLayout from "../components/BaseLayout";
 import { authUtils } from "../utils/auth";
 import { API_URL } from "../config";
 import { formatResumeAsText } from "../utils/resumeFormatter";
@@ -138,23 +138,16 @@ export default function TailoredResumesPage() {
   if (!user) return null;
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", pb: 4 }}>
-      <ProfileMenu />
-
-      <Container maxWidth="lg" sx={{ pt: 4 }}>
-        {/* Header */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate("/dashboard/job-invitations")}
-            variant="text"
-          >
-            Back
-          </Button>
-          <Typography variant="h4" sx={{ fontWeight: "bold" }}>
-            Tailored Resumes
-          </Typography>
-        </Box>
+    <BaseLayout pageTitle="Tailored Resumes">
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/dashboard/job-invitations")}
+          variant="text"
+          sx={{ mb: 3 }}
+        >
+          Back
+        </Button>
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -318,6 +311,6 @@ export default function TailoredResumesPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   );
 }

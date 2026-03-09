@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
-import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Badge, Tooltip } from "@mui/material"
+import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Badge } from "@mui/material"
 import { authUtils, parseMyResume, tailorMyResume } from "../utils/auth"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db, auth } from "../firebase"
@@ -12,10 +12,8 @@ import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"
 import MailIcon from "@mui/icons-material/Mail"
-import ChatIcon from "@mui/icons-material/Chat"
-import ProfileMenu from "./ProfileMenu"
 import EventList from "../components/EventList"
-import NotificationBell from "../components/NotificationBell"
+import BaseLayout from "../components/BaseLayout"
 
 // Helper function to get fair status message based on user role
 function getFairStatusMessage(role: string | undefined): string {
@@ -607,7 +605,6 @@ export default function Dashboard() {
   const [inviteCodeError, setInviteCodeError] = useState("")
   const [linking, setLinking] = useState(false)
   const [totalRepresentatives, setTotalRepresentatives] = useState(0)
-  const [unreadCount, setUnreadCount] = useState<number>(0)
   const [isLive, setIsLive] = useState(false)
   const [upcomingEventsCount, setUpcomingEventsCount] = useState(0)
   const [totalCompaniesCount, setTotalCompaniesCount] = useState(0)
@@ -664,55 +661,6 @@ Frontend Intern
     // Additional role validation could be added here if needed
     // For now, the login functions handle role validation
   }, [navigate])
-
-  // Fetch unread chat count and keep it updated
-  useEffect(() => {
-    if (!user?.uid) return;
-
-    let cancelled = false;
-
-    const fetchUnread = async () => {
-      try {
-        const firebaseUser = await waitForFirebaseUser()
-        if (!firebaseUser) return
-        const idToken = await firebaseUser.getIdToken();
-        const res = await fetch(
-          `${API_URL}/api/stream-unread`,
-          {
-            headers: { Authorization: `Bearer ${idToken}` },
-          }
-        );
-
-        if (!res.ok) {
-          console.error("Unread API error:", res.status);
-          return;
-        }
-
-        const data = await res.json();
-
-        if (!cancelled && typeof data.unread === "number") {
-          setUnreadCount(data.unread);
-        }
-      } catch (err) {
-        console.error("Failed to fetch unread count:", err);
-      }
-    };
-
-    void fetchUnread().catch((err) => {
-      console.error("Initial unread count fetch failed:", err);
-    });
-
-    const interval = setInterval(() => {
-      void fetchUnread().catch((err) => {
-        console.error("Periodic unread count fetch failed:", err);
-      });
-    }, 10000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [user?.uid]);
 
   // Fetch total representatives count for company owners
   useEffect(() => {
@@ -863,82 +811,7 @@ Frontend Intern
   if (!user) return null
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#fafafa" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 4,
-          px: 4,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-          backdropFilter: "blur(10px)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", flexDirection: "column" }}>
-              <Typography variant="h4" sx={{ fontWeight: 800, color: "white", letterSpacing: "-0.5px" }}>
-                Job Goblin
-              </Typography>
-              <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.9)" }}>
-                Virtual Career Fair
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              {/* ✅ Chat Button with Unread Badge */}
-              <Tooltip title="Open Chat">
-                <Badge
-                  color="error"
-                  badgeContent={unreadCount > 0 ? unreadCount : null}
-                  overlap="circular"
-                  anchorOrigin={{
-                    vertical: "top",
-                    horizontal: "right",
-                  }}
-                  sx={{
-                    "& .MuiBadge-badge": {
-                      fontSize: "0.875rem",
-                      height: "20px",
-                      minWidth: "20px",
-                      padding: "0 6px",
-                      right: "4px",
-                      top: "4px",
-                      background: "#ff5252",
-                      boxShadow: "0 0 0 2px #b03a6c",
-                    },
-                  }}
-                >
-                  <Button
-                    onClick={() => navigate("/dashboard/chat")}
-                    startIcon={<ChatIcon />}
-                    sx={{
-                      fontWeight: 700,
-                      color: "white",
-                      background: "rgba(255,255,255,0.15)",
-                      border: "1px solid rgba(255,255,255,0.3)",
-                      backdropFilter: "blur(10px)",
-                      transition: "all 0.3s ease",
-                      "&:hover": {
-                        background: "rgba(255,255,255,0.25)",
-                        backdropFilter: "blur(10px)",
-                        transform: "translateY(-2px)",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-                      },
-                    }}
-                  >
-                    Chat
-                  </Button>
-                </Badge>
-              </Tooltip>
-
-              <NotificationBell />
-
-              <ProfileMenu />
-            </Box>
-
-          </Box>
-        </Container>
-      </Box>
+    <BaseLayout>
       <Container maxWidth="lg">
         <Box sx={{ py: 6 }}>
           {/* Welcome Section */}
@@ -1121,6 +994,6 @@ Frontend Intern
         </DialogActions>
       </Dialog>
 
-    </Box>
+    </BaseLayout>
   )
 }

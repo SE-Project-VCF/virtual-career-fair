@@ -67,7 +67,7 @@ function DemoCard({
 
 export default function SamplePage() {
   return (
-    <BaseLayout>
+    <BaseLayout pageTitle="Sample Page">
       <Container maxWidth="lg">
         <Box sx={{ py: 5 }}>
           {/* Page intro */}
