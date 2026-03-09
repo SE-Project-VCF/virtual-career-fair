@@ -394,6 +394,74 @@ app.get("/api/get-resume-url/:userId", verifyFirebaseToken, async (req, res) => 
   }
 });
 
+/**
+ * GET /api/student/:studentId/resume-url
+ * Get signed URL for a student's resume
+ * Accessible by: company owners/reps (if student resume is visible) or the student themselves
+ */
+app.get("/api/student/:studentId/resume-url", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const requesterId = req.user.uid;
+
+    // Students can always view their own resume
+    const isOwnResume = requesterId === studentId;
+
+    if (!isOwnResume) {
+      // Check if requester is a company owner/rep and if student has resume visible
+      const requesterDoc = await db.collection("users").doc(requesterId).get();
+      if (!requesterDoc.exists) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const requesterData = requesterDoc.data();
+      const isCompanyUser = requesterData.role === "company" || requesterData.companyId;
+
+      if (!isCompanyUser) {
+        return res.status(403).json({ error: "Not authorized to view this resume" });
+      }
+
+      // Check if student has made resume visible
+      const studentDoc = await db.collection("users").doc(studentId).get();
+      if (!studentDoc.exists) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const studentData = studentDoc.data();
+      if (studentData.resumeVisible === false) {
+        return res.status(403).json({ error: "Student has set resume to private" });
+      }
+    }
+
+    const bucket = admin.storage().bucket();
+
+    // List files in the user's resume folder to get the most recent one
+    const [files] = await bucket.getFiles({ prefix: `resumes/${studentId}/` });
+
+    if (files.length === 0) {
+      return res.status(404).json({ error: "No resume found" });
+    }
+
+    // Get the most recent file (last one in the list is usually the newest)
+    const latestFile = files.at(-1);
+
+    // Generate a signed URL valid for 1 hour
+    const [signedUrl] = await latestFile.getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+    });
+
+    return res.json({
+      success: true,
+      resumeUrl: signedUrl,
+    });
+  } catch (err) {
+    console.error("Get student resume URL error:", err);
+    return res.status(500).json({ error: err.message || "Failed to get resume URL" });
+  }
+});
+
 /* ----------------------------------------------------
    UPLOAD BOOTH LOGO TO FIREBASE STORAGE (via backend)
    Uses Firebase Admin SDK to bypass client-side CORS issues

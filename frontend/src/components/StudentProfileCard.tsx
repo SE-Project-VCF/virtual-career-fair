@@ -2,6 +2,8 @@ import { useState, useEffect } from "react"
 import { Box, Typography, CircularProgress, Alert, Chip, Paper } from "@mui/material"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
+import { authUtils } from "../utils/auth"
+import { API_URL } from "../config"
 
 interface StudentProfile {
   uid: string
@@ -12,6 +14,7 @@ interface StudentProfile {
   expectedGradYear?: number
   skills?: string
   resumeUrl?: string
+  resumeVisible?: boolean
 }
 
 interface Props {
@@ -22,6 +25,8 @@ export default function StudentProfileCard({ studentId }: Props) {
   const [profile, setProfile] = useState<StudentProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [resumeSignedUrl, setResumeSignedUrl] = useState<string | null>(null)
+  const [loadingResume, setLoadingResume] = useState(false)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -49,6 +54,44 @@ export default function StudentProfileCard({ studentId }: Props) {
 
     fetchProfile()
   }, [studentId])
+
+  // Fetch signed URL for local resume paths
+  useEffect(() => {
+    if (!profile?.resumeUrl || profile.resumeUrl.startsWith("http")) {
+      return
+    }
+
+    const fetchResumeUrl = async () => {
+      try {
+        setLoadingResume(true)
+        const token = await authUtils.getIdToken()
+        if (!token) {
+          console.warn("No auth token available")
+          return
+        }
+
+        const response = await fetch(`${API_URL}/api/student/${studentId}/resume-url`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Failed to fetch resume URL")
+        }
+
+        const result = await response.json()
+        setResumeSignedUrl(result.resumeUrl)
+      } catch (err: any) {
+        console.warn("Error fetching resume signed URL:", err)
+      } finally {
+        setLoadingResume(false)
+      }
+    }
+
+    fetchResumeUrl()
+  }, [profile?.resumeUrl, studentId])
 
   if (loading) {
     return (
@@ -132,23 +175,54 @@ export default function StudentProfileCard({ studentId }: Props) {
           <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
             Resume
           </Typography>
-          {profile.resumeUrl.startsWith("http") ? (
-            <Typography
-              component="a"
-              href={profile.resumeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{
-                color: "#388560",
-                textDecoration: "none",
-                "&:hover": { textDecoration: "underline" },
-              }}
-            >
-              View Resume (External)
-            </Typography>
+          {profile.resumeVisible !== false ? (
+            <>
+              {profile.resumeUrl.startsWith("http") ? (
+                <Typography
+                  component="a"
+                  href={profile.resumeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    color: "#388560",
+                    textDecoration: "none",
+                    "&:hover": { textDecoration: "underline" },
+                  }}
+                >
+                  View Resume
+                </Typography>
+              ) : (
+                <>
+                  {loadingResume ? (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <CircularProgress size={20} />
+                      <Typography variant="body2">Loading resume...</Typography>
+                    </Box>
+                  ) : resumeSignedUrl ? (
+                    <Typography
+                      component="a"
+                      href={resumeSignedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{
+                        color: "#388560",
+                        textDecoration: "none",
+                        "&:hover": { textDecoration: "underline" },
+                      }}
+                    >
+                      View Resume
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="textSecondary">
+                      Resume ready
+                    </Typography>
+                  )}
+                </>
+              )}
+            </>
           ) : (
-            <Typography variant="body2" color="textSecondary">
-              Resume stored locally - {profile.resumeUrl}
+            <Typography variant="body2" sx={{ color: "#b03a6c", fontStyle: "italic" }}>
+              Student has set resume to private
             </Typography>
           )}
         </Box>

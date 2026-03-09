@@ -15,6 +15,8 @@ import {
   List,
   ListItemButton,
   Chip,
+  FormControlLabel,
+  Switch,
 } from "@mui/material"
 import ProfileMenu from "./ProfileMenu"
 import { doc, getDoc, setDoc } from "firebase/firestore"
@@ -36,6 +38,7 @@ export default function StudentProfilePage() {
   const [skills, setSkills] = useState("")
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [resumeUrl, setResumeUrl] = useState<string | null>(null)
+  const [resumeVisible, setResumeVisible] = useState(true)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -68,6 +71,7 @@ export default function StudentProfilePage() {
           setYear(data.expectedGradYear || "")
           setSkills(data.skills || "")
           setResumeUrl(data.resumeUrl || null)
+          setResumeVisible(data.resumeVisible !== false)
         }
       } catch (err: any) {
         console.error("Error fetching profile:", err)
@@ -192,6 +196,7 @@ export default function StudentProfilePage() {
           expectedGradYear: year,
           skills,
           resumeUrl: uploadedUrl || null,
+          resumeVisible,
         },
         { merge: true }
       )
@@ -247,6 +252,24 @@ export default function StudentProfilePage() {
       window.open(result.resumeUrl, "_blank")
     } catch (err: any) {
       setError(err?.message || "Failed to view resume")
+    }
+  }
+
+  const handleResumeVisibilityToggle = async (checked: boolean) => {
+    setResumeVisible(checked)
+    
+    // Auto-save the visibility toggle to Firestore
+    if (!user) return
+    try {
+      const docRef = doc(db, "users", user.uid)
+      await setDoc(
+        docRef,
+        { resumeVisible: checked },
+        { merge: true }
+      )
+    } catch (err: any) {
+      console.error("Error saving resume visibility:", err)
+      setError("Failed to save resume visibility")
     }
   }
 
@@ -372,6 +395,34 @@ export default function StudentProfilePage() {
                 </Box>
               )}
             </Box>
+
+            {/* Resume Visibility Toggle */}
+            {resumeUrl && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: "rgba(56, 133, 96, 0.05)", borderRadius: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={resumeVisible}
+                      onChange={(e) => handleResumeVisibilityToggle(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        Make Resume Visible to Recruiters
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+                        {resumeVisible
+                          ? "Your resume is visible to company representatives"
+                          : "Your resume is hidden from company representatives"}
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ mb: 0 }}
+                />
+              </Box>
+            )}
 
             <Box
               sx={{
