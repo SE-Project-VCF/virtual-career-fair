@@ -1150,7 +1150,6 @@ app.get("/api/job-invitations/received", async (req, res) => {
     }
 
     const invitationsSnapshot = await query.get();
-    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student`);
 
     // Get job and company details for each invitation
     const invitations = await Promise.all(
@@ -1237,7 +1236,6 @@ app.get("/api/job-invitations/received", async (req, res) => {
       return b.sentAt - a.sentAt;
     });
 
-    console.log(`Returning ${invitations.length} invitation(s) with full details`);
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching received invitations:", err);
