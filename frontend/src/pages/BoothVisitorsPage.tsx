@@ -91,14 +91,14 @@ export default function BoothVisitorsPage() {
     }, 5000);
 
     return () => clearInterval(refreshInterval);
-  }, [boothId]);
+  }, [boothId, navigate]);
 
   // Re-fetch when filter, search, or sort changes
   useEffect(() => {
     if (boothId && !loading) {
       fetchVisitors();
     }
-  }, [filterStatus, searchQuery, majorFilter, sortBy]);
+  }, [filterStatus, searchQuery, majorFilter, sortBy, boothId, loading]);
 
   const fetchBoothAndVisitors = async () => {
     try {
