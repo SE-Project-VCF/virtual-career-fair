@@ -22,6 +22,7 @@ import BarChartIcon from "@mui/icons-material/BarChart"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
+import VisibilityIcon from "@mui/icons-material/Visibility"
 import ProfileMenu from "./ProfileMenu"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
@@ -340,7 +341,7 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
           </Button>
 
           {boothId && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 2, display: "flex", gap: 2, flexDirection: "column" }}>
               <Button
                 variant="outlined"
                 onClick={() => navigate(`/booth/${boothId}`)}
@@ -354,6 +355,21 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
                 }}
               >
                 View Public Booth
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<VisibilityIcon />}
+                onClick={() => navigate(`/booth/${boothId}/visitors`)}
+                sx={{
+                  borderColor: "#b03a6c",
+                  color: "#b03a6c",
+                  "&:hover": {
+                    borderColor: "#8b2854",
+                    bgcolor: "rgba(176, 58, 108, 0.05)",
+                  },
+                }}
+              >
+                View Visitors Analytics
               </Button>
             </Box>
           )}

@@ -1048,28 +1048,6 @@ export default function BoothEditor() {
             {/* Submit Buttons */}
             <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
               <Box sx={{ display: "flex", gap: 2 }}>
-                {(() => {
-                  const activeBoothId = fairId ? fairBoothId : company.boothId;
-                  if (activeBoothId) {
-                    return (
-                      <Button
-                        variant="outlined"
-                        onClick={() => navigate(`/booth/${activeBoothId}/visitors`)}
-                        sx={{
-                          borderColor: "#b03a6c",
-                          color: "#b03a6c",
-                          "&:hover": {
-                            borderColor: "#8b2854",
-                            bgcolor: "rgba(176, 58, 108, 0.05)",
-                          },
-                        }}
-                      >
-                        View Visitors
-                      </Button>
-                    );
-                  }
-                  return null;
-                })()}
               </Box>
 
               <Box sx={{ display: "flex", gap: 2 }}>
