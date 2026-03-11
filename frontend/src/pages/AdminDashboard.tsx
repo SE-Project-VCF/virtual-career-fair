@@ -26,10 +26,11 @@ import {
   Paper,
   IconButton,
   Chip,
+  Rating,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, setDoc, Timestamp } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
 import { evaluateFairStatus } from "../utils/fairStatus"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import EventIcon from "@mui/icons-material/Event"
@@ -37,7 +38,9 @@ import ScheduleIcon from "@mui/icons-material/Schedule"
 import EditIcon from "@mui/icons-material/Edit"
 import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
+import StarIcon from "@mui/icons-material/Star"
 import ProfileMenu from "./ProfileMenu"
+import { API_URL } from "../config"
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
@@ -50,7 +53,7 @@ export default function AdminDashboard() {
   const [schedules, setSchedules] = useState<any[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
-  const [editingSchedule, setEditingSchedule] = useState<any | null>(null)
+  const [editingSchedule, setEditingSchedule] = useState<any>(null)
   const [scheduleForm, setScheduleForm] = useState({
     name: "",
     description: "",
@@ -60,6 +63,8 @@ export default function AdminDashboard() {
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [scheduleName, setScheduleName] = useState<string | null>(null)
   const [scheduleDescription, setScheduleDescription] = useState<string | null>(null)
+  const [boothAnalytics, setBoothAnalytics] = useState<{ boothId: string; companyName: string; averageRating: number; totalRatings: number }[]>([])
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false)
 
   // Helper: Convert local datetime-local string to UTC ISO string
   const localToUTC = (localDateTime: string): string => {
@@ -68,8 +73,8 @@ export default function AdminDashboard() {
     // Create a Date object treating it as local time, then convert to UTC ISO string
     const localDate = new Date(localDateTime)
     // Check if date is valid
-    if (isNaN(localDate.getTime())) {
-      throw new Error(`Invalid date: ${localDateTime}`)
+    if (Number.isNaN(localDate.getTime())) {
+      throw new RangeError(`Invalid date: ${localDateTime}`)
     }
     return localDate.toISOString()
   }
@@ -149,6 +154,25 @@ export default function AdminDashboard() {
     }
   }, [user?.uid])
 
+  const fetchBoothAnalytics = useCallback(async () => {
+    if (!user?.uid) return
+    try {
+      setLoadingAnalytics(true)
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/booth-ratings/analytics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setBoothAnalytics(data.analytics || [])
+      }
+    } catch (err) {
+      console.error("Error fetching booth analytics:", err)
+    } finally {
+      setLoadingAnalytics(false)
+    }
+  }, [user?.uid])
+
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
       navigate("/login")
@@ -160,9 +184,8 @@ export default function AdminDashboard() {
       return
     }
 
-    fetchFairStatus()
-    fetchSchedules()
-  }, [navigate, user?.role, user?.uid, fetchFairStatus, fetchSchedules])
+    void Promise.all([fetchFairStatus(), fetchSchedules(), fetchBoothAnalytics()])
+  }, [navigate, user?.role, user?.uid, fetchFairStatus, fetchSchedules, fetchBoothAnalytics])
 
   const handleToggleLiveStatus = async () => {
     if (!user?.uid) {
@@ -301,7 +324,7 @@ export default function AdminDashboard() {
       return
     }
 
-    if (!window.confirm("Are you sure you want to delete this career fair schedule?")) {
+    if (!globalThis.confirm("Are you sure you want to delete this career fair schedule?")) {
       return
     }
 
@@ -352,6 +375,10 @@ export default function AdminDashboard() {
       </Box>
     )
   }
+
+  let scheduleButtonLabel = "Schedule Career Fair"
+  if (savingSchedule) scheduleButtonLabel = "Saving..."
+  else if (editingSchedule) scheduleButtonLabel = "Update Schedule"
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
@@ -509,11 +536,12 @@ export default function AdminDashboard() {
               </Button>
             </Box>
 
-            {loadingSchedules ? (
+            {loadingSchedules && (
               <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                 <CircularProgress />
               </Box>
-            ) : schedules.length === 0 ? (
+            )}
+            {!loadingSchedules && schedules.length === 0 && (
               <Box sx={{ textAlign: "center", py: 4 }}>
                 <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
                   No career fairs scheduled yet. Schedule your first career fair to get started.
@@ -534,7 +562,8 @@ export default function AdminDashboard() {
                   Schedule Career Fair
                 </Button>
               </Box>
-            ) : (
+            )}
+            {!loadingSchedules && schedules.length > 0 && (
               <TableContainer component={Paper} variant="outlined">
                 <Table>
                   <TableHead>
@@ -549,6 +578,9 @@ export default function AdminDashboard() {
                   <TableBody>
                     {schedules.map((schedule) => {
                       const status = getScheduleStatus(schedule)
+                      let chipColor: "success" | "primary" | "default" = "default"
+                      if (status?.type === "active") chipColor = "success"
+                      else if (status?.type === "upcoming") chipColor = "primary"
                       return (
                         <TableRow key={schedule.id}>
                           <TableCell>
@@ -568,13 +600,7 @@ export default function AdminDashboard() {
                               <Chip
                                 label={status.label}
                                 size="small"
-                                color={
-                                  status.type === "active"
-                                    ? "success"
-                                    : status.type === "upcoming"
-                                    ? "primary"
-                                    : "default"
-                                }
+                                color={chipColor}
                               />
                             ) : (
                               <Chip label="No Status" size="small" color="default" />
@@ -645,12 +671,7 @@ export default function AdminDashboard() {
                     type="datetime-local"
                     value={scheduleForm.startTime}
                     onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    inputProps={{
-                      min: new Date().toISOString().slice(0, 16),
-                    }}
+                    slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: new Date().toISOString().slice(0, 16) } }}
                     required
                   />
                 </Grid>
@@ -661,12 +682,7 @@ export default function AdminDashboard() {
                     type="datetime-local"
                     value={scheduleForm.endTime}
                     onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    inputProps={{
-                      min: scheduleForm.startTime || new Date().toISOString().slice(0, 16),
-                    }}
+                    slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: scheduleForm.startTime || new Date().toISOString().slice(0, 16) } }}
                     required
                   />
                 </Grid>
@@ -686,10 +702,80 @@ export default function AdminDashboard() {
                 },
               }}
             >
-              {savingSchedule ? "Saving..." : editingSchedule ? "Update Schedule" : "Schedule Career Fair"}
+              {scheduleButtonLabel}
             </Button>
           </DialogActions>
         </Dialog>
+
+        <Card sx={{ border: "1px solid rgba(176, 58, 108, 0.3)", mb: 3 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+              <StarIcon sx={{ fontSize: 40, color: "#b03a6c" }} />
+              <Box>
+                <Typography variant="h5" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
+                  Booth Ratings Analytics
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Average student ratings per employer booth
+                </Typography>
+              </Box>
+            </Box>
+
+            {loadingAnalytics && (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+                <CircularProgress />
+              </Box>
+            )}
+            {!loadingAnalytics && boothAnalytics.length === 0 && (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <Typography variant="body1" color="text.secondary">
+                  No booth ratings submitted yet.
+                </Typography>
+              </Box>
+            )}
+            {!loadingAnalytics && boothAnalytics.length > 0 && (
+              <TableContainer component={Paper} variant="outlined">
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 600 }}>Company</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Average Rating</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Total Ratings</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {boothAnalytics.map((row) => (
+                      <TableRow key={row.boothId}>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {row.companyName || "Unknown Company"}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <Rating
+                              value={row.averageRating}
+                              precision={0.1}
+                              readOnly
+                              size="small"
+                              sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }}
+                            />
+                            <Typography variant="body2" color="text.secondary">
+                              {row.averageRating.toFixed(1)}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{row.totalRatings}</Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </CardContent>
+        </Card>
 
         <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
           <CardContent sx={{ p: 4 }}>

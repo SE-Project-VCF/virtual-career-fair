@@ -1,4 +1,4 @@
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 const admin = require("firebase-admin");
 const { db } = require("./firebase");
 
@@ -33,8 +33,8 @@ function parseUTCToTimestamp(dateTimeString) {
     date = new Date(dateTimeString);
   }
 
-  if (isNaN(date.getTime())) {
-    throw new Error(`Invalid date string: ${dateTimeString}`);
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError(`Invalid date string: ${dateTimeString}`);
   }
 
   return admin.firestore.Timestamp.fromMillis(date.getTime());

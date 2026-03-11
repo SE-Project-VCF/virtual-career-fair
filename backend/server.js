@@ -32,11 +32,13 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // CORS configuration - allow multiple origins
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://virtual-career-fair-git-dev-ninapellis-projects.vercel.app",
-  process.env.FRONTEND_URL, // Allow custom frontend URL from env
-].filter(Boolean); // Remove any undefined values
+const allowedOrigins = new Set(
+  [
+    "http://localhost:5173",
+    "https://virtual-career-fair-git-dev-ninapellis-projects.vercel.app",
+    process.env.FRONTEND_URL, // Allow custom frontend URL from env
+  ].filter(Boolean)
+);
 
 app.use(
   cors({
@@ -45,7 +47,7 @@ app.use(
       if (!origin) return callback(null, true);
 
       // Check if origin is in allowed list
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      if (allowedOrigins.has(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
@@ -54,6 +56,7 @@ app.use(
     credentials: true,
   })
 );
+app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
 
 // Rate limiting: per-IP. Higher limit when not production (dev or NODE_ENV unset) to avoid 429s from polling and booth/dashboard loads.
@@ -73,7 +76,7 @@ if (process.env.NODE_ENV !== "test") {
 ---------------------------------------------------- */
 async function verifyFirebaseToken(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing or invalid Authorization header" });
   }
 
@@ -166,9 +169,9 @@ app.post("/api/sync-stream-user", verifyFirebaseToken, async (req, res) => {
     }
 
     const username =
-      email && email.includes("@")
+      email?.includes("@")
         ? email.split("@")[0]
-        : email || uid;
+        : email ?? uid;
 
     await streamServer.upsertUser({
       id: uid,
@@ -314,9 +317,9 @@ app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
 
     for (const u of users) {
       const username =
-        u.email && u.email.includes("@")
+        u.email?.includes("@")
           ? u.email.split("@")[0]
-          : u.email || "";
+          : u.email ?? "";
 
       await streamServer.upsertUser({
         id: u.uid,
@@ -349,69 +352,26 @@ app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
 /* ----------------------------------------------------
    ADD JOB
 ---------------------------------------------------- */
+function validateJobFields({ companyId, name, description, majorsAssociated, applicationLink }) {
+  if (!companyId) return { status: 400, error: "Company ID is required" };
+  if (!name?.trim()) return { status: 400, error: "Job title is required" };
+  if (name.trim().length > 200) return { status: 400, error: "Job title must be 200 characters or less" };
+  if (!description?.trim()) return { status: 400, error: "Job description is required" };
+  if (description.trim().length > 5000) return { status: 400, error: "Job description must be 5000 characters or less" };
+  if (!majorsAssociated?.trim()) return { status: 400, error: "Skills are required" };
+  if (majorsAssociated.trim().length > 500) return { status: 400, error: "Skills must be 500 characters or less" };
+  if (applicationLink?.trim()) {
+    try { new URL(applicationLink.trim()); } catch { return { status: 400, error: "Invalid application URL format" }; }
+  }
+  return null;
+}
+
 app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
   try {
-    const {
-      companyId,
-      name,
-      description,
-      majorsAssociated,
-      applicationLink,
-    } = req.body;
+    const { companyId, name, description, majorsAssociated, applicationLink } = req.body;
 
-    // Validate required fields
-    if (!companyId) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Company ID is required" });
-    }
-
-    if (!name || !name.trim()) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job title is required" });
-    }
-
-    if (name.trim().length > 200) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job title must be 200 characters or less" });
-    }
-
-    if (!description || !description.trim()) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job description is required" });
-    }
-
-    if (description.trim().length > 5000) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Job description must be 5000 characters or less" });
-    }
-
-    if (!majorsAssociated || !majorsAssociated.trim()) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Skills are required" });
-    }
-
-    if (majorsAssociated.trim().length > 500) {
-      return res
-        .status(400)
-        .send({ success: false, error: "Skills must be 500 characters or less" });
-    }
-
-    // Validate application link format if provided
-    if (applicationLink && applicationLink.trim()) {
-      try {
-        new URL(applicationLink.trim());
-      } catch (e) {
-        return res
-          .status(400)
-          .send({ success: false, error: "Invalid application URL format" });
-      }
-    }
+    const validationErr = validateJobFields(req.body);
+    if (validationErr) return res.status(validationErr.status).send({ success: false, error: validationErr.error });
 
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) {
@@ -428,10 +388,10 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
     }
 
     // Sanitize inputs (trim and remove null bytes)
-    const sanitizedName = name.trim().replace(/\0/g, '');
-    const sanitizedDescription = description.trim().replace(/\0/g, '');
-    const sanitizedMajors = majorsAssociated.trim().replace(/\0/g, '');
-    const sanitizedAppLink = applicationLink && applicationLink.trim() ? applicationLink.trim().replace(/\0/g, '') : undefined;
+    const sanitizedName = name.trim().replaceAll('\0', '');
+    const sanitizedDescription = description.trim().replaceAll('\0', '');
+    const sanitizedMajors = majorsAssociated.trim().replaceAll('\0', '');
+    const sanitizedAppLink = applicationLink?.trim() ? applicationLink.trim().replaceAll('\0', '') : undefined;
 
     const jobRef = await db.collection("jobs").add(
       removeUndefined({
@@ -506,23 +466,23 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
     const { name, description, majorsAssociated, applicationLink } = req.body;
 
     // Validate required fields
-    if (!name || !name.trim()) {
+    if (!name?.trim()) {
       return res.status(400).json({ success: false, error: "Job title is required" });
     }
 
-    if (!description || !description.trim()) {
+    if (!description?.trim()) {
       return res.status(400).json({ success: false, error: "Job description is required" });
     }
 
-    if (!majorsAssociated || !majorsAssociated.trim()) {
+    if (!majorsAssociated?.trim()) {
       return res.status(400).json({ success: false, error: "Skills are required" });
     }
 
     // Validate application link format if provided
-    if (applicationLink && applicationLink.trim()) {
+    if (applicationLink?.trim()) {
       try {
         new URL(applicationLink.trim());
-      } catch (e) {
+      } catch {
         return res.status(400).json({ success: false, error: "Invalid application URL format" });
       }
     }
@@ -550,7 +510,7 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
         name: name.trim(),
         description: description.trim(),
         majorsAssociated: majorsAssociated.trim(),
-        applicationLink: applicationLink && applicationLink.trim() ? applicationLink.trim() : null,
+        applicationLink: applicationLink?.trim() ? applicationLink.trim() : null,
         updatedAt: admin.firestore.Timestamp.now(),
       })
     );
@@ -692,13 +652,10 @@ app.post("/api/job-invitations/send", async (req, res) => {
     const batch = db.batch();
     const invitationIds = [];
 
-    console.log(`Creating ${studentIds.length} job invitation(s) for job ${jobId}`);
-    console.log(`Sent by user ${userId} from company ${companyId}`);
-
     for (const studentId of studentIds) {
       const invitationRef = db.collection("jobInvitations").doc();
       invitationIds.push(invitationRef.id);
-      
+
       const invitationData = removeUndefined({
         jobId,
         companyId,
@@ -710,76 +667,11 @@ app.post("/api/job-invitations/send", async (req, res) => {
         message: message || undefined,
       });
 
-      console.log(`Creating invitation ${invitationRef.id} for student ${studentId}:`, invitationData);
-      
       batch.set(invitationRef, invitationData);
     }
 
     await batch.commit();
-    console.log(`Successfully created ${invitationIds.length} invitation(s)`);
 
-    // Chat invitations are no longer supported - invitations are only sent via dashboard notifications
-    // The code below is kept for reference but will not be executed
-    if (sentVia === "chat") {
-      try {
-        // Get sender details
-        const senderDoc = await db.collection("users").doc(userId).get();
-        const senderData = senderDoc.data();
-        const senderName = `${senderData.firstName || ""} ${senderData.lastName || ""}`.trim() || "Representative";
-
-        // Get company details
-        const companyDoc = await db.collection("companies").doc(companyId).get();
-        const companyName = companyDoc.exists ? companyDoc.data().companyName : "Our Company";
-
-        // Send a chat message to each student
-        for (const studentId of studentIds) {
-          try {
-            // Create or get 1-on-1 channel between sender and student
-            const channelId = [userId, studentId].sort().join("-");
-            const channel = streamServer.channel("messaging", channelId, {
-              members: [userId, studentId],
-              created_by_id: userId,
-            });
-
-            await channel.create();
-
-            // Send the job invitation message
-            const messageText = message 
-              ? `🎯 **Job Opportunity: ${jobData.name}**\n\n${companyName} has invited you to apply for this position!\n\n"${message}"\n\n👉 View details and apply: [Click here to view invitation]`
-              : `🎯 **Job Opportunity: ${jobData.name}**\n\n${companyName} has invited you to apply for this position!\n\n👉 View details and apply: [Click here to view invitation]`;
-
-            await channel.sendMessage({
-              text: messageText,
-              user_id: userId,
-              attachments: [{
-                type: "job_invitation",
-                title: jobData.name,
-                title_link: `/dashboard/job-invitations`,
-                text: jobData.description.substring(0, 200) + (jobData.description.length > 200 ? "..." : ""),
-                fields: [
-                  {
-                    title: "Company",
-                    value: companyName,
-                    short: true,
-                  },
-                  {
-                    title: "Skills Required",
-                    value: jobData.majorsAssociated,
-                    short: true,
-                  }
-                ],
-              }],
-            });
-          } catch (chatErr) {
-            console.error(`Failed to send chat message to student ${studentId}:`, chatErr);
-            // Continue with other students even if one fails
-          }
-        }
-      } catch (chatErr) {
-        console.error("Error sending chat messages:", chatErr);
-        // Don't fail the entire request if chat fails, invitations are still created
-      }
-    }
 
     return res.json({
       success: true,
@@ -795,121 +687,68 @@ app.post("/api/job-invitations/send", async (req, res) => {
 /* ----------------------------------------------------
    GET INVITATIONS RECEIVED BY A STUDENT
 ---------------------------------------------------- */
+async function enrichReceivedInvitation(doc) {
+  const invData = doc.data();
+  let jobDetails = null;
+  try {
+    const jobDoc = await db.collection("jobs").doc(invData.jobId).get();
+    if (jobDoc.exists) {
+      const jobData = jobDoc.data();
+      jobDetails = { id: jobDoc.id, name: jobData.name, description: jobData.description, majorsAssociated: jobData.majorsAssociated, applicationLink: jobData.applicationLink || null };
+    }
+  } catch (err) { console.error("Error fetching job:", err); }
+
+  let companyDetails = null;
+  try {
+    const companyDoc = await db.collection("companies").doc(invData.companyId).get();
+    if (companyDoc.exists) {
+      const companyData = companyDoc.data();
+      companyDetails = { id: companyDoc.id, companyName: companyData.companyName, boothId: companyData.boothId || null };
+    }
+  } catch (err) { console.error("Error fetching company:", err); }
+
+  let senderDetails = null;
+  try {
+    const senderDoc = await db.collection("users").doc(invData.sentBy).get();
+    if (senderDoc.exists) {
+      const senderData = senderDoc.data();
+      senderDetails = { id: senderDoc.id, firstName: senderData.firstName, lastName: senderData.lastName, email: senderData.email };
+    }
+  } catch (err) { console.error("Error fetching sender:", err); }
+
+  return {
+    id: doc.id, jobId: invData.jobId, companyId: invData.companyId, studentId: invData.studentId,
+    sentBy: invData.sentBy, sentVia: invData.sentVia, status: invData.status,
+    sentAt: invData.sentAt ? invData.sentAt.toMillis() : null,
+    viewedAt: invData.viewedAt ? invData.viewedAt.toMillis() : null,
+    clickedAt: invData.clickedAt ? invData.clickedAt.toMillis() : null,
+    message: invData.message || null, job: jobDetails, company: companyDetails, sender: senderDetails,
+  };
+}
+
+function compareInvitationsByDate(a, b) {
+  return (b.sentAt || 0) - (a.sentAt || 0);
+}
+
 app.get("/api/job-invitations/received", async (req, res) => {
   try {
     const { userId, status } = req.query;
 
-    console.log(`Fetching job invitations for student ${userId}`);
+    if (!userId) return res.status(400).json({ error: "User ID is required" });
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
-
-    // Verify user exists and is a student
     const userDoc = await db.collection("users").doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
 
     const userData = userDoc.data();
-    if (userData.role !== "student") {
-      return res.status(403).json({ error: "Only students can view received invitations" });
-    }
+    if (userData.role !== "student") return res.status(403).json({ error: "Only students can view received invitations" });
 
-    // Build query (without orderBy to avoid needing a composite index)
     let query = db.collection("jobInvitations").where("studentId", "==", userId);
-    
-    if (status) {
-      query = query.where("status", "==", status);
-    }
+    if (status) query = query.where("status", "==", status);
 
     const invitationsSnapshot = await query.get();
-    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student ${userId}`);
+    const invitations = await Promise.all(invitationsSnapshot.docs.map(enrichReceivedInvitation));
+    invitations.sort(compareInvitationsByDate);
 
-    // Get job and company details for each invitation
-    const invitations = await Promise.all(
-      invitationsSnapshot.docs.map(async (doc) => {
-        const invData = doc.data();
-        
-        // Get job details
-        let jobDetails = null;
-        try {
-          const jobDoc = await db.collection("jobs").doc(invData.jobId).get();
-          if (jobDoc.exists) {
-            const jobData = jobDoc.data();
-            jobDetails = {
-              id: jobDoc.id,
-              name: jobData.name,
-              description: jobData.description,
-              majorsAssociated: jobData.majorsAssociated,
-              applicationLink: jobData.applicationLink || null,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching job ${invData.jobId}:`, err);
-        }
-
-        // Get company details
-        let companyDetails = null;
-        try {
-          const companyDoc = await db.collection("companies").doc(invData.companyId).get();
-          if (companyDoc.exists) {
-            const companyData = companyDoc.data();
-            companyDetails = {
-              id: companyDoc.id,
-              companyName: companyData.companyName,
-              boothId: companyData.boothId || null,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching company ${invData.companyId}:`, err);
-        }
-
-        // Get sender details
-        let senderDetails = null;
-        try {
-          const senderDoc = await db.collection("users").doc(invData.sentBy).get();
-          if (senderDoc.exists) {
-            const senderData = senderDoc.data();
-            senderDetails = {
-              id: senderDoc.id,
-              firstName: senderData.firstName,
-              lastName: senderData.lastName,
-              email: senderData.email,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching sender ${invData.sentBy}:`, err);
-        }
-
-        return {
-          id: doc.id,
-          jobId: invData.jobId,
-          companyId: invData.companyId,
-          studentId: invData.studentId,
-          sentBy: invData.sentBy,
-          sentVia: invData.sentVia,
-          status: invData.status,
-          sentAt: invData.sentAt ? invData.sentAt.toMillis() : null,
-          viewedAt: invData.viewedAt ? invData.viewedAt.toMillis() : null,
-          clickedAt: invData.clickedAt ? invData.clickedAt.toMillis() : null,
-          message: invData.message || null,
-          job: jobDetails,
-          company: companyDetails,
-          sender: senderDetails,
-        };
-      })
-    );
-
-    // Sort invitations by sentAt descending (newest first) in memory
-    invitations.sort((a, b) => {
-      if (!a.sentAt && !b.sentAt) return 0;
-      if (!a.sentAt) return 1;
-      if (!b.sentAt) return -1;
-      return b.sentAt - a.sentAt;
-    });
-
-    console.log(`Returning ${invitations.length} invitation(s) with full details`);
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching received invitations:", err);
@@ -963,7 +802,7 @@ app.get("/api/job-invitations/sent", async (req, res) => {
             };
           }
         } catch (err) {
-          console.error(`Error fetching student ${invData.studentId}:`, err);
+          console.error("Error fetching student:", err);
         }
 
         // Get job details
@@ -978,7 +817,7 @@ app.get("/api/job-invitations/sent", async (req, res) => {
             };
           }
         } catch (err) {
-          console.error(`Error fetching job ${invData.jobId}:`, err);
+          console.error("Error fetching job:", err);
         }
 
         return {
@@ -1062,93 +901,48 @@ app.patch("/api/job-invitations/:id/status", async (req, res) => {
 /* ----------------------------------------------------
    GET LIST OF STUDENTS (for invitation UI)
 ---------------------------------------------------- */
+function toStudentSummary(doc) {
+  const data = doc.data();
+  return { id: doc.id, firstName: data.firstName || "", lastName: data.lastName || "", email: data.email || "", major: data.major || "" };
+}
+
+async function fetchStudentsByBooth(boothId) {
+  const studentsSnapshot = await db.collection("users").where("role", "==", "student").get();
+  const results = await Promise.all(
+    studentsSnapshot.docs.map(async (studentDoc) => {
+      const visited = await db.collection("users").doc(studentDoc.id).collection("boothHistory").doc(boothId).get();
+      return visited.exists ? toStudentSummary(studentDoc) : null;
+    })
+  );
+  return results.filter(Boolean);
+}
+
 app.get("/api/students", async (req, res) => {
   try {
     const { userId, search, major, boothId } = req.query;
 
-    if (!userId) {
-      return res.status(400).json({ error: "User ID is required" });
-    }
+    if (!userId) return res.status(400).json({ error: "User ID is required" });
 
-    // Verify user is representative, company owner, or admin
     const authCheck = await verifyRepOrOwner(userId, null);
-    if (authCheck) {
-      return res.status(authCheck.status).json({ error: authCheck.error });
-    }
+    if (authCheck) return res.status(authCheck.status).json({ error: authCheck.error });
 
-    let students = [];
+    let students = boothId
+      ? await fetchStudentsByBooth(boothId)
+      : (await db.collection("users").where("role", "==", "student").get()).docs.map(toStudentSummary);
 
-    if (boothId) {
-      // Find students who visited this specific booth
-      console.log(`Filtering students who visited booth: ${boothId}`);
-      
-      // Get all students first
-      const allStudentsQuery = db.collection("users").where("role", "==", "student");
-      const studentsSnapshot = await allStudentsQuery.get();
-      
-      // Check each student to see if they have a boothHistory document for this booth
-      const studentPromises = studentsSnapshot.docs.map(async (studentDoc) => {
-        const studentData = studentDoc.data();
-        
-        // Check if this student has visited the booth
-        const boothHistoryDoc = await db.collection("users")
-          .doc(studentDoc.id)
-          .collection("boothHistory")
-          .doc(boothId)
-          .get();
-        
-        if (boothHistoryDoc.exists) {
-          return {
-            id: studentDoc.id,
-            firstName: studentData.firstName || "",
-            lastName: studentData.lastName || "",
-            email: studentData.email || "",
-            major: studentData.major || "",
-          };
-        }
-        return null;
-      });
-      
-      students = (await Promise.all(studentPromises)).filter(s => s !== null);
-      console.log(`Found ${students.length} students who visited booth ${boothId}`);
-    } else {
-      // Get all students (existing logic)
-      let query = db.collection("users").where("role", "==", "student");
-      const studentsSnapshot = await query.get();
-
-      students = studentsSnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          firstName: data.firstName || "",
-          lastName: data.lastName || "",
-          email: data.email || "",
-          major: data.major || "",
-        };
-      });
-    }
-
-    // Apply search filter if provided
-    if (search && search.trim()) {
+    if (search?.trim()) {
       const searchLower = search.toLowerCase().trim();
-      students = students.filter((student) => {
-        const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
-        return (
-          fullName.includes(searchLower) ||
-          student.email.toLowerCase().includes(searchLower)
-        );
+      students = students.filter((s) => {
+        const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
+        return fullName.includes(searchLower) || s.email.toLowerCase().includes(searchLower);
       });
     }
 
-    // Apply major filter if provided
-    if (major && major.trim()) {
+    if (major?.trim()) {
       const majorLower = major.toLowerCase().trim();
-      students = students.filter((student) =>
-        student.major.toLowerCase().includes(majorLower)
-      );
+      students = students.filter((s) => s.major.toLowerCase().includes(majorLower));
     }
 
-    console.log(`Returning ${students.length} students`);
     return res.json({ students });
   } catch (err) {
     console.error("Error fetching students:", err);
@@ -1264,7 +1058,7 @@ app.get("/api/job-invitations/details/:jobId", async (req, res) => {
             };
           }
         } catch (err) {
-          console.error(`Error fetching student ${invData.studentId}:`, err);
+          console.error("Error fetching student:", err);
         }
 
         return {
@@ -1343,9 +1137,9 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
     }
 
     // Sanitize text inputs (trim whitespace, remove null bytes)
-    const sanitizedBoothName = boothName ? boothName.trim().replace(/\0/g, '') : boothName;
-    const sanitizedLocation = location ? location.trim().replace(/\0/g, '') : location;
-    const sanitizedDescription = description ? description.trim().replace(/\0/g, '') : description;
+    const sanitizedBoothName = boothName ? boothName.trim().replaceAll('\0', '') : boothName;
+    const sanitizedLocation = location ? location.trim().replaceAll('\0', '') : location;
+    const sanitizedDescription = description ? description.trim().replaceAll('\0', '') : description;
 
     const boothRef = await db.collection("booths").add(
       removeUndefined({
@@ -1366,6 +1160,145 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   BOOTH RATINGS
+---------------------------------------------------- */
+
+// POST /api/booths/:boothId/ratings — student submits a rating
+app.post("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const { rating, comment } = req.body;
+    const studentId = req.user.uid;
+
+    // Validate rating
+    if (rating === undefined || rating === null) {
+      return res.status(400).json({ success: false, error: "Rating is required" });
+    }
+    const ratingNum = Number(rating);
+    if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+      return res.status(400).json({ success: false, error: "Rating must be an integer between 1 and 5" });
+    }
+    if (comment && comment.length > 1000) {
+      return res.status(400).json({ success: false, error: "Comment must be 1000 characters or less" });
+    }
+
+    // Verify user and booth in parallel
+    const [userDoc, boothDoc] = await Promise.all([
+      db.collection("users").doc(studentId).get(),
+      db.collection("booths").doc(boothId).get(),
+    ]);
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+    if (userDoc.data().role !== "student") {
+      return res.status(403).json({ success: false, error: "Only students can rate booths" });
+    }
+    if (!boothDoc.exists) {
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+    const companyName = boothDoc.data().companyName || "";
+
+    // Enforce one rating per student per booth
+    const existing = await db.collection("boothRatings")
+      .where("boothId", "==", boothId)
+      .where("studentId", "==", studentId)
+      .get();
+    if (!existing.empty) {
+      return res.status(409).json({ success: false, error: "You have already rated this booth" });
+    }
+
+    const sanitizedComment = comment ? comment.trim().replaceAll("\0", "") : null;
+    const ratingRef = await db.collection("boothRatings").add(
+      removeUndefined({
+        boothId,
+        studentId,
+        rating: ratingNum,
+        comment: sanitizedComment,
+        companyName,
+        createdAt: admin.firestore.Timestamp.now(),
+      })
+    );
+
+    res.json({ success: true, ratingId: ratingRef.id });
+  } catch (err) {
+    console.error("Error submitting booth rating:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/booths/:boothId/ratings — admin fetches ratings for a booth
+app.get("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => {
+  try {
+    const adminErr = await verifyAdmin(req.user.uid);
+    if (adminErr) {
+      return res.status(adminErr.status).json({ error: adminErr.error });
+    }
+
+    const { boothId } = req.params;
+    const snapshot = await db.collection("boothRatings")
+      .where("boothId", "==", boothId)
+      .get();
+
+    const ratings = [];
+    let sum = 0;
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      ratings.push({
+        id: doc.id,
+        studentId: data.studentId,
+        rating: data.rating,
+        comment: data.comment || null,
+        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+      });
+      sum += data.rating;
+    });
+
+    const averageRating = ratings.length > 0 ? Math.round((sum / ratings.length) * 10) / 10 : null;
+    res.json({ ratings, averageRating, totalCount: ratings.length });
+  } catch (err) {
+    console.error("Error fetching booth ratings:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/booth-ratings/analytics — admin fetches avg ratings across all booths
+app.get("/api/booth-ratings/analytics", verifyFirebaseToken, async (req, res) => {
+  try {
+    const adminErr = await verifyAdmin(req.user.uid);
+    if (adminErr) {
+      return res.status(adminErr.status).json({ error: adminErr.error });
+    }
+
+    const snapshot = await db.collection("boothRatings").get();
+
+    // Group by boothId
+    const grouped = {};
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if (!grouped[data.boothId]) {
+        grouped[data.boothId] = { boothId: data.boothId, companyName: data.companyName || "", sum: 0, count: 0 };
+      }
+      grouped[data.boothId].sum += data.rating;
+      grouped[data.boothId].count += 1;
+    });
+
+    const analytics = Object.values(grouped).map(({ boothId, companyName, sum, count }) => ({
+      boothId,
+      companyName,
+      averageRating: Math.round((sum / count) * 10) / 10,
+      totalRatings: count,
+    }));
+
+    analytics.sort((a, b) => b.averageRating - a.averageRating);
+    res.json({ analytics });
+  } catch (err) {
+    console.error("Error fetching booth ratings analytics:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
    HELPER: Evaluate if fair should be live based on schedules
    Checks all schedules - fair is live if ANY schedule is active
 ---------------------------------------------------- */
@@ -1380,20 +1313,19 @@ async function evaluateFairStatus() {
     for (const scheduleDoc of schedulesSnapshot.docs) {
       const scheduleData = scheduleDoc.data();
       
-      if (scheduleData.startTime && scheduleData.endTime) {
-        const startTime = scheduleData.startTime;
-        const endTime = scheduleData.endTime;
-        
-        // Check if current time is within this schedule's range
-        if (now.toMillis() >= startTime.toMillis() && now.toMillis() <= endTime.toMillis()) {
-          return { 
-            isLive: true, 
-            source: "schedule",
-            activeScheduleId: scheduleDoc.id,
-            activeScheduleName: scheduleData.name || null,
-            activeScheduleDescription: scheduleData.description || null
-          };
-        }
+      const { startTime, endTime } = scheduleData;
+      if (
+        startTime && endTime
+        && now.toMillis() >= startTime.toMillis()
+        && now.toMillis() <= endTime.toMillis()
+      ) {
+        return {
+          isLive: true,
+          source: "schedule",
+          activeScheduleId: scheduleDoc.id,
+          activeScheduleName: scheduleData.name || null,
+          activeScheduleDescription: scheduleData.description || null,
+        };
       }
     }
     
@@ -1562,7 +1494,7 @@ app.get("/api/public/fair-schedules", async (req, res) => {
 ---------------------------------------------------- */
 app.post("/api/fair-schedules", async (req, res) => {
   try {
-    const { userId, name, startTime, endTime, description, enabled } = req.body;
+    const { userId, name, startTime, endTime, description } = req.body;
 
     const adminCheck = await verifyAdmin(userId);
     if (adminCheck) {
@@ -1576,7 +1508,6 @@ app.post("/api/fair-schedules", async (req, res) => {
     // Parse dates as UTC to ensure consistent storage
     const start = parseUTCToTimestamp(startTime);
     const end = parseUTCToTimestamp(endTime);
-    const now = admin.firestore.Timestamp.now();
 
     if (end.toMillis() <= start.toMillis()) {
       return res.status(400).json({ error: "End time must be after start time" });
@@ -1615,53 +1546,34 @@ app.post("/api/fair-schedules", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
+function resolveScheduleTimes({ startTime, endTime }, existingData) {
+  if (startTime === undefined && endTime === undefined) return null;
+  const start = startTime === undefined ? existingData.startTime : parseUTCToTimestamp(startTime);
+  const end = endTime === undefined ? existingData.endTime : parseUTCToTimestamp(endTime);
+  if (!start || !end) return { error: "Both start time and end time are required", status: 400 };
+  if (end.toMillis() <= start.toMillis()) return { error: "End time must be after start time", status: 400 };
+  return { start, end };
+}
+
 app.put("/api/fair-schedules/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, name, startTime, endTime, description } = req.body;
 
     const adminCheck = await verifyAdmin(userId);
-    if (adminCheck) {
-      return res.status(adminCheck.status).json({ error: adminCheck.error });
-    }
+    if (adminCheck) return res.status(adminCheck.status).json({ error: adminCheck.error });
 
     const scheduleRef = db.collection("fairSchedules").doc(id);
     const scheduleDoc = await scheduleRef.get();
+    if (!scheduleDoc.exists) return res.status(404).json({ error: "Schedule not found" });
 
-    if (!scheduleDoc.exists) {
-      return res.status(404).json({ error: "Schedule not found" });
-    }
-
-    const updateData = {
-      updatedAt: admin.firestore.Timestamp.now(),
-      updatedBy: userId,
-    };
-
-    // Update fields if provided
+    const updateData = { updatedAt: admin.firestore.Timestamp.now(), updatedBy: userId };
     if (name !== undefined) updateData.name = name || null;
     if (description !== undefined) updateData.description = description || null;
 
-    if (startTime !== undefined || endTime !== undefined) {
-      // Get existing times if not provided
-      const existingData = scheduleDoc.data();
-      const start = startTime !== undefined 
-        ? parseUTCToTimestamp(startTime)
-        : existingData.startTime;
-      const end = endTime !== undefined 
-        ? parseUTCToTimestamp(endTime)
-        : existingData.endTime;
-
-      if (!start || !end) {
-        return res.status(400).json({ error: "Both start time and end time are required" });
-      }
-
-      if (end.toMillis() <= start.toMillis()) {
-        return res.status(400).json({ error: "End time must be after start time" });
-      }
-
-      updateData.startTime = start;
-      updateData.endTime = end;
-    }
+    const times = resolveScheduleTimes({ startTime, endTime }, scheduleDoc.data());
+    if (times?.error) return res.status(times.status).json({ error: times.error });
+    if (times) { updateData.startTime = times.start; updateData.endTime = times.end; }
 
     await scheduleRef.update(updateData);
 
@@ -1790,103 +1702,74 @@ app.post("/api/update-invite-code", async (req, res) => {
 /* ----------------------------------------------------
    CREATE ADMIN ACCOUNT (Protected - requires secret key)
 ---------------------------------------------------- */
+// Returns { upgraded: true, uid } if user already existed and was upgraded,
+// { userRecord } if user was found but not yet in Firestore,
+// or null if user doesn't exist yet.
+async function findOrUpgradeExistingUser(email, res) {
+  let userRecord;
+  try {
+    userRecord = await auth.getUserByEmail(email);
+  } catch (err) {
+    if (err.code === "auth/user-not-found") return null;
+    throw err;
+  }
+  const userDoc = await db.collection("users").doc(userRecord.uid).get();
+  if (userDoc.exists && userDoc.data().role === "administrator") {
+    res.status(400).json({ error: "User is already an administrator" });
+    return { alreadyHandled: true };
+  }
+  if (userDoc.exists) {
+    await db.collection("users").doc(userRecord.uid).update({ role: "administrator" });
+    res.json({ success: true, message: "User upgraded to administrator", uid: userRecord.uid });
+    return { alreadyHandled: true };
+  }
+  return { userRecord };
+}
+
+async function upsertAdminToStream(userRecord, { firstName, lastName, email }) {
+  try {
+    const username = email.includes("@") ? email.split("@")[0] : email;
+    await streamServer.upsertUser({
+      id: userRecord.uid,
+      name: `${firstName || ""} ${lastName || ""}`.trim() || email,
+      email, username, firstName: firstName || "", lastName: lastName || "", role: "user",
+    });
+  } catch (streamErr) {
+    console.error("STREAM UPSERT ERROR:", streamErr);
+  }
+}
+
 app.post("/api/create-admin", async (req, res) => {
   try {
     const { firstName, lastName, email, password, adminSecret } = req.body;
 
-    if (!email || !password || !adminSecret) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
+    if (!email || !password || !adminSecret) return res.status(400).json({ error: "Missing required fields" });
 
-    // Verify admin secret key
     const expectedSecret = process.env.ADMIN_SECRET_KEY;
     if (!expectedSecret) {
       console.error("ADMIN_SECRET_KEY not set in environment variables");
       return res.status(500).json({ error: "Server configuration error" });
     }
 
-    if (adminSecret !== expectedSecret) {
-      return res.status(403).json({ error: "Invalid admin secret key" });
-    }
+    if (adminSecret !== expectedSecret) return res.status(403).json({ error: "Invalid admin secret key" });
 
-    // Check if user already exists
-    let userRecord;
-    try {
-      userRecord = await auth.getUserByEmail(email);
-      // User exists, check if they're already an admin
-      const userDoc = await db.collection("users").doc(userRecord.uid).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        if (userData.role === "administrator") {
-          return res.status(400).json({ error: "User is already an administrator" });
-        }
-        // Update existing user to admin
-        await db.collection("users").doc(userRecord.uid).update({
-          role: "administrator",
-        });
-        return res.json({ 
-          success: true, 
-          message: "User upgraded to administrator",
-          uid: userRecord.uid 
-        });
-      }
-    } catch (err) {
-      if (err.code !== "auth/user-not-found") {
-        throw err;
-      }
-      // User doesn't exist, create new one
-    }
+    const existing = await findOrUpgradeExistingUser(email, res);
+    if (existing?.alreadyHandled) return;
 
-    // Create new Firebase Auth user
-    if (!userRecord) {
-      userRecord = await auth.createUser({
-        email,
-        password,
-        displayName: `${firstName || ""} ${lastName || ""}`.trim(),
-        emailVerified: true, // Auto-verify admin emails
-      });
-    }
-
-    // Save user in Firestore
-    const docData = removeUndefined({
-      uid: userRecord.uid,
-      firstName,
-      lastName,
-      email,
-      role: "administrator",
+    const userRecord = existing?.userRecord ?? await auth.createUser({
+      email, password,
+      displayName: `${firstName || ""} ${lastName || ""}`.trim(),
       emailVerified: true,
-      createdAt: admin.firestore.Timestamp.now(),
     });
 
-    await db.collection("users").doc(userRecord.uid).set(docData, { merge: true });
+    await db.collection("users").doc(userRecord.uid).set(
+      removeUndefined({ uid: userRecord.uid, firstName, lastName, email, role: "administrator", emailVerified: true, createdAt: admin.firestore.Timestamp.now() }),
+      { merge: true }
+    );
 
-    // Upsert to Stream Chat
-    try {
-      const username = email.includes("@")
-        ? email.split("@")[0]
-        : email;
+    await upsertAdminToStream(userRecord, { firstName, lastName, email });
 
-      await streamServer.upsertUser({
-        id: userRecord.uid,
-        name: `${firstName || ""} ${lastName || ""}`.trim() || email,
-        email,
-        username,
-        firstName: firstName || "",
-        lastName: lastName || "",
-        role: "user",
-      });
-    } catch (streamErr) {
-      console.error("STREAM UPSERT ERROR:", streamErr);
-    }
-
-    return res.json({
-      success: true,
-      user: {
-        uid: userRecord.uid,
-        email,
-        role: "administrator",
-      },
-    });
+    return res.json({ success: true, user: { uid: userRecord.uid, email, role: "administrator" } });
   } catch (err) {
     console.error("Error creating admin:", err);
     return res.status(500).json({ error: err.message || "Failed to create admin account" });
