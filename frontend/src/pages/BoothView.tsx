@@ -16,6 +16,10 @@ import {
   Link,
   Rating,
   TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material"
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db, auth } from "../firebase"
@@ -88,8 +92,13 @@ export default function BoothView() {
   const [ratingComment, setRatingComment] = useState("")
   const [submittingRating, setSubmittingRating] = useState(false)
   const [ratingError, setRatingError] = useState("")
-  const [ratingSuccess, setRatingSuccess] = useState(false)
-  const [existingRating, setExistingRating] = useState<number | null>(null)
+  const [myReview, setMyReview] = useState<{ rating: number; comment: string | null; createdAt: number | null } | null>(null)
+  const [loadingMyReview, setLoadingMyReview] = useState(false)
+  const [resubmitOpen, setResubmitOpen] = useState(false)
+  const [resubmitValue, setResubmitValue] = useState<number | null>(null)
+  const [resubmitComment, setResubmitComment] = useState("")
+  const [resubmitError, setResubmitError] = useState("")
+  const [submittingResubmit, setSubmittingResubmit] = useState(false)
 
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
@@ -124,12 +133,38 @@ export default function BoothView() {
         setRatingError(data.error || "Failed to submit rating")
         return
       }
-      setExistingRating(ratingValue)
-      setRatingSuccess(true)
+      setMyReview({ rating: ratingValue!, comment: ratingComment || null, createdAt: Date.now() })
     } catch {
       if (isMountedRef.current) setRatingError("Failed to submit rating")
     } finally {
       if (isMountedRef.current) setSubmittingRating(false)
+    }
+  }
+
+  const handleResubmit = async () => {
+    if (!resubmitValue || !boothId) return
+    try {
+      setSubmittingResubmit(true)
+      setResubmitError("")
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rating: resubmitValue, comment: resubmitComment }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setResubmitError(data.error || "Failed to submit rating")
+        return
+      }
+      setMyReview({ rating: resubmitValue, comment: resubmitComment || null, createdAt: Date.now() })
+      setResubmitOpen(false)
+      setResubmitValue(null)
+      setResubmitComment("")
+    } catch {
+      setResubmitError("Failed to submit rating")
+    } finally {
+      if (isMountedRef.current) setSubmittingResubmit(false)
     }
   }
 
@@ -173,6 +208,28 @@ export default function BoothView() {
     }
     fetchBooth()
   }, [boothId, navigate])
+
+  useEffect(() => {
+    if (!boothId || user?.role !== "student") return
+    const fetchMyReview = async () => {
+      try {
+        setLoadingMyReview(true)
+        const token = await auth.currentUser?.getIdToken()
+        const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (res.ok && data.rating !== null) {
+          setMyReview({ rating: data.rating, comment: data.comment, createdAt: data.createdAt })
+        }
+      } catch {
+        // silently ignore
+      } finally {
+        if (isMountedRef.current) setLoadingMyReview(false)
+      }
+    }
+    fetchMyReview()
+  }, [boothId, user?.role])
 
   const checkBoothAccess = async (targetBoothId: string): Promise<boolean> => {
     if (!user || (user.role !== "companyOwner" && user.role !== "representative")) return false
@@ -660,19 +717,34 @@ export default function BoothView() {
               </CardContent>
             </Card>
 
-            {/* Rate this Booth — students only */}
+            {/* Rate this Booth / Your Review — students only */}
             {user?.role === "student" && (
               <Card sx={{ border: "1px solid rgba(176, 58, 108, 0.3)" }}>
                 <CardContent sx={{ p: 3 }}>
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a" }}>
-                    Rate this Booth
+                    {myReview ? "Your Review" : "Rate this Booth"}
                   </Typography>
-                  {ratingSuccess ? (
+
+                  {loadingMyReview ? (
+                    <CircularProgress size={24} />
+                  ) : myReview ? (
                     <Box>
-                      <Alert severity="success" sx={{ mb: 2 }}>
-                        Thanks for your feedback!
-                      </Alert>
-                      <Rating value={existingRating} readOnly size="large" />
+                      <Rating value={myReview.rating} readOnly size="large" sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }} />
+                      {myReview.comment && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>{myReview.comment}</Typography>
+                      )}
+                      {myReview.createdAt && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                          Submitted {new Date(myReview.createdAt).toLocaleDateString()}
+                        </Typography>
+                      )}
+                      <Button
+                        variant="outlined"
+                        onClick={() => setResubmitOpen(true)}
+                        sx={{ mt: 2, textTransform: "none", borderColor: "#b03a6c", color: "#b03a6c" }}
+                      >
+                        Resubmit Review
+                      </Button>
                     </Box>
                   ) : (
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -716,6 +788,43 @@ export default function BoothView() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Resubmit dialog */}
+            <Dialog open={resubmitOpen} onClose={() => setResubmitOpen(false)} fullWidth maxWidth="sm">
+              <DialogTitle>Resubmit Your Review</DialogTitle>
+              <DialogContent>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+                  <Rating
+                    value={resubmitValue}
+                    onChange={(_, val) => setResubmitValue(val)}
+                    size="large"
+                    sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }}
+                  />
+                  <TextField
+                    label="Comments (optional)"
+                    multiline
+                    rows={3}
+                    value={resubmitComment}
+                    onChange={(e) => setResubmitComment(e.target.value)}
+                    slotProps={{ htmlInput: { maxLength: 1000 } }}
+                    size="small"
+                    fullWidth
+                  />
+                  {resubmitError && <Alert severity="error">{resubmitError}</Alert>}
+                </Box>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setResubmitOpen(false)}>Cancel</Button>
+                <Button
+                  variant="contained"
+                  disabled={!resubmitValue || submittingResubmit}
+                  onClick={handleResubmit}
+                  sx={{ background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)", textTransform: "none" }}
+                >
+                  {submittingResubmit ? "Submitting..." : "Submit New Review"}
+                </Button>
+              </DialogActions>
+            </Dialog>
           </Grid>
         </Grid>
       </Container>
