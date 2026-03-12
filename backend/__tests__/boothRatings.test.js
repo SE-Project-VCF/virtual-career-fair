@@ -24,7 +24,7 @@ jest.mock("stream-chat", () => ({
 }));
 
 jest.mock("../firebase", () => ({
-  db: { collection: jest.fn(), runTransaction: jest.fn() },
+  db: { collection: jest.fn(), runTransaction: jest.fn(), collectionGroup: jest.fn() },
   auth: {
     verifyIdToken: jest.fn(),
     createUser: jest.fn(),
