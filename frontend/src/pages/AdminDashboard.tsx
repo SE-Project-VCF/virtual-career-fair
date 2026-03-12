@@ -613,14 +613,14 @@ export default function AdminDashboard() {
                           <TableCell align="right">
                             <IconButton
                               size="small"
-                              onClick={() => handleOpenScheduleDialog(schedule)}
+                              onClick={(e) => { e.stopPropagation(); handleOpenScheduleDialog(schedule) }}
                               sx={{ color: "#b03a6c" }}
                             >
                               <EditIcon data-testid="EditIcon" />
                             </IconButton>
                             <IconButton
                               size="small"
-                              onClick={() => handleDeleteSchedule(schedule.id)}
+                              onClick={(e) => { e.stopPropagation(); handleDeleteSchedule(schedule.id) }}
                               sx={{ color: "#d32f2f" }}
                             >
                               <DeleteIcon data-testid="DeleteIcon" />

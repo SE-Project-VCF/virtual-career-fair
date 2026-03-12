@@ -157,6 +157,7 @@ export default function BoothView() {
         body: JSON.stringify({ rating: resubmitValue, comment: resubmitComment }),
       })
       const data = await res.json()
+      if (!isMountedRef.current) return
       if (!res.ok) {
         setResubmitError(data.error || "Failed to submit rating")
         return
@@ -166,7 +167,7 @@ export default function BoothView() {
       setResubmitValue(null)
       setResubmitComment("")
     } catch {
-      setResubmitError("Failed to submit rating")
+      if (isMountedRef.current) setResubmitError("Failed to submit rating")
     } finally {
       if (isMountedRef.current) setSubmittingResubmit(false)
     }
