@@ -134,6 +134,7 @@ describe("POST /api/booths/:boothId/ratings", () => {
   });
 
   it("allows a student to resubmit (upsert) a rating", async () => {
+    auth.verifyIdToken.mockResolvedValue({ uid: "student-uid", email: "student@test.com" });
     const mockSet = jest.fn().mockResolvedValue({});
     db.collection.mockImplementation((col) => {
       if (col === "booths") {
