@@ -86,7 +86,7 @@ async function verifyFirebaseToken(req, res, next) {
     req.user = { uid: decodedToken.uid, email: decodedToken.email };
     next();
   } catch (err) {
-    console.error("Token verification failed:", err.message);
+    console.error("Token verification failed:", err);
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
@@ -287,7 +287,7 @@ app.post("/api/register-user", async (req, res) => {
     });
   } catch (err) {
     console.error("Error registering user:", err);
-    res.status(500).send({ success: false, error: err.message });
+    res.status(500).send({ success: false, error: "Internal server error" });
   }
 });
 
@@ -344,7 +344,7 @@ app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
     console.error("Stream user sync failed:", err);
     return res.status(500).json({
       success: false,
-      error: err.message,
+      error: "Internal server error",
     });
   }
 });
@@ -407,7 +407,7 @@ app.post("/api/jobs", verifyFirebaseToken, async (req, res) => {
     res.send({ success: true, jobId: jobRef.id });
   } catch (err) {
     console.error("Error adding job:", err);
-    res.status(500).send({ success: false, error: err.message });
+    res.status(500).send({ success: false, error: "Internal server error" });
   }
 });
 
@@ -453,7 +453,7 @@ app.get("/api/jobs", async (req, res) => {
     return res.json({ success: true, jobs });
   } catch (err) {
     console.error("Error fetching jobs:", err);
-    return res.status(500).json({ error: "Failed to fetch jobs", details: err.message });
+    return res.status(500).json({ error: "Failed to fetch jobs" });
   }
 });
 
@@ -518,7 +518,7 @@ app.put("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error("Error updating job:", err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
@@ -552,7 +552,7 @@ app.delete("/api/jobs/:id", verifyFirebaseToken, async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error("Error deleting job:", err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
@@ -680,7 +680,7 @@ app.post("/api/job-invitations/send", async (req, res) => {
     });
   } catch (err) {
     console.error("Error sending job invitations:", err);
-    return res.status(500).json({ error: "Failed to send invitations", details: err.message });
+    return res.status(500).json({ error: "Failed to send invitations" });
   }
 });
 
@@ -752,7 +752,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching received invitations:", err);
-    return res.status(500).json({ error: "Failed to fetch invitations", details: err.message });
+    return res.status(500).json({ error: "Failed to fetch invitations" });
   }
 });
 
@@ -841,7 +841,7 @@ app.get("/api/job-invitations/sent", async (req, res) => {
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching sent invitations:", err);
-    return res.status(500).json({ error: "Failed to fetch invitations", details: err.message });
+    return res.status(500).json({ error: "Failed to fetch invitations" });
   }
 });
 
@@ -894,7 +894,7 @@ app.patch("/api/job-invitations/:id/status", async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error("Error updating invitation status:", err);
-    return res.status(500).json({ error: "Failed to update invitation status", details: err.message });
+    return res.status(500).json({ error: "Failed to update invitation status" });
   }
 });
 
@@ -946,7 +946,7 @@ app.get("/api/students", async (req, res) => {
     return res.json({ students });
   } catch (err) {
     console.error("Error fetching students:", err);
-    return res.status(500).json({ error: "Failed to fetch students", details: err.message });
+    return res.status(500).json({ error: "Failed to fetch students" });
   }
 });
 
@@ -1002,7 +1002,7 @@ app.get("/api/job-invitations/stats/:jobId", async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching invitation stats:", err);
-    return res.status(500).json({ error: "Failed to fetch stats", details: err.message });
+    return res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
 
@@ -1085,7 +1085,7 @@ app.get("/api/job-invitations/details/:jobId", async (req, res) => {
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching detailed invitations:", err);
-    return res.status(500).json({ error: "Failed to fetch invitation details", details: err.message });
+    return res.status(500).json({ error: "Failed to fetch invitation details" });
   }
 });
 
@@ -1155,7 +1155,7 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
     res.send({ success: true, boothId: boothRef.id });
   } catch (err) {
     console.error("Error adding booth:", err);
-    res.status(500).send({ success: false, error: err.message });
+    res.status(500).send({ success: false, error: "Internal server error" });
   }
 });
 
@@ -1216,7 +1216,7 @@ app.post("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =
     res.json({ success: true, ratingId: studentId });
   } catch (err) {
     console.error("Error submitting booth rating:", err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
 
@@ -1244,7 +1244,7 @@ app.get("/api/booths/:boothId/ratings/me", verifyFirebaseToken, async (req, res)
     });
   } catch (err) {
     console.error("Error fetching own rating:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -1296,7 +1296,7 @@ app.get("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =>
     res.json({ ratings, averageRating, totalCount: ratings.length });
   } catch (err) {
     console.error("Error fetching booth ratings:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -1334,7 +1334,7 @@ app.get("/api/booth-ratings/analytics", verifyFirebaseToken, async (req, res) =>
     res.json({ analytics });
   } catch (err) {
     console.error("Error fetching booth ratings analytics:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -1401,7 +1401,7 @@ app.get("/api/fairs/:fairId/booths", verifyFirebaseToken, async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching fair booths:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -1879,7 +1879,7 @@ app.post("/api/create-admin", async (req, res) => {
     return res.json({ success: true, user: { uid: userRecord.uid, email, role: "administrator" } });
   } catch (err) {
     console.error("Error creating admin:", err);
-    return res.status(500).json({ error: err.message || "Failed to create admin account" });
+    return res.status(500).json({ error: "Failed to create admin account" });
   }
 });
 
