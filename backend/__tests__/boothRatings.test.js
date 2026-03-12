@@ -204,12 +204,27 @@ describe("GET /api/booths/:boothId/ratings", () => {
 
   it("returns ratings and averageRating for a booth", async () => {
     auth.verifyIdToken.mockResolvedValue({ uid: "admin-uid" });
-    verifyAdmin.mockResolvedValue(null);
+    verifyAdmin.mockResolvedValue(null); // admin
+
     const ratingDocs = [
-      mockDocSnap({ studentId: "s1", rating: 4, comment: "Good", createdAt: { toMillis: () => 1000 } }, true, "r1"),
-      mockDocSnap({ studentId: "s2", rating: 2, comment: null, createdAt: { toMillis: () => 2000 } }, true, "r2"),
+      { id: "r1", data: () => ({ studentId: "s1", rating: 4, comment: "Good", createdAt: { toMillis: () => 1000 } }) },
+      { id: "r2", data: () => ({ studentId: "s2", rating: 2, comment: null, createdAt: { toMillis: () => 2000 } }) },
     ];
-    setupDbMock({ boothRatings: { docs: ratingDocs } });
+
+    db.collection.mockImplementation((col) => {
+      if (col === "booths") {
+        return {
+          doc: () => ({
+            collection: () => ({
+              get: jest.fn().mockResolvedValue({
+                forEach: (cb) => ratingDocs.forEach(cb),
+              }),
+            }),
+          }),
+        };
+      }
+    });
+
     const res = await request(app)
       .get("/api/booths/booth1/ratings")
       .set("Authorization", "Bearer valid-token");
@@ -217,6 +232,65 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.body.totalCount).toBe(2);
     expect(res.body.averageRating).toBe(3);
     expect(res.body.ratings).toHaveLength(2);
+    // Admin gets studentId
+    expect(res.body.ratings[0].studentId).toBe("s1");
+  });
+
+  it("allows a company owner to fetch booth ratings (anonymous)", async () => {
+    auth.verifyIdToken.mockResolvedValue({ uid: "owner-uid" });
+    // verifyAdmin returns error (not admin)
+    verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
+
+    // Mock the chain: booths doc → companyId; companies doc → ownerId
+    // booths/{boothId}/ratings subcollection → 1 rating
+    const mockRatingDoc = {
+      id: "student-uid",
+      data: () => ({
+        studentId: "student-uid",
+        rating: 4,
+        comment: "Nice",
+        createdAt: { toMillis: () => 1000 },
+      }),
+    };
+
+    db.collection.mockImplementation((col) => {
+      if (col === "booths") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ companyId: "company1" }),
+            }),
+            collection: () => ({
+              get: jest.fn().mockResolvedValue({
+                forEach: (cb) => cb(mockRatingDoc),
+              }),
+            }),
+          }),
+        };
+      }
+      if (col === "companies") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ ownerId: "owner-uid", representativeIDs: [] }),
+            }),
+          }),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/booths/booth1/ratings")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.ratings).toHaveLength(1);
+    expect(res.body.ratings[0].rating).toBe(4);
+    // studentId should NOT be in the response (anonymous for rep/owner)
+    expect(res.body.ratings[0].studentId).toBeUndefined();
+    expect(res.body.averageRating).toBe(4);
   });
 });
 

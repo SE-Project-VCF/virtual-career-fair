@@ -1220,30 +1220,47 @@ app.post("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =
   }
 });
 
-// GET /api/booths/:boothId/ratings — admin fetches ratings for a booth
+// GET /api/booths/:boothId/ratings — admin or rep/owner fetches ratings for a booth
 app.get("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => {
   try {
-    const adminErr = await verifyAdmin(req.user.uid);
+    const { boothId } = req.params;
+    const uid = req.user.uid;
+
+    // Allow admin OR rep/owner of the booth's company
+    const adminErr = await verifyAdmin(uid);
     if (adminErr) {
-      return res.status(adminErr.status).json({ error: adminErr.error });
+      // Not admin — check if rep/owner of this booth's company
+      const boothDoc = await db.collection("booths").doc(boothId).get();
+      if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
+      const companyId = boothDoc.data().companyId;
+      if (!companyId) return res.status(403).json({ error: "Not authorized" });
+      const companyDoc = await db.collection("companies").doc(companyId).get();
+      if (!companyDoc.exists) return res.status(403).json({ error: "Not authorized" });
+      const companyData = companyDoc.data();
+      const reps = companyData.representativeIDs || [];
+      if (companyData.ownerId !== uid && !reps.includes(uid)) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
     }
 
-    const { boothId } = req.params;
-    const snapshot = await db.collection("boothRatings")
-      .where("boothId", "==", boothId)
-      .get();
+    const snapshot = await db.collection("booths").doc(boothId)
+      .collection("ratings").get();
+
+    const isAdmin = !adminErr;
 
     const ratings = [];
     let sum = 0;
     snapshot.forEach((doc) => {
       const data = doc.data();
-      ratings.push({
+      const entry = {
         id: doc.id,
-        studentId: data.studentId,
         rating: data.rating,
         comment: data.comment || null,
         createdAt: data.createdAt ? data.createdAt.toMillis() : null,
-      });
+      };
+      // Only expose studentId to admins — reps/owners see anonymous reviews
+      if (isAdmin) entry.studentId = data.studentId;
+      ratings.push(entry);
       sum += data.rating;
     });
 
