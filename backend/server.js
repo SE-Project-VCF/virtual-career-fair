@@ -1333,6 +1333,73 @@ app.get("/api/booth-ratings/analytics", verifyFirebaseToken, async (req, res) =>
   }
 });
 
+// GET /api/fairs/:fairId/booths — admin fetches booths with ratings for a specific fair's time window
+app.get("/api/fairs/:fairId/booths", verifyFirebaseToken, async (req, res) => {
+  try {
+    const adminErr = await verifyAdmin(req.user.uid);
+    if (adminErr) return res.status(adminErr.status).json({ error: adminErr.error });
+
+    const { fairId } = req.params;
+
+    const fairDoc = await db.collection("fairSchedules").doc(fairId).get();
+    if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+
+    const fairData = fairDoc.data();
+    const startTime = fairData.startTime; // Firestore Timestamp
+    const endTime = fairData.endTime;     // Firestore Timestamp
+
+    // Get all booths
+    const boothsSnapshot = await db.collection("booths").get();
+
+    const boothResults = await Promise.all(
+      boothsSnapshot.docs.map(async (boothDoc) => {
+        const boothData = boothDoc.data();
+        const boothId = boothDoc.id;
+
+        // Get ratings created within the fair's time window
+        const ratingsSnapshot = await db.collection("booths").doc(boothId)
+          .collection("ratings")
+          .where("createdAt", ">=", startTime)
+          .where("createdAt", "<=", endTime)
+          .get();
+
+        const ratings = [];
+        let sum = 0;
+        ratingsSnapshot.forEach((rDoc) => {
+          const d = rDoc.data();
+          ratings.push({
+            studentId: d.studentId,
+            rating: d.rating,
+            comment: d.comment || null,
+            createdAt: d.createdAt ? d.createdAt.toMillis() : null,
+          });
+          sum += d.rating;
+        });
+
+        const averageRating = ratings.length > 0 ? Math.round((sum / ratings.length) * 10) / 10 : null;
+
+        return {
+          boothId,
+          companyName: boothData.companyName || "",
+          averageRating,
+          totalRatings: ratings.length,
+          ratings,
+        };
+      })
+    );
+
+    res.json({
+      fairName: fairData.name || "",
+      startTime: startTime ? startTime.toMillis() : null,
+      endTime: endTime ? endTime.toMillis() : null,
+      booths: boothResults,
+    });
+  } catch (err) {
+    console.error("Error fetching fair booths:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ----------------------------------------------------
    HELPER: Evaluate if fair should be live based on schedules
    Checks all schedules - fair is live if ANY schedule is active
