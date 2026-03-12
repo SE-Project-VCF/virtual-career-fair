@@ -582,7 +582,11 @@ export default function AdminDashboard() {
                       if (status?.type === "active") chipColor = "success"
                       else if (status?.type === "upcoming") chipColor = "primary"
                       return (
-                        <TableRow key={schedule.id}>
+                        <TableRow
+                          key={schedule.id}
+                          onClick={() => navigate(`/admin/fairs/${schedule.id}`)}
+                          sx={{ cursor: "pointer", "&:hover": { backgroundColor: "rgba(56, 133, 96, 0.04)" } }}
+                        >
                           <TableCell>
                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
                               {schedule.name || "Unnamed Career Fair"}
