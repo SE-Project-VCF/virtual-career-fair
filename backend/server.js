@@ -1199,19 +1199,12 @@ app.post("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =
     }
     const companyName = boothDoc.data().companyName || "";
 
-    // Enforce one rating per student per booth
-    const existing = await db.collection("boothRatings")
-      .where("boothId", "==", boothId)
-      .where("studentId", "==", studentId)
-      .get();
-    if (!existing.empty) {
-      return res.status(409).json({ success: false, error: "You have already rated this booth" });
-    }
-
     const sanitizedComment = comment ? comment.trim().replaceAll("\0", "") : null;
-    const ratingRef = await db.collection("boothRatings").add(
+    const ratingRef = db.collection("booths").doc(boothId)
+      .collection("ratings").doc(studentId);
+
+    await ratingRef.set(
       removeUndefined({
-        boothId,
         studentId,
         rating: ratingNum,
         comment: sanitizedComment,
@@ -1220,7 +1213,7 @@ app.post("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =
       })
     );
 
-    res.json({ success: true, ratingId: ratingRef.id });
+    res.json({ success: true, ratingId: studentId });
   } catch (err) {
     console.error("Error submitting booth rating:", err);
     res.status(500).json({ success: false, error: err.message });

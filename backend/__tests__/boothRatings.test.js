@@ -133,26 +133,46 @@ describe("POST /api/booths/:boothId/ratings", () => {
     expect(res.body.error).toMatch(/only students/i);
   });
 
-  it("returns 409 when student has already rated this booth", async () => {
-    const existingRating = mockDocSnap({ boothId: "booth1", studentId: "student-uid", rating: 3 });
-    setupDbMock({
-      users: { docData: { role: "student" } },
-      booths: { docData: { companyName: "Acme" } },
-      boothRatings: { docs: [existingRating] },
+  it("allows a student to resubmit (upsert) a rating", async () => {
+    const mockSet = jest.fn().mockResolvedValue({});
+    db.collection.mockImplementation((col) => {
+      if (col === "booths") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ companyName: "Acme" }) }),
+            collection: () => ({ doc: () => ({ set: mockSet }) }),
+          }),
+        };
+      }
+      if (col === "users") {
+        return { doc: () => ({ get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "student" }) }) }) };
+      }
     });
+
     const res = await request(app)
-      .post("/api/booths/booth1/ratings")
-      .set("Authorization", authHeader())
-      .send({ rating: 4 });
-    expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/already rated/i);
+      .post("/api/booths/booth123/ratings")
+      .set("Authorization", "Bearer token")
+      .send({ rating: 4, comment: "Good booth" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockSet).toHaveBeenCalled();
   });
 
   it("creates rating successfully", async () => {
-    setupDbMock({
-      users: { docData: { role: "student" } },
-      booths: { docData: { companyName: "Acme Corp" } },
-      boothRatings: { docs: [], newDocId: "rating-123" },
+    const mockSet = jest.fn().mockResolvedValue({});
+    db.collection.mockImplementation((col) => {
+      if (col === "booths") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ companyName: "Acme Corp" }) }),
+            collection: () => ({ doc: () => ({ set: mockSet }) }),
+          }),
+        };
+      }
+      if (col === "users") {
+        return { doc: () => ({ get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "student" }) }) }) };
+      }
     });
     const res = await request(app)
       .post("/api/booths/booth1/ratings")
@@ -160,7 +180,7 @@ describe("POST /api/booths/:boothId/ratings", () => {
       .send({ rating: 4, comment: "Great booth!" });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.ratingId).toBe("rating-123");
+    expect(res.body.ratingId).toBe("student-uid");
   });
 });
 
