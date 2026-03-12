@@ -14,12 +14,13 @@ import {
   Divider,
   Grid,
   TextField,
-  Chip
+  Chip,
+  Rating,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
 import BusinessIcon from "@mui/icons-material/Business"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
@@ -116,6 +117,9 @@ export default function Company() {
   const [deletingJob, setDeletingJob] = useState(false)
   const [statsDialogOpen, setStatsDialogOpen] = useState(false)
   const [selectedJobForStats, setSelectedJobForStats] = useState<Job | null>(null)
+  const [boothReviews, setBoothReviews] = useState<{ id: string; rating: number; comment: string | null; createdAt: number | null }[]>([])
+  const [reviewsAverageRating, setReviewsAverageRating] = useState<number | null>(null)
+  const [loadingReviews, setLoadingReviews] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
@@ -175,7 +179,11 @@ export default function Company() {
       }
 
       setCompany(companyInfo)
-      
+
+      if (companyInfo.boothId && (userRole === "companyOwner" || userRole === "representative")) {
+        fetchBoothReviews(companyInfo.boothId)
+      }
+
       // Fetch representatives if there are any
       if (companyInfo.representativeIDs && companyInfo.representativeIDs.length > 0) {
         fetchRepresentatives(companyInfo.representativeIDs)
@@ -214,6 +222,26 @@ export default function Company() {
       console.error("Error fetching representatives:", err)
     } finally {
       setLoadingRepresentatives(false)
+    }
+  }
+
+  const fetchBoothReviews = async (boothId: string) => {
+    if (!boothId || !user?.uid) return
+    try {
+      setLoadingReviews(true)
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setBoothReviews(data.ratings || [])
+        setReviewsAverageRating(data.averageRating)
+      }
+    } catch (err) {
+      console.error("Error fetching booth reviews:", err)
+    } finally {
+      setLoadingReviews(false)
     }
   }
 
@@ -872,6 +900,50 @@ export default function Company() {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Booth Reviews Section — visible to owner and reps */}
+          {company.boothId && (
+            <Grid size={{ xs: 12 }}>
+              <Card sx={{ border: "1px solid rgba(176, 58, 108, 0.3)" }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                    Booth Reviews
+                  </Typography>
+                  {loadingReviews ? (
+                    <CircularProgress size={24} />
+                  ) : boothReviews.length === 0 ? (
+                    <Typography color="text.secondary">No reviews yet.</Typography>
+                  ) : (
+                    <>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+                        <Rating value={reviewsAverageRating} readOnly precision={0.1} />
+                        <Typography variant="body2" color="text.secondary">
+                          {reviewsAverageRating?.toFixed(1)} avg · {boothReviews.length} review{boothReviews.length !== 1 ? "s" : ""}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        {boothReviews.map((review) => (
+                          <Box key={review.id} sx={{ p: 2, border: "1px solid rgba(0,0,0,0.12)", borderRadius: 2 }}>
+                            <Rating value={review.rating} readOnly size="small" />
+                            {review.comment && (
+                              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                {review.comment}
+                              </Typography>
+                            )}
+                            {review.createdAt && (
+                              <Typography variant="caption" color="text.secondary">
+                                {new Date(review.createdAt).toLocaleDateString()}
+                              </Typography>
+                            )}
+                          </Box>
+                        ))}
+                      </Box>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
 
           {/* Job Postings Card */}
           <Grid size={{ xs: 12 }}>
