@@ -1220,6 +1220,29 @@ app.post("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =
   }
 });
 
+// GET /api/booths/:boothId/ratings/me — student fetches their own rating for a booth
+app.get("/api/booths/:boothId/ratings/me", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const studentId = req.user.uid;
+
+    const ratingDoc = await db.collection("booths").doc(boothId)
+      .collection("ratings").doc(studentId).get();
+
+    if (!ratingDoc.exists) return res.json({ rating: null });
+
+    const data = ratingDoc.data();
+    res.json({
+      rating: data.rating,
+      comment: data.comment || null,
+      createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+    });
+  } catch (err) {
+    console.error("Error fetching own rating:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/booths/:boothId/ratings — admin or rep/owner fetches ratings for a booth
 app.get("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => {
   try {

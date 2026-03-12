@@ -321,6 +321,72 @@ describe("GET /api/booths/:boothId/ratings", () => {
   });
 });
 
+describe("GET /api/booths/:boothId/ratings/me", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    auth.verifyIdToken.mockResolvedValue({ uid: "student-uid", email: "student@test.com" });
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await request(app).get("/api/booths/booth1/ratings/me");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns the student's own rating when it exists", async () => {
+    db.collection.mockImplementation((col) => {
+      if (col === "booths") {
+        return {
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({
+                get: jest.fn().mockResolvedValue({
+                  exists: true,
+                  data: () => ({
+                    studentId: "student-uid",
+                    rating: 3,
+                    comment: "ok",
+                    createdAt: { toMillis: () => 1000 },
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/booths/booth123/ratings/me")
+      .set("Authorization", "Bearer token");
+    expect(res.status).toBe(200);
+    expect(res.body.rating).toBe(3);
+    expect(res.body.comment).toBe("ok");
+    expect(res.body.createdAt).toBe(1000);
+  });
+
+  it("returns { rating: null } when no rating exists", async () => {
+    db.collection.mockImplementation((col) => {
+      if (col === "booths") {
+        return {
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({
+                get: jest.fn().mockResolvedValue({ exists: false }),
+              }),
+            }),
+          }),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/booths/booth123/ratings/me")
+      .set("Authorization", "Bearer token");
+    expect(res.status).toBe(200);
+    expect(res.body.rating).toBeNull();
+  });
+});
+
 describe("GET /api/booth-ratings/analytics", () => {
   beforeEach(() => jest.clearAllMocks());
 
