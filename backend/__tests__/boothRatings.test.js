@@ -341,12 +341,26 @@ describe("GET /api/booth-ratings/analytics", () => {
   it("returns grouped averages across all booths", async () => {
     auth.verifyIdToken.mockResolvedValue({ uid: "admin-uid" });
     verifyAdmin.mockResolvedValue(null);
+
+    // Each doc needs a ref with parent.parent.id = boothId
+    const makRatingDoc = (boothId, companyName, rating, id) => ({
+      id,
+      ref: { parent: { parent: { id: boothId } } },
+      data: () => ({ companyName, rating }),
+    });
+
     const ratingDocs = [
-      mockDocSnap({ boothId: "b1", companyName: "Acme", rating: 5 }, true, "r1"),
-      mockDocSnap({ boothId: "b1", companyName: "Acme", rating: 3 }, true, "r2"),
-      mockDocSnap({ boothId: "b2", companyName: "Globex", rating: 4 }, true, "r3"),
+      makRatingDoc("b1", "Acme", 5, "s1"),
+      makRatingDoc("b1", "Acme", 3, "s2"),
+      makRatingDoc("b2", "Globex", 4, "s3"),
     ];
-    setupDbMock({ boothRatings: { docs: ratingDocs } });
+
+    db.collectionGroup = jest.fn().mockReturnValue({
+      get: jest.fn().mockResolvedValue({
+        forEach: (cb) => ratingDocs.forEach(cb),
+      }),
+    });
+
     const res = await request(app)
       .get("/api/booth-ratings/analytics")
       .set("Authorization", "Bearer valid-token");

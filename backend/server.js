@@ -1280,17 +1280,19 @@ app.get("/api/booth-ratings/analytics", verifyFirebaseToken, async (req, res) =>
       return res.status(adminErr.status).json({ error: adminErr.error });
     }
 
-    const snapshot = await db.collection("boothRatings").get();
+    // Collection group query across all booths/{boothId}/ratings subcollections
+    const snapshot = await db.collectionGroup("ratings").get();
 
-    // Group by boothId
     const grouped = {};
     snapshot.forEach((doc) => {
       const data = doc.data();
-      if (!grouped[data.boothId]) {
-        grouped[data.boothId] = { boothId: data.boothId, companyName: data.companyName || "", sum: 0, count: 0 };
+      // boothId is the parent document ID (path: booths/{boothId}/ratings/{studentId})
+      const boothId = doc.ref.parent.parent.id;
+      if (!grouped[boothId]) {
+        grouped[boothId] = { boothId, companyName: data.companyName || "", sum: 0, count: 0 };
       }
-      grouped[data.boothId].sum += data.rating;
-      grouped[data.boothId].count += 1;
+      grouped[boothId].sum += data.rating;
+      grouped[boothId].count += 1;
     });
 
     const analytics = Object.values(grouped).map(({ boothId, companyName, sum, count }) => ({
