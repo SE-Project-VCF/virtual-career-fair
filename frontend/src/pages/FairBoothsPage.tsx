@@ -16,6 +16,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { auth } from "../firebase"
 import { API_URL } from "../config"
+import { authUtils } from "../utils/auth"
 
 type ReviewEntry = {
   studentId: string
@@ -42,11 +43,16 @@ type FairData = {
 export default function FairBoothsPage() {
   const { fairId } = useParams<{ fairId: string }>()
   const navigate = useNavigate()
+  const user = authUtils.getCurrentUser()
   const [fairData, setFairData] = useState<FairData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   useEffect(() => {
+    if (!authUtils.isAuthenticated() || user?.role !== "administrator") {
+      navigate("/admin")
+      return
+    }
     if (!fairId) return
     const fetchFairBooths = async () => {
       try {
@@ -68,7 +74,7 @@ export default function FairBoothsPage() {
       }
     }
     fetchFairBooths()
-  }, [fairId])
+  }, [fairId, navigate, user?.role])
 
   const formatDate = (ms: number | null) =>
     ms ? new Date(ms).toLocaleString() : "—"
