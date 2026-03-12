@@ -1226,6 +1226,11 @@ app.get("/api/booths/:boothId/ratings/me", verifyFirebaseToken, async (req, res)
     const { boothId } = req.params;
     const studentId = req.user.uid;
 
+    const userDoc = await db.collection("users").doc(studentId).get();
+    if (!userDoc.exists || userDoc.data().role !== "student") {
+      return res.status(403).json({ error: "Only students can access their own rating" });
+    }
+
     const ratingDoc = await db.collection("booths").doc(boothId)
       .collection("ratings").doc(studentId).get();
 

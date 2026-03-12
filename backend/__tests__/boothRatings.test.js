@@ -332,8 +332,24 @@ describe("GET /api/booths/:boothId/ratings/me", () => {
     expect(res.status).toBe(401);
   });
 
+  it("returns 403 when caller is not a student", async () => {
+    db.collection.mockImplementation((col) => {
+      if (col === "users") {
+        return { doc: () => ({ get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "administrator" }) }) }) };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/booths/booth123/ratings/me")
+      .set("Authorization", "Bearer token");
+    expect(res.status).toBe(403);
+  });
+
   it("returns the student's own rating when it exists", async () => {
     db.collection.mockImplementation((col) => {
+      if (col === "users") {
+        return { doc: () => ({ get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "student" }) }) }) };
+      }
       if (col === "booths") {
         return {
           doc: () => ({
@@ -366,6 +382,9 @@ describe("GET /api/booths/:boothId/ratings/me", () => {
 
   it("returns { rating: null } when no rating exists", async () => {
     db.collection.mockImplementation((col) => {
+      if (col === "users") {
+        return { doc: () => ({ get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "student" }) }) }) };
+      }
       if (col === "booths") {
         return {
           doc: () => ({
