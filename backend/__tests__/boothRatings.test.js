@@ -193,9 +193,36 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 403 when user is not admin", async () => {
+  it("returns 403 when user is not admin and not rep/owner", async () => {
     auth.verifyIdToken.mockResolvedValue({ uid: "user-uid" });
     verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+
+    db.collection.mockImplementation((col) => {
+      if (col === "booths") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ companyId: "company1" }),
+            }),
+            collection: () => ({
+              get: jest.fn().mockResolvedValue({ forEach: () => {} }),
+            }),
+          }),
+        };
+      }
+      if (col === "companies") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({ ownerId: "other-user", representativeIDs: [] }),
+            }),
+          }),
+        };
+      }
+    });
+
     const res = await request(app)
       .get("/api/booths/booth1/ratings")
       .set("Authorization", "Bearer valid-token");
