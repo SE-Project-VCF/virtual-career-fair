@@ -146,7 +146,11 @@ export default function BoothView() {
     try {
       setSubmittingResubmit(true)
       setResubmitError("")
-      const token = await auth.currentUser?.getIdToken()
+      if (!auth.currentUser) {
+        setResubmitError("You must be logged in to submit a rating")
+        return
+      }
+      const token = await auth.currentUser.getIdToken()
       const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -219,7 +223,7 @@ export default function BoothView() {
           headers: { Authorization: `Bearer ${token}` },
         })
         const data = await res.json()
-        if (res.ok && data.rating !== null) {
+        if (res.ok && data.rating != null) {
           setMyReview({ rating: data.rating, comment: data.comment, createdAt: data.createdAt })
         }
       } catch {
