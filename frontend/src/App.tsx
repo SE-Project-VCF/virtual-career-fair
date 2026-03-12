@@ -15,6 +15,7 @@ import ChatPage from "./pages/ChatPage" // ✅ added import
 import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage" // ✅ added import
 import JobInvitations from "./pages/JobInvitations"
+import FairBoothsPage from "./pages/FairBoothsPage"
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
         <Route path="/dashboard/job-invitations" element={<JobInvitations />} />
 
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/fairs/:fairId" element={<FairBoothsPage />} />
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />
