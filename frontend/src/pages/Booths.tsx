@@ -201,12 +201,44 @@ export default function Booths() {
 
       let boothsList: Booth[] = []
 
-      if (fairIsLive) {
-        // Fair is live - show all booths
+      if (fairIsLive && status.activeScheduleId) {
+        // Fair is live with an active schedule — show only registered booths
+        const scheduleDoc = await getDoc(doc(db, "fairSchedules", status.activeScheduleId))
+        const registeredBoothIds: string[] = scheduleDoc.exists()
+          ? (scheduleDoc.data().registeredBoothIds || [])
+          : []
+
+        if (registeredBoothIds.length > 0) {
+          const boothDocs = await Promise.all(
+            registeredBoothIds.map((id) => getDoc(doc(db, "booths", id)))
+          )
+
+          // Fetch companies to map boothId -> companyId
+          const companiesSnapshot = await getDocs(collection(db, "companies"))
+          const boothIdToCompanyId: Record<string, string> = {}
+          companiesSnapshot.forEach((companyDoc) => {
+            const companyData = companyDoc.data()
+            if (companyData.boothId) {
+              boothIdToCompanyId[companyData.boothId] = companyDoc.id
+            }
+          })
+
+          boothDocs.forEach((boothDoc) => {
+            if (!boothDoc.exists()) return
+            const boothData = boothDoc.data()
+            const companyId = boothData.companyId || boothIdToCompanyId[boothDoc.id] || undefined
+            boothsList.push({
+              id: boothDoc.id,
+              ...boothData,
+              companyId,
+            } as Booth)
+          })
+        }
+      } else if (fairIsLive) {
+        // Fair is live via manual toggle only (no active schedule) — show all booths
         const q = query(collection(db, "booths"), orderBy("companyName"))
         const querySnapshot = await getDocs(q)
 
-        // Also fetch companies to map boothId to companyId
         const companiesSnapshot = await getDocs(collection(db, "companies"))
         const boothIdToCompanyId: Record<string, string> = {}
         companiesSnapshot.forEach((companyDoc) => {
@@ -216,11 +248,11 @@ export default function Booths() {
           }
         })
 
-        querySnapshot.forEach((doc) => {
-          const boothData = doc.data()
-          const companyId = boothData.companyId || boothIdToCompanyId[doc.id] || undefined
+        querySnapshot.forEach((boothDoc) => {
+          const boothData = boothDoc.data()
+          const companyId = boothData.companyId || boothIdToCompanyId[boothDoc.id] || undefined
           boothsList.push({
-            id: doc.id,
+            id: boothDoc.id,
             ...boothData,
             companyId,
           } as Booth)
