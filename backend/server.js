@@ -1353,44 +1353,49 @@ app.get("/api/fairs/:fairId/booths", verifyFirebaseToken, async (req, res) => {
     const startTime = fairData.startTime; // Firestore Timestamp
     const endTime = fairData.endTime;     // Firestore Timestamp
 
-    // Get all booths
-    const boothsSnapshot = await db.collection("booths").get();
+    // Get only registered booths
+    const registeredBoothIds = fairData.registeredBoothIds || [];
+    const boothDocs = await Promise.all(
+      registeredBoothIds.map((id) => db.collection("booths").doc(id).get())
+    );
 
     const boothResults = await Promise.all(
-      boothsSnapshot.docs.map(async (boothDoc) => {
-        const boothData = boothDoc.data();
-        const boothId = boothDoc.id;
+      boothDocs
+        .filter((boothDoc) => boothDoc.exists)
+        .map(async (boothDoc) => {
+          const boothData = boothDoc.data();
+          const boothId = boothDoc.id;
 
-        // Get ratings created within the fair's time window
-        const ratingsSnapshot = await db.collection("booths").doc(boothId)
-          .collection("ratings")
-          .where("createdAt", ">=", startTime)
-          .where("createdAt", "<=", endTime)
-          .get();
+          // Get ratings created within the fair's time window
+          const ratingsSnapshot = await db.collection("booths").doc(boothId)
+            .collection("ratings")
+            .where("createdAt", ">=", startTime)
+            .where("createdAt", "<=", endTime)
+            .get();
 
-        const ratings = [];
-        let sum = 0;
-        ratingsSnapshot.forEach((rDoc) => {
-          const d = rDoc.data();
-          ratings.push({
-            studentId: d.studentId,
-            rating: d.rating,
-            comment: d.comment || null,
-            createdAt: d.createdAt ? d.createdAt.toMillis() : null,
+          const ratings = [];
+          let sum = 0;
+          ratingsSnapshot.forEach((rDoc) => {
+            const d = rDoc.data();
+            ratings.push({
+              studentId: d.studentId,
+              rating: d.rating,
+              comment: d.comment || null,
+              createdAt: d.createdAt ? d.createdAt.toMillis() : null,
+            });
+            sum += d.rating;
           });
-          sum += d.rating;
-        });
 
-        const averageRating = ratings.length > 0 ? Math.round((sum / ratings.length) * 10) / 10 : null;
+          const averageRating = ratings.length > 0 ? Math.round((sum / ratings.length) * 10) / 10 : null;
 
-        return {
-          boothId,
-          companyName: boothData.companyName || "",
-          averageRating,
-          totalRatings: ratings.length,
-          ratings,
-        };
-      })
+          return {
+            boothId,
+            companyName: boothData.companyName || "",
+            averageRating,
+            totalRatings: ratings.length,
+            ratings,
+          };
+        })
     );
 
     res.json({

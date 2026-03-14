@@ -90,22 +90,19 @@ describe("GET /api/fairs/:fairId/booths", () => {
           doc: () => ({
             get: jest.fn().mockResolvedValue({
               exists: true,
-              data: () => ({ name: "Spring Fair 2025", startTime, endTime }),
+              data: () => ({ name: "Spring Fair 2025", startTime, endTime, registeredBoothIds: ["booth1"] }),
             }),
           }),
         };
       }
       if (col === "booths") {
         return {
-          get: jest.fn().mockResolvedValue({
-            docs: [
-              {
-                id: "booth1",
-                data: () => ({ companyName: "Acme Corp" }),
-              },
-            ],
-          }),
-          doc: () => ({
+          doc: (id) => ({
+            get: jest.fn().mockResolvedValue(
+              id === "booth1"
+                ? { exists: true, id: "booth1", data: () => ({ companyName: "Acme Corp" }) }
+                : { exists: false, data: () => ({}) }
+            ),
             collection: () => ({
               where: jest.fn().mockReturnThis(),
               get: jest.fn().mockResolvedValue({
@@ -132,5 +129,82 @@ describe("GET /api/fairs/:fairId/booths", () => {
     expect(res.body.booths[0].averageRating).toBe(4);
     expect(res.body.booths[0].ratings).toHaveLength(1);
     expect(res.body.booths[0].ratings[0].rating).toBe(4);
+  });
+
+  it("returns only registered booths (ignores unregistered booth IDs)", async () => {
+    const startTime = { toMillis: () => 1000, seconds: 1 };
+    const endTime = { toMillis: () => 9000, seconds: 9 };
+
+    db.collection.mockImplementation((col) => {
+      if (col === "fairSchedules") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({
+                name: "Test Fair",
+                startTime,
+                endTime,
+                registeredBoothIds: ["booth1"], // booth2 is NOT registered
+              }),
+            }),
+          }),
+        };
+      }
+      if (col === "booths") {
+        return {
+          doc: (id) => ({
+            get: jest.fn().mockResolvedValue(
+              id === "booth1"
+                ? { exists: true, id: "booth1", data: () => ({ companyName: "Acme Corp" }) }
+                : { exists: false, data: () => ({}) }
+            ),
+            collection: () => ({
+              where: jest.fn().mockReturnThis(),
+              get: jest.fn().mockResolvedValue({ forEach: () => {} }),
+            }),
+          }),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/fairs/fair1/booths")
+      .set("Authorization", "Bearer token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.booths).toHaveLength(1);
+    expect(res.body.booths[0].boothId).toBe("booth1");
+  });
+
+  it("returns empty booths array when no booths are registered", async () => {
+    const startTime = { toMillis: () => 1000, seconds: 1 };
+    const endTime = { toMillis: () => 9000, seconds: 9 };
+
+    db.collection.mockImplementation((col) => {
+      if (col === "fairSchedules") {
+        return {
+          doc: () => ({
+            get: jest.fn().mockResolvedValue({
+              exists: true,
+              data: () => ({
+                name: "Empty Fair",
+                startTime,
+                endTime,
+                registeredBoothIds: [],
+              }),
+            }),
+          }),
+        };
+      }
+      return { doc: jest.fn(), get: jest.fn() };
+    });
+
+    const res = await request(app)
+      .get("/api/fairs/fair1/booths")
+      .set("Authorization", "Bearer token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.booths).toHaveLength(0);
   });
 });
