@@ -312,6 +312,7 @@ export default function AdminDashboard() {
         scheduleData.inviteCode = generateFairInviteCode()
         scheduleData.createdAt = Timestamp.now()
         scheduleData.createdBy = user.uid
+        scheduleData.registeredBoothIds = []
         await addDoc(collection(db, "fairSchedules"), scheduleData)
         setSuccess(`Career fair scheduled successfully! Invite code: ${scheduleData.inviteCode}`)
       }
