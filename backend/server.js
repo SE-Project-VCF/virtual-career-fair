@@ -1406,6 +1406,72 @@ app.get("/api/fairs/:fairId/booths", verifyFirebaseToken, async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   JOIN FAIR WITH INVITE CODE (Company owner/rep)
+---------------------------------------------------- */
+app.post("/api/fairs/join", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { inviteCode } = req.body;
+    if (!inviteCode) {
+      return res.status(400).json({ error: "inviteCode is required" });
+    }
+
+    const normalizedCode = String(inviteCode).trim().toUpperCase();
+
+    // Find the schedule with this invite code
+    const schedulesSnapshot = await db.collection("fairSchedules")
+      .where("inviteCode", "==", normalizedCode)
+      .get();
+
+    if (schedulesSnapshot.empty) {
+      return res.status(404).json({ error: "Invalid invite code" });
+    }
+
+    const scheduleDoc = schedulesSnapshot.docs[0];
+    const scheduleData = scheduleDoc.data();
+
+    // Find the user's booth via company ownership
+    let boothId = null;
+    const ownerSnapshot = await db.collection("companies")
+      .where("ownerId", "==", req.user.uid)
+      .get();
+
+    if (!ownerSnapshot.empty) {
+      boothId = ownerSnapshot.docs[0].data().boothId || null;
+    }
+
+    // Fall back to representative role
+    if (!boothId) {
+      const repSnapshot = await db.collection("companies")
+        .where("representativeIDs", "array-contains", req.user.uid)
+        .get();
+      if (!repSnapshot.empty) {
+        boothId = repSnapshot.docs[0].data().boothId || null;
+      }
+    }
+
+    if (!boothId) {
+      return res.status(404).json({ error: "No booth found for this account" });
+    }
+
+    // Append boothId idempotently
+    const existing = scheduleData.registeredBoothIds || [];
+    if (!existing.includes(boothId)) {
+      await scheduleDoc.ref.update({
+        registeredBoothIds: [...existing, boothId],
+      });
+    }
+
+    return res.json({
+      fairId: scheduleDoc.id,
+      fairName: scheduleData.name || "",
+    });
+  } catch {
+    console.error("Error joining fair");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/* ----------------------------------------------------
    HELPER: Evaluate if fair should be live based on schedules
    Checks all schedules - fair is live if ANY schedule is active
 ---------------------------------------------------- */
