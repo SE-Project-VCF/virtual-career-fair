@@ -154,7 +154,7 @@ describe("POST /api/fairs/join", () => {
     expect(res.body.fairId).toBe("sched1");
     expect(res.body.fairName).toBe("Spring Fair");
     expect(scheduleDocRef.update).toHaveBeenCalledWith({
-      registeredBoothIds: expect.anything(),
+      registeredBoothIds: expect.objectContaining({ _type: "arrayUnion", args: ["booth1"] }),
     });
   });
 
@@ -208,7 +208,7 @@ describe("POST /api/fairs/join", () => {
     expect(res.status).toBe(200);
     expect(res.body.fairId).toBe("sched1");
     expect(scheduleDocRef.update).toHaveBeenCalledWith({
-      registeredBoothIds: expect.anything(),
+      registeredBoothIds: expect.objectContaining({ _type: "arrayUnion", args: ["booth-rep1"] }),
     });
   });
 
