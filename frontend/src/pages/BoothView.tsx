@@ -201,15 +201,17 @@ export default function BoothView() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setJoinError(data.error || "Failed to join fair")
+        if (isMountedRef.current) setJoinError(data.error || "Failed to join fair")
       } else {
-        setJoinSuccess(`Joined "${data.fairName || "fair"}" successfully`)
-        setJoinCode("")
+        if (isMountedRef.current) {
+          setJoinSuccess(`Joined "${data.fairName || "fair"}" successfully`)
+          setJoinCode("")
+        }
       }
     } catch {
-      setJoinError("Network error. Please try again.")
+      if (isMountedRef.current) setJoinError("Network error. Please try again.")
     } finally {
-      setJoiningFair(false)
+      if (isMountedRef.current) setJoiningFair(false)
     }
   }
 
@@ -630,7 +632,7 @@ export default function BoothView() {
                           }}
                           error={!!joinError}
                           helperText={joinError}
-                          inputProps={{ maxLength: 20 }}
+                          slotProps={{ htmlInput: { maxLength: 20 } }}
                           sx={{ flex: 1 }}
                         />
                         <Button
