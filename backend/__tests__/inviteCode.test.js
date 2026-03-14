@@ -146,7 +146,6 @@ describe("POST /api/update-invite-code", () => {
     }));
 
     db.runTransaction.mockImplementation(async (callback) => {
-      const companyRef = { exists: true };
       const transaction = {
         get: jest.fn().mockResolvedValue({ exists: true }),
         update: jest.fn(),

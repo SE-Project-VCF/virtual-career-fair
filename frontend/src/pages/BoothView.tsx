@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { trackBoothView } from "../utils/boothHistory";
 import {
@@ -133,7 +133,7 @@ export default function BoothView() {
         setRatingError(data.error || "Failed to submit rating")
         return
       }
-      setMyReview({ rating: ratingValue!, comment: ratingComment || null, createdAt: Date.now() })
+      setMyReview({ rating: ratingValue, comment: ratingComment || null, createdAt: Date.now() })
     } catch {
       if (isMountedRef.current) setRatingError("Failed to submit rating")
     } finally {
@@ -282,6 +282,16 @@ export default function BoothView() {
     return match?.id
   }
 
+  const hasInviteCodeAccess = async (status: { isLive: boolean; requiresInviteCode: boolean; activeScheduleId: string | null }): Promise<boolean> => {
+    if (!status.isLive || !status.requiresInviteCode || !status.activeScheduleId) return true
+    const scheduleDoc = await getDoc(doc(db, "fairSchedules", status.activeScheduleId))
+    const requiredCode = scheduleDoc.exists()
+      ? String(scheduleDoc.data().inviteCode || "").trim().toUpperCase()
+      : ""
+    const savedAccessCode = localStorage.getItem(`fairAccess:${status.activeScheduleId}:${user?.uid || "guest"}`)
+    return !requiredCode || savedAccessCode === requiredCode
+  }
+
   const fetchBooth = async () => {
     if (!boothId) return
 
@@ -299,17 +309,9 @@ export default function BoothView() {
         return
       }
 
-      if (status.isLive && status.requiresInviteCode && status.activeScheduleId) {
-        const scheduleDoc = await getDoc(doc(db, "fairSchedules", status.activeScheduleId))
-        const requiredCode = scheduleDoc.exists()
-          ? String(scheduleDoc.data().inviteCode || "").trim().toUpperCase()
-          : ""
-        const savedAccessCode = localStorage.getItem(`fairAccess:${status.activeScheduleId}:${user?.uid || "guest"}`)
-
-        if (requiredCode && savedAccessCode !== requiredCode) {
-          setError("This fair requires an invite code. Go to the Booths page and enter the fair invite code first.")
-          return
-        }
+      if (!await hasInviteCodeAccess(status)) {
+        setError("This fair requires an invite code. Go to the Booths page and enter the fair invite code first.")
+        return
       }
 
       const accessError = await getAccessError(status.isLive)
@@ -377,6 +379,72 @@ export default function BoothView() {
             Back to Booths
           </Button>
         </Card>
+      </Box>
+    )
+  }
+
+  let reviewContent: ReactNode
+  if (loadingMyReview) {
+    reviewContent = <CircularProgress size={24} />
+  } else if (myReview) {
+    reviewContent = (
+      <Box>
+        <Rating value={myReview.rating} readOnly size="large" sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }} />
+        {myReview.comment && (
+          <Typography variant="body2" sx={{ mt: 1 }}>{myReview.comment}</Typography>
+        )}
+        {myReview.createdAt && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            Submitted {new Date(myReview.createdAt).toLocaleDateString()}
+          </Typography>
+        )}
+        <Button
+          variant="outlined"
+          onClick={() => setResubmitOpen(true)}
+          sx={{ mt: 2, textTransform: "none", borderColor: "#b03a6c", color: "#b03a6c" }}
+        >
+          Resubmit Review
+        </Button>
+      </Box>
+    )
+  } else {
+    reviewContent = (
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Rating
+          value={ratingValue}
+          onChange={(_, val) => setRatingValue(val)}
+          size="large"
+          sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }}
+        />
+        <TextField
+          label="Comments (optional)"
+          multiline
+          rows={3}
+          value={ratingComment}
+          onChange={(e) => setRatingComment(e.target.value)}
+          slotProps={{ htmlInput: { maxLength: 1000 } }}
+          size="small"
+          fullWidth
+        />
+        {ratingError && (
+          <Alert severity="error">{ratingError}</Alert>
+        )}
+        <Button
+          variant="contained"
+          disabled={!ratingValue || submittingRating}
+          onClick={handleSubmitRating}
+          sx={{
+            background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+            textTransform: "none",
+            fontWeight: 600,
+            borderRadius: 2,
+            "&:hover": {
+              background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+            },
+          }}
+        >
+          {submittingRating ? "Submitting..." : "Submit Rating"}
+        </Button>
       </Box>
     )
   }
@@ -743,66 +811,7 @@ export default function BoothView() {
                     {myReview ? "Your Review" : "Rate this Booth"}
                   </Typography>
 
-                  {loadingMyReview ? (
-                    <CircularProgress size={24} />
-                  ) : myReview ? (
-                    <Box>
-                      <Rating value={myReview.rating} readOnly size="large" sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }} />
-                      {myReview.comment && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>{myReview.comment}</Typography>
-                      )}
-                      {myReview.createdAt && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-                          Submitted {new Date(myReview.createdAt).toLocaleDateString()}
-                        </Typography>
-                      )}
-                      <Button
-                        variant="outlined"
-                        onClick={() => setResubmitOpen(true)}
-                        sx={{ mt: 2, textTransform: "none", borderColor: "#b03a6c", color: "#b03a6c" }}
-                      >
-                        Resubmit Review
-                      </Button>
-                    </Box>
-                  ) : (
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <Rating
-                        value={ratingValue}
-                        onChange={(_, val) => setRatingValue(val)}
-                        size="large"
-                        sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }}
-                      />
-                      <TextField
-                        label="Comments (optional)"
-                        multiline
-                        rows={3}
-                        value={ratingComment}
-                        onChange={(e) => setRatingComment(e.target.value)}
-                        slotProps={{ htmlInput: { maxLength: 1000 } }}
-                        size="small"
-                        fullWidth
-                      />
-                      {ratingError && (
-                        <Alert severity="error">{ratingError}</Alert>
-                      )}
-                      <Button
-                        variant="contained"
-                        disabled={!ratingValue || submittingRating}
-                        onClick={handleSubmitRating}
-                        sx={{
-                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
-                          textTransform: "none",
-                          fontWeight: 600,
-                          borderRadius: 2,
-                          "&:hover": {
-                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-                          },
-                        }}
-                      >
-                        {submittingRating ? "Submitting..." : "Submit Rating"}
-                      </Button>
-                    </Box>
-                  )}
+                  {reviewContent}
                 </CardContent>
               </Card>
             )}

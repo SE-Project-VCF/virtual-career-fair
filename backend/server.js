@@ -85,8 +85,8 @@ async function verifyFirebaseToken(req, res, next) {
     const decodedToken = await auth.verifyIdToken(idToken);
     req.user = { uid: decodedToken.uid, email: decodedToken.email };
     next();
-  } catch (err) {
-    console.error("Token verification failed:", err);
+  } catch {
+    console.error("Token verification failed");
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 }
@@ -184,8 +184,8 @@ app.post("/api/sync-stream-user", verifyFirebaseToken, async (req, res) => {
     });
 
     return res.json({ success: true });
-  } catch (err) {
-    console.error("Stream single-user sync error:", err);
+  } catch {
+    console.error("Stream single-user sync error");
     return res.status(500).json({ error: "Failed to sync user to Stream" });
   }
 });
@@ -272,8 +272,8 @@ app.post("/api/register-user", async (req, res) => {
         role: "user", // Stream requires a valid role
       });
 
-    } catch (streamErr) {
-      console.error("Stream upsert error:", streamErr);
+    } catch {
+      console.error("Stream upsert error");
     }
 
     res.send({
@@ -285,8 +285,8 @@ app.post("/api/register-user", async (req, res) => {
         companyId,
       },
     });
-  } catch (err) {
-    console.error("Error registering user:", err);
+  } catch {
+    console.error("Error registering user");
     res.status(500).send({ success: false, error: "Internal server error" });
   }
 });
@@ -1399,8 +1399,8 @@ app.get("/api/fairs/:fairId/booths", verifyFirebaseToken, async (req, res) => {
       endTime: endTime ? endTime.toMillis() : null,
       booths: boothResults,
     });
-  } catch (err) {
-    console.error("Error fetching fair booths:", err);
+  } catch {
+    console.error("Error fetching fair booths");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -1841,8 +1841,8 @@ async function upsertAdminToStream(userRecord, { firstName, lastName, email }) {
       name: `${firstName || ""} ${lastName || ""}`.trim() || email,
       email, username, firstName: firstName || "", lastName: lastName || "", role: "user",
     });
-  } catch (streamErr) {
-    console.error("STREAM UPSERT ERROR:", streamErr);
+  } catch {
+    console.error("STREAM UPSERT ERROR");
   }
 }
 
@@ -1877,8 +1877,8 @@ app.post("/api/create-admin", async (req, res) => {
     await upsertAdminToStream(userRecord, { firstName, lastName, email });
 
     return res.json({ success: true, user: { uid: userRecord.uid, email, role: "administrator" } });
-  } catch (err) {
-    console.error("Error creating admin:", err);
+  } catch {
+    console.error("Error creating admin");
     return res.status(500).json({ error: "Failed to create admin account" });
   }
 });
