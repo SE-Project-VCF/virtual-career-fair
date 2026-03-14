@@ -99,6 +99,10 @@ export default function BoothView() {
   const [resubmitComment, setResubmitComment] = useState("")
   const [resubmitError, setResubmitError] = useState("")
   const [submittingResubmit, setSubmittingResubmit] = useState(false)
+  const [joinCode, setJoinCode] = useState("")
+  const [joinError, setJoinError] = useState("")
+  const [joinSuccess, setJoinSuccess] = useState("")
+  const [joiningFair, setJoiningFair] = useState(false)
 
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
@@ -170,6 +174,42 @@ export default function BoothView() {
       if (isMountedRef.current) setResubmitError("Failed to submit rating")
     } finally {
       if (isMountedRef.current) setSubmittingResubmit(false)
+    }
+  }
+
+  const handleJoinFair = async () => {
+    setJoinError("")
+    setJoinSuccess("")
+    if (!joinCode.trim()) {
+      setJoinError("Please enter an invite code")
+      return
+    }
+    if (!auth.currentUser) {
+      setJoinError("You must be logged in to join a fair")
+      return
+    }
+    setJoiningFair(true)
+    try {
+      const token = await auth.currentUser.getIdToken()
+      const res = await fetch(`${API_URL}/api/fairs/join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ inviteCode: joinCode.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setJoinError(data.error || "Failed to join fair")
+      } else {
+        setJoinSuccess(`Joined "${data.fairName || "fair"}" successfully`)
+        setJoinCode("")
+      }
+    } catch {
+      setJoinError("Network error. Please try again.")
+    } finally {
+      setJoiningFair(false)
     }
   }
 
@@ -567,6 +607,49 @@ export default function BoothView() {
                     {booth.description}
                   </Typography>
                 </Box>
+
+                {/* Join a Fair */}
+                {(user?.role === "companyOwner" || user?.role === "representative") && (
+                  <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        Join a Career Fair
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Enter the invite code provided by the fair organizer to register your booth.
+                      </Typography>
+                      <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                        <TextField
+                          label="Fair Invite Code"
+                          size="small"
+                          value={joinCode}
+                          onChange={(e) => {
+                            setJoinCode(e.target.value.toUpperCase())
+                            setJoinError("")
+                            setJoinSuccess("")
+                          }}
+                          error={!!joinError}
+                          helperText={joinError}
+                          inputProps={{ maxLength: 20 }}
+                          sx={{ flex: 1 }}
+                        />
+                        <Button
+                          variant="contained"
+                          onClick={handleJoinFair}
+                          disabled={joiningFair}
+                          sx={{ mt: 0.5 }}
+                        >
+                          {joiningFair ? "Joining…" : "Join Fair"}
+                        </Button>
+                      </Box>
+                      {joinSuccess && (
+                        <Alert severity="success" sx={{ mt: 1 }}>
+                          {joinSuccess}
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Job Postings */}
                 {loadingJobs && (
