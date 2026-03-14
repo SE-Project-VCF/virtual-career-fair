@@ -39,6 +39,7 @@ import EditIcon from "@mui/icons-material/Edit"
 import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
 import StarIcon from "@mui/icons-material/Star"
+import RefreshIcon from "@mui/icons-material/Refresh"
 import ProfileMenu from "./ProfileMenu"
 import { API_URL } from "../config"
 
@@ -65,6 +66,13 @@ export default function AdminDashboard() {
   const [scheduleDescription, setScheduleDescription] = useState<string | null>(null)
   const [boothAnalytics, setBoothAnalytics] = useState<{ boothId: string; companyName: string; averageRating: number; totalRatings: number }[]>([])
   const [loadingAnalytics, setLoadingAnalytics] = useState(false)
+
+  const generateFairInviteCode = (): string => {
+    return Array.from(
+      crypto.getRandomValues(new Uint8Array(4)),
+      (b) => b.toString(16).padStart(2, "0")
+    ).join("").toUpperCase()
+  }
 
   // Helper: Convert local datetime-local string to UTC ISO string
   const localToUTC = (localDateTime: string): string => {
@@ -120,6 +128,7 @@ export default function AdminDashboard() {
         schedulesList.push({
           id: doc.id,
           name: data.name || null,
+          inviteCode: data.inviteCode || null,
           startTime: data.startTime instanceof Timestamp
             ? data.startTime.toMillis()
             : data.startTime,
@@ -300,10 +309,11 @@ export default function AdminDashboard() {
         setSuccess("Career fair schedule updated successfully!")
       } else {
         // Create new schedule
+        scheduleData.inviteCode = generateFairInviteCode()
         scheduleData.createdAt = Timestamp.now()
         scheduleData.createdBy = user.uid
         await addDoc(collection(db, "fairSchedules"), scheduleData)
-        setSuccess("Career fair scheduled successfully!")
+        setSuccess(`Career fair scheduled successfully! Invite code: ${scheduleData.inviteCode}`)
       }
 
       setTimeout(() => setSuccess(""), 5000)
@@ -315,6 +325,30 @@ export default function AdminDashboard() {
       setError(err.message || "Failed to save career fair schedule")
     } finally {
       setSavingSchedule(false)
+    }
+  }
+
+  const handleRefreshInviteCode = async (scheduleId: string) => {
+    if (!user?.uid) {
+      setError("User not found")
+      return
+    }
+
+    try {
+      setError("")
+      const newInviteCode = generateFairInviteCode()
+      await updateDoc(doc(db, "fairSchedules", scheduleId), {
+        inviteCode: newInviteCode,
+        inviteCodeUpdatedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        updatedBy: user.uid,
+      })
+      setSuccess(`Fair invite code refreshed: ${newInviteCode}`)
+      setTimeout(() => setSuccess(""), 5000)
+      fetchSchedules()
+    } catch (err: any) {
+      console.error("Error refreshing fair invite code:", err)
+      setError(err.message || "Failed to refresh fair invite code")
     }
   }
 
@@ -569,6 +603,7 @@ export default function AdminDashboard() {
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Invite Code</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>Start Time</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>End Time</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
@@ -597,6 +632,19 @@ export default function AdminDashboard() {
                               </Typography>
                             )}
                           </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={schedule.inviteCode || "Not Set"}
+                              size="small"
+                              sx={{
+                                fontFamily: "monospace",
+                                fontWeight: 700,
+                                letterSpacing: "0.06em",
+                                bgcolor: "rgba(56, 133, 96, 0.12)",
+                                color: "#2f6f50",
+                              }}
+                            />
+                          </TableCell>
                           <TableCell>{formatDateTime(schedule.startTime)}</TableCell>
                           <TableCell>{formatDateTime(schedule.endTime)}</TableCell>
                           <TableCell>
@@ -611,6 +659,14 @@ export default function AdminDashboard() {
                             )}
                           </TableCell>
                           <TableCell align="right">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => { e.stopPropagation(); handleRefreshInviteCode(schedule.id) }}
+                              sx={{ color: "#388560" }}
+                              title="Refresh invite code"
+                            >
+                              <RefreshIcon />
+                            </IconButton>
                             <IconButton
                               size="small"
                               onClick={(e) => { e.stopPropagation(); handleOpenScheduleDialog(schedule) }}

@@ -299,6 +299,19 @@ export default function BoothView() {
         return
       }
 
+      if (status.isLive && status.requiresInviteCode && status.activeScheduleId) {
+        const scheduleDoc = await getDoc(doc(db, "fairSchedules", status.activeScheduleId))
+        const requiredCode = scheduleDoc.exists()
+          ? String(scheduleDoc.data().inviteCode || "").trim().toUpperCase()
+          : ""
+        const savedAccessCode = localStorage.getItem(`fairAccess:${status.activeScheduleId}:${user?.uid || "guest"}`)
+
+        if (requiredCode && savedAccessCode !== requiredCode) {
+          setError("This fair requires an invite code. Go to the Booths page and enter the fair invite code first.")
+          return
+        }
+      }
+
       const accessError = await getAccessError(status.isLive)
       if (!isMountedRef.current) return
 

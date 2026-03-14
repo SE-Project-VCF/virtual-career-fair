@@ -5,6 +5,8 @@ export interface FairStatus {
   isLive: boolean
   scheduleName: string | null
   scheduleDescription: string | null
+  activeScheduleId: string | null
+  requiresInviteCode: boolean
 }
 
 /**
@@ -27,6 +29,8 @@ export async function evaluateFairStatus(): Promise<FairStatus> {
           isLive: true,
           scheduleName: activeSchedule?.name || null,
           scheduleDescription: activeSchedule?.description || null,
+          activeScheduleId: activeSchedule?.id || null,
+          requiresInviteCode: Boolean(activeSchedule?.inviteCode),
         }
       }
     }
@@ -38,6 +42,8 @@ export async function evaluateFairStatus(): Promise<FairStatus> {
         isLive: true,
         scheduleName: activeSchedule.name || null,
         scheduleDescription: activeSchedule.description || null,
+        activeScheduleId: activeSchedule.id,
+        requiresInviteCode: Boolean(activeSchedule.inviteCode),
       }
     }
 
@@ -45,6 +51,8 @@ export async function evaluateFairStatus(): Promise<FairStatus> {
       isLive: false,
       scheduleName: null,
       scheduleDescription: null,
+      activeScheduleId: null,
+      requiresInviteCode: false,
     }
   } catch (err) {
     console.error("Error evaluating fair status:", err)
@@ -57,6 +65,8 @@ export async function evaluateFairStatus(): Promise<FairStatus> {
           isLive: data.isLive || false,
           scheduleName: null,
           scheduleDescription: null,
+          activeScheduleId: null,
+          requiresInviteCode: false,
         }
       }
     } catch (fallbackErr) {
@@ -66,6 +76,8 @@ export async function evaluateFairStatus(): Promise<FairStatus> {
       isLive: false,
       scheduleName: null,
       scheduleDescription: null,
+      activeScheduleId: null,
+      requiresInviteCode: false,
     }
   }
 }
@@ -73,7 +85,7 @@ export async function evaluateFairStatus(): Promise<FairStatus> {
 /**
  * Get the currently active schedule if any
  */
-async function getActiveSchedule(now: number): Promise<{ name: string | null; description: string | null } | null> {
+async function getActiveSchedule(now: number): Promise<{ id: string; name: string | null; description: string | null; inviteCode?: string | null } | null> {
   const schedulesSnapshot = await getDocs(collection(db, "fairSchedules"))
 
   for (const scheduleDoc of schedulesSnapshot.docs) {
@@ -90,8 +102,10 @@ async function getActiveSchedule(now: number): Promise<{ name: string | null; de
       // Check if current time is within this schedule's range
       if (now >= startTime && now <= endTime) {
         return {
+          id: scheduleDoc.id,
           name: scheduleData.name || null,
           description: scheduleData.description || null,
+          inviteCode: scheduleData.inviteCode || null,
         }
       }
     }
