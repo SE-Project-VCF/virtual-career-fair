@@ -3,8 +3,12 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
+  const FieldValue = {
+    arrayUnion: jest.fn((...args) => ({ _type: "arrayUnion", args })),
+    arrayRemove: jest.fn((...args) => ({ _type: "arrayRemove", args })),
+  };
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, FieldValue }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
@@ -131,7 +135,7 @@ describe("GET /api/fairs/:fairId/booths", () => {
     expect(res.body.booths[0].ratings[0].rating).toBe(4);
   });
 
-  it("returns only registered booths (ignores unregistered booth IDs)", async () => {
+  it("returns only registered booths (ignores deleted/non-existent booth IDs)", async () => {
     const startTime = { toMillis: () => 1000, seconds: 1 };
     const endTime = { toMillis: () => 9000, seconds: 9 };
 
@@ -145,7 +149,7 @@ describe("GET /api/fairs/:fairId/booths", () => {
                 name: "Test Fair",
                 startTime,
                 endTime,
-                registeredBoothIds: ["booth1"], // booth2 is NOT registered
+                registeredBoothIds: ["booth1", "deletedBooth"], // deletedBooth no longer exists
               }),
             }),
           }),
@@ -173,6 +177,7 @@ describe("GET /api/fairs/:fairId/booths", () => {
       .set("Authorization", "Bearer token");
 
     expect(res.status).toBe(200);
+    // deletedBooth is in registeredBoothIds but exists: false — must be filtered out
     expect(res.body.booths).toHaveLength(1);
     expect(res.body.booths[0].boothId).toBe("booth1");
   });
