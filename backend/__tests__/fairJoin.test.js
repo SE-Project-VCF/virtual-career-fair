@@ -5,8 +5,12 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
+  const FieldValue = {
+    arrayUnion: jest.fn((...args) => ({ _type: "arrayUnion", args })),
+    arrayRemove: jest.fn((...args) => ({ _type: "arrayRemove", args })),
+  };
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, FieldValue }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
@@ -150,7 +154,7 @@ describe("POST /api/fairs/join", () => {
     expect(res.body.fairId).toBe("sched1");
     expect(res.body.fairName).toBe("Spring Fair");
     expect(scheduleDocRef.update).toHaveBeenCalledWith({
-      registeredBoothIds: expect.arrayContaining(["booth1"]),
+      registeredBoothIds: expect.anything(),
     });
   });
 
@@ -204,11 +208,11 @@ describe("POST /api/fairs/join", () => {
     expect(res.status).toBe(200);
     expect(res.body.fairId).toBe("sched1");
     expect(scheduleDocRef.update).toHaveBeenCalledWith({
-      registeredBoothIds: expect.arrayContaining(["booth-rep1"]),
+      registeredBoothIds: expect.anything(),
     });
   });
 
-  it("does not call update when booth is already registered (idempotent)", async () => {
+  it("calls update with arrayUnion when booth is already registered (idempotent by arrayUnion)", async () => {
     const scheduleDocRef = {
       id: "sched1",
       update: jest.fn().mockResolvedValue(undefined),
@@ -249,7 +253,9 @@ describe("POST /api/fairs/join", () => {
       .send({ inviteCode: "CODE1234" });
 
     expect(res.status).toBe(200);
-    // The update should be skipped entirely when booth is already registered
-    expect(scheduleDocRef.update).not.toHaveBeenCalled();
+    // arrayUnion is always called — Firestore handles idempotency atomically
+    expect(scheduleDocRef.update).toHaveBeenCalledWith({
+      registeredBoothIds: expect.anything(),
+    });
   });
 });

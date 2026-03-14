@@ -1453,13 +1453,10 @@ app.post("/api/fairs/join", verifyFirebaseToken, async (req, res) => {
       return res.status(404).json({ error: "No booth found for this account" });
     }
 
-    // Append boothId idempotently
-    const existing = scheduleData.registeredBoothIds || [];
-    if (!existing.includes(boothId)) {
-      await scheduleDoc.ref.update({
-        registeredBoothIds: [...existing, boothId],
-      });
-    }
+    // Append boothId idempotently using arrayUnion (atomic, no race condition)
+    await scheduleDoc.ref.update({
+      registeredBoothIds: admin.firestore.FieldValue.arrayUnion(boothId),
+    });
 
     return res.json({
       fairId: scheduleDoc.id,
