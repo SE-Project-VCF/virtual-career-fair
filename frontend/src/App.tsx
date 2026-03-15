@@ -16,6 +16,7 @@ import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage" // ✅ added import
 import JobInvitations from "./pages/JobInvitations"
 import FairBoothsPage from "./pages/FairBoothsPage"
+import StudentFairBoothsPage from "./pages/StudentFairBoothsPage"
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />
         <Route path="/booths" element={<Booths />} />
+        <Route path="/fairs/:fairId/booths" element={<StudentFairBoothsPage />} />
         <Route path="/booth/:boothId" element={<BoothView />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
