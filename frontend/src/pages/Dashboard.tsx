@@ -761,60 +761,24 @@ export default function Dashboard() {
                       <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                         <BusinessIcon sx={{ fontSize: 40, color: "#b03a6c", mr: 2 }} />
                         <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          Browse Company Booths
+                          Booth History
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {isLive
-                          ? "Explore opportunities from top companies at the virtual career fair."
-                          : "The career fair is not currently live. Check back later to browse company booths."}
+                        View your booth visit history and revisit companies you've explored.
                       </Typography>
-
-                      {/* Two-button row: View All Booths + View Booth History */}
-                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                        <Button
-                          variant="contained"
-                          onClick={() => navigate("/booths")}
-                          disabled={!isLive}
-                          sx={{
-                            background: isLive
-                              ? "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)"
-                              : "rgba(0, 0, 0, 0.12)",
-                            color: isLive ? "white" : "rgba(0, 0, 0, 0.26)",
-                            "&:hover": {
-                              background: isLive
-                                ? "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)"
-                                : "rgba(0, 0, 0, 0.12)",
-                            },
-                            "&:disabled": {
-                              background: "rgba(0, 0, 0, 0.12)",
-                              color: "rgba(0, 0, 0, 0.26)",
-                            },
-                          }}
-                        >
-                          View All Booths
-                        </Button>
-
-                        <Button
-                          variant="outlined"
-                          onClick={() => navigate("/dashboard/booth-history")}
-                          disabled={!isLive}
-                          sx={{
-                            borderColor: "rgba(176, 58, 108, 0.6)",
-                            color: isLive ? "#b03a6c" : "rgba(0, 0, 0, 0.26)",
-                            "&:hover": {
-                              borderColor: "#b03a6c",
-                              backgroundColor: "rgba(176, 58, 108, 0.08)",
-                            },
-                            "&:disabled": {
-                              borderColor: "rgba(0, 0, 0, 0.12)",
-                              color: "rgba(0, 0, 0, 0.26)",
-                            },
-                          }}
-                        >
-                          View Booth History
-                        </Button>
-                      </Box>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/dashboard/booth-history")}
+                        sx={{
+                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                          },
+                        }}
+                      >
+                        View Booth History
+                      </Button>
                     </CardContent>
                   </Card>
                 </Grid>

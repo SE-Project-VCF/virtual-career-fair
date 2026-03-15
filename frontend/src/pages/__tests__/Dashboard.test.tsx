@@ -46,7 +46,7 @@ vi.mock("../../firebase", () => ({
 }))
 
 // Mock fetch for unread count and other API calls
-global.fetch = vi.fn().mockResolvedValue({
+globalThis.fetch = vi.fn().mockResolvedValue({
   ok: true,
   json: () => Promise.resolve({ unread: 0 }),
 })
@@ -122,7 +122,7 @@ describe("Dashboard", () => {
       expect(screen.getAllByText(/the career fair is not currently live/i)[0]).toBeInTheDocument()
     })
 
-    it("displays Browse Company Booths card for students", async () => {
+    it("displays Booth History card for students", async () => {
       mockGetCurrentUser.mockReturnValue({
         uid: "u1",
         email: "student@test.com",
@@ -136,14 +136,14 @@ describe("Dashboard", () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText("Browse Company Booths")).toBeInTheDocument()
+        expect(screen.getByText("Booth History")).toBeInTheDocument()
       })
 
-      const viewBoothsButton = screen.getByRole("button", { name: /view all booths/i })
-      expect(viewBoothsButton).toBeDisabled()
+      expect(screen.queryByRole("button", { name: /view all booths/i })).not.toBeInTheDocument()
+      expect(screen.getByRole("button", { name: /view booth history/i })).toBeEnabled()
     })
 
-    it("navigates to booths page when button clicked (when fair is live)", async () => {
+    it("booth history button is always enabled for students", async () => {
       mockGetCurrentUser.mockReturnValue({
         uid: "u1",
         email: "student@test.com",
@@ -160,8 +160,8 @@ describe("Dashboard", () => {
         expect(screen.getByText("Career Opportunities")).toBeInTheDocument()
       })
 
-      // Note: button is disabled when fair not live, so this just verifies it exists
-      expect(screen.getByRole("button", { name: /view all booths/i })).toBeInTheDocument()
+      const historyButton = screen.getByRole("button", { name: /view booth history/i })
+      expect(historyButton).toBeEnabled()
     })
   })
 
@@ -552,7 +552,7 @@ describe("Dashboard", () => {
   // Chat Functionality Tests
   describe("Chat Functionality", () => {
     it("displays chat button with unread count badge", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ unread: 5 }),
       })
