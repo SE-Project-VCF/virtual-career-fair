@@ -200,13 +200,13 @@ export default function BoothView() {
         body: JSON.stringify({ inviteCode: joinCode.trim() }),
       })
       const data = await res.json()
-      if (!res.ok) {
-        if (isMountedRef.current) setJoinError(data.error || "Failed to join fair")
-      } else {
+      if (res.ok) {
         if (isMountedRef.current) {
           setJoinSuccess(`Joined "${data.fairName || "fair"}" successfully`)
           setJoinCode("")
         }
+      } else if (isMountedRef.current) {
+        setJoinError(data.error || "Failed to join fair")
       }
     } catch {
       if (isMountedRef.current) setJoinError("Network error. Please try again.")

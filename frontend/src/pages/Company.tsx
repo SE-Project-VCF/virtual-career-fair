@@ -41,7 +41,6 @@ import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
-import ListItemSecondaryAction from "@mui/material/ListItemSecondaryAction"
 import Dialog from "@mui/material/Dialog"
 import DialogTitle from "@mui/material/DialogTitle"
 import DialogContent from "@mui/material/DialogContent"
@@ -81,7 +80,19 @@ interface JobInvitationStats {
   clickRate: string
 }
 
-export default function Company() {
+interface JobFormFields {
+  title: string
+  description: string
+  skills: string
+  applicationLink: string
+}
+
+type CompanyAccessDecision = {
+  redirectTo: string
+  message?: string
+} | null
+
+export default function Company() { // NOSONAR
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const user = authUtils.getCurrentUser()
@@ -139,6 +150,104 @@ export default function Company() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, id, userId, userRole])
 
+  const getCompanyAccessDecision = (companyInfo: Company): CompanyAccessDecision => {
+    if (userRole === "companyOwner" && companyInfo.ownerId !== userId) {
+      return { redirectTo: "/companies", message: "You don't have access to this company" }
+    }
+
+    if (userRole === "representative" && !companyInfo.representativeIDs?.includes(userId ?? "")) {
+      return { redirectTo: "/dashboard", message: "You don't have access to this company" }
+    }
+
+    if (userRole !== "companyOwner" && userRole !== "representative") {
+      return { redirectTo: "/dashboard" }
+    }
+
+    return null
+  }
+
+  const loadCompanyRelatedData = (companyInfo: Company) => {
+    if (companyInfo.boothId && (userRole === "companyOwner" || userRole === "representative")) {
+      fetchBoothReviews(companyInfo.boothId)
+    }
+
+    if (companyInfo.representativeIDs?.length) {
+      fetchRepresentatives(companyInfo.representativeIDs)
+    }
+
+    fetchJobs(companyInfo.id)
+  }
+
+  const getJobFormFields = (): JobFormFields => ({
+    title: jobTitle.trim(),
+    description: jobDescription.trim(),
+    skills: jobSkills.trim(),
+    applicationLink: jobApplicationLink.trim(),
+  })
+
+  const validateJobFormFields = (fields: JobFormFields) => {
+    const errors: {title?: string; description?: string; skills?: string; applicationLink?: string} = {}
+
+    if (!fields.title) {
+      errors.title = "Title is required"
+    }
+    if (!fields.description) {
+      errors.description = "Description is required"
+    }
+    if (!fields.skills) {
+      errors.skills = "Skills are required"
+    }
+    if (fields.applicationLink) {
+      try {
+        new URL(fields.applicationLink)
+      } catch {
+        errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)"
+      }
+    }
+
+    return errors
+  }
+
+  const buildJobUpdateData = (fields: JobFormFields) => ({
+    name: fields.title,
+    description: fields.description,
+    majorsAssociated: fields.skills,
+    applicationLink: fields.applicationLink || null,
+  })
+
+  const buildNewJobData = (companyId: string, fields: JobFormFields) => {
+    const jobData: {
+      companyId: string
+      name: string
+      description: string
+      majorsAssociated: string
+      createdAt: Date
+      applicationLink?: string
+    } = {
+      companyId,
+      name: fields.title,
+      description: fields.description,
+      majorsAssociated: fields.skills,
+      createdAt: new Date(),
+    }
+
+    if (fields.applicationLink) {
+      jobData.applicationLink = fields.applicationLink
+    }
+
+    return jobData
+  }
+
+  const getSaveJobButtonLabel = () => {
+    if (savingJob) {
+      return "Saving..."
+    }
+    if (editingJob) {
+      return "Update Job"
+    }
+    return "Publish Job"
+  }
+
   const fetchCompany = async () => {
     if (!id) return
 
@@ -160,37 +269,17 @@ export default function Company() {
         ...companyData
       }
 
-      // Check if user has access (owner or representative)
-      if (userRole === "companyOwner" && companyInfo.ownerId !== userId) {
-        setError("You don't have access to this company")
-        navigate("/companies")
-        return
-      }
-
-      if (userRole === "representative" && !companyInfo.representativeIDs?.includes(userId ?? "")) {
-        setError("You don't have access to this company")
-        navigate("/dashboard")
-        return
-      }
-
-      if (userRole !== "companyOwner" && userRole !== "representative") {
-        navigate("/dashboard")
+      const accessDecision = getCompanyAccessDecision(companyInfo)
+      if (accessDecision) {
+        if (accessDecision.message) {
+          setError(accessDecision.message)
+        }
+        navigate(accessDecision.redirectTo)
         return
       }
 
       setCompany(companyInfo)
-
-      if (companyInfo.boothId && (userRole === "companyOwner" || userRole === "representative")) {
-        fetchBoothReviews(companyInfo.boothId)
-      }
-
-      // Fetch representatives if there are any
-      if (companyInfo.representativeIDs && companyInfo.representativeIDs.length > 0) {
-        fetchRepresentatives(companyInfo.representativeIDs)
-      }
-      
-      // Fetch jobs for this company
-      fetchJobs(companyInfo.id)
+      loadCompanyRelatedData(companyInfo)
     } catch (err) {
       console.error("Error fetching company:", err)
       setError("Failed to load company")
@@ -359,27 +448,9 @@ export default function Company() {
   const handleSaveJob = async () => {
     if (!company) return
 
-    // Reset errors
     setJobErrors({})
-
-    // Validate required fields
-    const errors: {title?: string; description?: string; skills?: string; applicationLink?: string} = {}
-    if (!jobTitle.trim()) {
-      errors.title = "Title is required"
-    }
-    if (!jobDescription.trim()) {
-      errors.description = "Description is required"
-    }
-    if (!jobSkills.trim()) {
-      errors.skills = "Skills are required"
-    }
-    if (jobApplicationLink.trim()) {
-      try {
-        new URL(jobApplicationLink.trim())
-      } catch {
-        errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)"
-      }
-    }
+    const fields = getJobFormFields()
+    const errors = validateJobFormFields(fields)
 
     if (Object.keys(errors).length > 0) {
       setJobErrors(errors)
@@ -390,50 +461,18 @@ export default function Company() {
 
     try {
       if (editingJob) {
-        // Update existing job
         const jobRef = doc(db, "jobs", editingJob.id)
-        const updateData: any = {
-          name: jobTitle.trim(),
-          description: jobDescription.trim(),
-          majorsAssociated: jobSkills.trim(),
-        }
-        
-        // Only include applicationLink if it's not empty, otherwise set to null
-        if (jobApplicationLink.trim()) {
-          updateData.applicationLink = jobApplicationLink.trim()
-        } else {
-          updateData.applicationLink = null
-        }
-        
-        await updateDoc(jobRef, updateData)
-        
+        await updateDoc(jobRef, buildJobUpdateData(fields))
         setSuccess("Job posting updated successfully!")
-        fetchJobs(company.id)
-        setJobDialogOpen(false)
       } else {
-        // Create new job
         console.log("Creating job for company:", company.id, company.companyName)
-        
         const jobsRef = collection(db, "jobs")
-        const jobData: any = {
-          companyId: company.id,
-          name: jobTitle.trim(),
-          description: jobDescription.trim(),
-          majorsAssociated: jobSkills.trim(),
-          createdAt: new Date(),
-        }
-        
-        // Only add applicationLink if it's not empty
-        if (jobApplicationLink.trim()) {
-          jobData.applicationLink = jobApplicationLink.trim()
-        }
-        
-        await addDoc(jobsRef, jobData)
-        
+        await addDoc(jobsRef, buildNewJobData(company.id, fields))
         setSuccess("Job posting created successfully!")
-        fetchJobs(company.id)
-        setJobDialogOpen(false)
       }
+
+      fetchJobs(company.id)
+      setJobDialogOpen(false)
     } catch (err) {
       console.error("Error saving job:", err)
       setError("Failed to save job posting. Please try again.")
@@ -548,7 +587,7 @@ export default function Company() {
       await navigator.clipboard.writeText(text)
       setSuccess("Invite code copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
-    } catch (err) {
+    } catch {
       setError("Failed to copy to clipboard")
     }
   }
@@ -701,32 +740,7 @@ export default function Company() {
                       <Typography variant="body2" color="text.secondary">
                         Invite Code
                       </Typography>
-                      {!editingInviteCode ? (
-                        <Box sx={{ display: "flex", gap: 0.5 }}>
-                          <Tooltip title="Regenerate invite code">
-                            <IconButton
-                              onClick={() => handleRegenerateInviteCode()}
-                              size="small"
-                              disabled={updatingInviteCode}
-                              sx={{ color: "#388560" }}
-                            >
-                              <RefreshIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Edit invite code">
-                            <IconButton
-                              onClick={() => {
-                                setEditingInviteCode(true)
-                                setEditedInviteCode(company.inviteCode)
-                              }}
-                              size="small"
-                              sx={{ color: "#388560" }}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      ) : (
+                      {editingInviteCode ? (
                         <Box sx={{ display: "flex", gap: 0.5 }}>
                           <Tooltip title="Save">
                             <IconButton
@@ -751,6 +765,31 @@ export default function Company() {
                             </IconButton>
                           </Tooltip>
                         </Box>
+                      ) : (
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                          <Tooltip title="Regenerate invite code">
+                            <IconButton
+                              onClick={() => handleRegenerateInviteCode()}
+                              size="small"
+                              disabled={updatingInviteCode}
+                              sx={{ color: "#388560" }}
+                            >
+                              <RefreshIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Edit invite code">
+                            <IconButton
+                              onClick={() => {
+                                setEditingInviteCode(true)
+                                setEditedInviteCode(company.inviteCode)
+                              }}
+                              size="small"
+                              sx={{ color: "#388560" }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       )}
                     </Box>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -759,7 +798,7 @@ export default function Company() {
                           fullWidth
                           value={editedInviteCode}
                           onChange={(e) => {
-                            setEditedInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                            setEditedInviteCode(e.target.value.toUpperCase().replaceAll(/[^A-Z0-9]/g, ""))
                           }}
                           disabled={updatingInviteCode}
                           sx={{
@@ -791,7 +830,7 @@ export default function Company() {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
                   <PeopleIcon sx={{ fontSize: 20, color: "#b03a6c" }} />
                   <Typography variant="body2" color="text.secondary">
-                    {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length !== 1 ? "s" : ""}
+                    {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length === 1 ? "" : "s"}
                   </Typography>
                 </Box>
               </CardContent>
@@ -808,19 +847,32 @@ export default function Company() {
                     Representatives
                   </Typography>
 
-                  {loadingRepresentatives ? (
+                  {loadingRepresentatives && (
                     <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                       <CircularProgress size={24} />
                     </Box>
-                  ) : representatives.length === 0 ? (
+                  )}
+                  {!loadingRepresentatives && representatives.length === 0 && (
                     <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
                       No representatives have joined this company yet.
                     </Typography>
-                  ) : (
+                  )}
+                  {!loadingRepresentatives && representatives.length > 0 && (
                     <List>
                       {representatives.map((rep) => (
                         <ListItem
                           key={rep.uid}
+                          secondaryAction={
+                            <Tooltip title="Remove representative">
+                              <IconButton
+                                edge="end"
+                                onClick={() => handleDeleteClick(rep)}
+                                sx={{ color: "#d32f2f" }}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Tooltip>
+                          }
                           sx={{
                             borderBottom: "1px solid rgba(0,0,0,0.1)",
                             "&:last-child": {
@@ -832,17 +884,6 @@ export default function Company() {
                             primary={rep.firstName && rep.lastName ? `${rep.firstName} ${rep.lastName}` : rep.email}
                             secondary={rep.firstName && rep.lastName ? rep.email : undefined}
                           />
-                          <ListItemSecondaryAction>
-                            <Tooltip title="Remove representative">
-                              <IconButton
-                                edge="end"
-                                onClick={() => handleDeleteClick(rep)}
-                                sx={{ color: "#d32f2f" }}
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </Tooltip>
-                          </ListItemSecondaryAction>
                         </ListItem>
                       ))}
                     </List>
@@ -909,16 +950,16 @@ export default function Company() {
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                     Booth Reviews
                   </Typography>
-                  {loadingReviews ? (
-                    <CircularProgress size={24} />
-                  ) : boothReviews.length === 0 ? (
+                  {loadingReviews && <CircularProgress size={24} />}
+                  {!loadingReviews && boothReviews.length === 0 && (
                     <Typography color="text.secondary">No reviews yet.</Typography>
-                  ) : (
+                  )}
+                  {!loadingReviews && boothReviews.length > 0 && (
                     <>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
                         <Rating value={reviewsAverageRating} readOnly precision={0.1} />
                         <Typography variant="body2" color="text.secondary">
-                          {reviewsAverageRating?.toFixed(1)} avg · {boothReviews.length} review{boothReviews.length !== 1 ? "s" : ""}
+                          {reviewsAverageRating?.toFixed(1)} avg · {boothReviews.length} review{boothReviews.length === 1 ? "" : "s"}
                         </Typography>
                       </Box>
                       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -969,11 +1010,12 @@ export default function Company() {
                   </Button>
                 </Box>
 
-                {loadingJobs ? (
+                {loadingJobs && (
                   <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                     <CircularProgress size={24} />
                   </Box>
-                ) : jobs.length === 0 ? (
+                )}
+                {!loadingJobs && jobs.length === 0 && (
                   <Box sx={{ textAlign: "center", py: 4 }}>
                     <WorkIcon sx={{ fontSize: 48, color: "text.secondary", mb: 2 }} />
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
@@ -995,7 +1037,8 @@ export default function Company() {
                       Create Job Posting
                     </Button>
                   </Box>
-                ) : (
+                )}
+                {!loadingJobs && jobs.length > 0 && (
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {jobs.map((job) => (
                       <Card
@@ -1153,7 +1196,7 @@ export default function Company() {
                     Danger Zone
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Permanently delete this company. This action cannot be undone and will remove all company data, unlink representatives, and delete the associated booth.
+                    Permanently delete this company. This will remove all company data, detach representatives, and remove the company booth.
                   </Typography>
                   <Button
                     variant="contained"
@@ -1372,7 +1415,7 @@ export default function Company() {
               },
             }}
           >
-            {savingJob ? "Saving..." : editingJob ? "Update Job" : "Publish Job"}
+            {getSaveJobButtonLabel()}
           </Button>
         </DialogActions>
       </Dialog>

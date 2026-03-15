@@ -41,6 +41,11 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../../firebase", () => ({
   db: {},
+  auth: {
+    currentUser: {
+      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+    },
+  },
 }));
 
 // Import after mocks
@@ -81,7 +86,7 @@ describe("Company", () => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
     mockUseParams.mockReturnValue({ id: "company-1" });
-    
+
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
       role: "companyOwner",
@@ -337,7 +342,7 @@ describe("Company", () => {
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
       await user.click(deleteButtons[0].closest("button")!);
-      
+
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
@@ -389,13 +394,13 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
-      
+
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -414,7 +419,7 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -431,13 +436,13 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const titleInput = screen.getByLabelText(/job title/i);
       const linkInput = screen.getByLabelText(/application link/i);
-      
+
       await user.type(titleInput, "Job");
       await user.type(linkInput, "not-a-url");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -453,7 +458,7 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[editButtons.length - 1].closest("button")!);
+      await user.click(editButtons.at(-1)!.closest("button")!);
     }
   });
 
@@ -464,7 +469,7 @@ describe("Company", () => {
 
     const editButtons = screen.queryAllByTestId("EditIcon");
     if (editButtons.length > 0) {
-      await user.click(editButtons[editButtons.length - 1].closest("button")!);
+      await user.click(editButtons.at(-1)!.closest("button")!);
     }
 
     const linkInput = screen.getByLabelText(/application url/i);
@@ -490,11 +495,11 @@ describe("Company", () => {
 
     const deleteButtons = screen.queryAllByTestId("DeleteIcon");
     if (deleteButtons.length > 0) {
-      await user.click(deleteButtons[deleteButtons.length - 1].closest("button")!);
-      
-      const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
-      if (confirmButtons.length > 0) {
-        await user.click(confirmButtons[0]);
+      await user.click(deleteButtons.at(-1)!.closest("button")!);
+
+      const confirmButton = screen.queryAllByRole("button").find(b => b.textContent === "Delete");
+      if (confirmButton) {
+        await user.click(confirmButton);
         await waitFor(() => {
           expect(deleteDoc).toHaveBeenCalled();
         });
@@ -522,12 +527,12 @@ describe("Company", () => {
 
     // Wait for confirmation dialog
     await waitFor(() => {
-      const confirmButtons = screen.getAllByRole("button").filter(b => b.textContent === "Delete");
-      expect(confirmButtons.length).toBeGreaterThan(0);
+      const confirmButton = screen.getAllByRole("button").find(b => b.textContent === "Delete");
+      expect(confirmButton).toBeDefined();
     }, { timeout: 5000 });
 
-    const confirmButtons = screen.getAllByRole("button").filter(b => b.textContent === "Delete");
-    await user.click(confirmButtons[0]);
+    const confirmButton = screen.getAllByRole("button").find(b => b.textContent === "Delete");
+    if (confirmButton) await user.click(confirmButton);
 
     // Wait for error message
     await waitFor(() => {
@@ -581,7 +586,7 @@ describe("Company", () => {
     const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
     if (deleteButtons.length > 0) {
       await user.click(deleteButtons[0]);
-      
+
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
@@ -604,7 +609,7 @@ describe("Company", () => {
     const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
     if (deleteButtons.length > 0) {
       await user.click(deleteButtons[0]);
-      
+
       const confirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete");
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
@@ -643,10 +648,10 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
-      const titleInput = screen.getByLabelText(/job title/i);      
+
+      const titleInput = screen.getByLabelText(/job title/i);
       await user.type(titleInput, "New Job");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -657,7 +662,7 @@ describe("Company", () => {
   it("sorts jobs by creation date", async () => {
     const job1 = { ...mockJobData, createdAt: { toMillis: () => 1000 } };
     const job2 = { ...mockJobData, createdAt: { toMillis: () => 2000 } };
-    
+
     (getDocs as any).mockResolvedValue({
       forEach: (cb: any) => {
         cb({ id: "job-1", data: () => job1 });
@@ -665,7 +670,7 @@ describe("Company", () => {
       },
       empty: false,
     });
-    
+
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
     // Jobs should be displayed (sorted order tested in component)
@@ -673,12 +678,12 @@ describe("Company", () => {
 
   it("handles jobs with no creation date", async () => {
     const jobNoDate = { ...mockJobData, createdAt: null };
-    
+
     (getDocs as any).mockResolvedValue({
       forEach: (cb: any) => cb({ id: "job-1", data: () => jobNoDate }),
       empty: false,
     });
-    
+
     renderComp();
     expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
   });
@@ -687,7 +692,7 @@ describe("Company", () => {
     (getDoc as any).mockRejectedValueOnce(new Error("Error"));
     renderComp();
     await screen.findByText(/failed to load company/i, {}, { timeout: 3000 });
-    
+
     // Simulate successful retry by re-rendering
     vi.clearAllMocks();
     (getDoc as any).mockImplementation((docRef: any) => {
@@ -710,13 +715,13 @@ describe("Company", () => {
     const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
-      
+
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
-      
+
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
-      
+
       const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
       if (saveButtons.length > 0) {
         await user.click(saveButtons[0]);
@@ -729,11 +734,11 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
-      global.fetch = vi.fn();
+      globalThis.fetch = vi.fn();
     });
 
     it("fetches and displays job invitation stats", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -748,7 +753,7 @@ describe("Company", () => {
       await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
+        expect(globalThis.fetch).toHaveBeenCalledWith(
           expect.stringContaining("/api/job-invitations/stats/job-1"),
           expect.any(Object)
         );
@@ -756,7 +761,7 @@ describe("Company", () => {
     });
 
     it("displays View Details button when invitations exist", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -780,8 +785,8 @@ describe("Company", () => {
 
     it("opens JobInviteStatsDialog when View Details is clicked", async () => {
       const user = userEvent.setup();
-      
-      (global.fetch as any).mockResolvedValueOnce({
+
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -793,7 +798,7 @@ describe("Company", () => {
       });
 
       // Mock the details endpoint
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           invitations: [
@@ -824,7 +829,7 @@ describe("Company", () => {
         const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
         if (viewDetailsButton) {
           await user.click(viewDetailsButton);
-          
+
           await waitFor(() => {
             expect(screen.getByText("Invitation Details")).toBeInTheDocument();
           });
@@ -834,8 +839,8 @@ describe("Company", () => {
 
     it("closes JobInviteStatsDialog when Close is clicked", async () => {
       const user = userEvent.setup();
-      
-      (global.fetch as any).mockResolvedValue({
+
+      (globalThis.fetch as any).mockResolvedValue({
         ok: true,
         json: async () => ({
           totalSent: 5,
@@ -853,13 +858,13 @@ describe("Company", () => {
         const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
         if (viewDetailsButton) {
           await user.click(viewDetailsButton);
-          
+
           await waitFor(async () => {
             const dialogTitle = screen.queryByText("Invitation Details");
             if (dialogTitle) {
               const closeButton = screen.getByRole("button", { name: /close/i });
               await user.click(closeButton);
-              
+
               await waitFor(() => {
                 expect(screen.queryByText("Invitation Details")).not.toBeInTheDocument();
               });
@@ -870,7 +875,7 @@ describe("Company", () => {
     });
 
     it("does not display View Details button when no invitations", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 0,
@@ -891,7 +896,7 @@ describe("Company", () => {
     });
 
     it("handles stats fetch error gracefully", async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error("Network error"));
+      (globalThis.fetch as any).mockRejectedValueOnce(new Error("Network error"));
 
       renderComp();
       await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
@@ -903,7 +908,7 @@ describe("Company", () => {
     });
 
     it("displays invitation stats summary", async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      (globalThis.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           totalSent: 10,
@@ -918,10 +923,1008 @@ describe("Company", () => {
       await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
 
       await waitFor(() => {
-        // Check if stats numbers are displayed (they might be in various formats)
-        const statsText = screen.getByText(/Software Engineer/i).closest('div')?.textContent;
         // Stats should be visible somewhere in the job card
+        screen.getByText(/Software Engineer/i);
       }, { timeout: 5000 });
+    });
+  });
+
+  describe("Company with no booth", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn();
+
+      (getDoc as any).mockImplementation((docRef: any) => {
+        if (docRef.id === "company-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "company-1",
+            data: () => ({
+              ...mockCompanyData,
+              boothId: undefined,
+            }),
+          });
+        }
+        if (docRef.id === "rep-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "rep-1",
+            data: () => mockRepresentativeData,
+          });
+        }
+        return Promise.resolve({ exists: () => false });
+      });
+    });
+
+    it("shows Create Booth button when no boothId", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBoothBtn = await screen.findByRole("button", { name: /Create Booth/i });
+      expect(createBoothBtn).toBeInTheDocument();
+    });
+
+    it("does not show View Public Booth when no boothId", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: /View Public Booth/i })).not.toBeInTheDocument();
+      });
+    });
+
+    it("does not show Booth Reviews section when no boothId", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(screen.queryByText("Booth Reviews")).not.toBeInTheDocument();
+      });
+    });
+
+    it("navigates to booth editor on Create Booth click", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBoothBtn = await screen.findByRole("button", { name: /Create Booth/i });
+      await user.click(createBoothBtn);
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth");
+    });
+  });
+
+  describe("Booth Reviews", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn();
+    });
+
+    it("displays booth reviews with average rating", async () => {
+      (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/booths/") && url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              averageRating: 4.5,
+              ratings: [
+                { id: "r1", rating: 5, comment: "Great booth!", createdAt: Date.now() },
+                { id: "r2", rating: 4, comment: null, createdAt: Date.now() },
+              ],
+            }),
+          });
+        }
+        // stats endpoint
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            totalSent: 0,
+            totalViewed: 0,
+            totalClicked: 0,
+            viewRate: "0",
+            clickRate: "0",
+          }),
+        });
+      });
+
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText("Booth Reviews", {}, { timeout: 5000 })).toBeInTheDocument();
+      expect(await screen.findByText(/4\.5 avg/)).toBeInTheDocument();
+      expect(await screen.findByText(/2 reviews/)).toBeInTheDocument();
+      expect(await screen.findByText("Great booth!")).toBeInTheDocument();
+    });
+
+    it("shows no reviews message when booth has no reviews", async () => {
+      (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/booths/") && url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              averageRating: null,
+              ratings: [],
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            totalSent: 0,
+            totalViewed: 0,
+            totalClicked: 0,
+            viewRate: "0",
+            clickRate: "0",
+          }),
+        });
+      });
+
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText("Booth Reviews", {}, { timeout: 5000 })).toBeInTheDocument();
+      expect(await screen.findByText("No reviews yet.")).toBeInTheDocument();
+    });
+
+    it("shows single review without plural", async () => {
+      (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/booths/") && url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              averageRating: 3,
+              ratings: [
+                { id: "r1", rating: 3, comment: "Okay booth", createdAt: null },
+              ],
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            totalSent: 0,
+            totalViewed: 0,
+            totalClicked: 0,
+            viewRate: "0",
+            clickRate: "0",
+          }),
+        });
+      });
+
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText(/1 review\b/, {}, { timeout: 5000 })).toBeInTheDocument();
+      expect(await screen.findByText("Okay booth")).toBeInTheDocument();
+    });
+
+    it("handles booth reviews fetch error gracefully", async () => {
+      (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/booths/") && url.includes("/ratings")) {
+          return Promise.reject(new Error("Network error"));
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            totalSent: 0,
+            totalViewed: 0,
+            totalClicked: 0,
+            viewRate: "0",
+            clickRate: "0",
+          }),
+        });
+      });
+
+      renderComp();
+      // Company should still load even if reviews fail
+      expect(await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 })).toBeInTheDocument();
+    });
+  });
+
+  describe("Company with no representatives", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+
+      (getDoc as any).mockImplementation((docRef: any) => {
+        if (docRef.id === "company-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "company-1",
+            data: () => ({
+              ...mockCompanyData,
+              representativeIDs: [],
+            }),
+          });
+        }
+        return Promise.resolve({ exists: () => false });
+      });
+    });
+
+    it("displays no representatives message", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText(/No representatives have joined/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+
+    it("shows 0 Representatives count", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText(/0 Representative/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+  });
+
+  describe("Company with no jobs", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+
+      (getDocs as any).mockResolvedValue({
+        forEach: () => {},
+        empty: true,
+      });
+    });
+
+    it("shows empty jobs message", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText(/No job postings yet/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+
+    it("shows Job Postings (0) count", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText(/Job Postings \(0\)/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+
+    it("shows Create Job Posting button in empty state", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      await waitFor(() => {
+        const createButtons = screen.getAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+        // Should have 2: one in the header and one in the empty state
+        expect(createButtons.length).toBeGreaterThanOrEqual(2);
+      }, { timeout: 3000 });
+    });
+  });
+
+  describe("Representative user role", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+
+      (authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "rep-1",
+        role: "representative",
+      });
+    });
+
+    it("does not show invite code section for representative", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(screen.queryByText("Invite Code")).not.toBeInTheDocument();
+      });
+    });
+
+    it("does not show Delete Company section for representative", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(screen.queryByText("Danger Zone")).not.toBeInTheDocument();
+      });
+    });
+
+    it("does not show Representatives list card for non-owner rep", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      await waitFor(() => {
+        // The "Representatives" heading is only inside the owner card
+        const repHeadings = screen.queryAllByText("Representatives");
+        // Should not find the card heading (though it may find the count text)
+        expect(repHeadings.length).toBe(0);
+      });
+    });
+
+    it("navigates to dashboard on back button for representative", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const backIcon = screen.queryAllByTestId("ArrowBackIcon");
+      if (backIcon.length > 0) {
+        await user.click(backIcon[0].closest("button")!);
+        expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+      }
+    });
+  });
+
+  describe("Invite students dialog", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("opens invite dialog when Send icon is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+      const sendButtons = screen.queryAllByTestId("SendIcon");
+      expect(sendButtons.length).toBeGreaterThan(0);
+
+      await user.click(sendButtons[0].closest("button")!);
+
+      // The JobInviteDialog should open - it renders with a dialog
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toBeInTheDocument();
+      }, { timeout: 3000 });
+    });
+  });
+
+  describe("Regenerate invite code failure", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("shows error when regenerate fails with API error", async () => {
+      const user = userEvent.setup();
+      (authUtils.updateInviteCode as any).mockResolvedValue({
+        success: false,
+        error: "Server error occurred",
+      });
+      renderComp();
+      await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+      const refreshButtons = screen.queryAllByTestId("RefreshIcon");
+      if (refreshButtons.length > 0) {
+        await user.click(refreshButtons[0].closest("button")!);
+        expect(await screen.findByText(/Server error occurred/i)).toBeInTheDocument();
+      }
+    });
+
+    it("shows fallback error when regenerate returns no error message", async () => {
+      const user = userEvent.setup();
+      (authUtils.updateInviteCode as any).mockResolvedValue({
+        success: false,
+      });
+      renderComp();
+      await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+      const refreshButtons = screen.queryAllByTestId("RefreshIcon");
+      if (refreshButtons.length > 0) {
+        await user.click(refreshButtons[0].closest("button")!);
+        expect(await screen.findByText(/Failed to regenerate invite code/i)).toBeInTheDocument();
+      }
+    });
+
+    it("shows error when regenerate throws exception", async () => {
+      const user = userEvent.setup();
+      (authUtils.updateInviteCode as any).mockRejectedValue(new Error("Network error"));
+      renderComp();
+      await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+      const refreshButtons = screen.queryAllByTestId("RefreshIcon");
+      if (refreshButtons.length > 0) {
+        await user.click(refreshButtons[0].closest("button")!);
+        expect(await screen.findByText(/Failed to regenerate invite code/i)).toBeInTheDocument();
+      }
+    });
+  });
+
+  describe("Save invite code failure", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("shows error when save invite code fails with API error", async () => {
+      const user = userEvent.setup();
+      (authUtils.updateInviteCode as any).mockResolvedValue({
+        success: false,
+        error: "Code already in use",
+      });
+      renderComp();
+      await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+      const editButtons = screen.queryAllByTestId("EditIcon");
+      if (editButtons.length > 0) {
+        await user.click(editButtons[0].closest("button")!);
+
+        const inputs = screen.queryAllByRole("textbox");
+        const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE"));
+        if (inviteInput) {
+          await user.clear(inviteInput);
+          await user.type(inviteInput, "VALIDCODE");
+
+          const saveButtons = screen.queryAllByTestId("SaveIcon");
+          if (saveButtons.length > 0) {
+            await user.click(saveButtons[0].closest("button")!);
+          }
+        }
+      }
+
+      expect(await screen.findByText(/Code already in use/i)).toBeInTheDocument();
+    });
+
+    it("shows error when save invite code throws exception", async () => {
+      const user = userEvent.setup();
+      (authUtils.updateInviteCode as any).mockRejectedValue(new Error("Network error"));
+      renderComp();
+      await screen.findByText(/INVITE123/, {}, { timeout: 3000 });
+
+      const editButtons = screen.queryAllByTestId("EditIcon");
+      if (editButtons.length > 0) {
+        await user.click(editButtons[0].closest("button")!);
+
+        const inputs = screen.queryAllByRole("textbox");
+        const inviteInput = inputs.find(i => (i as HTMLInputElement).value.includes("INVITE"));
+        if (inviteInput) {
+          await user.clear(inviteInput);
+          await user.type(inviteInput, "VALIDCODE");
+
+          const saveButtons = screen.queryAllByTestId("SaveIcon");
+          if (saveButtons.length > 0) {
+            await user.click(saveButtons[0].closest("button")!);
+          }
+        }
+      }
+
+      expect(await screen.findByText(/Failed to update invite code/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("Booth management navigation", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("shows Edit Booth button when boothId exists", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const editBoothBtn = await screen.findByRole("button", { name: /Edit Booth/i });
+      expect(editBoothBtn).toBeInTheDocument();
+    });
+
+    it("shows View Public Booth button when boothId exists", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const viewBoothBtn = await screen.findByRole("button", { name: /View Public Booth/i });
+      expect(viewBoothBtn).toBeInTheDocument();
+    });
+
+    it("navigates to booth editor on Edit Booth click", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const editBoothBtn = await screen.findByRole("button", { name: /Edit Booth/i });
+      await user.click(editBoothBtn);
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth");
+    });
+
+    it("navigates to public booth on View Public Booth click", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const viewBoothBtn = await screen.findByRole("button", { name: /View Public Booth/i });
+      await user.click(viewBoothBtn);
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1");
+    });
+  });
+
+  describe("Delete company dialog content", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("shows warning text in delete company dialog", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
+      if (deleteButtons.length > 0) {
+        await user.click(deleteButtons[0]);
+        expect(await screen.findByText(/This action cannot be undone/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Remove the company permanently/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Unlink all representatives/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Delete the associated booth/i)).toBeInTheDocument();
+      }
+    });
+
+    it("closes delete company dialog on cancel", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
+      if (deleteButtons.length > 0) {
+        await user.click(deleteButtons[0]);
+        await screen.findByRole("dialog");
+
+        const cancelButton = screen.getAllByRole("button").filter(b => b.textContent === "Cancel");
+        if (cancelButton.length > 0) {
+          await user.click(cancelButton.at(-1)!);
+          await waitFor(() => {
+            expect(screen.queryByText(/This action cannot be undone/i)).not.toBeInTheDocument();
+          });
+        }
+      }
+    });
+
+    it("handles deleteCompany exception", async () => {
+      const user = userEvent.setup();
+      (authUtils.deleteCompany as any).mockRejectedValue(new Error("Server error"));
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const deleteButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Delete Company"));
+      if (deleteButtons.length > 0) {
+        await user.click(deleteButtons[0]);
+
+        // Click the dialog's Delete Company button
+        const confirmBtn = await screen.findByRole("button", { name: /Delete Company/i });
+        // The dialog has a button labeled "Delete Company" (the confirm one)
+        const dialogConfirmButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Delete Company");
+        // The last one should be in the dialog
+        if (dialogConfirmButtons.length > 1) {
+          await user.click(dialogConfirmButtons.at(-1)!);
+        } else {
+          await user.click(confirmBtn);
+        }
+
+        expect(await screen.findByText(/Failed to delete company/i)).toBeInTheDocument();
+      }
+    });
+  });
+
+  describe("Job dialog interactions", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("shows Edit Job Posting dialog title when editing", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+      // Click the edit icon for the job (last EditIcon is for the job)
+      const editButtons = screen.queryAllByTestId("EditIcon");
+      if (editButtons.length > 0) {
+        await user.click(editButtons.at(-1)!.closest("button")!);
+        expect(await screen.findByText("Edit Job Posting")).toBeInTheDocument();
+      }
+    });
+
+    it("shows Create Job Posting dialog title when creating", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBtn = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+      if (createBtn.length > 0) {
+        await user.click(createBtn[0]);
+        // Dialog title should say Create, not Edit
+        const dialogTitle = await screen.findByText("Create Job Posting", { selector: 'h2' });
+        expect(dialogTitle).toBeInTheDocument();
+      }
+    });
+
+    it("populates job fields when editing", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+      const editButtons = screen.queryAllByTestId("EditIcon");
+      if (editButtons.length > 0) {
+        await user.click(editButtons.at(-1)!.closest("button")!);
+
+        await waitFor(() => {
+          expect(screen.getByLabelText(/job title/i)).toHaveValue("Software Engineer");
+        });
+      }
+    });
+
+    it("closes job dialog on cancel", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBtn = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+      if (createBtn.length > 0) {
+        await user.click(createBtn[0]);
+        await screen.findByRole("dialog");
+
+        const cancelButton = screen.getAllByRole("button").filter(b => b.textContent === "Cancel");
+        if (cancelButton.length > 0) {
+          await user.click(cancelButton.at(-1)!);
+          await waitFor(() => {
+            expect(screen.queryByText("Create Job Posting", { selector: 'h2' })).not.toBeInTheDocument();
+          });
+        }
+      }
+    });
+
+    it("shows error when job save fails", async () => {
+      const user = userEvent.setup();
+      (addDoc as any).mockRejectedValueOnce(new Error("save failed"));
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBtn = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+      if (createBtn.length > 0) {
+        await user.click(createBtn[0]);
+
+        const titleInput = screen.getByLabelText(/job title/i);
+        const descInput = screen.getByLabelText(/description/i);
+        const skillsInput = screen.getByLabelText(/required skills/i);
+
+        await user.type(titleInput, "New Job");
+        await user.type(descInput, "Description");
+        await user.type(skillsInput, "React");
+
+        const publishBtn = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+        if (publishBtn.length > 0) {
+          await user.click(publishBtn[0]);
+          expect(await screen.findByText(/Failed to save job posting/i)).toBeInTheDocument();
+        }
+      }
+    });
+
+    it("validates description is required", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBtn = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+      if (createBtn.length > 0) {
+        await user.click(createBtn[0]);
+
+        const titleInput = screen.getByLabelText(/job title/i);
+        await user.type(titleInput, "New Job");
+
+        const publishBtn = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+        if (publishBtn.length > 0) {
+          await user.click(publishBtn[0]);
+          expect(addDoc).not.toHaveBeenCalled();
+        }
+      }
+    });
+
+    it("validates skills are required", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBtn = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+      if (createBtn.length > 0) {
+        await user.click(createBtn[0]);
+
+        const titleInput = screen.getByLabelText(/job title/i);
+        const descInput = screen.getByLabelText(/description/i);
+        await user.type(titleInput, "New Job");
+        await user.type(descInput, "Description");
+
+        const publishBtn = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+        if (publishBtn.length > 0) {
+          await user.click(publishBtn[0]);
+          expect(addDoc).not.toHaveBeenCalled();
+        }
+      }
+    });
+
+    it("clears field errors on typing", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBtn = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+      if (createBtn.length > 0) {
+        await user.click(createBtn[0]);
+
+        // Submit empty to trigger errors
+        const publishBtn = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+        if (publishBtn.length > 0) {
+          await user.click(publishBtn[0]);
+        }
+
+        // Now type in the title field, error should clear
+        const titleInput = screen.getByLabelText(/job title/i);
+        await user.type(titleInput, "N");
+
+        await waitFor(() => {
+          // The title error should be cleared after typing
+          expect(titleInput.getAttribute("aria-invalid")).not.toBe("true");
+        });
+      }
+    });
+
+    it("creates job with application link", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const createBtn = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Create Job Posting"));
+      if (createBtn.length > 0) {
+        await user.click(createBtn[0]);
+
+        const titleInput = screen.getByLabelText(/job title/i);
+        const descInput = screen.getByLabelText(/description/i);
+        const skillsInput = screen.getByLabelText(/required skills/i);
+        const linkInput = screen.getByLabelText(/application url/i);
+
+        await user.type(titleInput, "New Job");
+        await user.type(descInput, "Description");
+        await user.type(skillsInput, "React");
+        await user.type(linkInput, "https://example.com/apply");
+
+        const publishBtn = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+        if (publishBtn.length > 0) {
+          await user.click(publishBtn[0]);
+          await waitFor(() => {
+            expect(addDoc).toHaveBeenCalledWith(
+              expect.anything(),
+              expect.objectContaining({
+                applicationLink: "https://example.com/apply",
+              })
+            );
+          });
+        }
+      }
+    });
+  });
+
+  describe("Delete job dialog", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("shows delete job confirmation text", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+      // Click the delete icon for the job
+      const deleteButtons = screen.queryAllByTestId("DeleteIcon");
+      // Find the job delete button (last one in the job card area)
+      const jobDeleteBtn = deleteButtons.at(-1)?.closest("button");
+      if (jobDeleteBtn) {
+        await user.click(jobDeleteBtn);
+        expect(await screen.findByText(/Are you sure you want to delete/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Software Engineer/i)).toBeInTheDocument();
+      }
+    });
+
+    it("closes delete job dialog on cancel", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
+
+      const deleteButtons = screen.queryAllByTestId("DeleteIcon");
+      const jobDeleteBtn = deleteButtons.at(-1)?.closest("button");
+      if (jobDeleteBtn) {
+        await user.click(jobDeleteBtn);
+        await screen.findByRole("dialog");
+
+        const cancelButton = screen.getAllByRole("button").filter(b => b.textContent === "Cancel");
+        if (cancelButton.length > 0) {
+          await user.click(cancelButton.at(-1)!);
+          await waitFor(() => {
+            expect(screen.queryByText("Delete Job Posting")).not.toBeInTheDocument();
+          });
+        }
+      }
+    });
+  });
+
+  describe("Representative with only email (no name)", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+
+      (getDoc as any).mockImplementation((docRef: any) => {
+        if (docRef.id === "company-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "company-1",
+            data: () => mockCompanyData,
+          });
+        }
+        if (docRef.id === "rep-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "rep-1",
+            data: () => ({
+              email: "rep@example.com",
+              firstName: undefined,
+              lastName: undefined,
+            }),
+          });
+        }
+        return Promise.resolve({ exists: () => false });
+      });
+    });
+
+    it("shows email when rep has no first/last name", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      expect(await screen.findByText("rep@example.com", {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+  });
+
+  describe("Representative with only first name", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+
+      (getDoc as any).mockImplementation((docRef: any) => {
+        if (docRef.id === "company-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "company-1",
+            data: () => mockCompanyData,
+          });
+        }
+        if (docRef.id === "rep-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "rep-1",
+            data: () => ({
+              email: "rep@example.com",
+              firstName: "Jane",
+              lastName: undefined,
+            }),
+          });
+        }
+        return Promise.resolve({ exists: () => false });
+      });
+    });
+
+    it("shows email as primary when rep has only firstName (no lastName)", async () => {
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      // The component checks `rep.firstName && rep.lastName` for rendering name
+      // When only firstName exists, it falls back to email in the ListItemText primary
+      expect(await screen.findByText("rep@example.com", {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+  });
+
+  describe("Owner back button navigation", () => {
+    beforeEach(() => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          totalSent: 0,
+          totalViewed: 0,
+          totalClicked: 0,
+          viewRate: "0",
+          clickRate: "0",
+        }),
+      });
+    });
+
+    it("navigates to /companies on back button for owner", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
+
+      const backIcon = screen.queryAllByTestId("ArrowBackIcon");
+      if (backIcon.length > 0) {
+        await user.click(backIcon[0].closest("button")!);
+        expect(mockNavigate).toHaveBeenCalledWith("/companies");
+      }
     });
   });
 });

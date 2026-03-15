@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import EventList from "../EventList";
-import { getDocs, Timestamp } from "firebase/firestore";
+import { getDocs, getDoc, Timestamp } from "firebase/firestore";
 
 const mockNavigate = vi.fn();
 
@@ -24,6 +24,17 @@ vi.mock("../../utils/auth", () => ({
 vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }));
+
+vi.mock("../../firebase", () => ({
+  db: {},
+  auth: {
+    currentUser: {
+      getIdToken: vi.fn().mockResolvedValue("mock-token"),
+    },
+  },
+}));
+
+import { auth } from "../../firebase";
 
 import { authUtils } from "../../utils/auth";
 
@@ -488,5 +499,412 @@ describe("EventList", () => {
     });
 
     expect(screen.queryByRole("button", { name: "Browse Booths" })).not.toBeInTheDocument();
+  });
+
+  // --- Join Fair Dialog Tests ---
+
+  const setupCompanyUserWithFair = () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "company-1",
+      role: "companyOwner",
+    });
+
+    const now = Date.now();
+    const futureEnd = now + 86400000;
+
+    const emptySnapshot = { empty: true, docs: [], forEach: vi.fn() };
+    const fairSnapshot = {
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Test Fair",
+            startTime: now + 3600000,
+            endTime: futureEnd,
+          }),
+        });
+      },
+    };
+
+    (getDocs as any)
+      .mockResolvedValueOnce(emptySnapshot)
+      .mockResolvedValueOnce(fairSnapshot);
+  };
+
+  it("company user sees Join a Fair button", async () => {
+    setupCompanyUserWithFair();
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+  });
+
+  it("student does not see Join a Fair button", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "student-1",
+      role: "student",
+    });
+
+    const now = Date.now();
+    const futureEnd = now + 86400000;
+
+    (getDocs as any).mockResolvedValue({
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Student Fair",
+            startTime: now,
+            endTime: futureEnd,
+          }),
+        });
+      },
+    });
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByText("Student Fair")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: "Join a Fair" })).not.toBeInTheDocument();
+  });
+
+  it("clicking Join a Fair opens the dialog", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+
+    expect(screen.getByText("Join a Career Fair")).toBeInTheDocument();
+    expect(screen.getByLabelText("Fair Invite Code")).toBeInTheDocument();
+  });
+
+  it("shows error when submitting empty invite code", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+
+    // The Join Fair submit button should be disabled when code is empty
+    const joinButton = screen.getByRole("button", { name: "Join Fair" });
+    expect(joinButton).toBeDisabled();
+  });
+
+  it("shows error when not logged in", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+
+    // Set auth.currentUser to null to simulate logged out
+    const originalCurrentUser = (auth as any).currentUser;
+    (auth as any).currentUser = null;
+
+    await user.type(screen.getByLabelText("Fair Invite Code"), "TESTCODE");
+    await user.click(screen.getByRole("button", { name: "Join Fair" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("You must be logged in to join a fair")).toBeInTheDocument();
+    });
+
+    // Restore
+    (auth as any).currentUser = originalCurrentUser;
+  });
+
+  it("successful join shows success message", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "company-1",
+      role: "companyOwner",
+    });
+
+    const now = Date.now();
+    const futureEnd = now + 86400000;
+
+    const emptySnapshot = { empty: true, docs: [], forEach: vi.fn() };
+    const fairSnapshot = {
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Test Fair",
+            startTime: now + 3600000,
+            endTime: futureEnd,
+          }),
+        });
+      },
+    };
+
+    // Initial load: owner query + fair schedules
+    // After join success: fetchSchedules called again — owner query + fair schedules
+    (getDocs as any)
+      .mockResolvedValueOnce(emptySnapshot)
+      .mockResolvedValueOnce(fairSnapshot)
+      .mockResolvedValueOnce(emptySnapshot)
+      .mockResolvedValueOnce(fairSnapshot);
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ fairName: "Spring Fair" }),
+    });
+
+    const user = userEvent.setup();
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+    await user.type(screen.getByLabelText("Fair Invite Code"), "SPRING2025");
+    await user.click(screen.getByRole("button", { name: "Join Fair" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Joined "Spring Fair" successfully/)).toBeInTheDocument();
+    });
+  });
+
+  it("failed join shows server error", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: "Invalid invite code" }),
+    });
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+    await user.type(screen.getByLabelText("Fair Invite Code"), "BADCODE");
+    await user.click(screen.getByRole("button", { name: "Join Fair" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid invite code")).toBeInTheDocument();
+    });
+  });
+
+  it("network error shows fallback message", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn().mockRejectedValueOnce(new Error("Network error"));
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+    await user.type(screen.getByLabelText("Fair Invite Code"), "CODE123");
+    await user.click(screen.getByRole("button", { name: "Join Fair" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Network error. Please try again.")).toBeInTheDocument();
+    });
+  });
+
+  it("cancel button closes the join dialog", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+    expect(screen.getByText("Join a Career Fair")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Join a Career Fair")).not.toBeInTheDocument();
+    });
+  });
+
+  it("company owner with boothId sees Enrolled chip for enrolled fairs", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "company-1",
+      role: "companyOwner",
+    });
+
+    const now = Date.now();
+    const futureEnd = now + 86400000;
+
+    const ownerSnapshot = {
+      empty: false,
+      docs: [
+        {
+          data: () => ({ ownerId: "company-1", boothId: "booth-abc" }),
+        },
+      ],
+    };
+
+    const fairSnapshot = {
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Enrolled Fair",
+            startTime: now + 3600000,
+            endTime: futureEnd,
+            registeredBoothIds: ["booth-abc"],
+          }),
+        });
+      },
+    };
+
+    (getDocs as any)
+      .mockResolvedValueOnce(ownerSnapshot)
+      .mockResolvedValueOnce(fairSnapshot);
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByText("Enrolled Fair")).toBeInTheDocument();
+      expect(screen.getByText("Enrolled")).toBeInTheDocument();
+    });
+  });
+
+  it("representative booth lookup via getDoc", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "rep-1",
+      role: "representative",
+      companyId: "company-1",
+    });
+
+    const now = Date.now();
+    const futureEnd = now + 86400000;
+
+    // Owner query returns empty
+    const emptySnapshot = { empty: true, docs: [] };
+
+    // getDoc returns company with boothId
+    (getDoc as any).mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ boothId: "booth-rep" }),
+    });
+
+    const fairSnapshot = {
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Rep Fair",
+            startTime: now + 3600000,
+            endTime: futureEnd,
+            registeredBoothIds: ["booth-rep"],
+          }),
+        });
+      },
+    };
+
+    (getDocs as any)
+      .mockResolvedValueOnce(emptySnapshot)
+      .mockResolvedValueOnce(fairSnapshot);
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByText("Rep Fair")).toBeInTheDocument();
+      expect(screen.getByText("Enrolled")).toBeInTheDocument();
+    });
+  });
+
+  it("failed join with no error field shows default message", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({}),
+    });
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+    await user.type(screen.getByLabelText("Fair Invite Code"), "NOERROR");
+    await user.click(screen.getByRole("button", { name: "Join Fair" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed to join fair")).toBeInTheDocument();
+    });
+  });
+
+  it("typing in invite code clears previous error", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: "Bad code" }),
+    });
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+    await user.type(screen.getByLabelText("Fair Invite Code"), "BAD");
+    await user.click(screen.getByRole("button", { name: "Join Fair" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Bad code")).toBeInTheDocument();
+    });
+
+    // Typing should clear the error
+    await user.type(screen.getByLabelText("Fair Invite Code"), "X");
+    await waitFor(() => {
+      expect(screen.queryByText("Bad code")).not.toBeInTheDocument();
+    });
+  });
+
+  it("input converts text to uppercase", async () => {
+    setupCompanyUserWithFair();
+    const user = userEvent.setup();
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Join a Fair" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Join a Fair" }));
+    await user.type(screen.getByLabelText("Fair Invite Code"), "abc");
+
+    expect(screen.getByLabelText("Fair Invite Code")).toHaveValue("ABC");
   });
 });
