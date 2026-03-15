@@ -11,11 +11,6 @@ import {
   CircularProgress,
   Alert,
   Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import type { User } from "../utils/auth"
@@ -121,11 +116,6 @@ export default function Booths() {
   const [scheduleDescription, setScheduleDescription] = useState<string | null>(null)
   const [jobCounts, setJobCounts] = useState<Record<string, number>>({})
   const [totalJobs, setTotalJobs] = useState(0)
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
-  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null)
-  const [activeScheduleInviteCode, setActiveScheduleInviteCode] = useState("")
-  const [inviteCodeInput, setInviteCodeInput] = useState("")
-  const [inviteCodeError, setInviteCodeError] = useState("")
 
   useEffect(() => {
     fetchBooths()
@@ -163,27 +153,6 @@ export default function Booths() {
     }
   }
 
-  const checkAndHandleInviteCode = async (
-    status: { isLive: boolean; requiresInviteCode: boolean; activeScheduleId: string | null }
-  ): Promise<boolean> => {
-    if (!status.isLive || !status.requiresInviteCode || !status.activeScheduleId) return false
-    const scheduleDoc = await getDoc(doc(db, "fairSchedules", status.activeScheduleId))
-    const requiredCode = scheduleDoc.exists()
-      ? String(scheduleDoc.data().inviteCode || "").trim().toUpperCase()
-      : ""
-    if (!requiredCode) return false
-    setActiveScheduleInviteCode(requiredCode)
-    const accessKey = `fairAccess:${status.activeScheduleId}:${user?.uid || "guest"}`
-    const savedAccessCode = localStorage.getItem(accessKey)
-    if (savedAccessCode !== requiredCode) {
-      setBooths([])
-      setInviteDialogOpen(true)
-      setLoading(false)
-      return true
-    }
-    return false
-  }
-
   const fetchBooths = async () => {
     try {
       setLoading(true)
@@ -195,9 +164,6 @@ export default function Booths() {
       setIsLive(status.isLive)
       setScheduleName(status.scheduleName)
       setScheduleDescription(status.scheduleDescription)
-      setActiveScheduleId(status.activeScheduleId)
-
-      if (await checkAndHandleInviteCode(status)) return
 
       let boothsList: Booth[] = []
 
@@ -276,31 +242,6 @@ export default function Booths() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleJoinFairWithCode = async () => {
-    const normalizedInput = inviteCodeInput.trim().toUpperCase()
-
-    if (!normalizedInput) {
-      setInviteCodeError("Please enter the fair invite code")
-      return
-    }
-
-    if (normalizedInput !== activeScheduleInviteCode) {
-      setInviteCodeError("Invalid fair invite code")
-      return
-    }
-
-    if (!activeScheduleId) {
-      setInviteCodeError("Could not determine active fair")
-      return
-    }
-
-    localStorage.setItem(`fairAccess:${activeScheduleId}:${user?.uid || "guest"}`, normalizedInput)
-    setInviteDialogOpen(false)
-    setInviteCodeInput("")
-    setInviteCodeError("")
-    await fetchBooths()
   }
 
   // Get companyId for each booth and count jobs
@@ -665,41 +606,6 @@ export default function Booths() {
             {error}
           </Alert>
         )}
-
-        <Dialog open={inviteDialogOpen} maxWidth="xs" fullWidth>
-          <DialogTitle>Enter Fair Invite Code</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, mt: 1 }}>
-              This career fair requires an invite code before you can browse booths.
-            </Typography>
-            <TextField
-              fullWidth
-              label="Fair Invite Code"
-              value={inviteCodeInput}
-              onChange={(e) => {
-                setInviteCodeInput(e.target.value)
-                setInviteCodeError("")
-              }}
-              error={Boolean(inviteCodeError)}
-              helperText={inviteCodeError || "Enter the code shared by your organizer"}
-              slotProps={{ htmlInput: { autoCapitalize: "characters" } }}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={handleJoinFairWithCode}
-              variant="contained"
-              sx={{
-                background: "linear-gradient(135deg, #388560 0%, #2f6f50 100%)",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #2f6f50 0%, #388560 100%)",
-                },
-              }}
-            >
-              Join Fair
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         {boothsContent}
       </Container>
