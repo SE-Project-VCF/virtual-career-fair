@@ -10,30 +10,27 @@ Students are currently required to enter a fair invite code before they can brow
 ## Decision Summary
 
 - Students browse fairs freely via the EventList, click into a live fair, and see its booths
-- New route `/fairs/:fairId/booths` with a dedicated `FairBoothsPage` component
-- Remove the student-side invite code gate from `Booths.tsx`
+- New route `/fairs/:fairId/booths` with a dedicated `StudentFairBoothsPage` component
+- Remove the student-side invite code gate from `Booths.tsx` and `BoothView.tsx`
 - Company-side invite code flow (`POST /api/fairs/join` for booth registration) is unchanged
 - No backend changes required
 
 ## Student Flow (New)
 
 1. Student lands on Dashboard
-2. EventList shows all scheduled fairs (upcoming + live) with status chips
+2. EventList shows all scheduled fairs (upcoming + live, not ended) with status chips
 3. Student clicks a live fair → navigates to `/fairs/:fairId/booths`
-4. `FairBoothsPage` loads and displays that fair's registered booths
+4. `StudentFairBoothsPage` loads and displays that fair's registered booths
 5. Upcoming fairs are visible but not clickable (shows schedule info only)
+6. Ended fairs are filtered out of EventList (existing behavior). If a student navigates to an ended fair via a stale URL, the page shows "This fair has ended."
 
 ## Components & Routing
 
-### New: `FairBoothsPage.tsx`
+### New: `StudentFairBoothsPage.tsx`
 
-Located at `frontend/src/pages/FairBoothsPage.tsx`.
+Located at `frontend/src/pages/StudentFairBoothsPage.tsx`.
 
-Note: There is an existing `FairBoothsPage.tsx` used by admins at `/admin/fairs/:fairId`. The new student-facing page should either:
-- Be named differently (e.g., `StudentFairBoothsPage.tsx`) to avoid confusion, OR
-- Replace the route path to be distinct (the admin page is at `/admin/fairs/:fairId`, so `/fairs/:fairId/booths` is already distinct)
-
-**Recommended:** Name the new file `StudentFairBoothsPage.tsx` for clarity.
+(The existing `FairBoothsPage.tsx` is admin-only, used at `/admin/fairs/:fairId`. The new file is named distinctly to avoid confusion.)
 
 Responsibilities:
 - Read `fairId` from URL params via `useParams()`
@@ -41,33 +38,36 @@ Responsibilities:
 - Validate fair is currently live (`startTime <= now <= endTime`). If not:
   - Upcoming: show "This fair isn't live yet — starts at [time]"
   - Ended: show "This fair has ended"
+- If `registeredBoothIds` is empty for a live fair, show "No companies have registered for this fair yet."
 - Fetch booth docs for each ID in `registeredBoothIds`
 - Map company data (boothId → companyId) via companies collection
 - Fetch job counts per company
 - Render: header with fair name + back nav, stats bar (booth count, job count), booth card grid
 - Booth card layout reuses the same design currently in `Booths.tsx` (logo, name, industry, description, location, company size, job count, "Visit Booth" button)
+- **Authentication:** Not required. The page works for both logged-in and unauthenticated users, same as the current `/booths` page. Firestore security rules already permit public reads on `fairSchedules`, `booths`, and `companies`.
 
 ### Routing (`App.tsx`)
 
 Add:
 ```tsx
+import StudentFairBoothsPage from "./pages/StudentFairBoothsPage"
+// ...
 <Route path="/fairs/:fairId/booths" element={<StudentFairBoothsPage />} />
 ```
 
-Keep `/booths` as-is for company users and backward compatibility.
+Keep `/booths` as-is for company users. When a student navigates directly to `/booths` (via bookmark or external link), existing behavior is preserved — the page still loads booths for the active live fair (if any) without an invite code gate.
 
 ### EventList Changes
 
 - **Students:** Each fair card becomes clickable. Live fairs navigate to `/fairs/:fairId/booths`. Upcoming fairs show status but are not clickable (visual disabled state).
 - **Company users:** Behavior unchanged. "Join a Fair" button and non-clickable cards remain.
-- Implementation: wrap each card in a clickable container (or add a "Browse Booths" button) conditioned on `!isCompanyUser && status?.type === "active"`. Use `useNavigate()` to go to `/fairs/${schedule.id}/booths`.
+- **Implementation:** Add `useNavigate` import from `react-router-dom` (not currently imported). Wrap each card in a clickable container (or add a "Browse Booths" button) conditioned on `!isCompanyUser && status?.type === "active"`. Use `navigate(`/fairs/${schedule.id}/booths`)`.
 
 ### Dashboard Changes
 
-- **Student "Browse Company Booths" card:** Remove the `/booths` link and the `isLive` gating. Either:
-  - Remove the card entirely (EventList is now the primary entry point), OR
-  - Relabel to "Browse Career Fairs" and scroll/link to the EventList section
-- **Recommended:** Remove the card. The EventList already appears on the Dashboard and is the natural entry point.
+- **Student "Browse Company Booths" card:** This card currently contains both a "View All Booths" button and a "View Booth History" button. Since EventList is now the primary entry point for fair browsing:
+  - Remove the "View All Booths" button
+  - Keep the "View Booth History" button (move it to the Job Invitations card row or keep the card with just this button relabeled as "Booth History")
 - Remove the `isLive`-dependent messaging in the student section that references "the career fair" (singular).
 
 ### Booths.tsx Cleanup
@@ -84,6 +84,13 @@ Keep:
 - The page continues serving company users viewing their own booth when fair isn't live
 - The page still works for direct `/booths` navigation (shows booths if fair is live, or own booth if company user)
 
+### BoothView.tsx Cleanup
+
+Remove the student-side invite code gate:
+- Remove `hasInviteCodeAccess()` function (lines ~327-335)
+- Remove the call to `hasInviteCodeAccess(status)` in `fetchBooth()` (lines ~354-357) and the error message "This fair requires an invite code..."
+- The `evaluateFairStatus()` call and `isLive` check remain (they're used for other access control logic unrelated to invite codes)
+
 ## Data & Backend
 
 **No backend changes.** All data already exists in Firestore:
@@ -95,6 +102,8 @@ The `inviteCode` field remains on `fairSchedules` — still used by the company-
 
 The `requiresInviteCode` field in `evaluateFairStatus()` return type becomes unused on the student path. Leave it in place to avoid breaking other references.
 
+Firestore security rules already permit unauthenticated/student reads on `fairSchedules`, `booths`, and `companies` — no rule changes needed.
+
 ## Testing
 
 ### New Tests: `StudentFairBoothsPage.test.tsx`
@@ -102,18 +111,22 @@ The `requiresInviteCode` field in `evaluateFairStatus()` return type becomes unu
 - Shows "not live yet" message for upcoming fairs
 - Shows "fair has ended" message for past fairs
 - Handles missing/invalid `fairId` gracefully
+- Shows "no companies registered" when `registeredBoothIds` is empty for a live fair
 - Displays correct fair name, description, booth count
 
-### Updated Tests: `Booths.test.tsx`
-- Remove tests asserting invite code dialog behavior for students
-
 ### Updated Tests: `Dashboard.test.tsx`
-- Update student section tests to reflect removed "Browse Company Booths" card (or changed behavior)
+- Update student section tests to reflect removed "View All Booths" button and retained "View Booth History" button
 
-### Updated Tests: `EventList.test.tsx` (if exists, or add)
+### Updated Tests: `BoothView.test.tsx`
+- Remove or update any tests asserting invite code access gate behavior
+
+### New/Updated Tests: `EventList.test.tsx` (if exists, or add)
 - Student clicks live fair card → navigates to `/fairs/:fairId/booths`
 - Upcoming fair card is not clickable for students
 - Company user cards remain non-clickable (unchanged)
+
+### Booths.test.tsx
+- No invite code tests currently exist in this file, so no removals needed. Update any tests that reference invite code state if present after cleanup.
 
 ### No Backend Test Changes
 - `fairJoin.test.js` and `inviteCode.test.js` stay as-is
