@@ -65,10 +65,11 @@ Keep `/booths` as-is for company users. When a student navigates directly to `/b
 
 ### Dashboard Changes
 
-- **Student "Browse Company Booths" card:** This card currently contains both a "View All Booths" button and a "View Booth History" button. Since EventList is now the primary entry point for fair browsing:
-  - Remove the "View All Booths" button
-  - Keep the "View Booth History" button (move it to the Job Invitations card row or keep the card with just this button relabeled as "Booth History")
-- Remove the `isLive`-dependent messaging in the student section that references "the career fair" (singular).
+- **Student "Browse Company Booths" card** (Dashboard.tsx ~lines 748-817): This card currently contains both a "View All Booths" button and a "View Booth History" button, plus `isLive`-dependent description text (lines 768-770). Changes:
+  - Remove the "View All Booths" button (line 775-796)
+  - Remove the `isLive`-dependent description text ("Explore opportunities..." / "The career fair is not currently live...") — replace with static text like "View your booth visit history"
+  - Keep the "View Booth History" button. Relabel the card as "Booth History"
+  - Remove `isLive` gating on the booth history button (it's currently disabled when `!isLive`, line 801 — it should always be enabled)
 
 ### Booths.tsx Cleanup
 
@@ -91,6 +92,8 @@ Remove the student-side invite code gate:
 - Remove the call to `hasInviteCodeAccess(status)` in `fetchBooth()` (lines ~354-357) and the error message "This fair requires an invite code..."
 - The `evaluateFairStatus()` call and `isLive` check remain (they're used for other access control logic unrelated to invite codes)
 
+**Keep untouched:** The company-side "Join a Career Fair" card (lines ~613-654) stays as-is. It allows company users to register their booth via invite code — this is not part of the student gate removal.
+
 ## Data & Backend
 
 **No backend changes.** All data already exists in Firestore:
@@ -100,7 +103,7 @@ Remove the student-side invite code gate:
 
 The `inviteCode` field remains on `fairSchedules` — still used by the company-side `POST /api/fairs/join` endpoint.
 
-The `requiresInviteCode` field in `evaluateFairStatus()` return type becomes unused on the student path. Leave it in place to avoid breaking other references.
+The `requiresInviteCode` field in `evaluateFairStatus()` return type becomes fully unused on the frontend after both the `Booths.tsx` and `BoothView.tsx` cleanups (those were the only two consumers). Leave it in place to avoid breaking the type contract — it's harmless and the backend/utility may still reference it.
 
 Firestore security rules already permit unauthenticated/student reads on `fairSchedules`, `booths`, and `companies` — no rule changes needed.
 
