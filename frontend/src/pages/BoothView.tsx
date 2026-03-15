@@ -324,16 +324,6 @@ export default function BoothView() {
     return match?.id
   }
 
-  const hasInviteCodeAccess = async (status: { isLive: boolean; requiresInviteCode: boolean; activeScheduleId: string | null }): Promise<boolean> => {
-    if (!status.isLive || !status.requiresInviteCode || !status.activeScheduleId) return true
-    const scheduleDoc = await getDoc(doc(db, "fairSchedules", status.activeScheduleId))
-    const requiredCode = scheduleDoc.exists()
-      ? String(scheduleDoc.data().inviteCode || "").trim().toUpperCase()
-      : ""
-    const savedAccessCode = localStorage.getItem(`fairAccess:${status.activeScheduleId}:${user?.uid || "guest"}`)
-    return !requiredCode || savedAccessCode === requiredCode
-  }
-
   const fetchBooth = async () => {
     if (!boothId) return
 
@@ -348,11 +338,6 @@ export default function BoothView() {
 
       if (!boothDoc.exists()) {
         setError("Booth not found")
-        return
-      }
-
-      if (!await hasInviteCodeAccess(status)) {
-        setError("This fair requires an invite code. Go to the Booths page and enter the fair invite code first.")
         return
       }
 
