@@ -1,7 +1,31 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import EventList from "../EventList";
 import { getDocs, Timestamp } from "firebase/firestore";
+
+const mockNavigate = vi.fn();
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
+vi.mock("../../utils/auth", () => ({
+  authUtils: {
+    getCurrentUser: vi.fn(),
+  },
+}));
+
+vi.mock("../../config", () => ({
+  API_URL: "http://localhost:3000",
+}));
+
+import { authUtils } from "../../utils/auth";
 
 describe("EventList", () => {
   beforeEach(() => {
@@ -16,7 +40,7 @@ describe("EventList", () => {
         })
     );
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
 
@@ -25,7 +49,7 @@ describe("EventList", () => {
       forEach: vi.fn(),
     });
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.queryByText("Upcoming Career Fairs")).not.toBeInTheDocument();
@@ -35,7 +59,7 @@ describe("EventList", () => {
   it("renders error state when fetch fails", async () => {
     (getDocs as any).mockRejectedValue(new Error("Firestore error"));
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Failed to load events")).toBeInTheDocument();
@@ -62,7 +86,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Upcoming Career Fairs")).toBeInTheDocument();
@@ -90,7 +114,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.queryByText("Past Event")).not.toBeInTheDocument();
@@ -117,7 +141,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Timestamp Event")).toBeInTheDocument();
@@ -144,7 +168,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText(/Start:/)).toBeInTheDocument();
@@ -172,7 +196,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("This is a test event description")).toBeInTheDocument();
@@ -207,7 +231,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       const events = screen.getAllByText(/Event [12]/);
@@ -236,7 +260,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Upcoming")).toBeInTheDocument();
@@ -263,7 +287,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Live Now")).toBeInTheDocument();
@@ -290,7 +314,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Career Fair")).toBeInTheDocument(); // default name
@@ -315,7 +339,7 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Incomplete Event")).toBeInTheDocument();
@@ -349,11 +373,120 @@ describe("EventList", () => {
 
     (getDocs as any).mockResolvedValue(mockSnapshot);
 
-    render(<EventList />);
+    render(<MemoryRouter><EventList /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Event 1")).toBeInTheDocument();
       expect(screen.getByText("Event 2")).toBeInTheDocument();
     });
+  });
+
+  it("student can click live fair to navigate to fair booths", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "student-1",
+      role: "student",
+    });
+
+    const now = Date.now();
+    const pastStart = now - 1800000; // 30 minutes ago
+    const futureEnd = now + 1800000; // 30 minutes from now
+
+    const mockSnapshot = {
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Live Student Fair",
+            startTime: pastStart,
+            endTime: futureEnd,
+          }),
+        });
+      },
+    };
+
+    (getDocs as any).mockResolvedValue(mockSnapshot);
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByText("Live Student Fair")).toBeInTheDocument();
+    });
+
+    const browseButton = screen.getByRole("button", { name: "Browse Booths" });
+    await userEvent.click(browseButton);
+
+    expect(mockNavigate).toHaveBeenCalledWith("/fairs/fair-1/booths");
+  });
+
+  it("student does not see browse button for upcoming fairs", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "student-1",
+      role: "student",
+    });
+
+    const now = Date.now();
+    const futureStart = now + 3600000; // 1 hour from now
+    const futureEnd = now + 86400000;
+
+    const mockSnapshot = {
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Upcoming Student Fair",
+            startTime: futureStart,
+            endTime: futureEnd,
+          }),
+        });
+      },
+    };
+
+    (getDocs as any).mockResolvedValue(mockSnapshot);
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByText("Upcoming Student Fair")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: "Browse Booths" })).not.toBeInTheDocument();
+  });
+
+  it("company user does not see browse booths button", async () => {
+    (authUtils.getCurrentUser as any).mockReturnValue({
+      uid: "company-1",
+      role: "companyOwner",
+    });
+
+    const now = Date.now();
+    const pastStart = now - 1800000;
+    const futureEnd = now + 1800000;
+
+    // First call: company owner query (returns empty), second call: fairSchedules
+    const emptySnapshot = { empty: true, docs: [], forEach: vi.fn() };
+    const fairSnapshot = {
+      forEach: (callback: any) => {
+        callback({
+          id: "fair-1",
+          data: () => ({
+            name: "Live Company Fair",
+            startTime: pastStart,
+            endTime: futureEnd,
+          }),
+        });
+      },
+    };
+
+    (getDocs as any)
+      .mockResolvedValueOnce(emptySnapshot)
+      .mockResolvedValueOnce(fairSnapshot);
+
+    render(<MemoryRouter><EventList /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByText("Live Company Fair")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: "Browse Booths" })).not.toBeInTheDocument();
   });
 });

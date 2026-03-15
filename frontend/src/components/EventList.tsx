@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Box,
   Card,
@@ -37,6 +38,8 @@ export default function EventList() {
   const [error, setError] = useState("")
   const user = authUtils.getCurrentUser()
   const isCompanyUser = user?.role === "companyOwner" || user?.role === "representative"
+  const navigate = useNavigate()
+  const isStudent = user?.role === "student"
 
   // Join fair dialog state
   const [joinDialogOpen, setJoinDialogOpen] = useState(false)
@@ -313,6 +316,26 @@ export default function EventList() {
                       </Typography>
                     </Box>
                   </Box>
+
+                  {isStudent && status?.type === "active" && (
+                    <Box sx={{ mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => navigate(`/fairs/${schedule.id}/booths`)}
+                        sx={{
+                          background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
+                          textTransform: "none",
+                          fontWeight: 600,
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
+                          },
+                        }}
+                      >
+                        Browse Booths
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               )
             })}
