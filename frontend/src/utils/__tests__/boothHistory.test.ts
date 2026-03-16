@@ -221,7 +221,7 @@ describe("trackBoothView", () => {
       "boothHistory",
       "booth-123"
     )
-    expect(setDoc).toHaveBeenCalledTimes(2)
+    expect(setDoc).toHaveBeenCalledTimes(4)
   })
 
   it("tracks different booths for same user separately", async () => {
@@ -251,7 +251,7 @@ describe("trackBoothView", () => {
       "boothHistory",
       "booth-2"
     )
-    expect(setDoc).toHaveBeenCalledTimes(2)
+    expect(setDoc).toHaveBeenCalledTimes(4)
   })
 
   it("preserves special characters in companyName", async () => {
