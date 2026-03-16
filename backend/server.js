@@ -1033,6 +1033,62 @@ app.get("/api/applicant-resume-url/:applicationId", verifyFirebaseToken, async (
 });
 
 /* ----------------------------------------------------
+   GET APPLICANT TAILORED RESUME CONTENT (for company reps/owners)
+   Returns the text content of a tailored resume attached to an application.
+---------------------------------------------------- */
+app.get("/api/applicant-tailored-resume/:applicationId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+
+    const appDoc = await db.collection("jobApplications").doc(applicationId).get();
+    if (!appDoc.exists) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+
+    const appData = appDoc.data();
+    const { companyId, studentId, attachedTailoredResumeId } = appData;
+
+    if (!attachedTailoredResumeId) {
+      return res.status(404).json({ error: "No tailored resume attached to this application" });
+    }
+
+    // Verify requester is the company's owner or rep
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(404).json({ error: "Company not found" });
+    }
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).json({ error: "Not authorized to view this resume" });
+    }
+
+    // Fetch the tailored resume from the student's subcollection
+    const tailoredDoc = await db
+      .collection("users")
+      .doc(studentId)
+      .collection("tailoredResumes")
+      .doc(attachedTailoredResumeId)
+      .get();
+
+    if (!tailoredDoc.exists) {
+      return res.status(404).json({ error: "Tailored resume not found" });
+    }
+
+    const data = tailoredDoc.data();
+    return res.json({
+      tailoredText: data.tailoredText ?? null,
+      structured: data.structured ?? null,
+      jobContext: data.jobContext ?? null,
+      method: data.method ?? null,
+    });
+  } catch (err) {
+    console.error("Error fetching applicant tailored resume:", err);
+    return res.status(500).json({ error: err.message || "Failed to fetch tailored resume" });
+  }
+});
+
+/* ----------------------------------------------------
    HELPER: Verify user is representative or company owner
 ---------------------------------------------------- */
 async function verifyRepOrOwner(userId, companyId) {

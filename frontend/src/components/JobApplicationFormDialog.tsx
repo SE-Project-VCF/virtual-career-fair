@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Checkbox,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -12,6 +13,8 @@ import {
   FormControl,
   FormControlLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   Select,
   TextField,
   Typography,
@@ -19,7 +22,8 @@ import {
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import { collection, addDoc, doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { db, storage, auth } from "../firebase";
+import { API_URL } from "../config";
 import type { ApplicationForm, FormField, FormFieldType } from "../types/applicationForm";
 
 interface JobForApply {
@@ -37,7 +41,15 @@ interface JobApplicationFormDialogProps {
   studentId: string | null;
 }
 
+interface TailoredResumeSummary {
+  id: string;
+  label: string; // e.g. "Software Engineer – Mar 2026"
+}
+
 type FieldValue = string | string[] | boolean | File | null;
+
+// "none" | "profile" | <tailoredResumeId>
+type ResumeChoice = "none" | "profile" | string;
 
 export default function JobApplicationFormDialog({
   open,
@@ -53,22 +65,60 @@ export default function JobApplicationFormDialog({
   const [topError, setTopError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  const [resumePath, setResumePath] = useState<string | null>(null);
-  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
-  const [attachResume, setAttachResume] = useState(false);
+  // Resume state
+  const [profileResumePath, setProfileResumePath] = useState<string | null>(null);
+  const [profileResumeFileName, setProfileResumeFileName] = useState<string | null>(null);
+  const [tailoredResumes, setTailoredResumes] = useState<TailoredResumeSummary[]>([]);
+  const [resumesLoading, setResumesLoading] = useState(false);
+  const [resumeChoice, setResumeChoice] = useState<ResumeChoice>("none");
 
   useEffect(() => {
     if (!open || !studentId) return;
     let cancelled = false;
-    getDoc(doc(db, "users", studentId)).then((snap) => {
-      if (cancelled || !snap.exists()) return;
-      const data = snap.data();
-      const path: string | null = data.resumePath ?? data.currentResumePath ?? null;
-      const name: string | null = data.resumeFileName ?? null;
-      setResumePath(path);
-      setResumeFileName(name);
-      setAttachResume(!!path);
-    }).catch(() => {});
+
+    const load = async () => {
+      setResumesLoading(true);
+      try {
+        // 1. Profile resume from Firestore user doc
+        const snap = await getDoc(doc(db, "users", studentId));
+        if (!cancelled && snap.exists()) {
+          const data = snap.data();
+          const path: string | null = data.resumePath ?? data.currentResumePath ?? null;
+          const name: string | null = data.resumeFileName ?? null;
+          setProfileResumePath(path);
+          setProfileResumeFileName(name);
+          if (path) setResumeChoice("profile");
+        }
+
+        // 2. Tailored resumes via API
+        const token = await auth.currentUser?.getIdToken();
+        if (token && !cancelled) {
+          const res = await fetch(`${API_URL}/api/resume/tailored`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const summaries: TailoredResumeSummary[] = (data.resumes ?? []).map((r: any) => ({
+              id: r.id,
+              label: `${r.jobContext?.jobTitle ?? "Untitled"} – ${
+                r.createdAt?.toDate
+                  ? new Date(r.createdAt.toDate()).toLocaleDateString()
+                  : r.createdAt
+                    ? new Date(r.createdAt).toLocaleDateString()
+                    : "Unknown date"
+              }`,
+            }));
+            if (!cancelled) setTailoredResumes(summaries);
+          }
+        }
+      } catch {
+        // silently ignore — resume attachment is optional
+      } finally {
+        if (!cancelled) setResumesLoading(false);
+      }
+    };
+
+    load();
     return () => { cancelled = true; };
   }, [open, studentId]);
 
@@ -177,6 +227,23 @@ export default function JobApplicationFormDialog({
         }
       }
 
+      // Build resume attachment fields
+      let resumeFields: Record<string, any> = {};
+      if (resumeChoice === "profile" && profileResumePath) {
+        resumeFields = {
+          attachedResumePath: profileResumePath,
+          attachedResumeFileName: profileResumeFileName ?? null,
+        };
+      } else if (resumeChoice !== "none" && resumeChoice !== "profile") {
+        const chosen = tailoredResumes.find((r) => r.id === resumeChoice);
+        if (chosen) {
+          resumeFields = {
+            attachedTailoredResumeId: chosen.id,
+            attachedTailoredResumeLabel: chosen.label,
+          };
+        }
+      }
+
       const docData: any = {
         jobId: job.id,
         companyId: job.companyId,
@@ -184,7 +251,7 @@ export default function JobApplicationFormDialog({
         ...(boothId ? { boothId } : {}),
         responses,
         ...(Object.keys(fileUrls).length > 0 ? { fileUrls } : {}),
-        ...(attachResume && resumePath ? { attachedResumePath: resumePath, attachedResumeFileName: resumeFileName ?? null } : {}),
+        ...resumeFields,
         submittedAt: Date.now(),
       };
 
@@ -349,6 +416,8 @@ export default function JobApplicationFormDialog({
     }
   };
 
+  const hasAnyResume = !!profileResumePath || tailoredResumes.length > 0;
+
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{form.title}</DialogTitle>
@@ -381,39 +450,71 @@ export default function JobApplicationFormDialog({
             bgcolor: "rgba(56, 133, 96, 0.04)",
           }}
         >
-          <Typography variant="body2" fontWeight={600} sx={{ mb: 0.75, display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Typography
+            variant="body2"
+            fontWeight={600}
+            sx={{ mb: 0.75, display: "flex", alignItems: "center", gap: 0.5 }}
+          >
             <AttachFileIcon fontSize="small" sx={{ color: "#388560" }} />
             Resume
           </Typography>
-          {resumePath ? (
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={attachResume}
-                  onChange={(e) => setAttachResume(e.target.checked)}
-                  size="small"
-                  sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }}
-                />
-              }
-              label={
-                <Typography variant="body2">
-                  Attach my resume
-                  {resumeFileName && (
-                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>
-                      ({resumeFileName})
-                    </Typography>
-                  )}
-                </Typography>
-              }
-              sx={{ ml: 0 }}
-            />
-          ) : (
+
+          {resumesLoading ? (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <CircularProgress size={14} sx={{ color: "#388560" }} />
+              <Typography variant="caption" color="text.secondary">
+                Loading your resumes…
+              </Typography>
+            </Box>
+          ) : !hasAnyResume ? (
             <Typography variant="body2" color="text.secondary">
               No resume on file.{" "}
               <Typography component="span" variant="body2" color="#388560" sx={{ fontStyle: "italic" }}>
-                Upload one from your profile to attach it here.
+                Upload one from your profile, or create a tailored resume from a job invitation.
               </Typography>
             </Typography>
+          ) : (
+            <RadioGroup
+              value={resumeChoice}
+              onChange={(e) => setResumeChoice(e.target.value as ResumeChoice)}
+            >
+              <FormControlLabel
+                value="none"
+                control={<Radio size="small" sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }} />}
+                label={<Typography variant="body2">Don't attach a resume</Typography>}
+              />
+              {profileResumePath && (
+                <FormControlLabel
+                  value="profile"
+                  control={<Radio size="small" sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }} />}
+                  label={
+                    <Typography variant="body2">
+                      My uploaded resume
+                      {profileResumeFileName && (
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>
+                          ({profileResumeFileName})
+                        </Typography>
+                      )}
+                    </Typography>
+                  }
+                />
+              )}
+              {tailoredResumes.map((tr) => (
+                <FormControlLabel
+                  key={tr.id}
+                  value={tr.id}
+                  control={<Radio size="small" sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }} />}
+                  label={
+                    <Typography variant="body2">
+                      Tailored resume:{" "}
+                      <Typography component="span" variant="body2" color="text.secondary">
+                        {tr.label}
+                      </Typography>
+                    </Typography>
+                  }
+                />
+              ))}
+            </RadioGroup>
           )}
         </Box>
 
@@ -446,4 +547,3 @@ export default function JobApplicationFormDialog({
     </Dialog>
   );
 }
-
