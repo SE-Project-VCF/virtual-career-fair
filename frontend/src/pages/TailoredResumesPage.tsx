@@ -55,8 +55,11 @@ export default function TailoredResumesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (!user) navigate("/login");
-    else loadResumes();
+    if (user) {
+      loadResumes();
+    } else {
+      navigate("/login");
+    }
   }, [user, navigate]);
 
   const loadResumes = async () => {
@@ -129,13 +132,156 @@ export default function TailoredResumesPage() {
     const element = document.createElement("a");
     const file = new Blob([text], { type: "text/plain" });
     element.href = URL.createObjectURL(file);
-    element.download = `${resume.jobContext.jobTitle.replace(/\s+/g, "-")}-${new Date(resume.createdAt?.toMillis?.()).toLocaleDateString().replace(/\//g, "-")}.txt`;
+    element.download = `${resume.jobContext.jobTitle.replaceAll(/\s+/g, "-")}-${new Date(resume.createdAt?.toMillis?.()).toLocaleDateString().replaceAll("/", "-")}.txt`;
     document.body.appendChild(element);
     element.click();
-    document.body.removeChild(element);
+    element.remove();
   };
 
   if (!user) return null;
+
+  let content;
+  if (loading) {
+    content = (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
+  } else if (resumes.length === 0) {
+    content = (
+      <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f9f9f9" }}>
+        <Typography variant="body1" sx={{ color: "gray", mb: 2 }}>
+          You haven't created any tailored resumes yet.
+        </Typography>
+        <Typography variant="body2" sx={{ color: "gray", mb: 3 }}>
+          Go to your job invitations and tailor your resume to a job to get started.
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => navigate("/dashboard/job-invitations")}
+        >
+          View Job Invitations
+        </Button>
+      </Paper>
+    );
+  } else {
+    content = (
+      <Stack spacing={2}>
+        {resumes.map((resume) => (
+          <Card
+            key={resume.id}
+              sx={{
+                transition: "0.2s",
+                "&:hover": { boxShadow: 3 },
+              }}
+            >
+              <CardContent>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
+                  <Box flex={1}>
+                    <Typography variant="h6" sx={{ fontWeight: "bold", mb: 0.5 }}>
+                      {resume.jobContext.jobTitle}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "gray", mb: 1 }}>
+                      Created: {new Date(resume.createdAt?.toMillis?.()).toLocaleDateString()}
+                    </Typography>
+
+                    {/* Stats */}
+                    <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
+                      <Chip
+                        label={`${resume.acceptedPatches?.length || 0} Patches Applied`}
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                      />
+                      {resume.expiresAt && (
+                        <Chip
+                          label={`Expires: ${new Date(resume.expiresAt?.toMillis?.()).toLocaleDateString()}`}
+                          size="small"
+                          color={
+                            new Date(resume.expiresAt?.toMillis?.()) > new Date() ? "success" : "error"
+                          }
+                        />
+                      )}
+                    </Box>
+
+                    {/* Notes Preview */}
+                    {resume.studentNotes && (
+                      <Box
+                        sx={{
+                          bgcolor: "#f5f5f5",
+                          p: 1.5,
+                          borderRadius: 1,
+                          borderLeft: "3px solid #2196f3",
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: "bold", display: "block", mb: 0.5 }}>
+                          Your Notes:
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "gray",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {resume.studentNotes}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+
+                  {/* Actions */}
+                  <Box sx={{ display: "flex", gap: 1, ml: 2 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => navigate(`/dashboard/tailored-resume/${resume.id}`)}
+                      title="View Resume"
+                    >
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDownload(resume)}
+                      title="Download Resume"
+                    >
+                      <FileDownloadIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => {
+                        setDeleteTargetId(resume.id);
+                        setDeleteConfirmOpen(true);
+                      }}
+                      title="Delete Resume"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+
+                {/* Job Description Preview */}
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "gray",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {resume.jobContext.jobDescription.substring(0, 200)}...
+                </Typography>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+    );
+  }
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", pb: 4 }}>
@@ -158,141 +304,7 @@ export default function TailoredResumesPage() {
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
-          </Box>
-        ) : resumes.length === 0 ? (
-          <Paper sx={{ p: 4, textAlign: "center", bgcolor: "#f9f9f9" }}>
-            <Typography variant="body1" sx={{ color: "gray", mb: 2 }}>
-              You haven't created any tailored resumes yet.
-            </Typography>
-            <Typography variant="body2" sx={{ color: "gray", mb: 3 }}>
-              Go to your job invitations and tailor your resume to a job to get started.
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={() => navigate("/dashboard/job-invitations")}
-            >
-              View Job Invitations
-            </Button>
-          </Paper>
-        ) : (
-          <Stack spacing={2}>
-            {resumes.map((resume) => (
-              <Card
-                key={resume.id}
-                  sx={{
-                    transition: "0.2s",
-                    "&:hover": { boxShadow: 3 },
-                  }}
-                >
-                  <CardContent>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
-                      <Box flex={1}>
-                        <Typography variant="h6" sx={{ fontWeight: "bold", mb: 0.5 }}>
-                          {resume.jobContext.jobTitle}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: "gray", mb: 1 }}>
-                          Created: {new Date(resume.createdAt?.toMillis?.()).toLocaleDateString()}
-                        </Typography>
-
-                        {/* Stats */}
-                        <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
-                          <Chip
-                            label={`${resume.acceptedPatches?.length || 0} Patches Applied`}
-                            size="small"
-                            variant="outlined"
-                            color="primary"
-                          />
-                          {resume.expiresAt && (
-                            <Chip
-                              label={`Expires: ${new Date(resume.expiresAt?.toMillis?.()).toLocaleDateString()}`}
-                              size="small"
-                              color={
-                                new Date(resume.expiresAt?.toMillis?.()) > new Date() ? "success" : "error"
-                              }
-                            />
-                          )}
-                        </Box>
-
-                        {/* Notes Preview */}
-                        {resume.studentNotes && (
-                          <Box
-                            sx={{
-                              bgcolor: "#f5f5f5",
-                              p: 1.5,
-                              borderRadius: 1,
-                              borderLeft: "3px solid #2196f3",
-                            }}
-                          >
-                            <Typography variant="caption" sx={{ fontWeight: "bold", display: "block", mb: 0.5 }}>
-                              Your Notes:
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                color: "gray",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {resume.studentNotes}
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-
-                      {/* Actions */}
-                      <Box sx={{ display: "flex", gap: 1, ml: 2 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => navigate(`/dashboard/tailored-resume/${resume.id}`)}
-                          title="View Resume"
-                        >
-                          <VisibilityIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDownload(resume)}
-                          title="Download Resume"
-                        >
-                          <FileDownloadIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => {
-                            setDeleteTargetId(resume.id);
-                            setDeleteConfirmOpen(true);
-                          }}
-                          title="Delete Resume"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    </Box>
-
-                    {/* Job Description Preview */}
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "gray",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                      }}
-                    >
-                      {resume.jobContext.jobDescription.substring(0, 200)}...
-                    </Typography>
-                  </CardContent>
-                </Card>
-              ))}
-            </Stack>
-          )}
+        {content}
       </Container>
 
       {/* Delete Confirmation Dialog */}
