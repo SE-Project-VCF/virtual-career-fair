@@ -44,6 +44,29 @@ const app = require("../server");
 const { db, auth } = require("../firebase");
 const { evaluateFairStatusForFair } = require("../helpers");
 
+function makeFairsCollectionWithBooth(boothSnapshot) {
+  const boothDocRef = {
+    get: jest.fn().mockResolvedValue(boothSnapshot),
+  };
+  const boothsCollection = {
+    doc: jest.fn(() => boothDocRef),
+  };
+  const fairDocRef = {
+    collection: jest.fn(() => boothsCollection),
+  };
+  return {
+    doc: jest.fn(() => fairDocRef),
+  };
+}
+
+function makeUsersCollectionForAdminRole() {
+  return {
+    doc: jest.fn(() => ({
+      get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "administrator" }) }),
+    })),
+  };
+}
+
 describe("GET /api/fairs/:fairId/booths/:boothId (current route behavior)", () => {
   beforeEach(() => jest.clearAllMocks());
 
@@ -61,19 +84,11 @@ describe("GET /api/fairs/:fairId/booths/:boothId (current route behavior)", () =
 
     db.collection.mockImplementation((name) => {
       if (name === "fairs") {
-        return {
-          doc: jest.fn(() => ({
-            collection: jest.fn(() => ({
-              doc: jest.fn(() => ({
-                get: jest.fn().mockResolvedValue({
-                  exists: true,
-                  id: "booth1",
-                  data: () => ({ companyName: "Acme", industry: "Tech" }),
-                }),
-              })),
-            })),
-          })),
-        };
+        return makeFairsCollectionWithBooth({
+          exists: true,
+          id: "booth1",
+          data: () => ({ companyName: "Acme", industry: "Tech" }),
+        });
       }
       return { doc: jest.fn() };
     });
@@ -91,26 +106,14 @@ describe("GET /api/fairs/:fairId/booths/:boothId (current route behavior)", () =
 
     db.collection.mockImplementation((name) => {
       if (name === "users") {
-        return {
-          doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "administrator" }) }),
-          })),
-        };
+        return makeUsersCollectionForAdminRole();
       }
       if (name === "fairs") {
-        return {
-          doc: jest.fn(() => ({
-            collection: jest.fn(() => ({
-              doc: jest.fn(() => ({
-                get: jest.fn().mockResolvedValue({
-                  exists: true,
-                  id: "booth1",
-                  data: () => ({ companyName: "Acme" }),
-                }),
-              })),
-            })),
-          })),
-        };
+        return makeFairsCollectionWithBooth({
+          exists: true,
+          id: "booth1",
+          data: () => ({ companyName: "Acme" }),
+        });
       }
       return { doc: jest.fn() };
     });
@@ -128,15 +131,7 @@ describe("GET /api/fairs/:fairId/booths/:boothId (current route behavior)", () =
 
     db.collection.mockImplementation((name) => {
       if (name === "fairs") {
-        return {
-          doc: jest.fn(() => ({
-            collection: jest.fn(() => ({
-              doc: jest.fn(() => ({
-                get: jest.fn().mockResolvedValue({ exists: false }),
-              })),
-            })),
-          })),
-        };
+        return makeFairsCollectionWithBooth({ exists: false });
       }
       return { doc: jest.fn() };
     });

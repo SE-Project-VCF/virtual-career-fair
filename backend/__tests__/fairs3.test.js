@@ -80,6 +80,26 @@ const FAIR_DATA = {
   updatedAt: { toMillis: () => 200 },
 };
 
+function makeRejectedSubDoc() {
+  return { get: jest.fn().mockRejectedValue(DB_ERROR) };
+}
+
+function makeRejectedSubcollection() {
+  return {
+    doc: jest.fn(() => makeRejectedSubDoc()),
+    get: jest.fn().mockRejectedValue(DB_ERROR),
+  };
+}
+
+function makeRejectedFairDoc() {
+  return {
+    get: jest.fn().mockRejectedValue(DB_ERROR),
+    update: jest.fn().mockRejectedValue(DB_ERROR),
+    delete: jest.fn().mockRejectedValue(DB_ERROR),
+    collection: jest.fn(() => makeRejectedSubcollection()),
+  };
+}
+
 // -----------------------------------------------------------------
 // Helper: build just enough of the fairs collection mock for DB throws
 // -----------------------------------------------------------------
@@ -88,15 +108,7 @@ function dbThrowOnFairs() {
   db.collection.mockImplementation((name) => {
     if (name === "fairs") {
       return {
-        doc: jest.fn(() => ({
-          get: jest.fn().mockRejectedValue(DB_ERROR),
-          update: jest.fn().mockRejectedValue(DB_ERROR),
-          delete: jest.fn().mockRejectedValue(DB_ERROR),
-          collection: jest.fn(() => ({
-            doc: jest.fn(() => ({ get: jest.fn().mockRejectedValue(DB_ERROR) })),
-            get: jest.fn().mockRejectedValue(DB_ERROR),
-          })),
-        })),
+        doc: jest.fn(() => makeRejectedFairDoc()),
         get: jest.fn().mockRejectedValue(DB_ERROR),
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
@@ -619,13 +631,6 @@ describe("DELETE /api/fairs/:fairId/enrollments/:companyId – error paths", () 
     verifyAdmin.mockResolvedValue(null);
     const batch = makeBatch();
     db.batch.mockReturnValue(batch);
-
-    const jobDocRef = { ref: {}, delete: jest.fn() };
-    const jobBatch = {
-      set: jest.fn().mockReturnThis(),
-      delete: jest.fn().mockReturnThis(),
-      commit: jest.fn().mockResolvedValue(undefined),
-    };
 
     db.collection.mockImplementation((name) => {
       if (name === "fairs") {

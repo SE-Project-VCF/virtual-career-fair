@@ -357,9 +357,45 @@ describe("Company", () => {
     expect(authUtils.updateInviteCode).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), "A");
   });
 
+  it("sanitizes invite code input to uppercase alphanumeric", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/INVITE123/);
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      const editBtn = editButtons[0].closest("button");
+      if (editBtn) await user.click(editBtn);
+
+      const inviteInput = screen.getByLabelText(/invite code/i) as HTMLInputElement;
+      await user.clear(inviteInput);
+      await user.type(inviteInput, "ab-12$cd");
+
+      expect(inviteInput.value).toBe("AB12CD");
+    }
+  });
+
   it("displays representatives list", async () => {
     renderComp();
     expect(await screen.findByText(/John Doe/i)).toBeInTheDocument();
+  });
+
+  it("shows empty representatives message when none have joined", async () => {
+    (getDoc as any).mockImplementation((docRef: any) => {
+      if (docRef.id === "company-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "company-1",
+          data: () => ({ ...mockCompanyData, representativeIDs: [] }),
+        });
+      }
+      return Promise.resolve({ exists: () => false });
+    });
+
+    renderComp();
+    expect(
+      await screen.findByText(/No representatives have joined this company yet/i)
+    ).toBeInTheDocument();
   });
 
   it("deletes representative", async () => {

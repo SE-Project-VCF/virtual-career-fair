@@ -48,6 +48,8 @@ const app = require("../server");
 const { db, auth } = require("../firebase");
 const { extractTextFromBuffer, toStructuredResume } = require("../resumeParser");
 
+const TEST_USER_SECRET = "student-pass-123";
+
 function authHeader(uid = "test-uid") {
   auth.verifyIdToken.mockResolvedValue({ uid, email: `${uid}@test.com` });
   return "Bearer valid-token";
@@ -124,7 +126,7 @@ describe("server misc endpoints", () => {
         firstName: "Admin",
         lastName: "User",
         email: "admin@test.com",
-        password: "password123",
+        password: TEST_USER_SECRET,
         role: "administrator",
       });
 
@@ -141,7 +143,7 @@ describe("server misc endpoints", () => {
         firstName: "Jane",
         lastName: "Doe",
         email: "jane@test.com",
-        password: "password123",
+        password: TEST_USER_SECRET,
         role: "student",
       });
 
@@ -167,7 +169,7 @@ describe("server misc endpoints", () => {
         firstName: "Jane",
         lastName: "Doe",
         email: "jane@test.com",
-        password: "password123",
+        password: TEST_USER_SECRET,
         role: "student",
       });
 

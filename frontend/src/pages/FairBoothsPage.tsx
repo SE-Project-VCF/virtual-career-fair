@@ -130,8 +130,11 @@ export default function FairBoothsPage() {
                     <Typography color="text.secondary">No reviews for this fair period.</Typography>
                   ) : (
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                      {booth.ratings.map((review, i) => (
-                        <Box key={i} sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 2 }}>
+                      {booth.ratings.map((review) => (
+                        <Box
+                          key={`${review.studentId}-${review.createdAt ?? "na"}-${review.rating}-${review.comment ?? ""}`}
+                          sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 2 }}
+                        >
                           <Rating value={review.rating} readOnly size="small" />
                           {review.comment && (
                             <Typography variant="body2" sx={{ mt: 0.5 }}>
