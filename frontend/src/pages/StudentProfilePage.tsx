@@ -80,7 +80,7 @@ export default function StudentProfilePage() {
     }
 
     fetchProfile()
-  }, [user])
+  }, [user?.uid])
 
   // Load tailored resumes
   const loadTailoredResumes = async () => {
@@ -120,7 +120,7 @@ export default function StudentProfilePage() {
     if (!user || loadTailoredResumesDone.current) return
     loadTailoredResumesDone.current = true
     loadTailoredResumes()
-  }, [user])
+  }, [user?.uid])
 
   const handleViewTailoredResume = (resumeId: string) => {
     setTailoredDialogOpen(false)
@@ -179,14 +179,9 @@ export default function StudentProfilePage() {
         }
 
         const result = await response.json()
-        console.log("Upload response:", result)
         // Store the file path (not the URL)
         // Frontend will fetch signed URL when viewing
         uploadedUrl = result.filePath || null
-        console.log("uploadedUrl set to:", uploadedUrl)
-        if (!uploadedUrl) {
-          console.warn("Warning: filePath is empty/null from backend response")
-        }
       }
 
       await setDoc(

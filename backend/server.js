@@ -26,6 +26,32 @@ async function checkCompanyAuthorization(companyId, userId) {
   return { authorized: true, companyData };
 }
 
+// Helper to resolve booth reference - supports both global booths and fair-specific booths
+async function resolveBooth(boothId) {
+  // First, try to get booth from global booths collection
+  const globalBoothRef = db.collection("booths").doc(boothId);
+  const globalBoothDoc = await globalBoothRef.get();
+  
+  if (globalBoothDoc.exists) {
+    return { ref: globalBoothRef, data: globalBoothDoc.data() };
+  }
+
+  // If not found globally, search through all fairs for this booth
+  const fairsSnapshot = await db.collection("fairs").get();
+  
+  for (const fairDoc of fairsSnapshot.docs) {
+    const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
+    const fairBoothDoc = await fairBoothRef.get();
+    
+    if (fairBoothDoc.exists) {
+      return { ref: fairBoothRef, data: fairBoothDoc.data() };
+    }
+  }
+
+  // Booth not found
+  return null;
+}
+
 // --------------------------
 // ENVIRONMENT VALIDATION
 // --------------------------
@@ -293,15 +319,7 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
       const rawText = await extractTextFromBuffer(buffer, fileName);
       const structured = toStructuredResume(rawText);
       
-      console.log("[UPLOAD RESUME] Parsed resume:", {
-        rawTextLength: rawText.length,
-        summaryLength: structured.summary?.text?.length || 0,
-        skillsCount: structured.skills?.items?.length || 0,
-        experienceCount: structured.experience?.length || 0,
-      });
-      
       // Update Firestore with both raw text and structured data
-      console.log("[UPLOAD RESUME] Updating Firestore with parsed data...");
       await db.collection("users").doc(userId).set(
         {
           resumePath: filePath,
@@ -328,13 +346,8 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
       );
     }
     
-    console.log("[UPLOAD RESUME] ✅ Firestore updated");
-    
     // Verify the data was written
     const verifySnap = await db.collection("users").doc(userId).get();
-    const userData = verifySnap.data();
-    console.log("[UPLOAD RESUME] Verification - resumePath on user:", userData?.resumePath);
-    console.log("[UPLOAD RESUME] Verification - user doc keys:", Object.keys(userData || {}));
 
     // Store the file path in response (not a URL)
     // Client will call /api/get-resume-url to get a signed URL when viewing
@@ -1149,8 +1162,6 @@ app.post("/api/job-invitations/send", async (req, res) => {
     const batch = db.batch();
     const invitationIds = [];
 
-    console.log("Creating job invitation(s)");
-
     for (const studentId of studentIds) {
       const invitationRef = db.collection("jobInvitations").doc();
       invitationIds.push(invitationRef.id);
@@ -1166,7 +1177,7 @@ app.post("/api/job-invitations/send", async (req, res) => {
         message: message || undefined,
       });
 
-      console.log(`Creating invitation ${invitationRef.id} for student ${studentId}:`, invitationData);
+      // Invitation record created
 
       batch.set(invitationRef, invitationData);
     }
@@ -1218,7 +1229,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
     }
 
     const invitationsSnapshot = await query.get();
-    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student`);
+    // Fetching invitations
 
     // Get job and company details for each invitation
     const invitations = await Promise.all(
@@ -1305,7 +1316,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
       return b.sentAt - a.sentAt;
     });
 
-    console.log(`Returning ${invitations.length} invitation(s) with full details`);
+    // Returning invitation details
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching received invitations:", err);
@@ -1888,15 +1899,6 @@ app.post("/api/resume/parse", verifyFirebaseToken, async (req, res) => {
     // 4) Extract text + structure
     const rawText = await extractTextFromBuffer(buffer, resumePath || fileName);
     const structured = toStructuredResume(rawText);
-    
-    // DEBUG: Log what was extracted
-    console.log("[PARSE RESUME] Raw text first 500 chars:", rawText.substring(0, 500));
-    console.log("[PARSE RESUME] Structured sections found:", {
-      summaryLength: structured.summary?.text?.length || 0,
-      skillsCount: structured.skills?.items?.length || 0,
-      experienceCount: structured.experience?.length || 0,
-      projectsCount: structured.projects?.length || 0,
-    });
 
     // 5) Save parsed data to main user document (not subcollection for efficiency)
     await userRef.set(
@@ -2864,13 +2866,9 @@ app.post("/api/resume/tailor/simple", verifyFirebaseToken, async (req, res) => {
 
     // 2) Generate changes using Gemini
     const { generateResumeChanges } = require("./resumeTailorSimple");
-    console.log("[TAILOR SIMPLE] About to call generateResumeChanges");
     const changes = await generateResumeChanges(resumeRawText, jobDescription, jobTitle);
     
-    console.log("[TAILOR SIMPLE] Generated", changes.length, "changes");
-    if (changes.length > 0) {
-      console.log("[TAILOR SIMPLE] First change:", JSON.stringify(changes[0], null, 2));
-    }
+    console.log("[TAILOR SIMPLE] Generated", changes.length, "suggested changes");
 
     // 3) Return changes for user review
     return res.json({
@@ -3917,8 +3915,18 @@ app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res)
     console.log(`[TRACK-VIEW] Student data: ${studentData.firstName} ${studentData.lastName}`);
     const now = admin.firestore.Timestamp.now();
 
-    // Update or create visitor record in boothVisitors subcollection
-    const visitorRef = db.collection("boothVisitors").doc(boothId).collection("studentVisits").doc(studentId);
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
+      console.log(`[TRACK-VIEW] Booth not found: ${boothId}`);
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothRef = boothResult.ref;
+    const boothData = boothResult.data;
+
+    // Update or create visitor record in booth's studentVisits subcollection
+    const visitorRef = boothRef.collection("studentVisits").doc(studentId);
     const existingVisit = await visitorRef.get();
 
     if (existingVisit.exists) {
@@ -3948,28 +3956,22 @@ app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res)
     }
 
     // Update booth's currentVisitors array
-    const boothRef = db.collection("booths").doc(boothId);
-    const boothDoc = await boothRef.get();
+    const currentVisitors = boothData.currentVisitors || [];
 
-    if (boothDoc.exists) {
-      const boothData = boothDoc.data();
-      const currentVisitors = boothData.currentVisitors || [];
-
-      // Add to current visitors if not already there
-      if (!currentVisitors.includes(studentId)) {
-        await boothRef.update({
-          currentVisitors: admin.firestore.FieldValue.arrayUnion(studentId),
-          totalVisitorsCount: admin.firestore.FieldValue.increment(1),
-          updatedAt: now,
-        });
-        console.log(`[TRACK-VIEW] Added to currentVisitors array`);
-      } else {
-        // Already viewing, just update timestamp
-        await boothRef.update({
-          updatedAt: now,
-        });
-        console.log(`[TRACK-VIEW] Already in currentVisitors, updated timestamp`);
-      }
+    // Add to current visitors if not already there
+    if (!currentVisitors.includes(studentId)) {
+      await boothRef.update({
+        currentVisitors: admin.firestore.FieldValue.arrayUnion(studentId),
+        totalVisitorsCount: admin.firestore.FieldValue.increment(1),
+        updatedAt: now,
+      });
+      console.log(`[TRACK-VIEW] Added to currentVisitors array`);
+    } else {
+      // Already viewing, just update timestamp
+      await boothRef.update({
+        updatedAt: now,
+      });
+      console.log(`[TRACK-VIEW] Already in currentVisitors, updated timestamp`);
     }
 
     console.log(`[TRACK-VIEW] Success - returning response`);
@@ -3995,8 +3997,17 @@ app.post("/api/booth/:boothId/track-leave", verifyFirebaseToken, async (req, res
 
     const now = admin.firestore.Timestamp.now();
 
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
+      console.log(`[TRACK-LEAVE] Booth not found: ${boothId}`);
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothRef = boothResult.ref;
+
     // Mark as not currently viewing
-    const visitorRef = db.collection("boothVisitors").doc(boothId).collection("studentVisits").doc(studentId);
+    const visitorRef = boothRef.collection("studentVisits").doc(studentId);
     const visitorExists = await visitorRef.get();
 
     if (visitorExists.exists) {
@@ -4007,7 +4018,6 @@ app.post("/api/booth/:boothId/track-leave", verifyFirebaseToken, async (req, res
     }
 
     // Remove from booth's currentVisitors array
-    const boothRef = db.collection("booths").doc(boothId);
     await boothRef.update({
       currentVisitors: admin.firestore.FieldValue.arrayRemove(studentId),
       updatedAt: now,
@@ -4032,14 +4042,14 @@ app.get("/api/booth/:boothId/current-visitors", verifyFirebaseToken, async (req,
       return res.status(400).json({ success: false, error: "Missing boothId" });
     }
 
-    const boothRef = db.collection("booths").doc(boothId);
-    const boothDoc = await boothRef.get();
-
-    if (!boothDoc.exists) {
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
       return res.status(404).json({ success: false, error: "Booth not found" });
     }
 
-    const boothData = boothDoc.data();
+    const boothRef = boothResult.ref;
+    const boothData = boothResult.data;
     const currentVisitorIds = boothData.currentVisitors || [];
 
     // Get details of current visitors
@@ -4087,14 +4097,15 @@ app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) =>
       return res.status(400).json({ success: false, error: "Missing boothId" });
     }
 
-    // Get booth
-    const boothDoc = await db.collection("booths").doc(boothId).get();
-    if (!boothDoc.exists) {
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
       console.log(`[GET-VISITORS] Booth not found: ${boothId}`);
       return res.status(404).json({ success: false, error: "Booth not found" });
     }
 
-    const boothData = boothDoc.data();
+    const boothRef = boothResult.ref;
+    const boothData = boothResult.data;
     const boothCompanyId = boothData.companyId;
     console.log(`[GET-VISITORS] Booth company ID: ${boothCompanyId}`);
 
@@ -4118,9 +4129,7 @@ app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) =>
     console.log(`[GET-VISITORS] Auth passed, fetching visitor records...`);
 
     // Get all student visits for this booth
-    const visitsSnapshot = await db
-      .collection("boothVisitors")
-      .doc(boothId)
+    const visitsSnapshot = await boothRef
       .collection("studentVisits")
       .get();
 
