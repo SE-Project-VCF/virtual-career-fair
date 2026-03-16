@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Alert,
   Box,
@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   FormControlLabel,
   MenuItem,
@@ -15,7 +16,8 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { collection, addDoc } from "firebase/firestore";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import { collection, addDoc, doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import type { ApplicationForm, FormField, FormFieldType } from "../types/applicationForm";
@@ -50,6 +52,25 @@ export default function JobApplicationFormDialog({
   const [submitting, setSubmitting] = useState(false);
   const [topError, setTopError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  const [resumePath, setResumePath] = useState<string | null>(null);
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [attachResume, setAttachResume] = useState(false);
+
+  useEffect(() => {
+    if (!open || !studentId) return;
+    let cancelled = false;
+    getDoc(doc(db, "users", studentId)).then((snap) => {
+      if (cancelled || !snap.exists()) return;
+      const data = snap.data();
+      const path: string | null = data.resumePath ?? data.currentResumePath ?? null;
+      const name: string | null = data.resumeFileName ?? null;
+      setResumePath(path);
+      setResumeFileName(name);
+      setAttachResume(!!path);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, studentId]);
 
   if (!form || form.status !== "published") {
     return null;
@@ -163,6 +184,7 @@ export default function JobApplicationFormDialog({
         ...(boothId ? { boothId } : {}),
         responses,
         ...(Object.keys(fileUrls).length > 0 ? { fileUrls } : {}),
+        ...(attachResume && resumePath ? { attachedResumePath: resumePath, attachedResumeFileName: resumeFileName ?? null } : {}),
         submittedAt: Date.now(),
       };
 
@@ -348,6 +370,54 @@ export default function JobApplicationFormDialog({
             Application submitted successfully!
           </Alert>
         )}
+
+        {/* Resume attachment section */}
+        <Box
+          sx={{
+            mb: 2,
+            p: 1.5,
+            border: "1px solid rgba(56, 133, 96, 0.25)",
+            borderRadius: 1,
+            bgcolor: "rgba(56, 133, 96, 0.04)",
+          }}
+        >
+          <Typography variant="body2" fontWeight={600} sx={{ mb: 0.75, display: "flex", alignItems: "center", gap: 0.5 }}>
+            <AttachFileIcon fontSize="small" sx={{ color: "#388560" }} />
+            Resume
+          </Typography>
+          {resumePath ? (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={attachResume}
+                  onChange={(e) => setAttachResume(e.target.checked)}
+                  size="small"
+                  sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  Attach my resume
+                  {resumeFileName && (
+                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>
+                      ({resumeFileName})
+                    </Typography>
+                  )}
+                </Typography>
+              }
+              sx={{ ml: 0 }}
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No resume on file.{" "}
+              <Typography component="span" variant="body2" color="#388560" sx={{ fontStyle: "italic" }}>
+                Upload one from your profile to attach it here.
+              </Typography>
+            </Typography>
+          )}
+        </Box>
+
+        {form.fields.length > 0 && <Divider sx={{ mb: 2 }} />}
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {form.fields.map((field) => (

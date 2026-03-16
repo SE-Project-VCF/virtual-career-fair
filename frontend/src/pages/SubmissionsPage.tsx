@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Collapse,
@@ -17,6 +18,7 @@ import {
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import AssignmentIcon from "@mui/icons-material/Assignment"
+import DescriptionIcon from "@mui/icons-material/Description"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 import ChatIcon from "@mui/icons-material/Chat"
@@ -34,6 +36,8 @@ interface Submission {
   studentId: string
   responses: Record<string, string | string[] | boolean | null>
   fileUrls?: Record<string, string>
+  attachedResumePath?: string
+  attachedResumeFileName?: string
   submittedAt: number
 }
 
@@ -56,11 +60,33 @@ function renderResponseValue(value: string | string[] | boolean | null): string 
 
 function SubmissionCard({ submission, form, studentName }: { submission: Submission; form?: ApplicationForm; studentName?: string }) {
   const [expanded, setExpanded] = useState(false)
+  const [resumeLoading, setResumeLoading] = useState(false)
   const navigate = useNavigate()
 
   const handleChat = (e: React.MouseEvent) => {
     e.stopPropagation()
     navigate("/dashboard/chat", { state: { repId: submission.studentId } })
+  }
+
+  const handleViewResume = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setResumeLoading(true)
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/applicant-resume-url/${submission.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Failed to get resume URL")
+      }
+      const { url } = await res.json()
+      window.open(url, "_blank", "noopener,noreferrer")
+    } catch (err: any) {
+      console.error("Error fetching resume URL:", err)
+    } finally {
+      setResumeLoading(false)
+    }
   }
 
   return (
@@ -115,6 +141,29 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
 
       <Collapse in={expanded}>
         <Box sx={{ px: 2, py: 1.5 }}>
+          {submission.attachedResumePath && (
+            <Box sx={{ mb: 1.5 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<DescriptionIcon fontSize="small" />}
+                onClick={handleViewResume}
+                disabled={resumeLoading}
+                sx={{
+                  borderColor: "#388560",
+                  color: "#388560",
+                  "&:hover": { borderColor: "#2d6b4d", color: "#2d6b4d", bgcolor: "rgba(56,133,96,0.06)" },
+                }}
+              >
+                {resumeLoading
+                  ? "Loading..."
+                  : submission.attachedResumeFileName
+                    ? `View Resume (${submission.attachedResumeFileName})`
+                    : "View Resume"}
+              </Button>
+              <Divider sx={{ mt: 1.5 }} />
+            </Box>
+          )}
           {form && form.fields.length > 0 ? (
             form.fields.map((field) => {
               const value = submission.responses?.[field.id]

@@ -986,6 +986,53 @@ app.get("/api/companies/:companyId/submissions", verifyFirebaseToken, async (req
 });
 
 /* ----------------------------------------------------
+   GET APPLICANT RESUME URL (for company reps/owners)
+   Generates a signed URL for a student's attached resume
+   on a specific job application.
+---------------------------------------------------- */
+app.get("/api/applicant-resume-url/:applicationId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+
+    const appDoc = await db.collection("jobApplications").doc(applicationId).get();
+    if (!appDoc.exists) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+
+    const appData = appDoc.data();
+    const { companyId, attachedResumePath } = appData;
+
+    if (!attachedResumePath) {
+      return res.status(404).json({ error: "No resume attached to this application" });
+    }
+
+    // Verify requester is the company's owner or rep
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(404).json({ error: "Company not found" });
+    }
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).json({ error: "Not authorized to view this resume" });
+    }
+
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(attachedResumePath);
+    const [signedUrl] = await file.getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+    });
+
+    return res.json({ url: signedUrl });
+  } catch (err) {
+    console.error("Error generating applicant resume URL:", err);
+    return res.status(500).json({ error: err.message || "Failed to generate resume URL" });
+  }
+});
+
+/* ----------------------------------------------------
    HELPER: Verify user is representative or company owner
 ---------------------------------------------------- */
 async function verifyRepOrOwner(userId, companyId) {
