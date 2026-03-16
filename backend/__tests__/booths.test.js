@@ -205,6 +205,6 @@ describe("POST /api/booths", () => {
       });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Internal server error");
+    expect(res.body.error).toBe("DB error");
   });
 });

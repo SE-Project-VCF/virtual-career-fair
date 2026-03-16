@@ -245,7 +245,7 @@ describe("POST /api/jobs", () => {
       .send({ companyId: "c1", name: "Dev", description: "desc", majorsAssociated: "CS" });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Internal server error");
+    expect(res.body.error).toBe("DB error");
   });
 
   it("returns 400 when job name is only whitespace", async () => {

@@ -28,7 +28,7 @@ jest.mock("stream-chat", () => ({
 }));
 
 jest.mock("../firebase", () => ({
-  db: { collection: jest.fn(), collectionGroup: jest.fn(), runTransaction: jest.fn() },
+  db: { collection: jest.fn(), collectionGroup: jest.fn(), runTransaction: jest.fn(), batch: jest.fn() },
   auth: { verifyIdToken: jest.fn(), createUser: jest.fn(), getUserByEmail: jest.fn() },
 }));
 
@@ -40,222 +40,124 @@ jest.mock("../helpers", () => {
 const request = require("supertest");
 const app = require("../server");
 const { db, auth } = require("../firebase");
+const { verifyAdmin } = require("../helpers");
 
 const VALID_TOKEN = "Bearer valid-token";
 
 beforeEach(() => {
   jest.clearAllMocks();
-  auth.verifyIdToken.mockResolvedValue({ uid: "user1", email: "u@test.com" });
+  auth.verifyIdToken.mockResolvedValue({ uid: "admin-uid", email: "a@test.com" });
+  verifyAdmin.mockResolvedValue(null);
 });
 
-describe("POST /api/fairs/join", () => {
+describe("POST /api/fairs/:fairId/enroll", () => {
   it("returns 401 without auth token", async () => {
-    const res = await request(app).post("/api/fairs/join").send({ inviteCode: "ABC12345" });
+    const res = await request(app).post("/api/fairs/fair1/enroll").send({ companyId: "comp1" });
     expect(res.status).toBe(401);
   });
 
-  it("returns 400 when inviteCode is missing", async () => {
+  it("returns 400 when both companyId and inviteCode are missing", async () => {
     const res = await request(app)
-      .post("/api/fairs/join")
+      .post("/api/fairs/fair1/enroll")
       .set("Authorization", VALID_TOKEN)
       .send({});
+
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/inviteCode/i);
+    expect(res.body.error).toMatch(/companyId or inviteCode/i);
   });
 
-  it("returns 404 when no schedule matches the invite code", async () => {
+  it("returns 404 when fair does not exist", async () => {
     db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-missing/enroll")
+      .set("Authorization", VALID_TOKEN)
+      .send({ companyId: "comp1" });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/fair not found/i);
+  });
+
+  it("enrolls company by companyId for admin", async () => {
+    const batch = {
+      set: jest.fn(),
+      commit: jest.fn().mockResolvedValue(undefined),
+    };
+
+    db.batch.mockReturnValue(batch);
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ name: "Spring Fair" }, true, "fair1")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "booths") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairBooth1" })),
+                };
+              }
+              if (sub === "jobs") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairJob1" })),
+                };
+              }
+              return { doc: jest.fn(() => ({ id: "x" })) };
+            }),
+          })),
+        };
+      }
+
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: "Acme", ownerId: "owner-1" }, true, "comp1")
+            ),
+          })),
+        };
+      }
+
+      if (name === "jobs") {
         return {
           where: jest.fn().mockReturnThis(),
           get: jest.fn().mockResolvedValue(mockQuerySnap([])),
         };
       }
-      return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(mockQuerySnap([])) };
+
+      return {
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+      };
     });
 
     const res = await request(app)
-      .post("/api/fairs/join")
+      .post("/api/fairs/fair1/enroll")
       .set("Authorization", VALID_TOKEN)
-      .send({ inviteCode: "NOTFOUND" });
-    expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/invite code/i);
-  });
+      .send({ companyId: "comp1" });
 
-  it("returns 404 when user has no company with a booth", async () => {
-    db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockResolvedValue(
-            mockQuerySnap([mockDocSnap({ name: "Spring Fair", inviteCode: "CODE1234" }, true, "sched1")])
-          ),
-        };
-      }
-      if (name === "companies") {
-        // Return empty for both ownerId query and representativeIDs query
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
-        };
-      }
-      return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(mockQuerySnap([])) };
-    });
-
-    const res = await request(app)
-      .post("/api/fairs/join")
-      .set("Authorization", VALID_TOKEN)
-      .send({ inviteCode: "CODE1234" });
-    expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/booth/i);
-  });
-
-  it("registers booth for company owner and returns fairId and fairName", async () => {
-    const scheduleDocRef = {
-      id: "sched1",
-      update: jest.fn().mockResolvedValue(undefined),
-    };
-
-    db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockResolvedValue(
-            mockQuerySnap([
-              {
-                ...mockDocSnap(
-                  { name: "Spring Fair", inviteCode: "CODE1234", registeredBoothIds: [] },
-                  true,
-                  "sched1"
-                ),
-                ref: scheduleDocRef,
-              },
-            ])
-          ),
-        };
-      }
-      if (name === "companies") {
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockResolvedValue(
-            mockQuerySnap([mockDocSnap({ ownerId: "user1", boothId: "booth1" }, true, "comp1")])
-          ),
-        };
-      }
-      return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(mockQuerySnap([])) };
-    });
-
-    const res = await request(app)
-      .post("/api/fairs/join")
-      .set("Authorization", VALID_TOKEN)
-      .send({ inviteCode: "CODE1234" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.fairId).toBe("sched1");
-    expect(res.body.fairName).toBe("Spring Fair");
-    expect(scheduleDocRef.update).toHaveBeenCalledWith({
-      registeredBoothIds: expect.objectContaining({ _type: "arrayUnion", args: ["booth1"] }),
-    });
-  });
-
-  it("registers booth for representative (ownerId query returns empty, rep query succeeds)", async () => {
-    const scheduleDocRef = {
-      id: "sched1",
-      update: jest.fn().mockResolvedValue(undefined),
-    };
-
-    let companiesCallCount = 0;
-    db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockResolvedValue(
-            mockQuerySnap([
-              {
-                ...mockDocSnap(
-                  { name: "Spring Fair", inviteCode: "CODE1234", registeredBoothIds: [] },
-                  true,
-                  "sched1"
-                ),
-                ref: scheduleDocRef,
-              },
-            ])
-          ),
-        };
-      }
-      if (name === "companies") {
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockImplementation(() => {
-            companiesCallCount++;
-            // First call: ownerId query returns empty
-            // Second call: representativeIDs query returns the company
-            if (companiesCallCount === 1) return Promise.resolve(mockQuerySnap([]));
-            return Promise.resolve(
-              mockQuerySnap([mockDocSnap({ boothId: "booth-rep1", representativeIDs: ["user1"] }, true, "comp2")])
-            );
-          }),
-        };
-      }
-      return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(mockQuerySnap([])) };
-    });
-
-    const res = await request(app)
-      .post("/api/fairs/join")
-      .set("Authorization", VALID_TOKEN)
-      .send({ inviteCode: "CODE1234" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.fairId).toBe("sched1");
-    expect(scheduleDocRef.update).toHaveBeenCalledWith({
-      registeredBoothIds: expect.objectContaining({ _type: "arrayUnion", args: ["booth-rep1"] }),
-    });
-  });
-
-  it("calls update with arrayUnion when booth is already registered (idempotent by arrayUnion)", async () => {
-    const scheduleDocRef = {
-      id: "sched1",
-      update: jest.fn().mockResolvedValue(undefined),
-    };
-
-    db.collection.mockImplementation((name) => {
-      if (name === "fairSchedules") {
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockResolvedValue(
-            mockQuerySnap([
-              {
-                ...mockDocSnap(
-                  { name: "Spring Fair", inviteCode: "CODE1234", registeredBoothIds: ["booth1"] },
-                  true,
-                  "sched1"
-                ),
-                ref: scheduleDocRef,
-              },
-            ])
-          ),
-        };
-      }
-      if (name === "companies") {
-        return {
-          where: jest.fn().mockReturnThis(),
-          get: jest.fn().mockResolvedValue(
-            mockQuerySnap([mockDocSnap({ ownerId: "user1", boothId: "booth1" }, true, "comp1")])
-          ),
-        };
-      }
-      return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(mockQuerySnap([])) };
-    });
-
-    const res = await request(app)
-      .post("/api/fairs/join")
-      .set("Authorization", VALID_TOKEN)
-      .send({ inviteCode: "CODE1234" });
-
-    expect(res.status).toBe(200);
-    // arrayUnion is always called — Firestore handles idempotency atomically
-    expect(scheduleDocRef.update).toHaveBeenCalledWith({
-      registeredBoothIds: expect.anything(),
-    });
+    expect(res.status).toBe(201);
+    expect(res.body.fairId).toBe("fair1");
+    expect(res.body.boothId).toBe("fairBooth1");
+    expect(batch.commit).toHaveBeenCalled();
   });
 });
