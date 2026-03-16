@@ -2,17 +2,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import JobApplicationFormDialog from "../JobApplicationFormDialog"
+import { getDoc, addDoc } from "firebase/firestore"
 import type { ApplicationForm } from "../../types/applicationForm"
 
 /* ---- Firebase mocks ---- */
 vi.mock("../../firebase", () => ({
   db: {},
   storage: {},
+  auth: {
+    currentUser: { getIdToken: vi.fn().mockResolvedValue("mock-token") },
+  },
 }))
+
+vi.mock("../../config", () => ({ API_URL: "http://localhost:3001" }))
 
 vi.mock("firebase/firestore", () => ({
   collection: vi.fn(),
   addDoc: vi.fn().mockResolvedValue({ id: "new-app-id" }),
+  doc: vi.fn(),
+  getDoc: vi.fn().mockResolvedValue({ exists: () => false, data: () => null }),
 }))
 
 vi.mock("firebase/storage", () => ({
@@ -20,6 +28,12 @@ vi.mock("firebase/storage", () => ({
   uploadBytesResumable: vi.fn(),
   getDownloadURL: vi.fn(),
 }))
+
+/* ---- Fetch mock (for tailored resumes API) ---- */
+global.fetch = vi.fn().mockResolvedValue({
+  ok: true,
+  json: () => Promise.resolve({ resumes: [] }),
+})
 
 /* ---- helpers ---- */
 function makeForm(overrides?: Partial<ApplicationForm>): ApplicationForm {
@@ -363,6 +377,181 @@ describe("JobApplicationFormDialog", () => {
 
       await user.click(screen.getByRole("button", { name: /close/i }))
       expect(onClose).toHaveBeenCalled()
+    })
+  })
+
+  describe("Resume attachment section", () => {
+    beforeEach(() => {
+      vi.mocked(getDoc).mockResolvedValue({ exists: () => false, data: () => null } as any)
+      ;(global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ resumes: [] }),
+      })
+    })
+
+    it("shows a loading indicator while resumes are being fetched", () => {
+      vi.mocked(getDoc).mockReturnValue(new Promise(() => {}) as any)
+      render(<JobApplicationFormDialog {...defaultProps} />)
+      expect(screen.getByRole("progressbar")).toBeInTheDocument()
+    })
+
+    it("shows no-resume message when user has no uploaded or tailored resumes", async () => {
+      render(<JobApplicationFormDialog {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByText(/no resume on file/i)).toBeInTheDocument()
+      })
+    })
+
+    it("shows the profile resume radio option when user has an uploaded resume", async () => {
+      vi.mocked(getDoc).mockResolvedValue({
+        exists: () => true,
+        data: () => ({ resumePath: "resumes/student-1/cv.pdf", resumeFileName: "cv.pdf" }),
+      } as any)
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: /my uploaded resume/i })).toBeInTheDocument()
+      })
+    })
+
+    it("pre-selects profile resume radio when user has an uploaded resume", async () => {
+      vi.mocked(getDoc).mockResolvedValue({
+        exists: () => true,
+        data: () => ({ resumePath: "resumes/student-1/cv.pdf", resumeFileName: "cv.pdf" }),
+      } as any)
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: /my uploaded resume/i })).toBeChecked()
+      })
+    })
+
+    it("shows filename next to profile resume option", async () => {
+      vi.mocked(getDoc).mockResolvedValue({
+        exists: () => true,
+        data: () => ({ resumePath: "resumes/student-1/cv.pdf", resumeFileName: "my-cv.pdf" }),
+      } as any)
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText("(my-cv.pdf)")).toBeInTheDocument()
+      })
+    })
+
+    it("shows a tailored resume option when user has tailored resumes", async () => {
+      ;(global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            resumes: [{ id: "tr-1", jobContext: { jobTitle: "Frontend Dev" }, createdAt: null }],
+          }),
+      })
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: /frontend dev/i })).toBeInTheDocument()
+      })
+    })
+
+    it("shows the 'don't attach' option when any resume is available", async () => {
+      vi.mocked(getDoc).mockResolvedValue({
+        exists: () => true,
+        data: () => ({ resumePath: "resumes/student-1/cv.pdf", resumeFileName: "cv.pdf" }),
+      } as any)
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: /don.t attach/i })).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe("Submission payload with resume", () => {
+    it("includes attachedResumePath and attachedResumeFileName when profile resume is selected", async () => {
+      const user = userEvent.setup()
+      vi.mocked(getDoc).mockResolvedValue({
+        exists: () => true,
+        data: () => ({ resumePath: "resumes/student-1/cv.pdf", resumeFileName: "cv.pdf" }),
+      } as any)
+      ;(global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ resumes: [] }),
+      })
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      // Profile resume pre-selected by default — submit directly
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: /my uploaded resume/i })).toBeChecked()
+      })
+
+      await user.click(screen.getByRole("button", { name: /submit application/i }))
+
+      await waitFor(() => {
+        const payload = vi.mocked(addDoc).mock.calls[0]?.[1] as any
+        expect(payload).toMatchObject({
+          attachedResumePath: "resumes/student-1/cv.pdf",
+          attachedResumeFileName: "cv.pdf",
+        })
+      })
+    })
+
+    it("includes attachedTailoredResumeId when a tailored resume is selected", async () => {
+      const user = userEvent.setup()
+      vi.mocked(getDoc).mockResolvedValue({ exists: () => false, data: () => null } as any)
+      ;(global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            resumes: [{ id: "tr-1", jobContext: { jobTitle: "Frontend Dev" }, createdAt: null }],
+          }),
+      })
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: /frontend dev/i })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole("radio", { name: /frontend dev/i }))
+      await user.click(screen.getByRole("button", { name: /submit application/i }))
+
+      await waitFor(() => {
+        const payload = vi.mocked(addDoc).mock.calls[0]?.[1] as any
+        expect(payload).toMatchObject({ attachedTailoredResumeId: "tr-1" })
+      })
+    })
+
+    it("does not include any resume fields when 'don't attach' is selected", async () => {
+      const user = userEvent.setup()
+      vi.mocked(getDoc).mockResolvedValue({
+        exists: () => true,
+        data: () => ({ resumePath: "resumes/student-1/cv.pdf", resumeFileName: "cv.pdf" }),
+      } as any)
+      ;(global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ resumes: [] }),
+      })
+
+      render(<JobApplicationFormDialog {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("radio", { name: /don.t attach/i })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole("radio", { name: /don.t attach/i }))
+      await user.click(screen.getByRole("button", { name: /submit application/i }))
+
+      await waitFor(() => {
+        const payload = vi.mocked(addDoc).mock.calls[0]?.[1] as any
+        expect(payload).not.toHaveProperty("attachedResumePath")
+        expect(payload).not.toHaveProperty("attachedTailoredResumeId")
+      })
     })
   })
 })

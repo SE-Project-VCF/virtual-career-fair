@@ -49,6 +49,10 @@ vi.mock("../ProfileMenu", () => ({
 /* ---- fetch mock ---- */
 global.fetch = vi.fn()
 
+/* ---- window.open mock ---- */
+const mockWindowOpen = vi.fn()
+Object.defineProperty(window, "open", { value: mockWindowOpen, writable: true })
+
 const mockJobs = [
   {
     id: "job-1",
@@ -82,6 +86,28 @@ const mockSubmissions = [
     submittedAt: 1700000001000,
   },
 ]
+
+const submissionWithResume = {
+  id: "sub-resume",
+  jobId: "job-1",
+  companyId: "company-1",
+  studentId: "student-3",
+  responses: {},
+  attachedResumePath: "resumes/student-3/cv.pdf",
+  attachedResumeFileName: "my-resume.pdf",
+  submittedAt: 1700000002000,
+}
+
+const submissionWithTailored = {
+  id: "sub-tailored",
+  jobId: "job-1",
+  companyId: "company-1",
+  studentId: "student-4",
+  responses: {},
+  attachedTailoredResumeId: "tr-1",
+  attachedTailoredResumeLabel: "Frontend Dev – 3/1/2026",
+  submittedAt: 1700000003000,
+}
 
 function renderPage() {
   return render(
@@ -288,6 +314,142 @@ describe("SubmissionsPage", () => {
           expect.stringContaining("/api/companies/company-1/submissions"),
           expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer mock-token" }) })
         )
+      })
+    })
+  })
+
+  describe("Resume buttons", () => {
+    /** Helper: render page with a single submission, expand its card, return user */
+    async function renderWithSubmission(submission: object) {
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ jobs: mockJobs }) })
+        }
+        if (url.includes("/api/companies")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ success: true, submissions: [submission] }),
+          })
+        }
+        // subsequent calls (resume URL, tailored resume) return specific data
+        if (url.includes("/api/applicant-resume-url")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ url: "https://example.com/signed.pdf" }) })
+        }
+        if (url.includes("/api/applicant-tailored-resume")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ tailoredText: "JOHN DOE\nSoftware Engineer\n\nExperience..." }),
+          })
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      })
+
+      renderPage()
+
+      // Wait for the page to load
+      await waitFor(() => expect(screen.getByText("Application Submissions")).toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+
+      // Expand the first submission card by clicking the student ID text row
+      const cardHeaders = screen.getAllByText(/ID:/)
+      await user.click(cardHeaders[0])
+
+      return user
+    }
+
+    it("shows View Resume button when submission has attachedResumePath", async () => {
+      await renderWithSubmission(submissionWithResume)
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /view resume.*my-resume\.pdf/i })).toBeInTheDocument()
+      })
+    })
+
+    it("clicking View Resume fetches a signed URL and opens it in a new tab", async () => {
+      const user = await renderWithSubmission(submissionWithResume)
+
+      const resumeBtn = await screen.findByRole("button", { name: /view resume/i })
+      await user.click(resumeBtn)
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining("/api/applicant-resume-url/sub-resume"),
+          expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer mock-token" }) })
+        )
+        expect(mockWindowOpen).toHaveBeenCalledWith(
+          "https://example.com/signed.pdf",
+          "_blank",
+          "noopener,noreferrer"
+        )
+      })
+    })
+
+    it("shows View Tailored Resume button when submission has attachedTailoredResumeId", async () => {
+      await renderWithSubmission(submissionWithTailored)
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /tailored resume/i })).toBeInTheDocument()
+      })
+    })
+
+    it("clicking View Tailored Resume opens a dialog with the resume content", async () => {
+      const user = await renderWithSubmission(submissionWithTailored)
+
+      const tailoredBtn = await screen.findByRole("button", { name: /tailored resume/i })
+      await user.click(tailoredBtn)
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining("/api/applicant-tailored-resume/sub-tailored"),
+          expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer mock-token" }) })
+        )
+        expect(screen.getByText(/JOHN DOE/)).toBeInTheDocument()
+      })
+    })
+
+    it("tailored resume dialog shows label from attachedTailoredResumeLabel in the title", async () => {
+      const user = await renderWithSubmission(submissionWithTailored)
+
+      const tailoredBtn = await screen.findByRole("button", { name: /tailored resume/i })
+      await user.click(tailoredBtn)
+
+      // The label appears in both the button text and the dialog heading — use heading role
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: /Frontend Dev/i })).toBeInTheDocument()
+      })
+    })
+
+    it("tailored resume dialog shows an error when the API call fails", async () => {
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ jobs: mockJobs }) })
+        }
+        if (url.includes("/api/companies")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ success: true, submissions: [submissionWithTailored] }),
+          })
+        }
+        if (url.includes("/api/applicant-tailored-resume")) {
+          return Promise.resolve({
+            ok: false,
+            json: () => Promise.resolve({ error: "Not authorized" }),
+          })
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      })
+
+      renderPage()
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+
+      const cardHeaders = screen.getAllByText(/ID:/)
+      await user.click(cardHeaders[0])
+
+      const tailoredBtn = await screen.findByRole("button", { name: /tailored resume/i })
+      await user.click(tailoredBtn)
+
+      await waitFor(() => {
+        expect(screen.getByText("Not authorized")).toBeInTheDocument()
       })
     })
   })
