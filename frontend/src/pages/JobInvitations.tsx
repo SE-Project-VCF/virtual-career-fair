@@ -13,7 +13,6 @@ import {
   Tabs,
   Tab,
   IconButton,
-  Tooltip,
   Divider,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -22,9 +21,11 @@ import BusinessIcon from "@mui/icons-material/Business";
 import PersonIcon from "@mui/icons-material/Person";
 import LaunchIcon from "@mui/icons-material/Launch";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import VisibilityIcon from "@mui/icons-material/Visibility";
+import EditIcon from "@mui/icons-material/Edit";
 import { authUtils } from "../utils/auth";
 import ProfileMenu from "./ProfileMenu";
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog";
+import type { ApplicationForm } from "../types/applicationForm";
 
 interface JobInvitation {
   id: string;
@@ -40,10 +41,12 @@ interface JobInvitation {
   message?: string;
   job: {
     id: string;
+    companyId: string;
     name: string;
     description: string;
     majorsAssociated: string;
     applicationLink: string | null;
+    applicationForm?: ApplicationForm | null;
   } | null;
   company: {
     id: string;
@@ -66,9 +69,11 @@ export default function JobInvitations() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentTab, setCurrentTab] = useState<"all" | "sent" | "viewed" | "clicked">("all");
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const [selectedInvitationForApply, setSelectedInvitationForApply] = useState<JobInvitation | null>(null);
 
   useEffect(() => {
-    
+
     const fetchInvitations = async () => {
       if (!user) return;
 
@@ -99,7 +104,7 @@ export default function JobInvitations() {
       }
     };
 
-    if (user && user.role === "student") {
+    if (user?.role === "student") {
       fetchInvitations();
     } else {
       setError("You must be logged in as a student to view invitations");
@@ -163,8 +168,13 @@ export default function JobInvitations() {
           )
         );
 
-        // Open application link if available
-        if (invitation.job?.applicationLink) {
+        const hasPublishedForm =
+          invitation.job?.applicationForm?.status === "published";
+
+        if (hasPublishedForm) {
+          setSelectedInvitationForApply(invitation);
+          setApplyDialogOpen(true);
+        } else if (invitation.job?.applicationLink) {
           window.open(invitation.job.applicationLink, "_blank");
         }
       } catch (err) {
@@ -183,6 +193,10 @@ export default function JobInvitations() {
     }
   };
 
+  const handleTailorResume = (invitation: JobInvitation) => {
+    navigate(`/invitations/${invitation.id}/tailor-simple`);
+  };
+
   const formatDateTime = (timestamp: number | undefined) => {
     if (!timestamp) return "N/A";
     const date = new Date(timestamp);
@@ -193,9 +207,9 @@ export default function JobInvitations() {
     const diffDays = Math.floor(diffMs / 86400000);
 
     if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
     return date.toLocaleDateString();
   };
 
@@ -212,7 +226,7 @@ export default function JobInvitations() {
 
   const newInvitationsCount = invitations.filter((inv) => inv.status === "sent").length;
 
-  if (!user || user.role !== "student") {
+  if (user?.role !== "student") {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Alert severity="error">
@@ -244,7 +258,7 @@ export default function JobInvitations() {
                   Job Invitations
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
-                  {invitations.length} invitation{invitations.length !== 1 ? "s" : ""} received
+                  {invitations.length} invitation{invitations.length > 1 ? "s" : ""} received
                   {newInvitationsCount > 0 && ` • ${newInvitationsCount} new`}
                 </Typography>
               </Box>
@@ -403,7 +417,7 @@ export default function JobInvitations() {
                   <Divider sx={{ my: 2 }} />
 
                   {/* Actions */}
-                  <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+                  <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end", flexWrap: "wrap" }}>
                     <Button
                       variant="outlined"
                       onClick={() => handleViewJob(invitation)}
@@ -418,7 +432,25 @@ export default function JobInvitations() {
                     >
                       View Full Details
                     </Button>
-                    {invitation.job?.applicationLink && (
+                    {invitation.job && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<EditIcon />}
+                        onClick={() => handleTailorResume(invitation)}
+                        sx={{
+                          borderColor: "#ff9800",
+                          color: "#ff9800",
+                          "&:hover": {
+                            borderColor: "#f57c00",
+                            bgcolor: "rgba(255, 152, 0, 0.05)",
+                          },
+                        }}
+                      >
+                        Tailor Resume
+                      </Button>
+                    )}
+                    {(invitation.job?.applicationLink ||
+                      invitation.job?.applicationForm?.status === "published") && (
                       <Button
                         variant="contained"
                         endIcon={<LaunchIcon />}
@@ -440,6 +472,19 @@ export default function JobInvitations() {
           </Box>
         )}
       </Container>
+
+      {selectedInvitationForApply?.job && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false);
+            setSelectedInvitationForApply(null);
+          }}
+          job={selectedInvitationForApply.job}
+          boothId={selectedInvitationForApply.company?.boothId || undefined}
+          studentId={user?.uid || null}
+        />
+      )}
     </Box>
   );
 }

@@ -16,8 +16,8 @@ describe("streamClient", () => {
 
   it("exports a client when API key is provided", async () => {
     // Mock environment variable
-    delete (global as any).import;
-    (global as any).import = {
+    delete (globalThis as any).import;
+    (globalThis as any).import = {
       meta: {
         env: {
           VITE_STREAM_API_KEY: "test-api-key",
@@ -32,8 +32,8 @@ describe("streamClient", () => {
 
   it("exports null when API key is missing", async () => {
     // Mock missing environment variable
-    delete (global as any).import;
-    (global as any).import = {
+    delete (globalThis as any).import;
+    (globalThis as any).import = {
       meta: {
         env: {
           VITE_STREAM_API_KEY: undefined,

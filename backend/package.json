@@ -1,12 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "test": "jest --verbose",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "start": "node index.js",
+    "start": "node server.js",
     "dev": "node server.js"
   },
   "keywords": [],
@@ -14,13 +14,17 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "bcrypt": "^6.0.0",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "firebase": "^12.4.0",
     "firebase-admin": "^13.5.0",
+    "mammoth": "^1.11.0",
+    "multer": "^2.1.0",
+    "pdfjs-dist": "^5.4.624",
     "stream-chat": "^9.25.0"
   },
   "devDependencies": {

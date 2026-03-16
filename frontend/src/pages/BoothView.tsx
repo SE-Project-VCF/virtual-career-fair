@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { trackBoothView } from "../utils/boothHistory";
 import {
@@ -14,17 +14,10 @@ import {
   Chip,
   Divider,
   Link,
-  Rating,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from "@mui/material"
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
-import { db, auth } from "../firebase"
+import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
-import { evaluateFairStatus } from "../utils/fairStatus"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -35,6 +28,8 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
 import NotificationBell from "../components/NotificationBell"
 
@@ -64,6 +59,63 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  applicationForm?: ApplicationForm | null
+}
+
+async function checkBoothAccess(
+  user: ReturnType<typeof import("../utils/auth").authUtils.getCurrentUser>,
+  boothId: string,
+  fairIsLive: boolean
+): Promise<{ hasAccess: boolean; error?: string }> {
+  if (fairIsLive) {
+    return { hasAccess: true }
+  }
+
+  // Only company owners and representatives can view booths when not live
+  if (!user || (user.role !== "companyOwner" && user.role !== "representative")) {
+    return {
+      hasAccess: false,
+      error: "The career fair is not currently live. You can only view your own booth.",
+    }
+  }
+
+  const companiesRef = collection(db, "companies")
+
+  if (user.role === "companyOwner") {
+    const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+    const ownerSnapshot = await getDocs(ownerQuery)
+    for (const companyDoc of ownerSnapshot.docs) {
+      if (companyDoc.data().boothId === boothId) {
+        return { hasAccess: true }
+      }
+    }
+  } else if (user.role === "representative" && user.companyId) {
+    const companyDoc = await getDoc(doc(db, "companies", user.companyId))
+    if (companyDoc.exists() && companyDoc.data().boothId === boothId) {
+      return { hasAccess: true }
+    }
+  }
+
+  return {
+    hasAccess: false,
+    error: "You don't have access to view this booth. The career fair is not currently live.",
+  }
+}
+
+async function findCompanyIdForBooth(boothId: string, boothData: Booth): Promise<string | undefined> {
+  if (boothData.companyId) {
+    return boothData.companyId
+  }
+
+  const companiesRef = collection(db, "companies")
+  const companiesSnapshot = await getDocs(companiesRef)
+  for (const companyDoc of companiesSnapshot.docs) {
+    if (companyDoc.data().boothId === boothId) {
+      return companyDoc.id
+    }
+  }
+
+  return undefined
 }
 
 const INDUSTRY_LABELS: Record<string, string> = {
@@ -88,21 +140,8 @@ export default function BoothView() {
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
-  const [ratingValue, setRatingValue] = useState<number | null>(null)
-  const [ratingComment, setRatingComment] = useState("")
-  const [submittingRating, setSubmittingRating] = useState(false)
-  const [ratingError, setRatingError] = useState("")
-  const [myReview, setMyReview] = useState<{ rating: number; comment: string | null; createdAt: number | null } | null>(null)
-  const [loadingMyReview, setLoadingMyReview] = useState(false)
-  const [resubmitOpen, setResubmitOpen] = useState(false)
-  const [resubmitValue, setResubmitValue] = useState<number | null>(null)
-  const [resubmitComment, setResubmitComment] = useState("")
-  const [resubmitError, setResubmitError] = useState("")
-  const [submittingResubmit, setSubmittingResubmit] = useState(false)
-  const [joinCode, setJoinCode] = useState("")
-  const [joinError, setJoinError] = useState("")
-  const [joinSuccess, setJoinSuccess] = useState("")
-  const [joiningFair, setJoiningFair] = useState(false)
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false)
+  const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
 
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
@@ -112,108 +151,6 @@ export default function BoothView() {
       isMountedRef.current = false
     }
   }, [])
-
-  const handleSubmitRating = async () => {
-    if (!ratingValue || !boothId) return
-    try {
-      setSubmittingRating(true)
-      setRatingError("")
-      if (!auth.currentUser) {
-        setRatingError("You must be logged in to rate booths")
-        return
-      }
-      const token = await auth.currentUser.getIdToken()
-      const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ rating: ratingValue, comment: ratingComment }),
-      })
-      const data = await res.json()
-      if (!isMountedRef.current) return
-      if (!res.ok) {
-        setRatingError(data.error || "Failed to submit rating")
-        return
-      }
-      setMyReview({ rating: ratingValue, comment: ratingComment || null, createdAt: Date.now() })
-    } catch {
-      if (isMountedRef.current) setRatingError("Failed to submit rating")
-    } finally {
-      if (isMountedRef.current) setSubmittingRating(false)
-    }
-  }
-
-  const handleResubmit = async () => {
-    if (!resubmitValue || !boothId) return
-    try {
-      setSubmittingResubmit(true)
-      setResubmitError("")
-      if (!auth.currentUser) {
-        setResubmitError("You must be logged in to submit a rating")
-        return
-      }
-      const token = await auth.currentUser.getIdToken()
-      const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ rating: resubmitValue, comment: resubmitComment }),
-      })
-      const data = await res.json()
-      if (!isMountedRef.current) return
-      if (!res.ok) {
-        setResubmitError(data.error || "Failed to submit rating")
-        return
-      }
-      setMyReview({ rating: resubmitValue, comment: resubmitComment || null, createdAt: Date.now() })
-      setResubmitOpen(false)
-      setResubmitValue(null)
-      setResubmitComment("")
-    } catch {
-      if (isMountedRef.current) setResubmitError("Failed to submit rating")
-    } finally {
-      if (isMountedRef.current) setSubmittingResubmit(false)
-    }
-  }
-
-  const handleJoinFair = async () => {
-    setJoinError("")
-    setJoinSuccess("")
-    if (!joinCode.trim()) {
-      setJoinError("Please enter an invite code")
-      return
-    }
-    if (!auth.currentUser) {
-      setJoinError("You must be logged in to join a fair")
-      return
-    }
-    setJoiningFair(true)
-    try {
-      const token = await auth.currentUser.getIdToken()
-      const res = await fetch(`${API_URL}/api/fairs/join`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ inviteCode: joinCode.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        if (isMountedRef.current) setJoinError(data.error || "Failed to join fair")
-      } else {
-        if (isMountedRef.current) {
-          setJoinSuccess(`Joined "${data.fairName || "fair"}" successfully`)
-          setJoinCode("")
-        }
-      }
-    } catch {
-      if (isMountedRef.current) setJoinError("Network error. Please try again.")
-    } finally {
-      if (isMountedRef.current) setJoiningFair(false)
-    }
-  }
 
   const handleStartChat = async () => {
     try {
@@ -256,110 +193,88 @@ export default function BoothView() {
     fetchBooth()
   }, [boothId, navigate])
 
-  useEffect(() => {
-    if (!boothId || user?.role !== "student") return
-    const fetchMyReview = async () => {
-      try {
-        setLoadingMyReview(true)
-        const token = await auth.currentUser?.getIdToken()
-        const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await res.json()
-        if (res.ok && data.rating != null) {
-          setMyReview({ rating: data.rating, comment: data.comment, createdAt: data.createdAt })
-        }
-      } catch {
-        // silently ignore
-      } finally {
-        if (isMountedRef.current) setLoadingMyReview(false)
-      }
-    }
-    fetchMyReview()
-  }, [boothId, user?.role])
-
-  const checkBoothAccess = async (targetBoothId: string): Promise<boolean> => {
-    if (!user || (user.role !== "companyOwner" && user.role !== "representative")) return false
-    const companiesRef = collection(db, "companies")
-    if (user.role === "companyOwner") {
-      const ownerSnapshot = await getDocs(query(companiesRef, where("ownerId", "==", user.uid)))
-      return ownerSnapshot.docs.some((d) => d.data().boothId === targetBoothId)
-    }
-    if (user.role === "representative" && user.companyId) {
-      const companyDoc = await getDoc(doc(db, "companies", user.companyId))
-      return companyDoc.exists() && companyDoc.data()?.boothId === targetBoothId
-    }
-    return false
-  }
-
-  const getAccessError = async (fairIsLive: boolean): Promise<string | null> => {
-    if (fairIsLive) return null
-    const hasAccess = await checkBoothAccess(boothId!)
-    if (hasAccess) return null
-    const isCompanyUser = user?.role === "companyOwner" || user?.role === "representative"
-    return isCompanyUser
-      ? "You don't have access to view this booth. The career fair is not currently live."
-      : "The career fair is not currently live. You can only view your own booth."
-  }
-
   const trackStudentBoothView = async (boothData: Booth) => {
-    if (!user?.uid || user.role !== "student") return
     try {
-      await trackBoothView(user.uid, {
-        boothId: boothData.id,
-        companyName: boothData.companyName,
-        industry: boothData.industry,
-        location: boothData.location,
-        logoUrl: boothData.logoUrl,
-      })
+      if (user?.uid && user.role === "student") {
+        await trackBoothView(user.uid, {
+          boothId: boothData.id,
+          companyName: boothData.companyName,
+          industry: boothData.industry,
+          location: boothData.location,
+          logoUrl: boothData.logoUrl,
+        });
+      }
     } catch (err) {
-      console.warn("History tracking failed:", err)
+      console.warn("History tracking failed:", err);
     }
   }
 
-  const resolveCompanyId = async (boothData: Booth, targetBoothId: string): Promise<string | undefined> => {
-    if (boothData.companyId) return boothData.companyId
-    const companiesSnapshot = await getDocs(collection(db, "companies"))
-    const match = companiesSnapshot.docs.find((d) => d.data().boothId === targetBoothId)
-    return match?.id
+  const loadBoothData = async (id: string, fairIsLive: boolean) => {
+    const boothDoc = await getDoc(doc(db, "booths", id))
+    if (!isMountedRef.current) return null
+
+    if (!boothDoc.exists()) {
+      setError("Booth not found")
+      setLoading(false)
+      return null
+    }
+
+    const boothData = {
+      id: boothDoc.id,
+      ...boothDoc.data(),
+    } as Booth
+
+    const { hasAccess, error: accessError } = await checkBoothAccess(user, boothId!, fairIsLive)
+    if (!hasAccess) {
+      if (isMountedRef.current) {
+        setError(accessError ?? "You don't have access to view this booth.")
+        setLoading(false)
+      }
+      return null
+    }
+
+    return boothData
   }
 
   const fetchBooth = async () => {
     if (!boothId) return
 
-    setLoading(true)
-    setError("")
     try {
-      const [status, boothDoc] = await Promise.all([
-        evaluateFairStatus(),
-        getDoc(doc(db, "booths", boothId)),
-      ])
+      if (!isMountedRef.current) return
+      setLoading(true)
+      setError("")
+
+      let fairIsLive = false
+      try {
+        const fairsRes = await fetch(`${API_URL}/api/fairs`)
+        if (fairsRes.ok) {
+          const fairsData = await fairsRes.json()
+          fairIsLive = (fairsData.fairs || []).some((f: { isLive: boolean }) => f.isLive)
+        }
+      } catch (err) {
+        console.error("Error fetching fairs:", err)
+      }
       if (!isMountedRef.current) return
 
-      if (!boothDoc.exists()) {
-        setError("Booth not found")
-        return
-      }
+      const boothData = await loadBoothData(boothId, fairIsLive)
+      if (!boothData || !isMountedRef.current) return
 
-      const accessError = await getAccessError(status.isLive)
-      if (!isMountedRef.current) return
-
-      if (accessError) {
-        setError(accessError)
-        return
-      }
-
-      const boothData = { id: boothDoc.id, ...boothDoc.data() } as Booth
       setBooth(boothData)
-      void trackStudentBoothView(boothData)
+      await trackStudentBoothView(boothData)
 
-      const companyId = await resolveCompanyId(boothData, boothId)
-      if (companyId) fetchJobs(companyId)
+      const companyId = await findCompanyIdForBooth(boothId, boothData)
+      if (companyId) {
+        fetchJobs(companyId)
+      }
     } catch (err) {
       console.error("Error fetching booth:", err)
-      if (isMountedRef.current) setError("Failed to load booth")
+      if (isMountedRef.current) {
+        setError("Failed to load booth")
+      }
     } finally {
-      if (isMountedRef.current) setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
@@ -406,72 +321,6 @@ export default function BoothView() {
             Back to Booths
           </Button>
         </Card>
-      </Box>
-    )
-  }
-
-  let reviewContent: ReactNode
-  if (loadingMyReview) {
-    reviewContent = <CircularProgress size={24} />
-  } else if (myReview) {
-    reviewContent = (
-      <Box>
-        <Rating value={myReview.rating} readOnly size="large" sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }} />
-        {myReview.comment && (
-          <Typography variant="body2" sx={{ mt: 1 }}>{myReview.comment}</Typography>
-        )}
-        {myReview.createdAt && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-            Submitted {new Date(myReview.createdAt).toLocaleDateString()}
-          </Typography>
-        )}
-        <Button
-          variant="outlined"
-          onClick={() => setResubmitOpen(true)}
-          sx={{ mt: 2, textTransform: "none", borderColor: "#b03a6c", color: "#b03a6c" }}
-        >
-          Resubmit Review
-        </Button>
-      </Box>
-    )
-  } else {
-    reviewContent = (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <Rating
-          value={ratingValue}
-          onChange={(_, val) => setRatingValue(val)}
-          size="large"
-          sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }}
-        />
-        <TextField
-          label="Comments (optional)"
-          multiline
-          rows={3}
-          value={ratingComment}
-          onChange={(e) => setRatingComment(e.target.value)}
-          slotProps={{ htmlInput: { maxLength: 1000 } }}
-          size="small"
-          fullWidth
-        />
-        {ratingError && (
-          <Alert severity="error">{ratingError}</Alert>
-        )}
-        <Button
-          variant="contained"
-          disabled={!ratingValue || submittingRating}
-          onClick={handleSubmitRating}
-          sx={{
-            background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)",
-            textTransform: "none",
-            fontWeight: 600,
-            borderRadius: 2,
-            "&:hover": {
-              background: "linear-gradient(135deg, #8a2d54 0%, #b03a6c 100%)",
-            },
-          }}
-        >
-          {submittingRating ? "Submitting..." : "Submit Rating"}
-        </Button>
       </Box>
     )
   }
@@ -595,49 +444,6 @@ export default function BoothView() {
                   </Typography>
                 </Box>
 
-                {/* Join a Fair */}
-                {(user?.role === "companyOwner" || user?.role === "representative") && (
-                  <Card sx={{ mb: 3 }}>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        Join a Career Fair
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Enter the invite code provided by the fair organizer to register your booth.
-                      </Typography>
-                      <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-                        <TextField
-                          label="Fair Invite Code"
-                          size="small"
-                          value={joinCode}
-                          onChange={(e) => {
-                            setJoinCode(e.target.value.toUpperCase())
-                            setJoinError("")
-                            setJoinSuccess("")
-                          }}
-                          error={!!joinError}
-                          helperText={joinError}
-                          slotProps={{ htmlInput: { maxLength: 20 } }}
-                          sx={{ flex: 1 }}
-                        />
-                        <Button
-                          variant="contained"
-                          onClick={handleJoinFair}
-                          disabled={joiningFair}
-                          sx={{ mt: 0.5 }}
-                        >
-                          {joiningFair ? "Joining…" : "Join Fair"}
-                        </Button>
-                      </Box>
-                      {joinSuccess && (
-                        <Alert severity="success" sx={{ mt: 1 }}>
-                          {joinSuccess}
-                        </Alert>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-
                 {/* Job Postings */}
                 {loadingJobs && (
                   <Box sx={{ mb: 4, display: "flex", justifyContent: "center", alignItems: "center", py: 4 }}>
@@ -668,7 +474,23 @@ export default function BoothView() {
                               <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
                                 {job.name}
                               </Typography>
-                              {job.applicationLink && (
+                              {job.applicationForm && job.applicationForm.status === "published" ? (
+                                <Button
+                                  variant="contained"
+                                  onClick={() => {
+                                    setSelectedJobForApply(job)
+                                    setApplyDialogOpen(true)
+                                  }}
+                                  sx={{
+                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                    "&:hover": {
+                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                                    },
+                                  }}
+                                >
+                                  Apply Now
+                                </Button>
+                              ) : job.applicationLink ? (
                                 <Button
                                   variant="contained"
                                   href={job.applicationLink}
@@ -683,7 +505,7 @@ export default function BoothView() {
                                 >
                                   Apply Now
                                 </Button>
-                              )}
+                              ) : null}
                             </Box>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
                               {job.description}
@@ -847,7 +669,7 @@ export default function BoothView() {
             </Card>
 
             {/* Open Positions Card */}
-            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)", mb: 3 }}>
+            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
               <CardContent sx={{ p: 3, textAlign: "center" }}>
                 <Box
                   sx={{
@@ -872,59 +694,22 @@ export default function BoothView() {
                 </Typography>
               </CardContent>
             </Card>
-
-            {/* Rate this Booth / Your Review — students only */}
-            {user?.role === "student" && (
-              <Card sx={{ border: "1px solid rgba(176, 58, 108, 0.3)" }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a" }}>
-                    {myReview ? "Your Review" : "Rate this Booth"}
-                  </Typography>
-
-                  {reviewContent}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Resubmit dialog */}
-            <Dialog open={resubmitOpen} onClose={() => setResubmitOpen(false)} fullWidth maxWidth="sm">
-              <DialogTitle>Resubmit Your Review</DialogTitle>
-              <DialogContent>
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-                  <Rating
-                    value={resubmitValue}
-                    onChange={(_, val) => setResubmitValue(val)}
-                    size="large"
-                    sx={{ "& .MuiRating-iconFilled": { color: "#b03a6c" } }}
-                  />
-                  <TextField
-                    label="Comments (optional)"
-                    multiline
-                    rows={3}
-                    value={resubmitComment}
-                    onChange={(e) => setResubmitComment(e.target.value)}
-                    slotProps={{ htmlInput: { maxLength: 1000 } }}
-                    size="small"
-                    fullWidth
-                  />
-                  {resubmitError && <Alert severity="error">{resubmitError}</Alert>}
-                </Box>
-              </DialogContent>
-              <DialogActions>
-                <Button onClick={() => setResubmitOpen(false)}>Cancel</Button>
-                <Button
-                  variant="contained"
-                  disabled={!resubmitValue || submittingResubmit}
-                  onClick={handleResubmit}
-                  sx={{ background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)", textTransform: "none" }}
-                >
-                  {submittingResubmit ? "Submitting..." : "Submit New Review"}
-                </Button>
-              </DialogActions>
-            </Dialog>
           </Grid>
         </Grid>
       </Container>
+
+      {selectedJobForApply && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false)
+            setSelectedJobForApply(null)
+          }}
+          job={selectedJobForApply}
+          boothId={booth?.id}
+          studentId={user?.role === "student" ? user.uid : null}
+        />
+      )}
     </Box>
   )
 }

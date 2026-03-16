@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Read(//Users/austinmoser/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/skills/subagent-driven-development/**)"
+      "Read(//Users/austinmoser/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/skills/subagent-driven-development/**)",
+      "Bash(git stash:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(node scripts/verifyUserEmail.mjs:*)",
+      "Bash(node scripts/createAdmin.mjs:*)",
+      "Bash(npx vite build:*)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Container,
@@ -13,10 +13,9 @@ import {
   Chip,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
-import type { User } from "../utils/auth"
 import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
-import { evaluateFairStatus } from "../utils/fairStatus"
+import { API_URL } from "../config"
 import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
@@ -58,52 +57,6 @@ const INDUSTRY_LABELS: Record<string, string> = {
 
 // Firestore 'in' queries support a maximum of 30 values per query
 const FIRESTORE_IN_QUERY_LIMIT = 30
-
-async function fetchBoothsForCompanyUser(user: User): Promise<Booth[]> {
-  const companiesRef = collection(db, "companies")
-  let companyIds: string[] = []
-
-  if (user.role === "companyOwner") {
-    const ownerSnapshot = await getDocs(query(companiesRef, where("ownerId", "==", user.uid)))
-    ownerSnapshot.forEach((d) => companyIds.push(d.id))
-  } else if (user.role === "representative" && user.companyId) {
-    companyIds.push(user.companyId)
-  }
-
-  if (companyIds.length === 0) return []
-
-  const companyDocs = await Promise.all(companyIds.map((id) => getDoc(doc(db, "companies", id))))
-  const boothIdToCompanyIdMap: Record<string, string> = {}
-  const boothIds: string[] = []
-
-  companyDocs.forEach((companyDoc, index) => {
-    if (companyDoc.exists()) {
-      const data = companyDoc.data()
-      if (data.boothId) {
-        boothIds.push(data.boothId)
-        boothIdToCompanyIdMap[data.boothId] = companyIds[index]
-      }
-    }
-  })
-
-  if (boothIds.length === 0) return []
-
-  const boothDocs = await Promise.all(boothIds.map((id) => getDoc(doc(db, "booths", id))))
-  const booths: Booth[] = []
-
-  boothDocs.forEach((boothDoc) => {
-    if (boothDoc.exists()) {
-      const data = boothDoc.data()
-      booths.push({
-        id: boothDoc.id,
-        ...data,
-        companyId: data.companyId || boothIdToCompanyIdMap[boothDoc.id],
-      } as Booth)
-    }
-  })
-
-  return booths
-}
 
 export default function Booths() {
   const navigate = useNavigate()
@@ -158,53 +111,35 @@ export default function Booths() {
       setLoading(true)
       setError("")
 
-      // Check if fair is live
-      const status = await evaluateFairStatus()
-      const fairIsLive = status.isLive
-      setIsLive(status.isLive)
-      setScheduleName(status.scheduleName)
-      setScheduleDescription(status.scheduleDescription)
+      // Check if any fair is live
+      let fairIsLive = false
+      let activeFairName: string | null = null
+      let activeFairDescription: string | null = null
+      try {
+        const fairsRes = await fetch(`${API_URL}/api/fairs`)
+        if (fairsRes.ok) {
+          const fairsData = await fairsRes.json()
+          const fairs: Array<{ isLive: boolean; name: string; description: string | null }> = fairsData.fairs || []
+          const activeFair = fairs.find((f) => f.isLive)
+          fairIsLive = !!activeFair
+          activeFairName = activeFair?.name ?? null
+          activeFairDescription = activeFair?.description ?? null
+        }
+      } catch (err) {
+        console.error("Error fetching fairs:", err)
+      }
+      setIsLive(fairIsLive)
+      setScheduleName(activeFairName)
+      setScheduleDescription(activeFairDescription)
 
       let boothsList: Booth[] = []
 
-      if (fairIsLive && status.activeScheduleId) {
-        // Fair is live with an active schedule — show only registered booths
-        const scheduleDoc = await getDoc(doc(db, "fairSchedules", status.activeScheduleId))
-        const registeredBoothIds: string[] = scheduleDoc.exists()
-          ? (scheduleDoc.data().registeredBoothIds || [])
-          : []
-
-        if (registeredBoothIds.length > 0) {
-          const boothDocs = await Promise.all(
-            registeredBoothIds.map((id) => getDoc(doc(db, "booths", id)))
-          )
-
-          // Fetch companies to map boothId -> companyId
-          const companiesSnapshot = await getDocs(collection(db, "companies"))
-          const boothIdToCompanyId: Record<string, string> = {}
-          companiesSnapshot.forEach((companyDoc) => {
-            const companyData = companyDoc.data()
-            if (companyData.boothId) {
-              boothIdToCompanyId[companyData.boothId] = companyDoc.id
-            }
-          })
-
-          boothDocs.forEach((boothDoc) => {
-            if (!boothDoc.exists()) return
-            const boothData = boothDoc.data()
-            const companyId = boothData.companyId || boothIdToCompanyId[boothDoc.id] || undefined
-            boothsList.push({
-              id: boothDoc.id,
-              ...boothData,
-              companyId,
-            } as Booth)
-          })
-        }
-      } else if (fairIsLive) {
-        // Fair is live via manual toggle only (no active schedule) — show all booths
+      if (fairIsLive) {
+        // Fair is live - show all booths
         const q = query(collection(db, "booths"), orderBy("companyName"))
         const querySnapshot = await getDocs(q)
 
+        // Also fetch companies to map boothId to companyId
         const companiesSnapshot = await getDocs(collection(db, "companies"))
         const boothIdToCompanyId: Record<string, string> = {}
         companiesSnapshot.forEach((companyDoc) => {
@@ -214,20 +149,73 @@ export default function Booths() {
           }
         })
 
-        querySnapshot.forEach((boothDoc) => {
-          const boothData = boothDoc.data()
-          const companyId = boothData.companyId || boothIdToCompanyId[boothDoc.id] || undefined
+        querySnapshot.forEach((doc) => {
+          const boothData = doc.data()
+          const companyId = boothData.companyId || boothIdToCompanyId[doc.id] || undefined
           boothsList.push({
-            id: boothDoc.id,
+            id: doc.id,
             ...boothData,
             companyId,
           } as Booth)
         })
       } else if (user && (user.role === "companyOwner" || user.role === "representative")) {
         // Fair is not live - only show booths for company owners/representatives
-        boothsList = await fetchBoothsForCompanyUser(user)
+          // Get user's company IDs
+          const companiesRef = collection(db, "companies")
+          let companyIds: string[] = []
+
+          if (user.role === "companyOwner") {
+            // Get all companies owned by this user
+            const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+            const ownerSnapshot = await getDocs(ownerQuery)
+            ownerSnapshot.forEach((doc) => {
+              companyIds.push(doc.id)
+            })
+          } else if (user.role === "representative" && user.companyId) {
+            // Get the company the representative is linked to
+            companyIds.push(user.companyId)
+          }
+
+          // Get booths for these companies
+          if (companyIds.length > 0) {
+            // Batch fetch all companies to avoid N+1 queries
+            const companyDocsPromises = companyIds.map(companyId => getDoc(doc(db, "companies", companyId)))
+            const companyDocs = await Promise.all(companyDocsPromises)
+
+            // Build mapping of boothId -> companyId
+            const boothIdToCompanyIdMap: Record<string, string> = {}
+            const boothIds: string[] = []
+
+            companyDocs.forEach((companyDoc, index) => {
+              if (companyDoc.exists()) {
+                const companyData = companyDoc.data()
+                if (companyData.boothId) {
+                  boothIds.push(companyData.boothId)
+                  boothIdToCompanyIdMap[companyData.boothId] = companyIds[index]
+                }
+              }
+            })
+
+            // Batch fetch all booths
+            if (boothIds.length > 0) {
+              const boothDocsPromises = boothIds.map(boothId => getDoc(doc(db, "booths", boothId)))
+              const boothDocs = await Promise.all(boothDocsPromises)
+
+              boothDocs.forEach((boothDoc) => {
+                if (boothDoc.exists()) {
+                  const boothData = boothDoc.data()
+                  const boothCompanyId = boothData.companyId || boothIdToCompanyIdMap[boothDoc.id]
+                  boothsList.push({
+                    id: boothDoc.id,
+                    ...boothData,
+                    companyId: boothCompanyId,
+                  } as Booth)
+                }
+              })
+            }
+          }
+        // If user is student or not logged in, they see no booths when fair is not live
       }
-      // If user is student or not logged in, they see no booths when fair is not live
 
       setBooths(boothsList)
 
@@ -250,166 +238,6 @@ export default function Booths() {
       return jobCounts[booth.companyId] || 0
     }
     return 0
-  }
-
-  let boothsContent: ReactNode
-  if (loading) {
-    boothsContent = (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-        <CircularProgress />
-      </Box>
-    )
-  } else if (booths.length === 0) {
-    boothsContent = (
-      <Card sx={{ textAlign: "center", p: 6, border: "1px solid rgba(56, 133, 96, 0.3)" }}>
-        <BusinessIcon sx={{ fontSize: 80, color: "#ccc", mb: 2 }} />
-        <Typography variant="h5" sx={{ mb: 2, color: "text.secondary" }}>
-          {isLive ? "No booths available" : "Career Fair Not Live"}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {isLive
-            ? "Companies are setting up their booths. Check back soon!"
-            : "The career fair is not currently live. You can only view and edit your own booth."}
-        </Typography>
-      </Card>
-    )
-  } else {
-    boothsContent = (
-      <>
-        <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a" }}>
-          Company Booths
-        </Typography>
-        <Grid container spacing={3}>
-          {booths.map((booth) => (
-            <Grid size={{ xs: 12, md: 6, lg: 4 }} key={booth.id}>
-              <Card
-                sx={{
-                  height: "100%",
-                  border: "1px solid rgba(56, 133, 96, 0.3)",
-                  transition: "transform 0.2s, box-shadow 0.2s",
-                  "&:hover": {
-                    transform: "translateY(-4px)",
-                    boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                  },
-                }}
-              >
-                <CardContent sx={{ p: 3 }}>
-                  {/* Company Logo & Name */}
-                  <Box sx={{ display: "flex", alignItems: "start", gap: 2, mb: 2 }}>
-                    {booth.logoUrl ? (
-                      <Box
-                        component="img"
-                        src={booth.logoUrl}
-                        alt={`${booth.companyName} logo`}
-                        sx={{
-                          width: 64,
-                          height: 64,
-                          borderRadius: 2,
-                          objectFit: "cover",
-                          border: "1px solid rgba(0,0,0,0.1)",
-                        }}
-                      />
-                    ) : (
-                      <Box
-                        sx={{
-                          width: 64,
-                          height: 64,
-                          borderRadius: 2,
-                          background: "linear-gradient(135deg, rgba(56, 133, 96, 0.1) 0%, rgba(176, 58, 108, 0.1) 100%)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <BusinessIcon sx={{ fontSize: 32, color: "#388560" }} />
-                      </Box>
-                    )}
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5, lineHeight: 1.2 }}>
-                        {booth.companyName}
-                      </Typography>
-                      <Chip
-                        label={INDUSTRY_LABELS[booth.industry] || booth.industry}
-                        size="small"
-                        sx={{
-                          bgcolor: "rgba(56, 133, 96, 0.1)",
-                          color: "#388560",
-                          fontWeight: 500,
-                          fontSize: "0.75rem",
-                        }}
-                      />
-                    </Box>
-                  </Box>
-
-                  {/* Description */}
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{
-                      mb: 2,
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                      minHeight: 40,
-                    }}
-                  >
-                    {booth.description}
-                  </Typography>
-
-                  {/* Details */}
-                  <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <LocationOnIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {booth.location}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <PeopleIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {booth.companySize} employees
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  {/* Open Positions Badge & Button */}
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      pt: 2,
-                      borderTop: "1px solid rgba(0,0,0,0.1)",
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
-                      {getJobCountForBooth(booth)} open position{getJobCountForBooth(booth) === 1 ? "" : "s"}
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      endIcon={<ArrowForwardIcon />}
-                      onClick={() => navigate(`/booth/${booth.id}`)}
-                      sx={{
-                        borderColor: "#388560",
-                        color: "#388560",
-                        "&:hover": {
-                          borderColor: "#2d6b4d",
-                          bgcolor: "rgba(56, 133, 96, 0.05)",
-                        },
-                      }}
-                    >
-                      Visit Booth
-                    </Button>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </>
-    )
   }
 
   return (
@@ -607,7 +435,160 @@ export default function Booths() {
           </Alert>
         )}
 
-        {boothsContent}
+        {loading && (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+            <CircularProgress />
+          </Box>
+        )}
+        {!loading && booths.length === 0 && (
+          <Card sx={{ textAlign: "center", p: 6, border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+            <BusinessIcon sx={{ fontSize: 80, color: "#ccc", mb: 2 }} />
+            <Typography variant="h5" sx={{ mb: 2, color: "text.secondary" }}>
+              {isLive ? "No booths available" : "Career Fair Not Live"}
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              {isLive
+                ? "Companies are setting up their booths. Check back soon!"
+                : "The career fair is not currently live. You can only view and edit your own booth."}
+            </Typography>
+          </Card>
+        )}
+        {!loading && booths.length > 0 && (
+          <>
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a" }}>
+              Company Booths
+            </Typography>
+            <Grid container spacing={3}>
+              {booths.map((booth) => (
+                <Grid size={{ xs: 12, md: 6, lg: 4 }} key={booth.id}>
+                  <Card
+                    sx={{
+                      height: "100%",
+                      border: "1px solid rgba(56, 133, 96, 0.3)",
+                      transition: "transform 0.2s, box-shadow 0.2s",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ p: 3 }}>
+                      {/* Company Logo & Name */}
+                      <Box sx={{ display: "flex", alignItems: "start", gap: 2, mb: 2 }}>
+                        {booth.logoUrl ? (
+                          <Box
+                            component="img"
+                            src={booth.logoUrl}
+                            alt={`${booth.companyName} logo`}
+                            sx={{
+                              width: 64,
+                              height: 64,
+                              borderRadius: 2,
+                              objectFit: "cover",
+                              border: "1px solid rgba(0,0,0,0.1)",
+                            }}
+                          />
+                        ) : (
+                          <Box
+                            sx={{
+                              width: 64,
+                              height: 64,
+                              borderRadius: 2,
+                              background: "linear-gradient(135deg, rgba(56, 133, 96, 0.1) 0%, rgba(176, 58, 108, 0.1) 100%)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <BusinessIcon sx={{ fontSize: 32, color: "#388560" }} />
+                          </Box>
+                        )}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5, lineHeight: 1.2 }}>
+                            {booth.companyName}
+                          </Typography>
+                          <Chip
+                            label={INDUSTRY_LABELS[booth.industry] || booth.industry}
+                            size="small"
+                            sx={{
+                              bgcolor: "rgba(56, 133, 96, 0.1)",
+                              color: "#388560",
+                              fontWeight: 500,
+                              fontSize: "0.75rem",
+                            }}
+                          />
+                        </Box>
+                      </Box>
+
+                      {/* Description */}
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          mb: 2,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                          minHeight: 40,
+                        }}
+                      >
+                        {booth.description}
+                      </Typography>
+
+                      {/* Details */}
+                      <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <LocationOnIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
+                          <Typography variant="body2" color="text.secondary">
+                            {booth.location}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <PeopleIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
+                          <Typography variant="body2" color="text.secondary">
+                            {booth.companySize} employees
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      {/* Open Positions Badge & Button */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          pt: 2,
+                          borderTop: "1px solid rgba(0,0,0,0.1)",
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
+                          {getJobCountForBooth(booth)} open position{getJobCountForBooth(booth) === 1 ? "" : "s"}
+                        </Typography>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          endIcon={<ArrowForwardIcon />}
+                          onClick={() => navigate(`/booth/${booth.id}`)}
+                          sx={{
+                            borderColor: "#388560",
+                            color: "#388560",
+                            "&:hover": {
+                              borderColor: "#2d6b4d",
+                              bgcolor: "rgba(56, 133, 96, 0.05)",
+                            },
+                          }}
+                        >
+                          Visit Booth
+                        </Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </>
+        )}
       </Container>
     </Box>
   )

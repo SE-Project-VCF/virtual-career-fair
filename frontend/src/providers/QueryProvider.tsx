@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 // Create a client with optimized defaults
 const queryClient = new QueryClient({
@@ -27,7 +27,7 @@ interface QueryProviderProps {
   children: ReactNode;
 }
 
-export function QueryProvider({ children }: QueryProviderProps) {
+export function QueryProvider({ children }: Readonly<QueryProviderProps>) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
