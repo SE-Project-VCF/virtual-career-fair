@@ -192,13 +192,17 @@ function fallbackRegexExtract(text, structured) {
   console.log(`[PARSER-FALLBACK] Very few lines, using regex extraction...`);
 
   // Find skills section
-  const skillsMatch = text.match(/(?:Technical\s+)?Skills?[:\s]+([^\n]*?)(?:Experience|Projects?|Education|$)/i);
-  if (skillsMatch) {
-    const skillsList = skillsMatch[1].split(/[,;•]+/)
+  const skillsSection = extractSectionByHeader(
+    text,
+    ["technical skills", "skills"],
+    ["experience", "projects", "education"]
+  );
+  if (skillsSection) {
+    const skillsList = skillsSection.split(/[\n,;•]+/)
       .map(s => s.trim())
       .filter(s => s.length > 1 && s.length < 60);
     structured.skills.items = Array.from(new Set(skillsList)).slice(0, 80);
-    console.log(`[PARSER-FALLBACK] Extracted ${structured.skills.items.length} skills via regex`);
+    console.log(`[PARSER-FALLBACK] Extracted ${structured.skills.items.length} skills via section scan`);
   }
 
   // Find experience section
@@ -208,14 +212,64 @@ function fallbackRegexExtract(text, structured) {
   fallbackExtractProjects(text, structured);
 }
 
+function findFirstHeader(textLower, headers, startAt = 0) {
+  let bestIndex = -1;
+  let bestHeader = "";
+  for (const header of headers) {
+    const idx = textLower.indexOf(header, startAt);
+    if (idx !== -1 && (bestIndex === -1 || idx < bestIndex)) {
+      bestIndex = idx;
+      bestHeader = header;
+    }
+  }
+  return { index: bestIndex, header: bestHeader };
+}
+
+function extractSectionByHeader(text, headers, stopHeaders) {
+  const lower = text.toLowerCase();
+  const startMatch = findFirstHeader(lower, headers);
+  if (startMatch.index === -1) return "";
+
+  let start = startMatch.index + startMatch.header.length;
+  while (start < text.length && (text[start] === ':' || text[start] === ' ' || text[start] === '\n' || text[start] === '\t')) {
+    start += 1;
+  }
+
+  const stopMatch = findFirstHeader(lower, stopHeaders, start);
+  const end = stopMatch.index === -1 ? text.length : stopMatch.index;
+
+  return text.substring(start, end).trim();
+}
+
+function extractDashLines(text) {
+  return text
+    .split(/[\n;]/)
+    .map(line => line.trim())
+    .filter(line => line.length > 5 && (line.includes("-") || line.includes("–")));
+}
+
+function parseYearsFromText(part) {
+  const years = part.match(/\b\d{4}\b/g) || [];
+  const lower = part.toLowerCase();
+  if (years.length >= 2) return [years[0], years[1]];
+  if (years.length === 1 && (lower.includes("present") || lower.includes("current"))) {
+    return [years[0], "Present"];
+  }
+  return [];
+}
+
 /**
  * Extract experience entries from text using regex in fallback mode.
  */
 function fallbackExtractExperience(text, structured) {
-  const expMatch = text.match(/(?:Work\s+)?Experience[:\s]+([\s\S]*?)(?:Projects?|Education|Skills?|$)/i);
-  if (!expMatch) return;
+  const sectionText = extractSectionByHeader(
+    text,
+    ["work experience", "experience"],
+    ["projects", "education", "skills"]
+  );
+  if (!sectionText) return;
 
-  const jobMatches = expMatch[1].match(/([A-Z][^–-]*?[–-]\s*[A-Z][^,\n]*)/g) || [];
+  const jobMatches = extractDashLines(sectionText);
 
   for (const jobLine of jobMatches) {
     if (jobLine.length > 5) {
@@ -238,10 +292,14 @@ function fallbackExtractExperience(text, structured) {
  * Extract project entries from text using regex in fallback mode.
  */
 function fallbackExtractProjects(text, structured) {
-  const projMatch = text.match(/Projects?[:\s]+([\s\S]*?)(?:Education|Skills?|Experience|$)/i);
-  if (!projMatch) return;
+  const sectionText = extractSectionByHeader(
+    text,
+    ["projects", "project"],
+    ["education", "skills", "experience"]
+  );
+  if (!sectionText) return;
 
-  const projMatches = projMatch[1].match(/([A-Z][^,\n]*?[–-][^,\n]*)/g) || [];
+  const projMatches = extractDashLines(sectionText);
 
   for (const projLine of projMatches) {
     if (projLine.length > 5) {
@@ -314,10 +372,10 @@ function isJobHeaderLine(line, nextLine) {
  */
 function classifyHeaderPart(part, currentExp) {
   if (hasDateToken(part)) {
-    const dateMatch = part.match(/(\w+ \d{4}|\d{4})/g);
-    if (dateMatch?.length === 2) {
-      currentExp.start = dateMatch[0];
-      currentExp.end = dateMatch[1];
+    const years = parseYearsFromText(part);
+    if (years.length === 2) {
+      currentExp.start = years[0];
+      currentExp.end = years[1];
     }
   } else if (jobKeywords.test(part)) {
     if (!currentExp.title) currentExp.title = part;

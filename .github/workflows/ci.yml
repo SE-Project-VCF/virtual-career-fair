@@ -21,7 +21,7 @@ jobs:
       - name: Install & Build
         run: |
           cd frontend
-          npm ci
+          npm ci --ignore-scripts
           npm run build
       - name: Run tests with coverage
         run: |
@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd backend
-          npm ci
+          npm ci --ignore-scripts
       - name: Run tests with coverage
         run: |
           cd backend
