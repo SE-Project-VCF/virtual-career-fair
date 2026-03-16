@@ -25,7 +25,6 @@ import FairBooths from "./pages/FairBooths"
 import FairBoothView from "./pages/FairBoothView"
 import FairAdminDashboard from "./pages/FairAdminDashboard"
 import { FairProvider } from "./contexts/FairContext"
-import SamplePage from "./pages/SamplePage"
 
 // Wrapper components to inject fairId from URL params into FairProvider
 function FairLandingWrapper() {
@@ -76,7 +75,6 @@ function App() {
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/profile" element={<StudentProfilePage />} />
-        <Route path="/sample" element={<SamplePage />} />
 
         {/* Multi-fair routes */}
         <Route path="/fairs" element={<FairList />} />
