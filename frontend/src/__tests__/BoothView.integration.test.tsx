@@ -1,231 +1,187 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { render, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 import { BrowserRouter } from "react-router-dom"
 import BoothView from "../pages/BoothView"
+import { getDoc, getDocs, collection, query, where } from "firebase/firestore"
 
+// Mock Firebase
 vi.mock("firebase/firestore")
-vi.mock("../firebase", () => ({ db: {}, auth: {} }))
-vi.mock("../utils/auth", () => ({
-  authUtils: {
-    getCurrentUser: vi.fn(() => ({ uid: "user-123" })),
-    isAuthenticated: vi.fn(() => true),
-    getIdToken: vi.fn(async () => "token"),
-  },
+vi.mock("../firebase", () => ({ db: {} }))
+vi.mock("../utils/boothHistory", () => ({
+  trackBoothView: vi.fn(),
 }))
+
+const mockNavigate = vi.fn()
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom")
   return {
     ...actual,
-    useNavigate: () => vi.fn(),
+    useNavigate: () => mockNavigate,
     useParams: () => ({ boothId: "booth-123" }),
   }
 })
 
+vi.mock("../utils/auth", () => ({
+  authUtils: {
+    getCurrentUser: vi.fn(() => ({ uid: "user-123", role: "student" })),
+    isAuthenticated: vi.fn(() => true),
+    getIdToken: vi.fn(async () => "token-123"),
+  },
+}))
+
 describe("BoothView - Integration Tests", () => {
+  const mockBoothData = {
+    id: "booth-123",
+    companyName: "TechCorp",
+    industry: "software",
+    companySize: "500+",
+    location: "San Francisco, CA",
+    description: "Leading technology company",
+    logoUrl: "https://example.com/logo.png",
+    openPositions: 2,
+    website: "https://techcorp.com",
+    careersPage: "https://techcorp.com/careers",
+    contactName: "John Doe",
+    contactEmail: "john@techcorp.com",
+    contactPhone: "555-1234",
+  }
+
+  const mockJobs = [
+    {
+      id: "job-1",
+      companyId: "booth-123",
+      name: "Software Engineer",
+      description: "Build great software",
+      majorsAssociated: "Computer Science, Engineering",
+      applicationLink: "https://techcorp.com/apply/job-1",
+      createdAt: Date.now(),
+      applicationForm: null,
+    },
+    {
+      id: "job-2",
+      companyId: "booth-123",
+      name: "Product Manager",
+      description: "Lead product strategy",
+      majorsAssociated: "Business, Engineering",
+      applicationLink: null,
+      createdAt: Date.now(),
+      applicationForm: { status: "published" },
+    },
+  ]
+
   beforeEach(() => {
     vi.clearAllMocks()
-    global.fetch = vi.fn()
-  })
-
-  describe("Rendering", () => {
-    it("renders without crashing", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
+    mockNavigate.mockClear()
+    global.fetch = vi.fn((url: string) => {
+      // Mock fair is live response
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ fairs: [{ isLive: true }] }), {
+            status: 200,
+          })
+        )
+      }
+      // Default response
+      return Promise.resolve(new Response("{}"))
     })
 
-    it("displays booth content", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container.innerHTML.length).toBeGreaterThan(0)
+    // Mock getDocs for jobs
+    ;(getDocs as any).mockResolvedValue({
+      docs: mockJobs.map((job) => ({
+        id: job.id,
+        data: () => job,
+      })),
+    })
+
+    // Mock getDoc for booth
+    ;(getDoc as any).mockResolvedValue({
+      exists: () => true,
+      id: "booth-123",
+      data: () => mockBoothData,
     })
   })
 
   describe("Booth Display", () => {
-    it("shows booth header", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("displays company name", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("shows booth number", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-  })
-
-  describe("Job Listings", () => {
-    it("displays available jobs", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("shows job details on expand", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("handles empty jobs list", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("renders job cards", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-  })
-
-  describe("User Interaction", () => {
-    it("supports job expansion", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      const buttons = container.querySelectorAll("button")
-      expect(buttons).toBeTruthy()
-    })
-
-    it("can apply to jobs", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("allows navigation back", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      const buttons = container.querySelectorAll("button")
-      expect(buttons.length).toBeGreaterThanOrEqual(0)
-    })
-  })
-
-  describe("Data Loading", () => {
-    it("fetches booth data", async () => {
+    it("displays company logo when available", async () => {
       render(
-        <BrowserRouter><BoothView /></BrowserRouter>
+        <BrowserRouter>
+          <BoothView />
+        </BrowserRouter>
       )
-      await waitFor(() => expect(true).toBe(true), { timeout: 1000 })
-    })
 
-    it("loads job listings", async () => {
+      await waitFor(
+        () => {
+          expect(screen.getByAltText("TechCorp logo")).toBeInTheDocument()
+        },
+        { timeout: 5000 }
+      )
+    })
+  })
+
+  describe("Contact Information", () => {
+    it("displays contact information section", async () => {
       render(
-        <BrowserRouter><BoothView /></BrowserRouter>
+        <BrowserRouter>
+          <BoothView />
+        </BrowserRouter>
       )
-      await waitFor(() => expect(true).toBe(true), { timeout: 1000 })
+
+      await waitFor(
+        () => {
+          expect(
+            screen.getByText("Contact Information")
+          ).toBeInTheDocument()
+        },
+        { timeout: 5000 }
+      )
     })
 
-    it("handles loading state", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
+    it("displays contact person name", async () => {
+      render(
+        <BrowserRouter>
+          <BoothView />
+        </BrowserRouter>
       )
-      expect(container).toBeTruthy()
-    })
-  })
 
-  describe("Error Handling", () => {
-    it("handles booth not found", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
+      await waitFor(
+        () => {
+          expect(screen.getByText("John Doe")).toBeInTheDocument()
+        },
+        { timeout: 5000 }
       )
-      expect(container).toBeTruthy()
-    })
-
-    it("recovers from data load errors", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
     })
 
-    it("shows error messages", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
+    it("displays contact phone", async () => {
+      render(
+        <BrowserRouter>
+          <BoothView />
+        </BrowserRouter>
       )
-      expect(container).toBeTruthy()
-    })
-  })
 
-  describe("Visitor Tracking", () => {
-    it("tracks booth visits", async () => {
-      vi.mocked(global.fetch).mockResolvedValue(
-        new Response(JSON.stringify({}))
+      await waitFor(
+        () => {
+          expect(screen.getByText("555-1234")).toBeInTheDocument()
+        },
+        { timeout: 5000 }
       )
-      render(<BrowserRouter><BoothView /></BrowserRouter>)
-      await waitFor(() => expect(true).toBe(true), { timeout: 500 })
-    })
-
-    it("records job views", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
     })
   })
 
-  describe("Responsive Design", () => {
-    it("adapts to mobile layout", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
+  describe("Message Button", () => {
+    it("displays message representative button", async () => {
+      render(
+        <BrowserRouter>
+          <BoothView />
+        </BrowserRouter>
       )
-      expect(container).toBeTruthy()
-    })
 
-    it("works on tablets", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
+      await waitFor(
+        () => {
+          const buttons = screen.getAllByRole("button")
+          expect(buttons.length).toBeGreaterThan(0)
+        },
+        { timeout: 5000 }
       )
-      expect(container).toBeTruthy()
-    })
-
-    it("displays on desktop", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-  })
-
-  describe("Integration", () => {
-    it("works with auth system", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("connects to Firebase", () => {
-      const { container } = render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )
-      expect(container).toBeTruthy()
-    })
-
-    it("integrates with router", () => {
-      expect(() => render(
-        <BrowserRouter><BoothView /></BrowserRouter>
-      )).not.toThrow()
     })
   })
 })
