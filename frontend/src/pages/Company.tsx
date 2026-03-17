@@ -1002,7 +1002,8 @@ export default function Company() {
     )
   }
 
-  if (error && !company) {
+  if (!company) {
+    if(error) {
     return (
       <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Card sx={{ p: 4, maxWidth: 500 }}>
@@ -1012,10 +1013,10 @@ export default function Company() {
           </Button>
         </Card>
       </Box>
-    )
+    )} else {
+      return null
+    }
   }
-
-  if (!company) return null
 
   const isOwner = userRole === "companyOwner" && company.ownerId === userId
   const saveButtonLabel = getSaveButtonLabel(savingJob, editingJob)
