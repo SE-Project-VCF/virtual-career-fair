@@ -533,4 +533,38 @@ describe("BoothVisitorsPage", () => {
       })
     })
   })
-})
+  describe("Error Paths Covered", () => {
+    it("handles missing token gracefully", async () => {
+      vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue(null)
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      // Should render without crashing even with no token
+      expect(screen.getByRole("progressbar")).toBeInTheDocument()
+    })
+
+    it("handles fetch error when loading visitors", async () => {
+      vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
+      vi.mocked(global.fetch).mockRejectedValue(new Error("Network error"))
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Failed to load booth visitors|error/i)).toBeInTheDocument()
+      })
+    })
+
+    it("handles bad response status when fetching visitors", async () => {
+      vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+      } as any)
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Failed to load booth visitors|error/i)).toBeInTheDocument()
+      })
+    })
+  })})
