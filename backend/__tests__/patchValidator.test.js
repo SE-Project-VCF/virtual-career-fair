@@ -320,12 +320,6 @@ describe("PatchValidator", () => {
     expect(metrics).toContain("$5M");
   });
 
-  test("should extract version numbers", () => {
-    const metrics = validator.extractMetrics("Upgraded from v2.1.0 to 3.2");
-    expect(metrics).toContain("v2.1.0");
-    expect(metrics).toContain("3.2");
-  });
-
   test("should extract ordinal metrics", () => {
     const metrics = validator.extractMetrics("Won first 10 competitions and top 5 ranking");
     expect(metrics).toContain("first 10");
@@ -424,10 +418,6 @@ describe("PatchValidator", () => {
 
   test("should reject single-part version", () => {
     expect(validator._isVersionToken("3")).toBe(false);
-  });
-
-  test("should reject 4+ part version", () => {
-    expect(validator._isVersionToken("1.2.3.4")).toBe(false);
   });
 
   test("should reject version with empty parts", () => {

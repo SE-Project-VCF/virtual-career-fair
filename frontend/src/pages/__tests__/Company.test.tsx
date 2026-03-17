@@ -367,7 +367,7 @@ describe("Company", () => {
       const editBtn = editButtons[0].closest("button");
       if (editBtn) await user.click(editBtn);
 
-      const inviteInput = screen.getByLabelText(/invite code/i) as HTMLInputElement;
+      const inviteInput: HTMLInputElement = screen.getByLabelText(/invite code/i);
       await user.clear(inviteInput);
       await user.type(inviteInput, "ab-12$cd");
 
