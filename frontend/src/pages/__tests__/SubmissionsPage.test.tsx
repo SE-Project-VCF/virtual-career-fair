@@ -61,7 +61,20 @@ vi.mock("../../components/BaseLayout", () => ({
   ),
 }))
 
-/* ---- fetch mock ---- */
+/* ---- fetch mock ----
+ * parseJsonOrThrow uses res.text() and res.headers.get("content-type"),
+ * so we must return Response-like objects with those methods.
+ */
+function mockJsonResponse(data: object, ok = true, status = 200) {
+  const body = JSON.stringify(data)
+  return Promise.resolve({
+    ok,
+    status,
+    headers: { get: (name: string) => (name === "content-type" ? "application/json; charset=utf-8" : null) },
+    text: () => Promise.resolve(body),
+    json: () => Promise.resolve(data),
+  })
+}
 global.fetch = vi.fn()
 
 /* ---- window.open mock ---- */
@@ -140,12 +153,12 @@ beforeEach(() => {
   vi.mocked(authUtils.isAuthenticated).mockReturnValue(true)
   ;(global.fetch as any).mockImplementation((url: string) => {
     if (url.includes("/api/jobs")) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ jobs: mockJobs }) })
+      return mockJsonResponse({ jobs: mockJobs })
     }
     if (url.includes("/api/companies")) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, submissions: mockSubmissions }) })
+      return mockJsonResponse({ success: true, submissions: mockSubmissions })
     }
-    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+    return mockJsonResponse({})
   })
 })
 
@@ -338,25 +351,21 @@ describe("SubmissionsPage", () => {
       const user = userEvent.setup()
       ;(global.fetch as any).mockImplementation((url: string) => {
         if (url.includes("/api/jobs")) {
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ jobs: mockJobs }) })
+          return mockJsonResponse({ jobs: mockJobs })
         }
         if (url.includes("/api/companies")) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({ success: true, submissions: [submission] }),
-          })
+          return mockJsonResponse({ success: true, submissions: [submission] })
         }
-        // subsequent calls (resume URL, tailored resume) return specific data
+        // parseJsonOrThrow requires text() and headers.get("content-type")
         if (url.includes("/api/applicant-resume-url")) {
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ url: "https://example.com/signed.pdf" }) })
+          return mockJsonResponse({ url: "https://example.com/signed.pdf" })
         }
         if (url.includes("/api/applicant-tailored-resume")) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({ tailoredText: "JOHN DOE\nSoftware Engineer\n\nExperience..." }),
+          return mockJsonResponse({
+            tailoredText: "JOHN DOE\nSoftware Engineer\n\nExperience...",
           })
         }
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+        return mockJsonResponse({})
       })
 
       renderPage()
@@ -436,21 +445,15 @@ describe("SubmissionsPage", () => {
       const user = userEvent.setup()
       ;(global.fetch as any).mockImplementation((url: string) => {
         if (url.includes("/api/jobs")) {
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ jobs: mockJobs }) })
+          return mockJsonResponse({ jobs: mockJobs })
         }
         if (url.includes("/api/companies")) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({ success: true, submissions: [submissionWithTailored] }),
-          })
+          return mockJsonResponse({ success: true, submissions: [submissionWithTailored] })
         }
         if (url.includes("/api/applicant-tailored-resume")) {
-          return Promise.resolve({
-            ok: false,
-            json: () => Promise.resolve({ error: "Not authorized" }),
-          })
+          return mockJsonResponse({ error: "Not authorized" }, false, 403)
         }
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+        return mockJsonResponse({})
       })
 
       renderPage()
