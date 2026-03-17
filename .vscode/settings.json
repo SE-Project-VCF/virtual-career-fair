@@ -3,5 +3,6 @@
         "connectionId": "se-project-vcf",
         "projectKey": "SE-Project-VCF_virtual-career-fair"
     },
+    "jest.jestCommandLine": "npx jest",
     "jest.rootPath": "backend"
 }

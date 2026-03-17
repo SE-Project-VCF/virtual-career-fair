@@ -192,6 +192,8 @@ module.exports = {
   addDocument,
   updateDocument,
   deleteDocument,
+  readJSON,
+  startConsole,
   ALLOWED_COLLECTIONS,
   COLLECTION_FIELDS,
 };

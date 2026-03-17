@@ -15,6 +15,8 @@ import ChatPage from "./pages/ChatPage"
 import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage"
 import JobInvitations from "./pages/JobInvitations"
+import FairBoothsPage from "./pages/FairBoothsPage"
+import StudentFairBoothsPage from "./pages/StudentFairBoothsPage"
 import TailorResumeSimplePage from "./pages/TailorResumeSimplePage"
 import TailoredResumeViewPage from "./pages/TailoredResumeViewPage"
 import TailoredResumesPage from "./pages/TailoredResumesPage"
@@ -66,11 +68,13 @@ function App() {
         <Route path="/invitations/:invitationId/tailor-simple" element={<TailorResumeSimplePage />} />
 
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/fairs/:fairId" element={<FairBoothsPage />} />
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />
         <Route path="/company/:companyId/submissions" element={<SubmissionsPage />} />
         <Route path="/booths" element={<Booths />} />
+        <Route path="/fairs/:fairId/booths" element={<StudentFairBoothsPage />} />
         <Route path="/booth/:boothId" element={<BoothView />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />

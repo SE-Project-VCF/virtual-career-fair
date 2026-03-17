@@ -34,7 +34,7 @@ function mockQuerySnap(docs = []) {
   return {
     docs,
     empty: docs.length === 0,
-    forEach: (cb) => docs.forEach(cb),
+    forEach: (cb) => docs.forEach((doc) => cb(doc)),
   };
 }
 

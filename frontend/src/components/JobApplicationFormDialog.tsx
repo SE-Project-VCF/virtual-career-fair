@@ -18,7 +18,7 @@ import {
 import { collection, addDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
-import type { ApplicationForm, FormField, FormFieldType } from "../types/applicationForm";
+import type { ApplicationForm, FormField } from "../types/applicationForm";
 
 interface JobForApply {
   id: string;
@@ -43,7 +43,7 @@ export default function JobApplicationFormDialog({
   job,
   boothId,
   studentId,
-}: JobApplicationFormDialogProps) {
+}: Readonly<JobApplicationFormDialogProps>) {
   const form = job.applicationForm;
   const [values, setValues] = useState<Record<string, FieldValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -51,7 +51,7 @@ export default function JobApplicationFormDialog({
   const [topError, setTopError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  if (!form || form.status !== "published") {
+  if (form?.status !== "published") {
     return null;
   }
 
@@ -61,33 +61,29 @@ export default function JobApplicationFormDialog({
     setTopError("");
   };
 
+  const getFieldError = (field: FormField, v: FieldValue): string | null => {
+    if (!field.required) return null;
+    switch (field.type) {
+      case "shortText":
+      case "longText":
+        return !v || typeof v !== "string" || !v.trim() ? "This field is required." : null;
+      case "singleSelect":
+        return !v || typeof v !== "string" ? "Please select an option." : null;
+      case "multiSelect":
+        return !Array.isArray(v) || v.length === 0 ? "Select at least one option." : null;
+      case "file":
+        return !v || !(v instanceof File) ? "Please select a file." : null;
+      default:
+        return null;
+    }
+  };
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
-
     for (const field of form.fields) {
-      if (!field.required) continue;
-
-      const v = values[field.id];
-
-      if (field.type === "shortText" || field.type === "longText") {
-        if (!v || typeof v !== "string" || !v.trim()) {
-          newErrors[field.id] = "This field is required.";
-        }
-      } else if (field.type === "singleSelect") {
-        if (!v || typeof v !== "string") {
-          newErrors[field.id] = "Please select an option.";
-        }
-      } else if (field.type === "multiSelect") {
-        if (!Array.isArray(v) || v.length === 0) {
-          newErrors[field.id] = "Select at least one option.";
-        }
-      } else if (field.type === "file") {
-        if (!v || !(v instanceof File)) {
-          newErrors[field.id] = "Please select a file.";
-        }
-      }
+      const error = getFieldError(field, values[field.id]);
+      if (error) newErrors[field.id] = error;
     }
-
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
       setTopError("Please fix the highlighted fields before submitting.");
@@ -98,20 +94,7 @@ export default function JobApplicationFormDialog({
 
   const isFormValid = () => {
     if (!form.title.trim()) return false;
-    for (const field of form.fields) {
-      if (!field.required) continue;
-      const v = values[field.id];
-      if (field.type === "shortText" || field.type === "longText") {
-        if (!v || typeof v !== "string" || !v.trim()) return false;
-      } else if (field.type === "singleSelect") {
-        if (!v || typeof v !== "string") return false;
-      } else if (field.type === "multiSelect") {
-        if (!Array.isArray(v) || v.length === 0) return false;
-      } else if (field.type === "file") {
-        if (!v || !(v instanceof File)) return false;
-      }
-    }
-    return true;
+    return form.fields.every((field) => !getFieldError(field, values[field.id]));
   };
 
   const handleSubmit = async () => {
@@ -133,7 +116,7 @@ export default function JobApplicationFormDialog({
       for (const field of form.fields) {
         const v = values[field.id];
         if (field.type === "file" && v instanceof File) {
-          const safeName = v.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const safeName = v.name.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
           const storageRef = ref(
             storage,
             `jobApplications/${job.id}/${studentId}/${field.id}_${safeName}`,
@@ -191,7 +174,7 @@ export default function JobApplicationFormDialog({
   const renderField = (field: FormField) => {
     const value = values[field.id];
 
-    switch (field.type as FormFieldType) {
+    switch (field.type) {
       case "shortText":
         return (
           <Box>
@@ -258,10 +241,10 @@ export default function JobApplicationFormDialog({
                 value={(value as string[]) || []}
                 onChange={(e) => handleChange(field, e.target.value as string[])}
                 renderValue={(selected) =>
-                  (selected as string[]).length === 0 ? (
+                  selected.length === 0 ? (
                     <em style={{ color: "rgba(0,0,0,0.4)" }}>Select options</em>
                   ) : (
-                    (selected as string[]).join(", ")
+                    selected.join(", ")
                   )
                 }
               >
@@ -300,7 +283,7 @@ export default function JobApplicationFormDialog({
           <Box>
             {renderFieldLabel(field)}
             <Button variant="outlined" component="label" size="small">
-              Choose file
+              <span>Choose file</span>
               <input
                 type="file"
                 hidden
