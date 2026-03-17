@@ -106,7 +106,7 @@ export default function BoothVisitorsPage() {
       setError("");
 
       // Fetch booth data
-      const boothDoc = await getDoc(doc(db, "booths", boothId!));
+      const boothDoc = await getDoc(doc(db, "booths", boothId));
 
       if (!boothDoc.exists()) {
         setError("Booth not found");
@@ -199,7 +199,7 @@ export default function BoothVisitorsPage() {
         date = new Date(Number(timestamp));
       }
       
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         return "N/A";
       }
       

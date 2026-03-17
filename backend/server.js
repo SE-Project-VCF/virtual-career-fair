@@ -274,8 +274,6 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
   try {
     const userId = req.user.uid;
     const file = req.file;
-    
-    console.log("[UPLOAD RESUME] Starting upload for user:", userId);
 
     if (!file) {
       console.log("[UPLOAD RESUME] No file provided");
@@ -346,9 +344,6 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
       );
     }
     
-    // Verify the data was written
-    const verifySnap = await db.collection("users").doc(userId).get();
-
     // Store the file path in response (not a URL)
     // Client will call /api/get-resume-url to get a signed URL when viewing
     console.log("[UPLOAD RESUME] ✅ Upload complete");
@@ -1490,7 +1485,6 @@ app.get("/api/students", async (req, res) => {
 
     if (boothId) {
       // Find students who visited this specific booth
-      console.log(`Filtering students who visited booth: ${JSON.stringify(boothId)}`);
 
       // Get all students first
       const allStudentsQuery = db.collection("users").where("role", "==", "student");
@@ -3898,8 +3892,6 @@ app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res)
     const { boothId } = req.params;
     const studentId = req.user.uid;
 
-    console.log(`[TRACK-VIEW] Booth: ${boothId}, Student: ${studentId}`);
-
     if (!boothId || !studentId) {
       return res.status(400).json({ success: false, error: "Missing required fields" });
     }
@@ -3907,18 +3899,15 @@ app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res)
     // Get student data
     const studentDoc = await db.collection("users").doc(studentId).get();
     if (!studentDoc.exists) {
-      console.log(`[TRACK-VIEW] Student not found: ${studentId}`);
       return res.status(404).json({ success: false, error: "Student not found" });
     }
 
     const studentData = studentDoc.data();
-    console.log(`[TRACK-VIEW] Student data: ${studentData.firstName} ${studentData.lastName}`);
     const now = admin.firestore.Timestamp.now();
 
     // Resolve booth reference - supports both global and fair-specific booths
     const boothResult = await resolveBooth(boothId);
     if (!boothResult) {
-      console.log(`[TRACK-VIEW] Booth not found: ${boothId}`);
       return res.status(404).json({ success: false, error: "Booth not found" });
     }
 
@@ -3937,7 +3926,6 @@ app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res)
         isCurrentlyViewing: true,
         viewCount: admin.firestore.FieldValue.increment(1),
       });
-      console.log(`[TRACK-VIEW] Updated existing visitor record`);
     } else {
       // Create new visitor record
       await visitorRef.set({
@@ -3952,20 +3940,18 @@ app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res)
         viewCount: 1,
         isCurrentlyViewing: true,
       });
-      console.log(`[TRACK-VIEW] Created new visitor record`);
     }
 
     // Update booth's currentVisitors array
     const currentVisitors = boothData.currentVisitors || [];
 
     // Add to current visitors if not already there
-    if (!currentVisitors.includes(studentId)) {
+    if (currentVisitors.includes(studentId) === false) {
       await boothRef.update({
         currentVisitors: admin.firestore.FieldValue.arrayUnion(studentId),
         totalVisitorsCount: admin.firestore.FieldValue.increment(1),
         updatedAt: now,
       });
-      console.log(`[TRACK-VIEW] Added to currentVisitors array`);
     } else {
       // Already viewing, just update timestamp
       await boothRef.update({
@@ -4000,7 +3986,6 @@ app.post("/api/booth/:boothId/track-leave", verifyFirebaseToken, async (req, res
     // Resolve booth reference - supports both global and fair-specific booths
     const boothResult = await resolveBooth(boothId);
     if (!boothResult) {
-      console.log(`[TRACK-LEAVE] Booth not found: ${boothId}`);
       return res.status(404).json({ success: false, error: "Booth not found" });
     }
 
@@ -4091,8 +4076,6 @@ app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) =>
     const { filter = "all", search, major, sort = "recent" } = req.query;
     const userId = req.user.uid;
 
-    console.log(`[GET-VISITORS] Booth: ${boothId}, User: ${userId}`);
-
     if (!boothId) {
       return res.status(400).json({ success: false, error: "Missing boothId" });
     }
@@ -4100,25 +4083,21 @@ app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) =>
     // Resolve booth reference - supports both global and fair-specific booths
     const boothResult = await resolveBooth(boothId);
     if (!boothResult) {
-      console.log(`[GET-VISITORS] Booth not found: ${boothId}`);
       return res.status(404).json({ success: false, error: "Booth not found" });
     }
 
     const boothRef = boothResult.ref;
     const boothData = boothResult.data;
     const boothCompanyId = boothData.companyId;
-    console.log(`[GET-VISITORS] Booth company ID: ${boothCompanyId}`);
 
     // Get user data to verify authorization
     const userDoc = await db.collection("users").doc(userId).get();
     if (!userDoc.exists) {
-      console.log(`[GET-VISITORS] User not found: ${userId}`);
       return res.status(404).json({ success: false, error: "User not found" });
     }
 
     const userData = userDoc.data();
     const userCompanyId = userData.companyId;
-    console.log(`[GET-VISITORS] User company ID: ${userCompanyId}`);
 
     // Check authorization: user's company must match booth's company
     if (userCompanyId !== boothCompanyId) {

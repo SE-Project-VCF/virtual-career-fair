@@ -18,7 +18,7 @@ interface StudentProfile {
 }
 
 interface Props {
-  studentId: string
+  readonly studentId: string
 }
 
 export default function StudentProfileCard({ studentId }: Props) {
@@ -154,9 +154,9 @@ export default function StudentProfileCard({ studentId }: Props) {
             Skills
           </Typography>
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-            {skills.map((skill, idx) => (
+            {skills.map((skill) => (
               <Chip
-                key={idx}
+                key={`skill-${skill}`}
                 label={skill}
                 size="small"
                 sx={{
@@ -175,7 +175,7 @@ export default function StudentProfileCard({ studentId }: Props) {
           <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
             Resume
           </Typography>
-          {profile.resumeVisible !== false ? (
+          {profile.resumeVisible === true ? (
             <>
               {profile.resumeUrl.startsWith("http") ? (
                 <Typography
