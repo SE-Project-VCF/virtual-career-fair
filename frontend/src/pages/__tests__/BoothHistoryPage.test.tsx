@@ -252,7 +252,14 @@ describe('BoothHistoryPage', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getAllByRole('button', { name: /dashboard/i })[0]).toBeInTheDocument()
+        expect(screen.getByText('Booth History')).toBeInTheDocument()
+      })
+
+      const menuButton = screen.getByRole('button', { name: /navigation menu/i })
+      fireEvent.click(menuButton)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^dashboard$/i })).toBeInTheDocument()
       })
     })
 
@@ -264,38 +271,18 @@ describe('BoothHistoryPage', () => {
       renderPage()
 
       await waitFor(() => {
-        const dashboardButtons = screen.getAllByRole('button', { name: /dashboard/i })
-        fireEvent.click(dashboardButtons[0])
+        expect(screen.getByText('Booth History')).toBeInTheDocument()
+      })
+
+      const menuButton = screen.getByRole('button', { name: /navigation menu/i })
+      fireEvent.click(menuButton)
+
+      await waitFor(() => {
+        const dashboardButton = screen.getByRole('button', { name: /^dashboard$/i })
+        fireEvent.click(dashboardButton)
       })
 
       expect(mockNavigate).toHaveBeenCalledWith('/dashboard')
-    })
-
-    it('should display Browse Booths button in header', async () => {
-      ;(getDocs as any).mockResolvedValue({
-        docs: [{ data: () => mockBoothHistory[0] }],
-      })
-
-      renderPage()
-
-      await waitFor(() => {
-        expect(screen.getAllByRole('button', { name: /browse booths/i })[0]).toBeInTheDocument()
-      })
-    })
-
-    it('should navigate to booths page when header Browse Booths button clicked', async () => {
-      ;(getDocs as any).mockResolvedValue({
-        docs: [{ data: () => mockBoothHistory[0] }],
-      })
-
-      renderPage()
-
-      await waitFor(() => {
-        const browseButtons = screen.getAllByRole('button', { name: /browse booths/i })
-        fireEvent.click(browseButtons[0])
-      })
-
-      expect(mockNavigate).toHaveBeenCalledWith('/booths')
     })
 
     it('should render ProfileMenu component', async () => {
@@ -380,13 +367,13 @@ describe('BoothHistoryPage', () => {
 
       // Find the TechCorp company name and navigate up to find the clickable Card
       const companyNameElement = screen.getByText('TechCorp')
-      let card = companyNameElement.closest('[class*="MuiCard"]') as Element | null
+      let card = companyNameElement.closest('[class*="MuiCard"]')
       
       // If direct MuiCard not found, try finding the Card's container
       if (!card) {
         const parentDiv = companyNameElement.closest('div')
         if (parentDiv) {
-          card = parentDiv.closest('div')?.closest('div') as Element | null
+          card = parentDiv.closest('div')?.closest('div') ?? null
         }
       }
 
@@ -407,8 +394,8 @@ describe('BoothHistoryPage', () => {
       renderPage()
 
       await waitFor(() => {
-        const browsButtons = screen.getAllByRole('button', { name: /browse booths/i })
-        expect(browsButtons.length).toBeGreaterThan(0)
+        const browseButtons = screen.getAllByRole('button', { name: /browse booths/i })
+        expect(browseButtons.length).toBeGreaterThan(0)
       })
     })
 
@@ -421,7 +408,8 @@ describe('BoothHistoryPage', () => {
 
       await waitFor(() => {
         const browseButtons = screen.getAllByRole('button', { name: /browse booths/i })
-        fireEvent.click(browseButtons[browseButtons.length - 1])
+        const buttonToClick = browseButtons.at(-1)
+        if (buttonToClick) fireEvent.click(buttonToClick)
       })
 
       expect(mockNavigate).toHaveBeenCalledWith('/booths')
