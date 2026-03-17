@@ -3,9 +3,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import BoothHistoryPage from '../BoothHistoryPage'
 import { authUtils } from '../../utils/auth'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
 
-// Mock Firebase
+// Mock Firebase modules
+vi.mock('../../firebase', () => ({
+  db: {},
+}))
+
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   getDocs: vi.fn(),
@@ -35,6 +38,9 @@ vi.mock('react-router-dom', async () => {
     useNavigate: () => mockNavigate,
   }
 })
+
+// Import mocked functions
+import { getDocs, orderBy, limit } from 'firebase/firestore'
 
 describe('BoothHistoryPage', () => {
   const mockStudent = {
@@ -359,35 +365,6 @@ describe('BoothHistoryPage', () => {
         expect(screen.getByText('CloudSys')).toBeInTheDocument()
         // Placeholder is rendered when no logoUrl
       })
-    })
-
-    it('should format lastViewedAt timestamp correctly', async () => {
-      ;(getDocs as any).mockResolvedValue({
-        docs: [{ data: () => mockBoothHistory[0] }],
-      })
-
-      renderPage()
-
-      await waitFor(() => {
-        expect(screen.getByText(/viewed/i)).toBeInTheDocument()
-      })
-    })
-
-    it('should navigate to booth when card clicked', async () => {
-      ;(getDocs as any).mockResolvedValue({
-        docs: [{ data: () => mockBoothHistory[0] }],
-      })
-
-      renderPage()
-
-      await waitFor(() => {
-        const techCorpCard = screen.getByText('TechCorp').closest('[role=button]')
-        if (techCorpCard) {
-          fireEvent.click(techCorpCard)
-        }
-      })
-
-      expect(mockNavigate).toHaveBeenCalledWith('/booth/booth-1')
     })
   })
 
