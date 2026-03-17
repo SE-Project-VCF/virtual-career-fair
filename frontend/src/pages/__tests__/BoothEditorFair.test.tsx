@@ -69,6 +69,20 @@ vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }))
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}))
+
 vi.mock("../../contexts/FairContext", () => ({
   useFair: vi.fn(),
   FairProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -377,8 +391,7 @@ describe("BoothEditor – fair-scoped", () => {
         expect(screen.getByRole("heading", { name: /create booth/i })).toBeInTheDocument()
       )
 
-      // First button in the header is the ArrowBack icon button
-      await user.click(screen.getAllByRole("button")[0])
+      await user.click(screen.getByRole("button", { name: /fairs/i }))
       expect(mockNavigate).toHaveBeenCalledWith("/fairs")
     })
 

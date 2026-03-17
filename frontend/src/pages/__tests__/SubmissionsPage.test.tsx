@@ -46,6 +46,21 @@ vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu" />,
 }))
 
+/* ---- BaseLayout mock ---- */
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}))
+
 /* ---- fetch mock ---- */
 global.fetch = vi.fn()
 
@@ -142,9 +157,8 @@ describe("SubmissionsPage", () => {
         expect(screen.getByText("Application Submissions")).toBeInTheDocument()
       })
 
-      // The back button is the first icon button in the header
-      const buttons = screen.getAllByRole("button")
-      await user.click(buttons[0])
+      const backButton = screen.getByRole("button", { name: /back to company/i })
+      await user.click(backButton)
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1")
     })
   })

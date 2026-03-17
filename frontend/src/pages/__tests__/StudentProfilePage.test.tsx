@@ -25,6 +25,20 @@ vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }));
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}));
+
 vi.mock("firebase/firestore", () => ({
   doc: vi.fn(),
   getDoc: vi.fn(),
@@ -105,9 +119,9 @@ describe("StudentProfilePage", () => {
     });
   });
 
-  it("renders page header with correct text", () => {
+  it("renders page layout wrapper", () => {
     renderStudentProfile();
-    expect(screen.getByText("Job Goblin - Virtual Career Fair")).toBeInTheDocument();
+    expect(screen.getByTestId("base-layout")).toBeInTheDocument();
   });
 
   it("renders ProfileMenu component", () => {

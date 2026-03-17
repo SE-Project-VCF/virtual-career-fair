@@ -41,6 +41,20 @@ vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }));
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}));
+
 const renderAdminDashboard = () => {
   return render(
     <BrowserRouter>
@@ -109,11 +123,11 @@ describe("AdminDashboard", () => {
 
   // Header Tests
   describe("Header", () => {
-    it("displays admin panel icon", async () => {
+    it("displays the BaseLayout wrapper", async () => {
       renderAdminDashboard();
 
       await waitFor(() => {
-        expect(screen.getByTestId("AdminPanelSettingsIcon")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
       });
     });
 

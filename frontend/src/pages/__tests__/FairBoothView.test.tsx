@@ -19,6 +19,19 @@ vi.mock("../../config", () => ({ API_URL: "http://localhost:5000" }))
 vi.mock("../ProfileMenu", () => ({ default: () => <div data-testid="profile-menu" /> }))
 vi.mock("../../components/NotificationBell", () => ({ default: () => <div data-testid="notification-bell" /> }))
 vi.mock("../../utils/boothHistory", () => ({ trackBoothView: vi.fn() }))
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}))
 vi.mock("../../firebase", () => ({
   db: {},
   auth: { currentUser: { getIdToken: vi.fn().mockResolvedValue("mock-token") } },
@@ -77,7 +90,7 @@ describe("FairBoothView", () => {
 
     renderFairBoothView()
 
-    await waitFor(() => expect(screen.getByText("Tech Corp")).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
   })
 
   it("shows error on 403 (fair not live)", async () => {
@@ -192,7 +205,7 @@ describe("FairBoothView", () => {
 
     renderFairBoothView()
 
-    await waitFor(() => expect(screen.getByText("Tech Corp")).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
 
     expect(screen.queryByRole("button", { name: /message representative/i })).not.toBeInTheDocument()
   })
@@ -222,7 +235,7 @@ describe("FairBoothView", () => {
 
     renderFairBoothView()
 
-    await waitFor(() => expect(screen.getByText("Tech Corp")).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
 
     const backButton = screen.getByRole("button", { name: /back to spring fair booths/i })
     await user.click(backButton)
