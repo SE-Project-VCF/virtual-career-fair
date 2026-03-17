@@ -19,6 +19,7 @@ vi.mock("react-router-dom", async () => {
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("test-token"),
   },
 }));
 
@@ -1015,5 +1016,122 @@ describe("BoothView", () => {
     await user.click(backButton);
 
     expect(mockNavigate).toHaveBeenCalledWith("/booths");
+  });
+
+  // Booth tracking tests - token available
+  describe("Booth View Tracking - Student", () => {
+    it("tracks booth view with token when student visits", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+          });
+        }
+        if (url.includes("/track-view")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({}),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ jobs: [] }),
+        });
+      });
+      globalThis.fetch = fetchSpy;
+
+      vi.mocked(authUtils.getCurrentUser).mockReturnValue({
+        uid: "student-1",
+        role: "student",
+        email: "student@example.com",
+      });
+      vi.mocked(authUtils.getIdToken).mockResolvedValue("test-token");
+
+      renderBoothView();
+
+      await waitFor(
+        () => {
+          const elements = screen.queryAllByText("Tech Corp");
+          expect(elements.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it("handles booth view tracking when token is not available", async () => {
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ jobs: [] }),
+        });
+      });
+      globalThis.fetch = fetchSpy;
+
+      vi.mocked(authUtils.getCurrentUser).mockReturnValue({
+        uid: "student-1",
+        role: "student",
+        email: "student@example.com",
+      });
+      vi.mocked(authUtils.getIdToken).mockResolvedValue(null);
+
+      renderBoothView();
+
+      await waitFor(
+        () => {
+          const elements = screen.queryAllByText("Tech Corp");
+          expect(elements.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      expect(fetchSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it("does not track when user is not student", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ jobs: [] }),
+        });
+      });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      globalThis.fetch = fetchSpy;
+
+      vi.mocked(authUtils.getCurrentUser).mockReturnValue({
+        uid: "company-1",
+        role: "companyOwner",
+        email: "company@example.com",
+      });
+
+      renderBoothView();
+
+      await waitFor(
+        () => {
+          const elements = screen.queryAllByText("Tech Corp");
+          expect(elements.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith("User missing or not a student");
+      warnSpy.mockRestore();
+    });
   });
 });

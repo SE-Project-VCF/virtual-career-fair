@@ -149,8 +149,10 @@ export default function BoothView() {
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      // Track when user leaves the booth
+      trackStudentBoothLeave()
     }
-  }, [])
+  }, [boothId, user?.uid])
 
   const handleStartChat = async () => {
     try {
@@ -196,6 +198,7 @@ export default function BoothView() {
   const trackStudentBoothView = async (boothData: Booth) => {
     try {
       if (user?.uid && user.role === "student") {
+        // Track in local history
         await trackBoothView(user.uid, {
           boothId: boothData.id,
           companyName: boothData.companyName,
@@ -203,9 +206,52 @@ export default function BoothView() {
           location: boothData.location,
           logoUrl: boothData.logoUrl,
         });
+
+        // Track in backend for company analytics
+        const token = await authUtils.getIdToken();
+
+        if (token) {
+          try {
+            const url = `${API_URL}/api/booth/${boothData.id}/track-view`;
+
+            await fetch(url, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+            // Tracking completed
+          } catch (err) {
+            console.warn("Backend booth tracking failed:", err);
+          }
+        } else {
+          console.log("[BOOTH-VIEW] No token available");
+        }
+      } else {
+        console.warn("User missing or not a student");
       }
     } catch (err) {
       console.warn("History tracking failed:", err);
+    }
+  }
+
+  const trackStudentBoothLeave = async () => {
+    try {
+      if (user?.uid && user.role === "student" && boothId) {
+        const token = await authUtils.getIdToken();
+        if (token) {
+          await fetch(`${API_URL}/api/booth/${boothId}/track-leave`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Booth leave tracking failed:", err);
     }
   }
 

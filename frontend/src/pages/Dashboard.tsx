@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Container, Box, Typography, Button, Grid, Card, CardContent, TextField, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Badge, Tooltip } from "@mui/material"
-import { authUtils, parseMyResume, tailorMyResume } from "../utils/auth"
+import { authUtils, parseMyResume } from "../utils/auth"
 import { collection, query, where, getDocs } from "firebase/firestore"
 import { db, auth } from "../firebase"
 import { API_URL } from "../config"
@@ -623,34 +623,14 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const result = await parseMyResume();
-        console.log("✅ RESUME PARSE RESULT:", result);
+        const currentUser = authUtils.getCurrentUser();
+        if (!currentUser) return; // Don't try to parse resume if not logged in
+        
+        await parseMyResume();
+        console.log("✅ Resume parsing completed successfully");
       } catch (e) {
-        console.error("❌ RESUME PARSE ERROR:", e);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        // Prevent spam on refresh
-        if (sessionStorage.getItem("tailorTestOnce")) return;
-
-        const jobDescription = `
-Frontend Intern
-- Build React components
-- Work with Firebase/Firestore
-- Write clean TypeScript
-- Collaborate in GitHub PR workflow
-`;
-
-        const result = await tailorMyResume(jobDescription, "testBoothId", "Frontend Intern");
-        console.log("🧠 TAILOR RESULT:", result);
-
-        sessionStorage.setItem("tailorTestOnce", "1");
-      } catch (e) {
-        console.error("❌ TAILOR ERROR:", e);
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        console.error("❌ Resume parsing failed:", errorMessage);
       }
     })();
   }, []);

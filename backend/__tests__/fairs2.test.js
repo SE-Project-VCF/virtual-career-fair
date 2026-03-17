@@ -88,6 +88,7 @@ function setupFairsDbMock({
   fairData,
   fairExists = true,
   fairId = "fair-id",
+  fairUpdateRejects = false,
   boothData,
   boothExists = true,
   boothId = "booth-id",
@@ -139,7 +140,9 @@ function setupFairsDbMock({
       const fairDocRef = {
         get: jest.fn().mockResolvedValue(mockDocSnap(fairData, fairExists, fairId)),
         set: jest.fn().mockResolvedValue(undefined),
-        update: jest.fn().mockResolvedValue(undefined),
+        update: fairUpdateRejects
+          ? jest.fn().mockRejectedValue(new Error("DB update failed"))
+          : jest.fn().mockResolvedValue(undefined),
         delete: jest.fn().mockResolvedValue(undefined),
         id: fairId,
         collection: jest.fn((sub) => {
@@ -341,6 +344,17 @@ describe("POST /api/fairs/:fairId/refresh-invite-code", () => {
     // Both should have valid invite codes (even if equal by rare chance)
     expect(res1.body.inviteCode).toBeDefined();
     expect(res2.body.inviteCode).toBeDefined();
+  });
+
+  it("returns 500 when fair update fails (lines 169-170)", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupFairsDbMock({ fairData: FAIR_DATA, fairUpdateRejects: true });
+    const res = await request(app)
+      .post("/api/fairs/fair-id/refresh-invite-code")
+      .set("Authorization", authHeader())
+      .send({});
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Failed to refresh invite code");
   });
 });
 

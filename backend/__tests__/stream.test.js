@@ -283,4 +283,28 @@ describe("GET /api/stream-unread", () => {
     expect(res.status).toBe(200);
     expect(res.body.unread).toBe(1);
   });
+
+  it("skips channel when state is missing (lines 246-248)", async () => {
+    mockQueryChannels.mockResolvedValue([
+      { state: null },
+      { state: undefined },
+    ]);
+    const res = await request(app)
+      .get("/api/stream-unread")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.unread).toBe(0);
+  });
+
+  it("skips channel when lastRead or messages missing (lines 251-253)", async () => {
+    mockQueryChannels.mockResolvedValue([
+      { state: { read: {}, messages: [] } },
+      { state: { read: { "test-uid": {} }, messages: undefined } },
+    ]);
+    const res = await request(app)
+      .get("/api/stream-unread")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.unread).toBe(0);
+  });
 });

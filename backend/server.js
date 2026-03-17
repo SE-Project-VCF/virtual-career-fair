@@ -26,6 +26,32 @@ async function checkCompanyAuthorization(companyId, userId) {
   return { authorized: true, companyData };
 }
 
+// Helper to resolve booth reference - supports both global booths and fair-specific booths
+async function resolveBooth(boothId) {
+  // First, try to get booth from global booths collection
+  const globalBoothRef = db.collection("booths").doc(boothId);
+  const globalBoothDoc = await globalBoothRef.get();
+  
+  if (globalBoothDoc.exists) {
+    return { ref: globalBoothRef, data: globalBoothDoc.data() };
+  }
+
+  // If not found globally, search through all fairs for this booth
+  const fairsSnapshot = await db.collection("fairs").get();
+  
+  for (const fairDoc of fairsSnapshot.docs) {
+    const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
+    const fairBoothDoc = await fairBoothRef.get();
+    
+    if (fairBoothDoc.exists) {
+      return { ref: fairBoothRef, data: fairBoothDoc.data() };
+    }
+  }
+
+  // Booth not found
+  return null;
+}
+
 // --------------------------
 // ENVIRONMENT VALIDATION
 // --------------------------
@@ -97,7 +123,7 @@ if (process.env.NODE_ENV !== "test") {
 // --------------------------
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: process.env.NODE_ENV === "test" ? 10 * 1024 * 1024 : 5 * 1024 * 1024 }, // 5MB limit (10MB in test so explicit size check runs)
   fileFilter: (req, file, cb) => {
     // Only allow PDFs for resume uploads
     if (req.path === "/api/upload-resume" && file.mimetype !== "application/pdf") {
@@ -248,8 +274,6 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
   try {
     const userId = req.user.uid;
     const file = req.file;
-    
-    console.log("[UPLOAD RESUME] Starting upload for user:", userId);
 
     if (!file) {
       console.log("[UPLOAD RESUME] No file provided");
@@ -293,15 +317,7 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
       const rawText = await extractTextFromBuffer(buffer, fileName);
       const structured = toStructuredResume(rawText);
       
-      console.log("[UPLOAD RESUME] Parsed resume:", {
-        rawTextLength: rawText.length,
-        summaryLength: structured.summary?.text?.length || 0,
-        skillsCount: structured.skills?.items?.length || 0,
-        experienceCount: structured.experience?.length || 0,
-      });
-      
       // Update Firestore with both raw text and structured data
-      console.log("[UPLOAD RESUME] Updating Firestore with parsed data...");
       await db.collection("users").doc(userId).set(
         {
           resumePath: filePath,
@@ -328,14 +344,6 @@ app.post("/api/upload-resume", verifyFirebaseToken, upload.single("file"), async
       );
     }
     
-    console.log("[UPLOAD RESUME] ✅ Firestore updated");
-    
-    // Verify the data was written
-    const verifySnap = await db.collection("users").doc(userId).get();
-    const userData = verifySnap.data();
-    console.log("[UPLOAD RESUME] Verification - resumePath on user:", userData?.resumePath);
-    console.log("[UPLOAD RESUME] Verification - user doc keys:", Object.keys(userData || {}));
-
     // Store the file path in response (not a URL)
     // Client will call /api/get-resume-url to get a signed URL when viewing
     console.log("[UPLOAD RESUME] ✅ Upload complete");
@@ -390,6 +398,74 @@ app.get("/api/get-resume-url/:userId", verifyFirebaseToken, async (req, res) => 
     });
   } catch (err) {
     console.error("Get resume URL error:", err);
+    return res.status(500).json({ error: err.message || "Failed to get resume URL" });
+  }
+});
+
+/**
+ * GET /api/student/:studentId/resume-url
+ * Get signed URL for a student's resume
+ * Accessible by: company owners/reps (if student resume is visible) or the student themselves
+ */
+app.get("/api/student/:studentId/resume-url", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const requesterId = req.user.uid;
+
+    // Students can always view their own resume
+    const isOwnResume = requesterId === studentId;
+
+    if (!isOwnResume) {
+      // Check if requester is a company owner/rep and if student has resume visible
+      const requesterDoc = await db.collection("users").doc(requesterId).get();
+      if (!requesterDoc.exists) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const requesterData = requesterDoc.data();
+      const isCompanyUser = requesterData.role === "company" || requesterData.companyId;
+
+      if (!isCompanyUser) {
+        return res.status(403).json({ error: "Not authorized to view this resume" });
+      }
+
+      // Check if student has made resume visible
+      const studentDoc = await db.collection("users").doc(studentId).get();
+      if (!studentDoc.exists) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const studentData = studentDoc.data();
+      if (studentData.resumeVisible === false) {
+        return res.status(403).json({ error: "Student has set resume to private" });
+      }
+    }
+
+    const bucket = admin.storage().bucket();
+
+    // List files in the user's resume folder to get the most recent one
+    const [files] = await bucket.getFiles({ prefix: `resumes/${studentId}/` });
+
+    if (files.length === 0) {
+      return res.status(404).json({ error: "No resume found" });
+    }
+
+    // Get the most recent file (last one in the list is usually the newest)
+    const latestFile = files.at(-1);
+
+    // Generate a signed URL valid for 1 hour
+    const [signedUrl] = await latestFile.getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+    });
+
+    return res.json({
+      success: true,
+      resumeUrl: signedUrl,
+    });
+  } catch (err) {
+    console.error("Get student resume URL error:", err);
     return res.status(500).json({ error: err.message || "Failed to get resume URL" });
   }
 });
@@ -1081,8 +1157,6 @@ app.post("/api/job-invitations/send", async (req, res) => {
     const batch = db.batch();
     const invitationIds = [];
 
-    console.log("Creating job invitation(s)");
-
     for (const studentId of studentIds) {
       const invitationRef = db.collection("jobInvitations").doc();
       invitationIds.push(invitationRef.id);
@@ -1098,7 +1172,7 @@ app.post("/api/job-invitations/send", async (req, res) => {
         message: message || undefined,
       });
 
-      console.log(`Creating invitation ${invitationRef.id} for student ${studentId}:`, invitationData);
+      // Invitation record created
 
       batch.set(invitationRef, invitationData);
     }
@@ -1150,7 +1224,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
     }
 
     const invitationsSnapshot = await query.get();
-    console.log(`Found ${invitationsSnapshot.size} invitation(s) for student`);
+    // Fetching invitations
 
     // Get job and company details for each invitation
     const invitations = await Promise.all(
@@ -1237,7 +1311,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
       return b.sentAt - a.sentAt;
     });
 
-    console.log(`Returning ${invitations.length} invitation(s) with full details`);
+    // Returning invitation details
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching received invitations:", err);
@@ -1411,7 +1485,6 @@ app.get("/api/students", async (req, res) => {
 
     if (boothId) {
       // Find students who visited this specific booth
-      console.log(`Filtering students who visited booth: ${JSON.stringify(boothId)}`);
 
       // Get all students first
       const allStudentsQuery = db.collection("users").where("role", "==", "student");
@@ -1820,15 +1893,6 @@ app.post("/api/resume/parse", verifyFirebaseToken, async (req, res) => {
     // 4) Extract text + structure
     const rawText = await extractTextFromBuffer(buffer, resumePath || fileName);
     const structured = toStructuredResume(rawText);
-    
-    // DEBUG: Log what was extracted
-    console.log("[PARSE RESUME] Raw text first 500 chars:", rawText.substring(0, 500));
-    console.log("[PARSE RESUME] Structured sections found:", {
-      summaryLength: structured.summary?.text?.length || 0,
-      skillsCount: structured.skills?.items?.length || 0,
-      experienceCount: structured.experience?.length || 0,
-      projectsCount: structured.projects?.length || 0,
-    });
 
     // 5) Save parsed data to main user document (not subcollection for efficiency)
     await userRef.set(
@@ -2796,13 +2860,9 @@ app.post("/api/resume/tailor/simple", verifyFirebaseToken, async (req, res) => {
 
     // 2) Generate changes using Gemini
     const { generateResumeChanges } = require("./resumeTailorSimple");
-    console.log("[TAILOR SIMPLE] About to call generateResumeChanges");
     const changes = await generateResumeChanges(resumeRawText, jobDescription, jobTitle);
     
-    console.log("[TAILOR SIMPLE] Generated", changes.length, "changes");
-    if (changes.length > 0) {
-      console.log("[TAILOR SIMPLE] First change:", JSON.stringify(changes[0], null, 2));
-    }
+    console.log("[TAILOR SIMPLE] Generated", changes.length, "suggested changes");
 
     // 3) Return changes for user review
     return res.json({
@@ -3816,6 +3876,302 @@ app.delete("/api/resume/tailored/:tailoredResumeId", verifyFirebaseToken, async 
   } catch (err) {
     console.error("Error deleting tailored resume:", err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* ============================================================
+   BOOTH VISITOR TRACKING
+============================================================ */
+
+/**
+ * POST /api/booth/:boothId/track-view
+ * Track when a student views a booth
+ */
+app.post("/api/booth/:boothId/track-view", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const studentId = req.user.uid;
+
+    if (!boothId || !studentId) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    // Get student data
+    const studentDoc = await db.collection("users").doc(studentId).get();
+    if (!studentDoc.exists) {
+      return res.status(404).json({ success: false, error: "Student not found" });
+    }
+
+    const studentData = studentDoc.data();
+    const now = admin.firestore.Timestamp.now();
+
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothRef = boothResult.ref;
+    const boothData = boothResult.data;
+
+    // Update or create visitor record in booth's studentVisits subcollection
+    const visitorRef = boothRef.collection("studentVisits").doc(studentId);
+    const existingVisit = await visitorRef.get();
+
+    if (existingVisit.exists) {
+      // Update existing visitor
+      await visitorRef.update({
+        lastViewedAt: now,
+        lastActivityAt: now,
+        isCurrentlyViewing: true,
+        viewCount: admin.firestore.FieldValue.increment(1),
+      });
+    } else {
+      // Create new visitor record
+      await visitorRef.set({
+        studentId,
+        firstName: studentData.firstName || "",
+        lastName: studentData.lastName || "",
+        email: studentData.email || "",
+        major: studentData.major || "",
+        firstViewedAt: now,
+        lastViewedAt: now,
+        lastActivityAt: now,
+        viewCount: 1,
+        isCurrentlyViewing: true,
+      });
+    }
+
+    // Update booth's currentVisitors array
+    const currentVisitors = boothData.currentVisitors || [];
+
+    // Add to current visitors if not already there
+    if (currentVisitors.includes(studentId) === false) {
+      await boothRef.update({
+        currentVisitors: admin.firestore.FieldValue.arrayUnion(studentId),
+        totalVisitorsCount: admin.firestore.FieldValue.increment(1),
+        updatedAt: now,
+      });
+    } else {
+      // Already viewing, just update timestamp
+      await boothRef.update({
+        updatedAt: now,
+      });
+      console.log(`[TRACK-VIEW] Already in currentVisitors, updated timestamp`);
+    }
+
+    console.log(`[TRACK-VIEW] Success - returning response`);
+    res.json({ success: true, boothId, tracked: true });
+  } catch (err) {
+    console.error("Error tracking booth view:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/booth/:boothId/track-leave
+ * Remove student from current visitors when they leave booth
+ */
+app.post("/api/booth/:boothId/track-leave", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const studentId = req.user.uid;
+
+    if (!boothId || !studentId) {
+      return res.status(400).json({ success: false, error: "Missing required fields" });
+    }
+
+    const now = admin.firestore.Timestamp.now();
+
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothRef = boothResult.ref;
+
+    // Mark as not currently viewing
+    const visitorRef = boothRef.collection("studentVisits").doc(studentId);
+    const visitorExists = await visitorRef.get();
+
+    if (visitorExists.exists) {
+      await visitorRef.update({
+        isCurrentlyViewing: false,
+        lastActivityAt: now,
+      });
+    }
+
+    // Remove from booth's currentVisitors array
+    await boothRef.update({
+      currentVisitors: admin.firestore.FieldValue.arrayRemove(studentId),
+      updatedAt: now,
+    });
+
+    res.json({ success: true, boothId, tracked: false });
+  } catch (err) {
+    console.error("Error tracking booth leave:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/booth/:boothId/current-visitors
+ * Get list of students currently viewing the booth
+ */
+app.get("/api/booth/:boothId/current-visitors", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+
+    if (!boothId) {
+      return res.status(400).json({ success: false, error: "Missing boothId" });
+    }
+
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothRef = boothResult.ref;
+    const boothData = boothResult.data;
+    const currentVisitorIds = boothData.currentVisitors || [];
+
+    // Get details of current visitors
+    const visitorDetails = [];
+    for (const visitorId of currentVisitorIds) {
+      const visitorRef = boothRef.collection("studentVisits").doc(visitorId);
+      const visitorDoc = await visitorRef.get();
+      if (visitorDoc.exists) {
+        const data = visitorDoc.data();
+        visitorDetails.push({
+          studentId: visitorId,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          major: data.major,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      boothId,
+      currentVisitorCount: currentVisitorIds.length,
+      currentVisitors: visitorDetails,
+    });
+  } catch (err) {
+    console.error("Error fetching current visitors:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/booth-visitors/:boothId
+ * Get all visitors of a booth (with filtering and sorting)
+ * Only accessible by company owner or representative
+ */
+app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const { filter = "all", search, major, sort = "recent" } = req.query;
+    const userId = req.user.uid;
+
+    if (!boothId) {
+      return res.status(400).json({ success: false, error: "Missing boothId" });
+    }
+
+    // Resolve booth reference - supports both global and fair-specific booths
+    const boothResult = await resolveBooth(boothId);
+    if (!boothResult) {
+      return res.status(404).json({ success: false, error: "Booth not found" });
+    }
+
+    const boothRef = boothResult.ref;
+    const boothData = boothResult.data;
+    const boothCompanyId = boothData.companyId;
+
+    // Get user data to verify authorization
+    const userDoc = await db.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+    const userCompanyId = userData.companyId;
+
+    // Check authorization: user's company must match booth's company
+    if (userCompanyId !== boothCompanyId) {
+      console.log(`[GET-VISITORS] Auth failed: company mismatch`);
+      return res.status(403).json({ success: false, error: "Not authorized to view booth visitors" });
+    }
+
+    console.log(`[GET-VISITORS] Auth passed, fetching visitor records...`);
+
+    // Get all student visits for this booth
+    const visitsSnapshot = await boothRef
+      .collection("studentVisits")
+      .get();
+
+    let visitors = visitsSnapshot.docs.map((doc) => ({
+      studentId: doc.id,
+      ...doc.data(),
+    }));
+
+    console.log(`[GET-VISITORS] Found ${visitors.length} total visitor records`);
+
+    // Apply filter
+    if (filter === "current") {
+      visitors = visitors.filter((v) => v.isCurrentlyViewing === true);
+    } else if (filter === "previous") {
+      visitors = visitors.filter((v) => v.isCurrentlyViewing === false);
+    }
+
+    // Apply search filter
+    if (search?.trim()) {
+      const searchLower = search.toLowerCase().trim();
+      visitors = visitors.filter((v) => {
+        const fullName = `${v.firstName} ${v.lastName}`.toLowerCase();
+        return fullName.includes(searchLower) || v.email.toLowerCase().includes(searchLower);
+      });
+    }
+
+    // Apply major filter
+    if (major?.trim()) {
+      const majorLower = major.toLowerCase().trim();
+      visitors = visitors.filter((v) =>
+        v.major.toLowerCase().includes(majorLower)
+      );
+    }
+
+    // Apply sorting
+    if (sort === "name") {
+      visitors.sort((a, b) =>
+        `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+      );
+    } else if (sort === "viewCount") {
+      visitors.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
+    } else {
+      // Default: recent (lastViewedAt descending)
+      visitors.sort(
+        (a, b) =>
+          (b.lastViewedAt?.toMillis?.() || 0) - (a.lastViewedAt?.toMillis?.() || 0)
+      );
+    }
+
+    const currentCount = visitors.filter((v) => v.isCurrentlyViewing).length;
+
+    console.log(`[GET-VISITORS] Returning ${visitors.length} visitors (${currentCount} currently viewing)`);
+
+    res.json({
+      success: true,
+      boothId,
+      totalVisitors: visitors.length,
+      currentlyViewing: currentCount,
+      visitors,
+    });
+  } catch (err) {
+    console.error("Error fetching booth visitors:", err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

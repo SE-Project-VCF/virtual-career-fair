@@ -52,7 +52,6 @@ function toStructuredResume(rawText) {
 
   console.log("[PARSER] Input text length:", text.length);
   console.log("[PARSER] After normalization, lines:", text.split('\n').length);
-  console.log("[PARSER] First 500 chars:", text.substring(0, 500));
 
   const structured = {
     summary: { text: "" },
@@ -87,11 +86,7 @@ function toStructuredResume(rawText) {
     sections[i].endIndex = (i + 1 < sections.length) ? sections[i + 1].startIndex : text.length;
   }
 
-  console.log("[PARSER] Found", sections.length, "sections:", sections.map(s => s.name));
-  console.log("[PARSER] Sample sections:", sections.slice(0, 5).map(s => ({
-    name: s.name,
-    contentPreview: text.substring(s.contentStart, Math.min(s.contentStart + 100, s.endIndex)).substring(0, 50)
-  })));
+  console.log("[PARSER] Found", sections.length, "sections");
 
   // Extract content for each section
   for (const section of sections) {

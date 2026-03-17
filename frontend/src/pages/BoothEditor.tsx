@@ -715,7 +715,7 @@ export default function BoothEditor() {
               </IconButton>
               <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
               <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: "white" }}>
                   {boothPageTitle}
                 </Typography>
                 <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
@@ -1046,45 +1046,50 @@ export default function BoothEditor() {
             </Box>
 
             {/* Submit Buttons */}
-            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
-              <Button
-                variant="outlined"
-                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
-                disabled={saving || logoUploading}
-                sx={{
-                  borderColor: "#388560",
-                  color: "#388560",
-                  "&:hover": {
-                    borderColor: "#2d6b4d",
-                    bgcolor: "rgba(56, 133, 96, 0.05)",
-                  },
-                }}
-              >
-                Cancel
-              </Button>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
+              <Box sx={{ display: "flex", gap: 2 }}>
+              </Box>
 
-              {(() => {
-                const activeBoothId = fairId ? fairBoothId : company.boothId
-                const savingText = activeBoothId ? "Updating..." : "Creating..."
-                const defaultText = activeBoothId ? "Update Booth" : "Create Booth"
-                const buttonText = saving ? savingText : defaultText
-                return (
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-                    disabled={saving || logoUploading}
-                    sx={{
-                      background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                      "&:hover": {
-                        background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                      },
-                    }}
-                  >
-                    {buttonText}
-                  </Button>
-                )
-              })()}
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate(fairId ? "/fairs" : `/company/${company.id}`)}
+                  disabled={saving}
+                  sx={{
+                    borderColor: "#388560",
+                    color: "#388560",
+                    "&:hover": {
+                      borderColor: "#2d6b4d",
+                      bgcolor: "rgba(56, 133, 96, 0.05)",
+                    },
+                  }}
+                >
+                  Cancel
+                </Button>
+
+                {(() => {
+                  const activeBoothId = fairId ? fairBoothId : company.boothId;
+                  const savingText = activeBoothId ? "Updating..." : "Creating...";
+                  const defaultText = activeBoothId ? "Update Booth" : "Create Booth";
+                  const buttonText = saving ? savingText : defaultText;
+                  return (
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      startIcon={saving ? <CircularProgress size={24} /> : <SaveIcon />}
+                      disabled={saving || logoUploading}
+                      sx={{
+                        background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                        "&:hover": {
+                          background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                        },
+                      }}
+                    >
+                      {buttonText}
+                    </Button>
+                  );
+                })()}
+              </Box>
             </Box>
           </form>
         </Card>
@@ -1108,5 +1113,5 @@ export default function BoothEditor() {
         </Box>
       </Container>
     </Box>
-  )
+  );
 }

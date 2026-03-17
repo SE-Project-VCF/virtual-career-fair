@@ -447,6 +447,238 @@ describe("deleteDocument", () => {
     expect(mockDoc).toHaveBeenCalledWith("specific-id");
     expect(mockDelete).toHaveBeenCalled();
   });
+
+  it("should propagate Firestore errors on delete", async () => {
+    const firestoreError = new Error("Firestore delete failed");
+    const mockGet = jest.fn().mockResolvedValue(mockDocSnap({}, true, "err-id"));
+    const mockDelete = jest.fn().mockRejectedValue(firestoreError);
+    const mockDoc = jest.fn().mockReturnValue({ get: mockGet, delete: mockDelete });
+    db.collection.mockReturnValue({ doc: mockDoc });
+
+    await expect(deleteDocument("students", "err-id")).rejects.toThrow("Firestore delete failed");
+  });
+});
+
+describe("listAll - error handling", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    console.log = jest.fn();
+  });
+
+  it("should propagate Firestore errors", async () => {
+    const firestoreError = new Error("Firestore read failed");
+    db.collection.mockReturnValue({ get: jest.fn().mockRejectedValue(firestoreError) });
+
+    await expect(listAll("students")).rejects.toThrow("Firestore read failed");
+  });
+
+  it("should handle collection with single document", async () => {
+    const mockDocs = [mockDocSnap({ companyName: "Acme" }, true, "single-id")];
+    db.collection.mockReturnValue({ get: jest.fn().mockResolvedValue(mockQuerySnap(mockDocs)) });
+
+    await listAll("employers");
+
+    expect(console.log).toHaveBeenCalledWith("single-id:", { companyName: "Acme" });
+  });
+});
+
+describe("addDocument - error handling", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    console.log = jest.fn();
+  });
+
+  it("should propagate Firestore errors on add", async () => {
+    const firestoreError = new Error("Firestore add failed");
+    db.collection.mockReturnValue({ add: jest.fn().mockRejectedValue(firestoreError) });
+
+    const validData = { firstName: "Jane" };
+    await expect(addDocument("students", validData)).rejects.toThrow("Firestore add failed");
+  });
+
+  it("should add valid representative document", async () => {
+    const mockAdd = jest.fn().mockResolvedValue({ id: "rep-id" });
+    db.collection.mockReturnValue({ add: mockAdd });
+
+    const validRep = { firstName: "Bob", lastName: "Smith", company: "Corp", email: "b@corp.com" };
+    await addDocument("representatives", validRep);
+
+    expect(mockAdd).toHaveBeenCalledWith(validRep);
+    expect(console.log).toHaveBeenCalledWith("✅ Added document with ID: rep-id");
+  });
+
+  it("should add valid job document", async () => {
+    const mockAdd = jest.fn().mockResolvedValue({ id: "job-id" });
+    db.collection.mockReturnValue({ add: mockAdd });
+
+    const validJob = { name: "Backend Engineer", description: "Build APIs", employer: "comp-id" };
+    await addDocument("jobs", validJob);
+
+    expect(mockAdd).toHaveBeenCalledWith(validJob);
+    expect(console.log).toHaveBeenCalledWith("✅ Added document with ID: job-id");
+  });
+
+  it("should reject representatives with invalid fields", async () => {
+    const mockAdd = jest.fn();
+    db.collection.mockReturnValue({ add: mockAdd });
+
+    const invalidRep = { firstName: "Bob", unknownField: "value" };
+    await addDocument("representatives", invalidRep);
+
+    expect(mockAdd).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith("❌ Invalid field 'unknownField'");
+  });
+
+  it("should reject jobs with invalid fields", async () => {
+    const mockAdd = jest.fn();
+    db.collection.mockReturnValue({ add: mockAdd });
+
+    const invalidJob = { name: "Engineer", badField: "value" };
+    await addDocument("jobs", invalidJob);
+
+    expect(mockAdd).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith("❌ Invalid field 'badField'");
+  });
+});
+
+describe("updateDocument - error handling", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    console.log = jest.fn();
+  });
+
+  it("should propagate Firestore errors on update", async () => {
+    const firestoreError = new Error("Firestore update failed");
+    const mockGet = jest.fn().mockResolvedValue(mockDocSnap({ name: "Old" }, true, "doc-id"));
+    const mockUpdate = jest.fn().mockRejectedValue(firestoreError);
+    const mockDoc = jest.fn().mockReturnValue({ get: mockGet, update: mockUpdate });
+    db.collection.mockReturnValue({ doc: mockDoc });
+
+    const validData = { firstName: "Jane" };
+    await expect(updateDocument("students", "doc-id", validData)).rejects.toThrow("Firestore update failed");
+  });
+
+  it("should update valid employer document", async () => {
+    const mockGet = jest.fn().mockResolvedValue(mockDocSnap({ companyName: "Old Corp" }, true, "emp-id"));
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    const mockDoc = jest.fn().mockReturnValue({ get: mockGet, update: mockUpdate });
+    db.collection.mockReturnValue({ doc: mockDoc });
+
+    const updateData = { companyName: "New Corp", email: "new@corp.com" };
+    await updateDocument("employers", "emp-id", updateData);
+
+    expect(mockUpdate).toHaveBeenCalledWith(updateData);
+    expect(console.log).toHaveBeenCalledWith("✅ Updated document with ID: emp-id");
+  });
+
+  it("should update valid representative document", async () => {
+    const mockGet = jest.fn().mockResolvedValue(mockDocSnap({ firstName: "Alice" }, true, "rep-id"));
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    const mockDoc = jest.fn().mockReturnValue({ get: mockGet, update: mockUpdate });
+    db.collection.mockReturnValue({ doc: mockDoc });
+
+    const updateData = { phone: "555-1234" };
+    await updateDocument("representatives", "rep-id", updateData);
+
+    expect(mockUpdate).toHaveBeenCalledWith(updateData);
+    expect(console.log).toHaveBeenCalledWith("✅ Updated document with ID: rep-id");
+  });
+});
+
+describe("validateFieldsRecursive - additional edge cases", () => {
+  it("should treat array values in data as non-objects (skip recursion)", () => {
+    const schema = { tags: true };
+    const data = { tags: ["a", "b", "c"] };
+    const result = validateFieldsRecursive(schema, data);
+    expect(result).toBeNull();
+  });
+
+  it("should treat numeric values in data as valid", () => {
+    const schema = { age: true };
+    const data = { age: 30 };
+    const result = validateFieldsRecursive(schema, data);
+    expect(result).toBeNull();
+  });
+
+  it("should treat boolean values in data as valid", () => {
+    const schema = { active: true };
+    const data = { active: false };
+    const result = validateFieldsRecursive(schema, data);
+    expect(result).toBeNull();
+  });
+
+  it("should handle schema field that is object but data value is not", () => {
+    const schema = { boothTable: { boothName: true } };
+    const data = { boothTable: "not-an-object" };
+    const result = validateFieldsRecursive(schema, data);
+    expect(result).toBeNull();
+  });
+
+  it("should return error with correct path prefix when nested field is invalid", () => {
+    const schema = { address: { city: true, zip: true } };
+    const data = { address: { city: "Miami", state: "FL" } };
+    const result = validateFieldsRecursive(schema, data);
+    expect(result).toBe("❌ Invalid field 'address.state'");
+  });
+});
+
+describe("validateFields - all collection types", () => {
+  it("should validate all student optional fields", () => {
+    const fullStudent = {
+      firstName: "Alice",
+      lastName: "Wong",
+      email: "alice@fiu.edu",
+      cityZip: "33101",
+      major: "CS",
+      labels: ["cs", "se"],
+      school: "FIU",
+      phone: "305-000-0000",
+      picture: "https://img.url",
+      username: "awong",
+      createdAt: "2024-01-01",
+    };
+    expect(validateFields("students", fullStudent)).toBeNull();
+  });
+
+  it("should validate all employer optional fields", () => {
+    const fullEmployer = {
+      companyName: "TechCorp",
+      primaryLocation: "Miami, FL",
+      secondaryLocations: ["NYC", "LA"],
+      jobFields: ["engineering"],
+      description: "A tech company",
+      boothId: "booth-123",
+      pictureFile: "logo.png",
+      username: "techcorp",
+      email: "hr@techcorp.com",
+      createdAt: "2024-01-01",
+    };
+    expect(validateFields("employers", fullEmployer)).toBeNull();
+  });
+
+  it("should validate all job optional fields", () => {
+    const fullJob = {
+      name: "Software Engineer",
+      description: "Build great software",
+      applicationLink: "https://apply.techcorp.com",
+      majorsAssociated: ["CS", "CE"],
+      employer: "techcorp-uid",
+    };
+    expect(validateFields("jobs", fullJob)).toBeNull();
+  });
+
+  it("should validate full booth with all boothTable fields", () => {
+    const fullBooth = {
+      employer: "techcorp-uid",
+      boothTable: {
+        boothName: "TechCorp Booth",
+        location: "Hall B",
+        description: "Come meet us!",
+        representatives: ["rep-1", "rep-2"],
+      },
+    };
+    expect(validateFields("booths", fullBooth)).toBeNull();
+  });
 });
 
 describe("readJSON", () => {

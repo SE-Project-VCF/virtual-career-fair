@@ -110,6 +110,7 @@ async function getCompanyAndBoothSnapshot(companyId) {
       const bData = boothDoc.data();
       boothSnapshot = {
         companyId,
+        originalBoothId: company.boothId,
         companyName: bData.companyName || company.companyName || "",
         industry: bData.industry || null,
         companySize: bData.companySize || null,
