@@ -105,6 +105,13 @@ export default function BoothVisitorsPage() {
       setLoading(true);
       setError("");
 
+      // Guard against undefined boothId
+      if (!boothId) {
+        setError("Invalid booth ID");
+        setLoading(false);
+        return;
+      }
+
       // Fetch booth data
       const boothDoc = await getDoc(doc(db, "booths", boothId));
 
