@@ -17,7 +17,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
-import ProfileMenu from "./ProfileMenu";
+import BaseLayout from "../components/BaseLayout";
 import { authUtils } from "../utils/auth";
 import { API_URL } from "../config";
 import { formatResumeAsText, formatPlainTextResume, countChanges, type StructuredResume } from "../utils/resumeFormatter";
@@ -204,10 +204,8 @@ export default function TailoredResumeViewPage() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", pb: 4 }}>
-      <ProfileMenu />
-
-      <Container maxWidth="lg" sx={{ pt: 4 }}>
+    <BaseLayout pageTitle={tailoredResume.jobContext?.jobTitle ?? "Tailored Resume"}>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Header */}
         <Button
           startIcon={<ArrowBackIcon />}
@@ -426,7 +424,7 @@ export default function TailoredResumeViewPage() {
           </CardContent>
         </Card>
       </Container>
-    </Box>
+    </BaseLayout>
   );
 }
 

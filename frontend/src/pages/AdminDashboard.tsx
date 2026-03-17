@@ -27,12 +27,11 @@ import {
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import EventIcon from "@mui/icons-material/Event"
 import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
-import ProfileMenu from "./ProfileMenu"
 import { API_URL } from "../config"
+import BaseLayout from "../components/BaseLayout"
 
 /* -------------------------------------------------------
    Inline component: Manage Fairs panel for AdminDashboard
@@ -267,29 +266,7 @@ export default function AdminDashboard() {
   }, [navigate, user?.role])
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <AdminPanelSettingsIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-                Administrator Dashboard
-              </Typography>
-            </Box>
-            <ProfileMenu />
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Administrator Dashboard">
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Multi-Fair Management */}
         <FairsManagementPanel navigate={navigate} />
@@ -327,6 +304,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }

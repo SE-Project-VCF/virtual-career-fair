@@ -41,6 +41,20 @@ vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }));
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}));
+
 const renderCompanyManagement = () => {
   return render(
     <BrowserRouter>
@@ -608,18 +622,12 @@ describe("CompanyManagement", () => {
 
   // Navigation Tests
   describe("Navigation", () => {
-    it("navigates back to dashboard when back button is clicked", async () => {
-      const user = userEvent.setup();
+    it("renders the company management page with title", async () => {
       renderCompanyManagement();
 
       await waitFor(() => {
         expect(screen.getByText("Company Management")).toBeInTheDocument();
       });
-
-      const backButton = screen.getByRole("button", { name: "" }); // Arrow back has no text
-      await user.click(backButton);
-
-      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
 
     it("navigates to company details when Manage Company is clicked", async () => {

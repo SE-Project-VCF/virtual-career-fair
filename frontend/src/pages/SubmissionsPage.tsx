@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Collapse,
@@ -24,7 +25,7 @@ import { auth, db } from "../firebase"
 import { doc, getDoc } from "firebase/firestore"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import type { ApplicationForm } from "../types/applicationForm"
 
 interface Submission {
@@ -270,35 +271,11 @@ export default function SubmissionsPage() {
   }, {})
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton onClick={() => navigate(`/company/${companyId}`)} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <AssignmentIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                Application Submissions
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Application Submissions">
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/company/${companyId}`)} sx={{ mb: 3 }}>
+          Back to Company
+        </Button>
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
             <CircularProgress sx={{ color: "#388560" }} />
@@ -402,6 +379,6 @@ export default function SubmissionsPage() {
           </>
         )}
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }

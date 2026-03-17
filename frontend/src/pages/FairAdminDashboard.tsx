@@ -31,7 +31,7 @@ import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import RefreshIcon from "@mui/icons-material/Refresh"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -263,22 +263,7 @@ export default function FairAdminDashboard() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <Box
-        sx={{
-          bgcolor: "primary.main",
-          color: "white",
-          py: 2,
-          px: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="h6" fontWeight="bold">Admin — {fair.name}</Typography>
-        <ProfileMenu />
-      </Box>
-
+    <BaseLayout pageTitle={`Admin — ${fair.name}`}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button variant="text" onClick={() => navigate("/admin")} sx={{ mb: 2 }}>
           ← Back to Admin
@@ -525,6 +510,6 @@ export default function FairAdminDashboard() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   )
 }

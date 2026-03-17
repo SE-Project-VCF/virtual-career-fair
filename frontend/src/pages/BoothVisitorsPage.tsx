@@ -36,7 +36,7 @@ import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import StudentProfileCard from "../components/StudentProfileCard"
 
 interface Visitor {
@@ -218,67 +218,54 @@ export default function BoothVisitorsPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
-        <CircularProgress />
-      </Box>
+      <BaseLayout pageTitle="Booth Visitors">
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh" }}>
+          <CircularProgress />
+        </Box>
+      </BaseLayout>
     );
   }
 
   if (error || !booth) {
     return (
-      <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Card sx={{ p: 4, maxWidth: 500, border: "1px solid rgba(56, 133, 96, 0.3)" }}>
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error || "Booth not found"}
-          </Alert>
-          <Button onClick={() => navigate("/companies")} variant="contained" fullWidth>
-            Back to Companies
-          </Button>
-        </Card>
-      </Box>
+      <BaseLayout pageTitle="Booth Visitors">
+        <Box sx={{ minHeight: "50vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Card sx={{ p: 4, maxWidth: 500, border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error || "Booth not found"}
+            </Alert>
+            <Button onClick={() => navigate("/companies")} variant="contained" fullWidth>
+              Back to Companies
+            </Button>
+          </Card>
+        </Box>
+      </BaseLayout>
     );
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Button
-                onClick={() => navigate(-1)}
-                sx={{
-                  color: "white",
-                  minWidth: "auto",
-                  p: 1,
-                  "&:hover": {
-                    bgcolor: "rgba(255,255,255,0.1)",
-                  },
-                }}
-              >
-                <ArrowBackIcon />
-              </Button>
-              <Typography variant="h4" sx={{ color: "white", fontWeight: "bold", m: 0 }}>
-                Booth Visitors
-              </Typography>
-            </Box>
-            <ProfileMenu />
+    <BaseLayout pageTitle={`Booth Visitors - ${booth.companyName}`}>
+      <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
+        <Container maxWidth="lg" sx={{ py: 4 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+            <Button
+              onClick={() => navigate(-1)}
+              startIcon={<ArrowBackIcon />}
+              sx={{
+                borderColor: "#388560",
+                color: "#388560",
+                "&:hover": {
+                  bgcolor: "rgba(56, 133, 96, 0.1)",
+                },
+              }}
+              variant="outlined"
+            >
+              Back
+            </Button>
+            <Typography variant="subtitle1" color="text.secondary">
+              {booth.companyName}
+            </Typography>
           </Box>
-          <Typography variant="subtitle1" sx={{ color: "rgba(255,255,255,0.9)" }}>
-            {booth.companyName}
-          </Typography>
-        </Container>
-      </Box>
-
-      <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Stats Cards */}
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2, mb: 4 }}>
           <Card sx={{ background: "linear-gradient(135deg, #388560 0%, rgba(56, 133, 96, 0.8) 100%)", color: "white" }}>
@@ -453,6 +440,6 @@ export default function BoothVisitorsPage() {
           <Button onClick={() => setProfileDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+   </Box> </BaseLayout>
   );
 }

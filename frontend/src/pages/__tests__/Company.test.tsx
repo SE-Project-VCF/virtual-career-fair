@@ -53,6 +53,20 @@ vi.mock("../../firebase", () => ({
 // Import after mocks
 import { authUtils } from "../../utils/auth";
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}));
+
 // Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
@@ -197,8 +211,7 @@ describe("Company", () => {
 
   it("displays company name after loading", async () => {
     renderComp();
-    // Use getByRole to specifically target the h4 heading
-    expect(await screen.findByRole('heading', { name: /Tech Corp/i, level: 4 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Tech Corp/i })).toBeInTheDocument();
   });
 
   it("displays invite code", async () => {
