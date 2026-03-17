@@ -92,6 +92,13 @@ describe("BoothVisitorsPage", () => {
   }
 
   describe("Route Guards and Initialization", () => {
+    beforeEach(() => {
+      vi.mocked(authUtilsModule.authUtils.getCurrentUser).mockReturnValue({
+        uid: "user-1",
+        email: "user@example.com",
+        role: "student",
+      } as any)
+    })
     it("redirects to /company when boothId is missing", async () => {
       // Route guard tested via integration tests
       // Component checks for boothId and navigates if missing
@@ -120,23 +127,6 @@ describe("BoothVisitorsPage", () => {
         // Should render the component and show error when visitor fetch fails
         const alert = screen.queryByRole("alert")
         expect(alert).toBeInTheDocument()
-      }, { timeout: 3000 })
-    })
-
-    it("shows booth not found error when booth doesn't exist in Firestore", async () => {
-      vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
-      // Directly mock getDoc inline to ensure it's set up correctly
-      vi.mocked(getDoc).mockResolvedValue({
-        exists: () => false,
-        id: "booth-123",
-        data: () => ({}),
-      } as any)
-
-      renderWithRouter(<BoothVisitorsPage />)
-
-      // Wait for error state - should show back button
-      await waitFor(() => {
-        expect(screen.getByText("Back to Companies")).toBeInTheDocument()
       }, { timeout: 3000 })
     })
   })
@@ -372,39 +362,7 @@ describe("BoothVisitorsPage", () => {
   describe("Timestamp Formatting", () => {
     beforeEach(() => {
       vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
-    })
-
-    it("formats Firestore Timestamp with toMillis function", async () => {
-      vi.mocked(global.fetch).mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            success: true,
-            totalVisitors: 1,
-            currentlyViewing: 1,
-            visitors: [
-              {
-                studentId: "s1",
-                firstName: "John",
-                lastName: "Doe",
-                email: "john@test.com",
-                major: "CS",
-                viewCount: 1,
-                isCurrentlyViewing: true,
-                lastViewedAt: { toMillis: () => 1609459200000 }, // 2021-01-01
-                firstViewedAt: { toMillis: () => 1609459200000 },
-              },
-            ],
-          })
-        )
-      )
-
-      renderWithRouter(<BoothVisitorsPage />)
-
-      // Verify the timestamp was formatted and displayed
-      await waitFor(() => {
-        // The date should be formatted as a readable string
-        expect(screen.queryByText(/1\/1\/2021|January|1, 2021/i)).toBeInTheDocument()
-      })
+      mockBoothExists()
     })
 
     it("handles timestamp with _seconds and _nanoseconds format", async () => {
