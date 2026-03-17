@@ -360,7 +360,7 @@ describe("StudentProfilePage", () => {
     it("uses user?.uid as dependency to prevent unnecessary re-fetches", async () => {
       const user = userEvent.setup();
       const getDocCall = vi.fn();
-      (firestore.getDoc as any).mockImplementation((ref) => {
+      (firestore.getDoc as any).mockImplementation((ref: any) => {
         getDocCall();
         return Promise.resolve({
           exists: () => true,

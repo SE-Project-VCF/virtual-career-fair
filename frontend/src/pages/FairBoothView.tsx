@@ -149,7 +149,7 @@ export default function FairBoothView() {
       if (token) {
         try {
           const url = `${API_URL}/api/booth/${originalOrFairBoothId}/track-view`
-          const response = await fetch(url, {
+          await fetch(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${token}`,

@@ -214,7 +214,7 @@ export default function BoothView() {
           try {
             const url = `${API_URL}/api/booth/${boothData.id}/track-view`;
 
-            const response = await fetch(url, {
+            await fetch(url, {
               method: "POST",
               headers: {
                 "Authorization": `Bearer ${token}`,
