@@ -1002,8 +1002,7 @@ export default function Company() {
     )
   }
 
-  if (!company) {
-    if(error) {
+  if (error &&!company) {
     return (
       <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Card sx={{ p: 4, maxWidth: 500 }}>
@@ -1013,10 +1012,9 @@ export default function Company() {
           </Button>
         </Card>
       </Box>
-    )} else {
-      return null
-    }
+    )
   }
+  if (!company) return null
 
   const isOwner = userRole === "companyOwner" && company.ownerId === userId
   const saveButtonLabel = getSaveButtonLabel(savingJob, editingJob)
@@ -1025,7 +1023,7 @@ export default function Company() {
     <BaseLayout pageTitle={company.companyName}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(isOwner ? "/companies" : "/dashboard")} sx={{ mb: 3 }}>
-          {isOwner ? "Companies" : "Dashboard"}
+          {"Companies"}
         </Button>
         {error && (
           <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError("")}>
