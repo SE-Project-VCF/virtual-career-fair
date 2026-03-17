@@ -5,8 +5,15 @@ import { BrowserRouter, Route, Routes } from "react-router-dom"
 import BoothVisitorsPage from "../pages/BoothVisitorsPage"
 import * as firebaseModule from "../firebase"
 import * as authUtilsModule from "../utils/auth"
+import { getDoc, doc } from "firebase/firestore"
 
-// Mock Firebase
+// Mock Firebase with getDoc
+vi.mock("firebase/firestore", () => ({
+  getDoc: vi.fn(),
+  doc: vi.fn(),
+}))
+
+// Mock Firebase database
 vi.mock("../firebase", () => ({
   db: {},
 }))
@@ -15,6 +22,7 @@ vi.mock("../firebase", () => ({
 vi.mock("../utils/auth", () => ({
   authUtils: {
     getIdToken: vi.fn(),
+    getCurrentUser: vi.fn(),
   },
 }))
 
@@ -45,6 +53,26 @@ describe("BoothVisitorsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     global.fetch = vi.fn()
+    
+    // Mock getCurrentUser for ProfileMenu component
+    vi.mocked(authUtilsModule.authUtils.getCurrentUser).mockReturnValue({
+      uid: "user-1",
+      email: "user@example.com",
+      role: "student",
+    } as any)
+    
+    // Setup default getDoc mock - booth exists
+    vi.mocked(getDoc).mockResolvedValue({
+      exists: () => true,
+      id: "booth-123",
+      data: () => ({
+        id: "booth-123",
+        companyName: "Tech Corp",
+        location: "Hall A",
+        industry: "Technology",
+        logoUrl: "https://example.com/logo.png",
+      }),
+    } as any)
   })
 
   describe("Route Guards and Initialization", () => {
@@ -76,9 +104,17 @@ describe("BoothVisitorsPage", () => {
     })
 
     it("shows booth not found error when booth doesn't exist in Firestore", async () => {
-      // This test would require mocking getDoc from Firebase
-      // Coverage for: if (!boothDoc.exists())
-      expect(true).toBe(true) // Placeholder
+      vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
+      // Mock getDoc to return a doc that doesn't exist
+      vi.mocked(getDoc).mockResolvedValueOnce({
+        exists: () => false,
+      } as any)
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Booth not found/i)).toBeInTheDocument()
+      })
     })
   })
 
@@ -339,33 +375,161 @@ describe("BoothVisitorsPage", () => {
 
       renderWithRouter(<BoothVisitorsPage />)
 
-      // Code path coverage: timestamp.toMillis() path
-      expect(true).toBe(true)
+      // Verify the timestamp was formatted and displayed
+      await waitFor(() => {
+        // The date should be formatted as a readable string
+        expect(screen.queryByText(/1\/1\/2021|January|1, 2021/i)).toBeInTheDocument()
+      })
     })
 
     it("handles timestamp with _seconds and _nanoseconds format", async () => {
-      // Code path coverage: timestamp._seconds path
-      expect(true).toBe(true)
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            totalVisitors: 1,
+            currentlyViewing: 0,
+            visitors: [
+              {
+                studentId: "s1",
+                firstName: "Jane",
+                lastName: "Smith",
+                email: "jane@test.com",
+                major: "Math",
+                viewCount: 2,
+                isCurrentlyViewing: false,
+                lastViewedAt: { _seconds: 1609459200, _nanoseconds: 500000000 },
+              },
+            ],
+          })
+        )
+      )
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Jane Smith/i)).toBeInTheDocument()
+      })
     })
 
     it("handles timestamp with seconds and nanoseconds format", async () => {
-      // Code path coverage: timestamp.seconds path
-      expect(true).toBe(true)
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            totalVisitors: 1,
+            currentlyViewing: 0,
+            visitors: [
+              {
+                studentId: "s1",
+                firstName: "Bob",
+                lastName: "Johnson",
+                email: "bob@test.com",
+                major: "Physics",
+                viewCount: 3,
+                isCurrentlyViewing: false,
+                lastViewedAt: { seconds: 1609459200, nanoseconds: 250000000 },
+              },
+            ],
+          })
+        )
+      )
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Bob Johnson/i)).toBeInTheDocument()
+      })
     })
 
     it("handles ISO string timestamps", async () => {
-      // Code path coverage: ISO string path
-      expect(true).toBe(true)
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            totalVisitors: 1,
+            currentlyViewing: 0,
+            visitors: [
+              {
+                studentId: "s1",
+                firstName: "Alice",
+                lastName: "Brown",
+                email: "alice@test.com",
+                major: "Chemistry",
+                viewCount: 1,
+                isCurrentlyViewing: false,
+                lastViewedAt: "2021-01-01T00:00:00Z",
+              },
+            ],
+          })
+        )
+      )
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Alice Brown/i)).toBeInTheDocument()
+      })
     })
 
     it("handles numeric millisecond timestamps", async () => {
-      // Code path coverage: numeric timestamp path
-      expect(true).toBe(true)
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            totalVisitors: 1,
+            currentlyViewing: 0,
+            visitors: [
+              {
+                studentId: "s1",
+                firstName: "Charlie",
+                lastName: "Davis",
+                email: "charlie@test.com",
+                major: "Biology",
+                viewCount: 4,
+                isCurrentlyViewing: false,
+                lastViewedAt: 1609459200000,
+              },
+            ],
+          })
+        )
+      )
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Charlie Davis/i)).toBeInTheDocument()
+      })
     })
 
     it("returns N/A for invalid timestamps", async () => {
-      // Code path coverage: invalid timestamp path
-      expect(true).toBe(true)
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            totalVisitors: 1,
+            currentlyViewing: 0,
+            visitors: [
+              {
+                studentId: "s1",
+                firstName: "David",
+                lastName: "Evans",
+                email: "david@test.com",
+                major: "Engineering",
+                viewCount: 2,
+                isCurrentlyViewing: false,
+                lastViewedAt: { invalid: "object" },
+              },
+            ],
+          })
+        )
+      )
+
+      renderWithRouter(<BoothVisitorsPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/David Evans/i)).toBeInTheDocument()
+      })
     })
   })
 
@@ -567,4 +731,5 @@ describe("BoothVisitorsPage", () => {
         expect(screen.getByText(/Failed to load booth visitors|error/i)).toBeInTheDocument()
       })
     })
-  })})
+  })
+})
