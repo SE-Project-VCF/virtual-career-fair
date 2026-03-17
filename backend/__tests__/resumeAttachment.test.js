@@ -112,19 +112,20 @@ function setupTailoredDbMock({
   });
 }
 
-/** Configures admin.storage() → bucket() → file() → getSignedUrl() */
+/** Configures admin.storage() → bucket() → file() → exists(), getSignedUrl() */
 function setupStorageMock({ signedUrl = "https://example.com/signed-resume.pdf", shouldFail = false } = {}) {
+  const exists = jest.fn().mockResolvedValue([true]);
   const getSignedUrl = shouldFail
     ? jest.fn().mockRejectedValue(new Error("Storage error"))
     : jest.fn().mockResolvedValue([signedUrl]);
 
   admin.storage.mockReturnValue({
     bucket: jest.fn().mockReturnValue({
-      file: jest.fn().mockReturnValue({ getSignedUrl }),
+      file: jest.fn().mockReturnValue({ exists, getSignedUrl }),
     }),
   });
 
-  return { getSignedUrl };
+  return { exists, getSignedUrl };
 }
 
 /* ==================================================================
