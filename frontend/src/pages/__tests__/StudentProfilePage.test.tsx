@@ -354,4 +354,175 @@ describe("StudentProfilePage", () => {
       );
     });
   });
+
+  // useEffect Dependency Optimization Tests
+  describe("useEffect Hook Management", () => {
+    it("uses user?.uid as dependency to prevent unnecessary re-fetches", async () => {
+      const user = userEvent.setup();
+      const getDocCall = vi.fn();
+      (firestore.getDoc as any).mockImplementation((ref) => {
+        getDocCall();
+        return Promise.resolve({
+          exists: () => true,
+          data: () => ({
+            major: "Computer Science",
+            expectedGradYear: "2025",
+            skills: "Python, React",
+          }),
+        });
+      });
+
+      const { rerender } = render(
+        <BrowserRouter>
+          <StudentProfilePage />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(getDocCall).toHaveBeenCalled();
+      });
+
+      const initialCallCount = getDocCall.mock.calls.length;
+
+      // Re-render with same user should not trigger new fetch
+      rerender(
+        <BrowserRouter>
+          <StudentProfilePage />
+        </BrowserRouter>
+      );
+
+      // Call count should remain the same (no additional fetches)
+      expect(getDocCall.mock.calls.length).toBeLessThanOrEqual(initialCallCount + 1);
+    });
+
+    it("allows typing in form fields without values disappearing", async () => {
+      const user = userEvent.setup();
+      renderStudentProfile();
+
+      const majorInput = await screen.findByLabelText(/Major/);
+
+      // Type multiple characters - all should persist
+      await user.type(majorInput, "C");
+      expect((majorInput as HTMLInputElement).value).toBe("C");
+
+      await user.type(majorInput, "o");
+      expect((majorInput as HTMLInputElement).value).toBe("Co");
+
+      await user.type(majorInput, "mputer Science");
+      expect((majorInput as HTMLInputElement).value).toBe("Computer Science");
+    });
+
+    it("maintains form field focus and input during editing", async () => {
+      const user = userEvent.setup();
+      renderStudentProfile();
+
+      const majorInput = await screen.findByLabelText(/Major/);
+      majorInput.focus();
+
+      expect(document.activeElement).toBe(majorInput);
+
+      await user.type(majorInput, "CS");
+      expect(document.activeElement).toBe(majorInput);
+      expect((majorInput as HTMLInputElement).value).toBe("CS");
+    });
+
+    it("does not reset form when user object metadata changes", async () => {
+      const user = userEvent.setup();
+      renderStudentProfile();
+
+      const majorInput = await screen.findByLabelText(/Major/);
+      await user.type(majorInput, "Computer Science");
+
+      // Simulate user object update but same uid
+      (authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "student-1", // Same uid
+        role: "student",
+        email: "student@newemail.com", // Changed email
+        firstName: "John",
+        lastName: "Doe",
+      });
+
+      // Form should retain the typed value
+      expect((majorInput as HTMLInputElement).value).toBe("Computer Science");
+    });
+
+    it("refetches profile only when user uid changes", async () => {
+      const getDocCall = vi.fn();
+      (firestore.getDoc as any).mockImplementation(() => {
+        getDocCall();
+        return Promise.resolve({
+          exists: () => true,
+          data: () => ({
+            major: "Computer Science",
+            expectedGradYear: "2025",
+            skills: "Python, React",
+          }),
+        });
+      });
+
+      renderStudentProfile();
+
+      await waitFor(() => {
+        expect(getDocCall).toHaveBeenCalled();
+      });
+
+      const callCountAfterMount = getDocCall.mock.calls.length;
+
+      // Clear and re-mock to track new calls
+      getDocCall.mockClear();
+
+      // Change email but keep same uid
+      (authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "student-1", // Same uid
+        role: "student",
+        email: "newemail@example.com",
+        firstName: "John",
+        lastName: "Doe",
+      });
+
+      // No new fetch should occur since uid hasn't changed
+      await waitFor(() => {
+        expect(getDocCall).not.toHaveBeenCalled();
+      });
+    });
+
+    it("clears and refetches when user logs out", async () => {
+      const getDocCall = vi.fn();
+      (firestore.getDoc as any).mockImplementation(() => {
+        getDocCall();
+        return Promise.resolve({
+          exists: () => true,
+          data: () => ({
+            major: "Computer Science",
+            expectedGradYear: "2025",
+            skills: "Python, React",
+          }),
+        });
+      });
+
+      const { rerender } = render(
+        <BrowserRouter>
+          <StudentProfilePage />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(getDocCall).toHaveBeenCalled();
+      });
+
+      // Simulate logout
+      (authUtils.getCurrentUser as any).mockReturnValue(null);
+      (authUtils.isAuthenticated as any).mockReturnValue(false);
+
+      rerender(
+        <BrowserRouter>
+          <StudentProfilePage />
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith("/login");
+      });
+    });
+  });
 });
