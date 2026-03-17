@@ -16,7 +16,7 @@ import {
   ListItemButton,
   Chip,
   FormControlLabel,
-  Switch,
+  Checkbox,
 } from "@mui/material"
 import ProfileMenu from "./ProfileMenu"
 import { doc, getDoc, setDoc } from "firebase/firestore"
@@ -396,26 +396,20 @@ export default function StudentProfilePage() {
               <Box sx={{ mb: 3, p: 2, bgcolor: "rgba(56, 133, 96, 0.05)", borderRadius: 1 }}>
                 <FormControlLabel
                   control={
-                    <Switch
+                    <Checkbox
                       checked={resumeVisible}
                       onChange={(e) => handleResumeVisibilityToggle(e.target.checked)}
                       color="primary"
                     />
                   }
-                  label={
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        Make Resume Visible to Recruiters
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
-                        {resumeVisible
-                          ? "Your resume is visible to company representatives"
-                          : "Your resume is hidden from company representatives"}
-                      </Typography>
-                    </Box>
-                  }
+                  label="Make Resume Visible"
                   sx={{ mb: 0 }}
                 />
+                <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 1 }}>
+                  {resumeVisible
+                    ? "Your resume is visible to company representatives"
+                    : "Your resume is hidden from company representatives"}
+                </Typography>
               </Box>
             )}
 

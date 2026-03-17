@@ -34,7 +34,7 @@ describe("StudentProfilePage - Integration Tests", () => {
         major: "Computer Science",
         expectedGradYear: "2026",
         skills: "JavaScript, React",
-        resumeUrl: null,
+        resumeUrl: "https://example.com/resume.pdf",
         resumeVisible: true,
       }),
     } as any)
@@ -42,7 +42,10 @@ describe("StudentProfilePage - Integration Tests", () => {
     vi.mocked(firestore.setDoc).mockResolvedValue(undefined)
     vi.mocked(firestore.doc).mockReturnValue({} as any)
     
-    global.fetch = vi.fn()
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ resumes: [] }),
+    })
     global.alert = vi.fn()
   })
 

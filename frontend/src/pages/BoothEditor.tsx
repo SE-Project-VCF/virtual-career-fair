@@ -715,7 +715,7 @@ export default function BoothEditor() {
               </IconButton>
               <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
               <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: "white" }}>
                   {boothPageTitle}
                 </Typography>
                 <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
@@ -1053,8 +1053,8 @@ export default function BoothEditor() {
               <Box sx={{ display: "flex", gap: 2 }}>
                 <Button
                   variant="outlined"
-                  onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
-                  disabled={saving || logoUploading}
+                  onClick={() => (fairId ? navigate("/fairs") : navigate("/companies"))}
+                  disabled={saving}
                   sx={{
                     borderColor: "#388560",
                     color: "#388560",
@@ -1076,7 +1076,7 @@ export default function BoothEditor() {
                     <Button
                       type="submit"
                       variant="contained"
-                      startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
+                      startIcon={saving ? <CircularProgress size={24} /> : <SaveIcon />}
                       disabled={saving || logoUploading}
                       sx={{
                         background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
@@ -1113,5 +1113,5 @@ export default function BoothEditor() {
         </Box>
       </Container>
     </Box>
-  )
+  );
 }
