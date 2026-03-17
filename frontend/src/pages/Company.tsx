@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import { getRepresentativeName } from "../utils/representativeUtils"
 import { useNavigate, useParams } from "react-router-dom"
 import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip } from "@mui/material"
 import { authUtils } from "../utils/auth"
@@ -22,6 +23,7 @@ import BarChartIcon from "@mui/icons-material/BarChart"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
+import VisibilityIcon from "@mui/icons-material/Visibility"
 import BaseLayout from "../components/BaseLayout"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
@@ -82,17 +84,6 @@ function getSaveButtonLabel(savingJob: boolean, editingJob: Job | null): string 
   if (savingJob) return "Saving..."
   if (editingJob) return "Update Job"
   return "Publish Job"
-}
-
-// Helper function to get representative display name
-function getRepresentativeName(rep: Representative): string {
-  if (rep.firstName && rep.lastName) {
-    return `${rep.firstName} ${rep.lastName}`
-  }
-  if (rep.firstName) {
-    return rep.firstName
-  }
-  return rep.email
 }
 
 function CompanyInfoCard({
@@ -348,7 +339,7 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
           </Button>
 
           {boothId && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 2, display: "flex", gap: 2, flexDirection: "column" }}>
               <Button
                 variant="outlined"
                 onClick={() => navigate(`/booth/${boothId}`)}
@@ -362,6 +353,21 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
                 }}
               >
                 View Public Booth
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<VisibilityIcon />}
+                onClick={() => navigate(`/booth/${boothId}/visitors`)}
+                sx={{
+                  borderColor: "#b03a6c",
+                  color: "#b03a6c",
+                  "&:hover": {
+                    borderColor: "#8b2854",
+                    bgcolor: "rgba(176, 58, 108, 0.05)",
+                  },
+                }}
+              >
+                View Visitors Analytics
               </Button>
             </Box>
           )}

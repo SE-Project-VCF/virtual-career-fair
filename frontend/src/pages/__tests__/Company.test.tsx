@@ -1298,4 +1298,47 @@ describe("Company", () => {
       expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
     });
   });
+
+  describe("Booth Navigation Buttons", () => {
+    it("navigates to public booth view when View Public Booth button is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      const viewBoothButton = screen.getByRole("button", { name: /View Public Booth/i });
+      await user.click(viewBoothButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1");
+    });
+
+    it("navigates to booth visitors analytics when View Visitors Analytics button is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      const visitorsButton = screen.getByRole("button", { name: /View Visitors Analytics/i });
+      await user.click(visitorsButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1/visitors");
+    });
+
+    it("hides booth view buttons when boothId is not set", async () => {
+      (getDoc as any).mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          companyName: "Tech Corp",
+          inviteCode: "INVITE123",
+          representativeIDs: ["rep-1"],
+          // boothId is undefined
+          ownerId: "owner-1",
+        }),
+      });
+
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      expect(screen.queryByRole("button", { name: /View Public Booth/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /View Visitors Analytics/i })).not.toBeInTheDocument();
+    });
+  });
 });

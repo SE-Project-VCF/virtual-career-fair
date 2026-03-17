@@ -101,7 +101,7 @@ export function useCreateJob() {
       method: "POST",
       body: JSON.stringify(jobData),
     }),
-    onSuccess: (_, variables) => {
+    onSuccess: (_: any, variables: any) => {
       // Invalidate and refetch jobs for this company
       queryClient.invalidateQueries({ queryKey: ["jobs", variables.companyId] });
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
@@ -128,7 +128,7 @@ export function useUpdateJob() {
         body: JSON.stringify(jobData),
       });
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["jobs", variables.companyId] });
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
     },
@@ -146,7 +146,7 @@ export function useDeleteJob() {
         method: "DELETE",
       });
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["jobs", variables.companyId] });
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
     },
@@ -168,7 +168,7 @@ export function useCreateBooth() {
       method: "POST",
       body: JSON.stringify(boothData),
     }),
-    onSuccess: (_, variables) => {
+    onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
     },
   });

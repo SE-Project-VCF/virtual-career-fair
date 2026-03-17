@@ -22,6 +22,13 @@ vi.mock("../pages/FairLanding", () => ({ default: () => <div>FairLanding</div> }
 vi.mock("../pages/FairBooths", () => ({ default: () => <div>FairBooths</div> }))
 vi.mock("../pages/FairBoothView", () => ({ default: () => <div>FairBoothView</div> }))
 vi.mock("../pages/FairAdminDashboard", () => ({ default: () => <div>FairAdminDashboard</div> }))
+vi.mock("../pages/BoothVisitorsPage", () => ({ default: () => <div>BoothVisitorsPage</div> }))
+vi.mock("../pages/FairBoothsPage", () => ({ default: () => <div>FairBoothsPage</div> }))
+vi.mock("../pages/StudentFairBoothsPage", () => ({ default: () => <div>StudentFairBoothsPage</div> }))
+vi.mock("../pages/TailorResumeSimplePage", () => ({ default: () => <div>TailorResumeSimplePage</div> }))
+vi.mock("../pages/TailoredResumeViewPage", () => ({ default: () => <div>TailoredResumeViewPage</div> }))
+vi.mock("../pages/TailoredResumesPage", () => ({ default: () => <div>TailoredResumesPage</div> }))
+vi.mock("../pages/SubmissionsPage", () => ({ default: () => <div>SubmissionsPage</div> }))
 vi.mock("../contexts/FairContext", () => ({
   FairProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useFair: vi.fn(),
@@ -65,5 +72,53 @@ describe("App", () => {
     globalThis.history.pushState({}, "", "/fair/test-fair-id/company/test-company-id/booth")
     render(<App />)
     expect(screen.getByText("BoothEditor")).toBeInTheDocument()
+  })
+
+  it("renders BoothVisitorsPage at /booth/:boothId/visitors", () => {
+    globalThis.history.pushState({}, "", "/booth/booth-123/visitors")
+    render(<App />)
+    expect(screen.getByText("BoothVisitorsPage")).toBeInTheDocument()
+  })
+
+  it("renders FairList at /fairs", () => {
+    globalThis.history.pushState({}, "", "/fairs")
+    render(<App />)
+    expect(screen.getByText("FairList")).toBeInTheDocument()
+  })
+
+  it("renders FairBoothsPage at /admin/fairs/:fairId", () => {
+    globalThis.history.pushState({}, "", "/admin/fairs/fair-456")
+    render(<App />)
+    expect(screen.getByText("FairBoothsPage")).toBeInTheDocument()
+  })
+
+  it("renders StudentFairBoothsPage at /fairs/:fairId/booths", () => {
+    globalThis.history.pushState({}, "", "/fairs/fair-789/booths")
+    render(<App />)
+    expect(screen.getByText("StudentFairBoothsPage")).toBeInTheDocument()
+  })
+
+  it("renders TailoredResumesPage at /dashboard/tailored-resumes", () => {
+    globalThis.history.pushState({}, "", "/dashboard/tailored-resumes")
+    render(<App />)
+    expect(screen.getByText("TailoredResumesPage")).toBeInTheDocument()
+  })
+
+  it("renders TailorResumeSimplePage at /invitations/:id/tailor-simple", () => {
+    globalThis.history.pushState({}, "", "/invitations/inv-abc/tailor-simple")
+    render(<App />)
+    expect(screen.getByText("TailorResumeSimplePage")).toBeInTheDocument()
+  })
+
+  it("renders SubmissionsPage at /company/:companyId/submissions", () => {
+    globalThis.history.pushState({}, "", "/company/company-1/submissions")
+    render(<App />)
+    expect(screen.getByText("SubmissionsPage")).toBeInTheDocument()
+  })
+
+  it("renders TailoredResumeViewPage at /dashboard/tailored-resume/:tailoredResumeId", () => {
+    globalThis.history.pushState({}, "", "/dashboard/tailored-resume/res-123")
+    render(<App />)
+    expect(screen.getByText("TailoredResumeViewPage")).toBeInTheDocument()
   })
 })

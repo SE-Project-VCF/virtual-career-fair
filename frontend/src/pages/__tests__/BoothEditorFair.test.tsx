@@ -35,6 +35,7 @@ vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
     isAuthenticated: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-token"),
   },
 }))
 
@@ -257,6 +258,11 @@ describe("BoothEditor – fair-scoped", () => {
     it("PUTs to the fair booth API and navigates to /fairs on success", async () => {
       const user = userEvent.setup()
       ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: async () => fairBoothPayload,
+      })
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => ({}),
       })
@@ -287,6 +293,11 @@ describe("BoothEditor – fair-scoped", () => {
 
     it("shows generic error when PUT request fails", async () => {
       const user = userEvent.setup()
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: async () => fairBoothPayload,
+      })
       ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         json: async () => ({ error: "Update failed" }),
