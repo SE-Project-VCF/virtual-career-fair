@@ -35,6 +35,7 @@ vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
     isAuthenticated: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-token"),
   },
 }))
 
