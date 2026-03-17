@@ -465,8 +465,6 @@ Analyzed requirements and designed solutions`;
  * - Edge cases (empty, malformed, multiple formats)
  */
 
-const { extractTextFromBuffer, toStructuredResume } = require("../resumeParser");
-
 describe("extractTextFromBuffer", () => {
   it("handles null buffer", async () => {
     // Coverage: null input handling

@@ -1,4 +1,4 @@
-const mockGenerateContent = jest.fn();
+let mockGenerateContent = jest.fn();
 
 jest.mock("@google/generative-ai", () => ({
   GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
@@ -213,20 +213,6 @@ describe("resumeTailorSimple", () => {
     );
   });
 });
-/**
- * Tests for resumeTailorSimple.js
- * Covers all three exported functions:
- *   - generateResumeChanges
- *   - applyChanges
- *   - reformatResumeWithGemini
- */
-
-const {
-  generateResumeChanges,
-  applyChanges,
-  reformatResumeWithGemini,
-} = require("../resumeTailorSimple");
-
 // ---------------------------------------------------------------------------
 // Shared mock factory – recreated per describe block as needed
 // ---------------------------------------------------------------------------
