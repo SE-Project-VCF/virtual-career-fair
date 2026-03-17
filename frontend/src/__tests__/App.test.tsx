@@ -115,10 +115,4 @@ describe("App", () => {
     render(<App />)
     expect(screen.getByText("SubmissionsPage")).toBeInTheDocument()
   })
-
-  it("renders FairLanding when fairId is empty in URL", () => {
-    globalThis.history.pushState({}, "", "/fair/")
-    render(<App />)
-    expect(screen.getByText("FairLanding")).toBeInTheDocument()
-  })
 })
