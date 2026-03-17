@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import { getRepresentativeName } from "../utils/representativeUtils"
 import { useNavigate, useParams } from "react-router-dom"
 import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip } from "@mui/material"
 import { authUtils } from "../utils/auth"
@@ -75,17 +76,6 @@ function getSaveButtonLabel(savingJob: boolean, editingJob: Job | null): string 
   if (savingJob) return "Saving..."
   if (editingJob) return "Update Job"
   return "Publish Job"
-}
-
-// Helper function to get representative display name
-function getRepresentativeName(rep: Representative): string {
-  if (rep.firstName && rep.lastName) {
-    return `${rep.firstName} ${rep.lastName}`
-  }
-  if (rep.firstName) {
-    return rep.firstName
-  }
-  return rep.email
 }
 
 function CompanyInfoCard({
