@@ -24,7 +24,9 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import ProfileMenu from "./ProfileMenu"
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
 import NotificationBell from "../components/NotificationBell"
+import type { ApplicationForm } from "../types/applicationForm"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, query, where } from "firebase/firestore"
@@ -55,6 +57,8 @@ interface Job {
   description: string | null
   majorsAssociated: string | null
   applicationLink: string | null
+  companyId?: string
+  applicationForm?: ApplicationForm | null
 }
 
 const INDUSTRY_LABELS: Record<string, string> = {
@@ -79,6 +83,8 @@ export default function FairBoothView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false)
+  const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
   const isMountedRef = useRef(true)
 
   useEffect(() => {
@@ -301,10 +307,35 @@ export default function FairBoothView() {
                             {job.description && (
                               <Typography variant="body2" sx={{ mt: 1 }}>{job.description}</Typography>
                             )}
-                            {job.applicationLink && (
-                              <Link href={job.applicationLink} target="_blank" rel="noopener noreferrer" sx={{ mt: 1, display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-                                Apply <LaunchIcon fontSize="small" />
-                              </Link>
+                            {(job.applicationLink ||
+                              (job.applicationForm && job.applicationForm.status === "published")) && (
+                              <Box sx={{ mt: 1 }}>
+                                {job.applicationForm && job.applicationForm.status === "published" ? (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    startIcon={<LaunchIcon />}
+                                    onClick={() => {
+                                      setSelectedJobForApply(job)
+                                      setApplyDialogOpen(true)
+                                    }}
+                                  >
+                                    Apply Now
+                                  </Button>
+                                ) : job.applicationLink ? (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    startIcon={<LaunchIcon />}
+                                    component="a"
+                                    href={job.applicationLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Apply Now
+                                  </Button>
+                                ) : null}
+                              </Box>
                             )}
                           </CardContent>
                         </Card>
@@ -371,6 +402,22 @@ export default function FairBoothView() {
           </Grid>
         )}
       </Container>
+
+      {selectedJobForApply && booth && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false)
+            setSelectedJobForApply(null)
+          }}
+          job={{
+            ...selectedJobForApply,
+            companyId: selectedJobForApply.companyId ?? booth.companyId,
+          }}
+          boothId={boothId}
+          studentId={user?.uid ?? null}
+        />
+      )}
     </Box>
   )
 }

@@ -1000,11 +1000,7 @@ app.get("/api/applicant-resume-url/:applicationId", verifyFirebaseToken, async (
     }
 
     const appData = appDoc.data();
-    const { companyId, attachedResumePath } = appData;
-
-    if (!attachedResumePath) {
-      return res.status(404).json({ error: "No resume attached to this application" });
-    }
+    const { companyId, studentId, attachedResumePath } = appData;
 
     // Verify requester is the company's owner or rep
     const companyDoc = await db.collection("companies").doc(companyId).get();
@@ -1017,8 +1013,34 @@ app.get("/api/applicant-resume-url/:applicationId", verifyFirebaseToken, async (
       return res.status(403).json({ error: "Not authorized to view this resume" });
     }
 
+    // If attachedResumePath is a full URL (legacy format), return it directly
+    const pathOrUrl = attachedResumePath || (appData.fileUrls && (appData.fileUrls.resume || appData.fileUrls.attach_resume || appData.fileUrls.resume_upload));
+    if (pathOrUrl && typeof pathOrUrl === "string" && pathOrUrl.startsWith("http")) {
+      return res.json({ url: pathOrUrl });
+    }
+
+    // Resolve storage path: use attachedResumePath, or fall back to student's profile resume
+    let storagePath = pathOrUrl;
+    if (!storagePath && studentId) {
+      const userDoc = await db.collection("users").doc(studentId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        const p = userData.currentResumePath || userData.resumePath || userData.resumeUrl;
+        if (p && typeof p === "string" && !p.startsWith("http")) storagePath = p;
+      }
+    }
+
+    if (!storagePath) {
+      return res.status(404).json({ error: "No resume attached to this application" });
+    }
+
     const bucket = admin.storage().bucket();
-    const file = bucket.file(attachedResumePath);
+    const file = bucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      return res.status(404).json({ error: "Resume file not found in storage" });
+    }
+
     const [signedUrl] = await file.getSignedUrl({
       version: "v4",
       action: "read",

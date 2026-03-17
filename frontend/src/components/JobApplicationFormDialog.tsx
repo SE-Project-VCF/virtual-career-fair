@@ -83,7 +83,9 @@ export default function JobApplicationFormDialog({
         const snap = await getDoc(doc(db, "users", studentId));
         if (!cancelled && snap.exists()) {
           const data = snap.data();
-          const path: string | null = data.resumePath ?? data.currentResumePath ?? null;
+          // resumePath/currentResumePath from upload-resume; resumeUrl from StudentProfilePage (stores path)
+          const path: string | null =
+            data.resumePath ?? data.currentResumePath ?? (typeof data.resumeUrl === "string" && !data.resumeUrl.startsWith("http") ? data.resumeUrl : null) ?? null;
           const name: string | null = data.resumeFileName ?? null;
           setProfileResumePath(path);
           setProfileResumeFileName(name);

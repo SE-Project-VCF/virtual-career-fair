@@ -84,16 +84,35 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
     e.stopPropagation()
     try {
       setResumeLoading(true)
+      // If resume is in fileUrls (e.g. from form file field "Attach resume"), use URL directly
+      const fileUrls = submission.fileUrls ?? {}
+      const resumeFileUrl =
+        fileUrls["resume"] ??
+        fileUrls["attach_resume"] ??
+        fileUrls["resume_upload"] ??
+        Object.values(fileUrls).find((v): v is string => typeof v === "string" && v.startsWith("http"))
+      if (resumeFileUrl && resumeFileUrl.startsWith("http")) {
+        window.open(resumeFileUrl, "_blank", "noopener,noreferrer")
+        return
+      }
       const token = await auth.currentUser?.getIdToken()
       const res = await fetch(`${API_URL}/api/applicant-resume-url/${submission.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      const text = await res.text()
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to get resume URL")
+        let message = "Failed to get resume URL"
+        try {
+          const data = JSON.parse(text)
+          message = data.error || message
+        } catch {
+          if (res.status === 404) message = "Resume not found or not attached to this application"
+        }
+        throw new Error(message)
       }
-      const { url } = await res.json()
-      window.open(url, "_blank", "noopener,noreferrer")
+      const data = JSON.parse(text)
+      const url = data?.url
+      if (url) window.open(url, "_blank", "noopener,noreferrer")
     } catch (err: any) {
       console.error("Error fetching resume URL:", err)
     } finally {

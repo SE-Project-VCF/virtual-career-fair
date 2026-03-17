@@ -15,6 +15,10 @@ import {
   List,
   ListItemButton,
   Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material"
 import ProfileMenu from "./ProfileMenu"
 import { doc, getDoc, setDoc } from "firebase/firestore"
@@ -53,19 +57,20 @@ export default function StudentProfilePage() {
     }
   }, [navigate, isAuthenticated])
 
-  // Load existing profile data once the user is ready
+  // Load existing profile data once when user is ready (use user.uid to avoid re-fetching on every render)
   useEffect(() => {
-    if (!user) return
+    if (!user?.uid) return
 
     const fetchProfile = async () => {
       try {
-        // NOTE: use /users (matches your Firestore rules)
         const docRef = doc(db, "users", user.uid)
         const docSnap = await getDoc(docRef)
         if (docSnap.exists()) {
           const data = docSnap.data()
+          const validYears = ["2023","2024","2025","2026","2027","2028","2029","2030","2031","2032","2033","2034","2035"]
+          const rawYear = data.expectedGradYear != null ? String(data.expectedGradYear) : ""
           setMajor(data.major || "")
-          setYear(data.expectedGradYear || "")
+          setYear(validYears.includes(rawYear) ? rawYear : "")
           setSkills(data.skills || "")
           setResumeUrl(data.resumeUrl || null)
         }
@@ -76,7 +81,7 @@ export default function StudentProfilePage() {
     }
 
     fetchProfile()
-  }, [user])
+  }, [user?.uid])
 
   // Load tailored resumes
   const loadTailoredResumes = async () => {
@@ -189,7 +194,7 @@ export default function StudentProfilePage() {
         docRef,
         {
           major,
-          expectedGradYear: year,
+          expectedGradYear: year || null,
           skills,
           resumeUrl: uploadedUrl || null,
         },
@@ -287,7 +292,7 @@ export default function StudentProfilePage() {
             Customize Profile
           </Typography>
 
-          <form onSubmit={handleSave}>
+          <form onSubmit={handleSave} autoComplete="off">
             {error && (
               <Typography color="error" sx={{ mb: 2 }}>
                 {error}
@@ -304,14 +309,22 @@ export default function StudentProfilePage() {
             />
 
             <TextField
+              select
               label="Expected Graduation Year"
-              type="number"
-              fullWidth
               value={year}
               onChange={(e) => setYear(e.target.value)}
+              fullWidth
               required
               sx={{ mb: 3 }}
-            />
+              SelectProps={{ native: true, name: "expectedGradYear" }}
+            >
+              <option value="">Select year...</option>
+              {[2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </TextField>
 
             <TextField
               label="Skills"
