@@ -79,20 +79,48 @@ export default function JobApplicationFormDialog({
     const load = async () => {
       setResumesLoading(true);
       try {
-        // 1. Profile resume from Firestore user doc
+        // 1. Profile resume and user data from Firestore
         const snap = await getDoc(doc(db, "users", studentId));
-        if (!cancelled && snap.exists()) {
-          const data = snap.data();
-          // resumePath/currentResumePath from upload-resume; resumeUrl from StudentProfilePage (stores path)
+        const data = snap.exists() ? snap.data() : null;
+
+        if (!cancelled && data) {
+          // Resume fields
           const path: string | null =
             data.resumePath ?? data.currentResumePath ?? (typeof data.resumeUrl === "string" && !data.resumeUrl.startsWith("http") ? data.resumeUrl : null) ?? null;
           const name: string | null = data.resumeFileName ?? null;
           setProfileResumePath(path);
           setProfileResumeFileName(name);
           if (path) setResumeChoice("profile");
+
+          // 2. Pre-fill form values from profile (only for known field IDs in this form)
+          if (form?.fields) {
+            const authUser = auth.currentUser;
+            const fieldIds = new Set(form.fields.map((f) => f.id));
+            const prefill: Record<string, string> = {};
+
+            if (fieldIds.has("fullName")) {
+              prefill.fullName = (authUser?.displayName ?? data.displayName ?? "").toString();
+            }
+            if (fieldIds.has("email")) {
+              prefill.email = (authUser?.email ?? data.email ?? "").toString();
+            }
+            if (fieldIds.has("graduationYear")) {
+              prefill.graduationYear = (data.expectedGradYear ?? "").toString();
+            }
+            if (fieldIds.has("major")) {
+              prefill.major = (data.major ?? "").toString();
+            }
+            if (fieldIds.has("skills")) {
+              prefill.skills = (data.skills ?? "").toString();
+            }
+
+            if (Object.keys(prefill).length > 0) {
+              setValues((prev) => ({ ...prev, ...prefill }));
+            }
+          }
         }
 
-        // 2. Tailored resumes via API
+        // 3. Tailored resumes via API
         const token = await auth.currentUser?.getIdToken();
         if (token && !cancelled) {
           const res = await fetch(`${API_URL}/api/resume/tailored`, {
@@ -122,7 +150,17 @@ export default function JobApplicationFormDialog({
 
     load();
     return () => { cancelled = true; };
-  }, [open, studentId]);
+  }, [open, studentId, form]);
+
+  // Reset values when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setValues({});
+      setErrors({});
+      setTopError("");
+      setSuccess(false);
+    }
+  }, [open]);
 
   if (!form || form.status !== "published") {
     return null;

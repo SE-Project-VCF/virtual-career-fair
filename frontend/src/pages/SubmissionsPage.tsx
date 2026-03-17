@@ -66,7 +66,7 @@ function renderResponseValue(value: string | string[] | boolean | null): string 
   return String(value) || "—"
 }
 
-function SubmissionCard({ submission, form, studentName }: { submission: Submission; form?: ApplicationForm; studentName?: string }) {
+function SubmissionCard({ submission, form, studentName }: { readonly submission: Submission; readonly form?: ApplicationForm; readonly studentName?: string }) {
   const [expanded, setExpanded] = useState(false)
   const [resumeLoading, setResumeLoading] = useState(false)
   const [tailoredDialogOpen, setTailoredDialogOpen] = useState(false)
@@ -91,7 +91,7 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
         fileUrls["attach_resume"] ??
         fileUrls["resume_upload"] ??
         Object.values(fileUrls).find((v): v is string => typeof v === "string" && v.startsWith("http"))
-      if (resumeFileUrl && resumeFileUrl.startsWith("http")) {
+      if (resumeFileUrl?.startsWith("http")) {
         window.open(resumeFileUrl, "_blank", "noopener,noreferrer")
         return
       }
@@ -219,11 +219,11 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
                     "&:hover": { borderColor: "#2d6b4d", color: "#2d6b4d", bgcolor: "rgba(56,133,96,0.06)" },
                   }}
                 >
-                  {resumeLoading
-                    ? "Loading..."
-                    : submission.attachedResumeFileName
-                      ? `View Resume (${submission.attachedResumeFileName})`
-                      : "View Resume"}
+                  {(() => {
+                    if (resumeLoading) return "Loading..."
+                    if (submission.attachedResumeFileName) return `View Resume (${submission.attachedResumeFileName})`
+                    return "View Resume"
+                  })()}
                 </Button>
               )}
               {submission.attachedTailoredResumeId && (
@@ -516,7 +516,7 @@ export default function SubmissionsPage() {
                 ))}
               </Select>
               <Typography variant="body2" color="text.secondary" sx={{ ml: "auto" }}>
-                {filteredSubmissions.length} submission{filteredSubmissions.length !== 1 ? "s" : ""}
+                {filteredSubmissions.length} submission{filteredSubmissions.length === 1 ? "" : "s"}
               </Typography>
             </Box>
 
@@ -555,7 +555,7 @@ export default function SubmissionsPage() {
                         {job?.name ?? jobId}
                       </Typography>
                       <Chip
-                        label={`${jobSubs.length} submission${jobSubs.length !== 1 ? "s" : ""}`}
+                        label={`${jobSubs.length} submission${jobSubs.length === 1 ? "" : "s"}`}
                         size="small"
                       />
                     </Box>

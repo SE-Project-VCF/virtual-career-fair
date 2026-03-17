@@ -62,8 +62,10 @@ describe("ApplicationFormBuilderDialog", () => {
       expect(screen.getByText("Software Engineer")).toBeInTheDocument()
     })
 
-    it("renders form title input pre-filled with job name for new form", () => {
+    it("renders form title input pre-filled with job name for new form", async () => {
+      const user = userEvent.setup()
       render(<ApplicationFormBuilderDialog {...defaultProps} />)
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
       const titleInput = screen.getByDisplayValue("Application for Software Engineer")
       expect(titleInput).toBeInTheDocument()
     })
@@ -74,8 +76,10 @@ describe("ApplicationFormBuilderDialog", () => {
       expect(screen.getByDisplayValue("Fill this in")).toBeInTheDocument()
     })
 
-    it("renders draft/published toggle switch", () => {
+    it("renders draft/published toggle switch", async () => {
+      const user = userEvent.setup()
       render(<ApplicationFormBuilderDialog {...defaultProps} />)
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
       expect(screen.getByRole("checkbox")).toBeInTheDocument()
       expect(screen.getByText("Draft")).toBeInTheDocument()
     })
@@ -94,8 +98,10 @@ describe("ApplicationFormBuilderDialog", () => {
       expect(screen.queryByLabelText(/^fair$/i)).not.toBeInTheDocument()
     })
 
-    it("renders Add field button", () => {
+    it("renders Add field button", async () => {
+      const user = userEvent.setup()
       render(<ApplicationFormBuilderDialog {...defaultProps} />)
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
       expect(screen.getByRole("button", { name: /add field/i })).toBeInTheDocument()
     })
 
@@ -111,6 +117,7 @@ describe("ApplicationFormBuilderDialog", () => {
       const user = userEvent.setup()
       render(<ApplicationFormBuilderDialog {...defaultProps} />)
 
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
       const before = screen.queryAllByLabelText(/field label/i).length
       await user.click(screen.getByRole("button", { name: /add field/i }))
       const after = screen.queryAllByLabelText(/field label/i).length
@@ -129,8 +136,8 @@ describe("ApplicationFormBuilderDialog", () => {
       const user = userEvent.setup()
       render(<ApplicationFormBuilderDialog {...defaultProps} />)
 
-      // Add a blank field (pre-filled with blank label)
-      await user.click(screen.getByRole("button", { name: /add field/i }))
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
+      // Build from scratch starts with one field with blank label
       await user.click(screen.getByRole("button", { name: /save/i }))
 
       await waitFor(() => {
@@ -142,6 +149,7 @@ describe("ApplicationFormBuilderDialog", () => {
       const user = userEvent.setup()
       render(<ApplicationFormBuilderDialog {...defaultProps} />)
 
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
       const titleInput = screen.getByDisplayValue("Application for Software Engineer")
       await user.clear(titleInput)
       await user.click(screen.getByRole("button", { name: /save/i }))
