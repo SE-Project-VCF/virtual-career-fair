@@ -4127,7 +4127,7 @@ app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) =>
     }
 
     // Apply search filter
-    if (search && search.trim()) {
+    if (search?.trim()) {
       const searchLower = search.toLowerCase().trim();
       visitors = visitors.filter((v) => {
         const fullName = `${v.firstName} ${v.lastName}`.toLowerCase();
@@ -4136,7 +4136,7 @@ app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) =>
     }
 
     // Apply major filter
-    if (major && major.trim()) {
+    if (major?.trim()) {
       const majorLower = major.toLowerCase().trim();
       visitors = visitors.filter((v) =>
         v.major.toLowerCase().includes(majorLower)

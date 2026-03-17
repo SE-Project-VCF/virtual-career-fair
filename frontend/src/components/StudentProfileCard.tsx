@@ -117,6 +117,41 @@ export default function StudentProfileCard({ studentId }: Props) {
       .filter((s) => s.length > 0)
   }
 
+  const renderResumeFromStorage = () => {
+    if (loadingResume) {
+      return (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <CircularProgress size={20} />
+          <Typography variant="body2">Loading resume...</Typography>
+        </Box>
+      )
+    }
+
+    if (resumeSignedUrl) {
+      return (
+        <Typography
+          component="a"
+          href={resumeSignedUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{
+            color: "#388560",
+            textDecoration: "none",
+            "&:hover": { textDecoration: "underline" },
+          }}
+        >
+          View Resume
+        </Typography>
+      )
+    }
+
+    return (
+      <Typography variant="body2" color="textSecondary">
+        Resume ready
+      </Typography>
+    )
+  }
+
   const skills = parseSkills(profile.skills)
 
   return (
@@ -192,32 +227,7 @@ export default function StudentProfileCard({ studentId }: Props) {
                   View Resume
                 </Typography>
               ) : (
-                <>
-                  {loadingResume ? (
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <CircularProgress size={20} />
-                      <Typography variant="body2">Loading resume...</Typography>
-                    </Box>
-                  ) : resumeSignedUrl ? (
-                    <Typography
-                      component="a"
-                      href={resumeSignedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      sx={{
-                        color: "#388560",
-                        textDecoration: "none",
-                        "&:hover": { textDecoration: "underline" },
-                      }}
-                    >
-                      View Resume
-                    </Typography>
-                  ) : (
-                    <Typography variant="body2" color="textSecondary">
-                      Resume ready
-                    </Typography>
-                  )}
-                </>
+                <>{renderResumeFromStorage()}</>
               )}
             </>
           ) : (
