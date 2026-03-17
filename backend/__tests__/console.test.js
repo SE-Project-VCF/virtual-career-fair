@@ -1,5 +1,12 @@
 // console.test.js - Tests for console.js validation and CRUD logic
 
+const mockRl = {
+  question: jest.fn(),
+  close: jest.fn(),
+  on: jest.fn(),
+  removeAllListeners: jest.fn(),
+};
+
 // Mock Firebase Admin before requiring console.js
 jest.mock("firebase-admin", () => {
   const Timestamp = {
@@ -14,13 +21,8 @@ jest.mock("firebase-admin", () => {
 });
 
 // Mock readline to prevent interactive console from starting
-jest.mock("readline", () => ({
-  createInterface: jest.fn(() => ({
-    question: jest.fn(),
-    close: jest.fn(),
-    on: jest.fn(),
-    removeAllListeners: jest.fn(),
-  })),
+jest.mock("node:readline", () => ({
+  createInterface: jest.fn(() => mockRl),
 }));
 
 // Mock the firebase module that console.js imports (must be before require)
@@ -40,6 +42,8 @@ const {
   addDocument,
   updateDocument,
   deleteDocument,
+  readJSON,
+  startConsole,
 } = require("../console");
 
 const { mockDocSnap, mockQuerySnap } = require("./testUtils");
@@ -674,5 +678,177 @@ describe("validateFields - all collection types", () => {
       },
     };
     expect(validateFields("booths", fullBooth)).toBeNull();
+  });
+});
+
+describe("readJSON", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    console.log = jest.fn();
+  });
+
+  it("parses multi-line JSON when user submits blank line", async () => {
+    let lineHandler;
+    mockRl.on.mockImplementation((event, cb) => {
+      if (event === "line") lineHandler = cb;
+    });
+
+    const callback = jest.fn();
+    readJSON("Enter JSON", callback);
+
+    lineHandler('{"name":"Jane"}');
+    lineHandler("");
+
+    expect(mockRl.removeAllListeners).toHaveBeenCalledWith("line");
+    expect(callback).toHaveBeenCalledWith(null, { name: "Jane" });
+  });
+
+  it("returns parse error for invalid JSON", async () => {
+    let lineHandler;
+    mockRl.on.mockImplementation((event, cb) => {
+      if (event === "line") lineHandler = cb;
+    });
+
+    const callback = jest.fn();
+    readJSON("Enter JSON", callback);
+
+    lineHandler("{bad json}");
+    lineHandler("");
+
+    expect(callback.mock.calls[0][0]).toBeInstanceOf(Error);
+    expect(callback.mock.calls[0][1]).toBeNull();
+  });
+});
+
+describe("startConsole", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    console.log = jest.fn();
+  });
+
+  it("shows help text", async () => {
+    mockRl.question
+      .mockImplementationOnce((_prompt, cb) => cb("help students"))
+      .mockImplementationOnce(() => {});
+
+    startConsole();
+
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Commands:"));
+  });
+
+  it("rejects invalid collection", async () => {
+    mockRl.question
+      .mockImplementationOnce((_prompt, cb) => cb("list nope"))
+      .mockImplementationOnce(() => {});
+
+    startConsole();
+
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining("❌ Invalid collection")
+    );
+  });
+
+  it("handles unknown command", async () => {
+    mockRl.question
+      .mockImplementationOnce((_prompt, cb) => cb("wat students"))
+      .mockImplementationOnce(() => {});
+
+    startConsole();
+
+    expect(console.log).toHaveBeenCalledWith("❌ Unknown command");
+  });
+
+  it("handles exit command", async () => {
+    mockRl.question.mockImplementationOnce((_prompt, cb) => cb("exit"));
+
+    startConsole();
+
+    expect(console.log).toHaveBeenCalledWith("Goodbye!");
+    expect(mockRl.close).toHaveBeenCalled();
+  });
+
+  it("handles missing ID for update", async () => {
+    mockRl.question.mockImplementationOnce((_prompt, cb) => cb("update students"));
+
+    startConsole();
+
+    expect(console.log).toHaveBeenCalledWith("❌ Must provide document ID");
+  });
+
+  it("handles add command with valid JSON input", async () => {
+    let lineHandler;
+    mockRl.on.mockImplementation((event, cb) => {
+      if (event === "line") lineHandler = cb;
+    });
+
+    const mockAdd = jest.fn().mockResolvedValue({ id: "new-id" });
+    db.collection.mockReturnValue({ add: mockAdd });
+
+    mockRl.question
+      .mockImplementationOnce((_prompt, cb) => cb("add students"))
+      .mockImplementationOnce(() => {});
+
+    startConsole();
+    lineHandler('{"firstName":"John"}');
+    lineHandler("");
+    await Promise.resolve();
+
+    expect(mockAdd).toHaveBeenCalledWith({ firstName: "John" });
+  });
+
+  it("handles update command with valid JSON input", async () => {
+    let lineHandler;
+    mockRl.on.mockImplementation((event, cb) => {
+      if (event === "line") lineHandler = cb;
+    });
+
+    const mockGet = jest.fn().mockResolvedValue(mockDocSnap({ firstName: "Old" }, true, "doc1"));
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({ get: mockGet, update: mockUpdate })),
+    });
+
+    mockRl.question
+      .mockImplementationOnce((_prompt, cb) => cb("update students doc1"))
+      .mockImplementationOnce(() => {});
+
+    startConsole();
+    lineHandler('{"firstName":"New"}');
+    lineHandler("");
+    await Promise.resolve();
+
+    expect(mockUpdate).toHaveBeenCalledWith({ firstName: "New" });
+  });
+
+  it("handles delete command", async () => {
+    const mockGet = jest.fn().mockResolvedValue(mockDocSnap({ firstName: "A" }, true, "doc1"));
+    const mockDelete = jest.fn().mockResolvedValue(undefined);
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({ get: mockGet, delete: mockDelete })),
+    });
+
+    mockRl.question
+      .mockImplementationOnce((_prompt, cb) => cb("delete students doc1"))
+      .mockImplementationOnce(() => {});
+
+    startConsole();
+    await Promise.resolve();
+
+    expect(mockDelete).toHaveBeenCalled();
+  });
+
+  it("logs caught errors from command handlers", async () => {
+    db.collection.mockReturnValue({
+      get: jest.fn().mockRejectedValue(new Error("boom")),
+    });
+
+    mockRl.question
+      .mockImplementationOnce((_prompt, cb) => cb("list students"))
+      .mockImplementationOnce(() => {});
+
+    startConsole();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(console.log).toHaveBeenCalledWith("❌ Error:", "boom");
   });
 });

@@ -229,7 +229,7 @@ const FAIR_DATA = {
    PUT /api/fairs/:fairId - update fair
 ======================================================= */
 describe("PUT /api/fairs/:fairId", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app)
@@ -254,7 +254,7 @@ describe("PUT /api/fairs/:fairId", () => {
    DELETE /api/fairs/:fairId - delete fair
 ======================================================= */
 describe("DELETE /api/fairs/:fairId", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app).delete("/api/fairs/fair-id");
@@ -277,7 +277,7 @@ describe("DELETE /api/fairs/:fairId", () => {
    POST /api/fairs/:fairId/refresh-invite-code
 ======================================================= */
 describe("POST /api/fairs/:fairId/refresh-invite-code", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app)
@@ -348,7 +348,7 @@ describe("POST /api/fairs/:fairId/refresh-invite-code", () => {
    GET /api/fairs/my-enrollments
 ======================================================= */
 describe("GET /api/fairs/my-enrollments", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/fairs/my-enrollments");
@@ -515,7 +515,7 @@ describe("GET /api/fairs/my-enrollments", () => {
    GET /api/fairs/:fairId/booths/:boothId
 ======================================================= */
 describe("GET /api/fairs/:fairId/booths/:boothId", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 403 when fair is not live (no auth)", async () => {
     evaluateFairStatusForFair.mockResolvedValue({ isLive: false });
@@ -618,7 +618,7 @@ describe("GET /api/fairs/:fairId/booths/:boothId", () => {
    GET /api/fairs/:fairId/jobs
 ======================================================= */
 describe("GET /api/fairs/:fairId/jobs", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 403 when fair is not live and no auth", async () => {
     evaluateFairStatusForFair.mockResolvedValue({ isLive: false });
@@ -679,7 +679,7 @@ describe("GET /api/fairs/:fairId/jobs", () => {
    POST /api/fairs/:fairId/jobs
 ======================================================= */
 describe("POST /api/fairs/:fairId/jobs", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app)
@@ -778,7 +778,7 @@ describe("POST /api/fairs/:fairId/jobs", () => {
    PUT /api/fairs/:fairId/jobs/:jobId
 ======================================================= */
 describe("PUT /api/fairs/:fairId/jobs/:jobId", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app)
@@ -854,7 +854,7 @@ describe("PUT /api/fairs/:fairId/jobs/:jobId", () => {
    DELETE /api/fairs/:fairId/jobs/:jobId
 ======================================================= */
 describe("DELETE /api/fairs/:fairId/jobs/:jobId", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app).delete("/api/fairs/fair-id/jobs/job-id");
@@ -924,7 +924,7 @@ describe("DELETE /api/fairs/:fairId/jobs/:jobId", () => {
    GET /api/companies/:companyId/fairs
 ======================================================= */
 describe("GET /api/companies/:companyId/fairs", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/companies/company-id/fairs");
@@ -1071,7 +1071,7 @@ describe("GET /api/companies/:companyId/fairs", () => {
    DELETE /api/fairs/:fairId/leave
 ======================================================= */
 describe("DELETE /api/fairs/:fairId/leave", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app).delete("/api/fairs/fair-id/leave");
@@ -1190,7 +1190,7 @@ describe("DELETE /api/fairs/:fairId/leave", () => {
    GET /api/fairs/:fairId/company/:companyId/booth
 ======================================================= */
 describe("GET /api/fairs/:fairId/company/:companyId/booth", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => jest.resetAllMocks());
 
   it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/fairs/fair-id/company/company-id/booth");

@@ -503,70 +503,77 @@ export default function BoothView() {
                       Job Openings ({jobs.length})
                     </Typography>
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {jobs.map((job) => (
-                        <Card
-                          key={job.id}
-                          sx={{
-                            border: "1px solid rgba(56, 133, 96, 0.2)",
-                            borderRadius: 2,
-                            transition: "box-shadow 0.2s",
-                            "&:hover": {
-                              boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
-                            },
-                          }}
-                        >
-                          <CardContent sx={{ p: 3 }}>
-                            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
-                                {job.name}
+                      {jobs.map((job) => {
+                        const hasPublishedForm = job.applicationForm?.status === "published"
+                        const buttonSx = {
+                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                          },
+                        }
+
+                        let applyButton = null
+                        if (hasPublishedForm) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              onClick={() => {
+                                setSelectedJobForApply(job)
+                                setApplyDialogOpen(true)
+                              }}
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        } else if (job.applicationLink) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              href={job.applicationLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        }
+
+                        return (
+                          <Card
+                            key={job.id}
+                            sx={{
+                              border: "1px solid rgba(56, 133, 96, 0.2)",
+                              borderRadius: 2,
+                              transition: "box-shadow 0.2s",
+                              "&:hover": {
+                                boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                              },
+                            }}
+                          >
+                            <CardContent sx={{ p: 3 }}>
+                              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
+                                  {job.name}
+                                </Typography>
+                                {applyButton}
+                              </Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
+                                {job.description}
                               </Typography>
-                              {job.applicationForm && job.applicationForm.status === "published" ? (
-                                <Button
-                                  variant="contained"
-                                  onClick={() => {
-                                    setSelectedJobForApply(job)
-                                    setApplyDialogOpen(true)
-                                  }}
-                                  sx={{
-                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                                    "&:hover": {
-                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                                    },
-                                  }}
-                                >
-                                  Apply Now
-                                </Button>
-                              ) : job.applicationLink ? (
-                                <Button
-                                  variant="contained"
-                                  href={job.applicationLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  sx={{
-                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                                    "&:hover": {
-                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                                    },
-                                  }}
-                                >
-                                  Apply Now
-                                </Button>
-                              ) : null}
-                            </Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
-                              {job.description}
-                            </Typography>
-                            <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
-                                Required Skills:
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {job.majorsAssociated}
-                              </Typography>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      ))}
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                                  Required Skills:
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {job.majorsAssociated}
+                                </Typography>
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
                     </Box>
                   </Box>
                 )}
