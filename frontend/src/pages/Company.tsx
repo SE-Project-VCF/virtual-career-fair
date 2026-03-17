@@ -69,6 +69,14 @@ interface JobInvitationStats {
   clickRate: string
 }
 
+// Helper function to compare jobs by creation date (descending)
+function compareJobsByDate(a: Job, b: Job): number {
+  if (!a.createdAt && !b.createdAt) return 0
+  if (!a.createdAt) return 1
+  if (!b.createdAt) return -1
+  return b.createdAt - a.createdAt
+}
+
 // Helper function to get save button label
 function getSaveButtonLabel(savingJob: boolean, editingJob: Job | null): string {
   if (savingJob) return "Saving..."
@@ -589,12 +597,7 @@ export default function Company() {
       })
 
       // Sort by createdAt descending
-      jobsList.sort((a, b) => {
-        if (!a.createdAt && !b.createdAt) return 0
-        if (!a.createdAt) return 1
-        if (!b.createdAt) return -1
-        return b.createdAt - a.createdAt
-      })
+      jobsList.sort(compareJobsByDate)
       
       setJobs(jobsList)
 

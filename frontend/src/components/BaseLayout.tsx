@@ -89,7 +89,7 @@ export interface BaseLayoutProps {
   pageTitle?: string
 }
 
-export default function BaseLayout({ children, showChat = true, pageTitle }: BaseLayoutProps) {
+export default function BaseLayout({ children, showChat = true, pageTitle }: Readonly<BaseLayoutProps>) {
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const user = authUtils.getCurrentUser()
