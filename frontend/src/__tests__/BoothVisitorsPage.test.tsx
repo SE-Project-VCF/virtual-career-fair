@@ -38,6 +38,16 @@ vi.mock("react-router-dom", async () => {
   }
 })
 
+/* ---- BaseLayout mock ---- */
+vi.mock("../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: { children: React.ReactNode; pageTitle?: string }) => (
+    <div data-testid="base-layout">
+      {pageTitle != null && <span data-testid="base-layout-title">{pageTitle}</span>}
+      {children}
+    </div>
+  ),
+}))
+
 // Render component with routing context
 function renderWithRouter(component: React.ReactElement) {
   return render(
