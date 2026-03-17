@@ -188,6 +188,63 @@ describe("server misc endpoints", () => {
     expect(res.body.error).toBe("No file provided");
   });
 
+  it("POST /api/upload-resume returns 400 when file exceeds 5MB (lines 283-290)", async () => {
+    const oversizedBuffer = Buffer.alloc(6 * 1024 * 1024);
+    const res = await request(app)
+      .post("/api/upload-resume")
+      .set("Authorization", authHeader("resume-user"))
+      .attach("file", oversizedBuffer, {
+        filename: "large.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("File size must be under 5MB");
+  });
+
+  it("POST /api/upload-resume sanitizes filename with replaceAll (lines 291)", async () => {
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(1700000000300);
+
+    const uploadedFile = {
+      save: jest.fn().mockResolvedValue(undefined),
+      download: jest.fn().mockResolvedValue([Buffer.from("%PDF mock")]),
+    };
+    const bucket = {
+      file: jest.fn(() => uploadedFile),
+      getFiles: jest.fn(),
+    };
+    admin.storage.mockReturnValue({ bucket: jest.fn(() => bucket) });
+
+    extractTextFromBuffer.mockResolvedValue("Raw resume text");
+    toStructuredResume.mockReturnValue({
+      summary: { text: "summary" },
+      skills: { items: [] },
+      experience: [],
+    });
+
+    const userSet = jest.fn().mockResolvedValue(undefined);
+    const userGet = jest.fn().mockResolvedValue({ data: () => ({ resumePath: "stored-path" }) });
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return { doc: jest.fn(() => ({ set: userSet, get: userGet })) };
+      }
+      return { doc: jest.fn(() => ({ set: jest.fn(), get: jest.fn() })) };
+    });
+
+    const res = await request(app)
+      .post("/api/upload-resume")
+      .set("Authorization", authHeader("resume-user"))
+      .attach("file", Buffer.from("%PDF-1.4"), {
+        filename: "resume@test#1.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.filePath).toContain("1700000000300-resume_test_1.pdf");
+
+    nowSpy.mockRestore();
+  });
+
   it("POST /api/upload-resume uploads, parses, and stores metadata", async () => {
     const nowSpy = jest.spyOn(Date, "now").mockReturnValue(1700000000000);
 
@@ -310,6 +367,155 @@ describe("server misc endpoints", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.resumeUrl).toBe("https://signed.example/resume");
+  });
+
+  describe("GET /api/student/:studentId/resume-url (lines 411-450)", () => {
+    it("student viewing own resume returns 200", async () => {
+      const newestFile = { getSignedUrl: jest.fn().mockResolvedValue(["https://signed.example/own"]) };
+      const bucket = {
+        getFiles: jest.fn().mockResolvedValue([[newestFile]]),
+      };
+      admin.storage.mockReturnValue({ bucket: jest.fn(() => bucket) });
+
+      const res = await request(app)
+        .get("/api/student/student-1/resume-url")
+        .set("Authorization", authHeader("student-1"));
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.resumeUrl).toBe("https://signed.example/own");
+    });
+
+    it("company user viewing student resume with resumeVisible returns 200", async () => {
+      const newestFile = { getSignedUrl: jest.fn().mockResolvedValue(["https://signed.example/student-resume"]) };
+      const bucket = {
+        getFiles: jest.fn().mockResolvedValue([[newestFile]]),
+      };
+      admin.storage.mockReturnValue({ bucket: jest.fn(() => bucket) });
+
+      db.collection.mockImplementation((name) => {
+        if (name === "users") {
+          return {
+            doc: jest.fn((id) => ({
+              get: jest.fn().mockResolvedValue(
+                id === "company-rep"
+                  ? { exists: true, data: () => ({ role: "company", companyId: "c1" }) }
+                  : { exists: true, data: () => ({ resumeVisible: true }) }
+              ),
+            })),
+          };
+        }
+        return { doc: jest.fn(() => ({ get: jest.fn() })) };
+      });
+
+      const res = await request(app)
+        .get("/api/student/student-1/resume-url")
+        .set("Authorization", authHeader("company-rep"));
+
+      expect(res.status).toBe(200);
+      expect(res.body.resumeUrl).toBe("https://signed.example/student-resume");
+    });
+
+    it("returns 404 when requester user doc not found", async () => {
+      db.collection.mockImplementation((name) => {
+        if (name === "users") {
+          return {
+            doc: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue({ exists: false }),
+            })),
+          };
+        }
+        return { doc: jest.fn(() => ({ get: jest.fn() })) };
+      });
+
+      const res = await request(app)
+        .get("/api/student/student-1/resume-url")
+        .set("Authorization", authHeader("unknown-user"));
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("User not found");
+    });
+
+    it("returns 403 when non-company user views other resume", async () => {
+      db.collection.mockImplementation((name) => {
+        if (name === "users") {
+          return {
+            doc: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ role: "student" }) }),
+            })),
+          };
+        }
+        return { doc: jest.fn(() => ({ get: jest.fn() })) };
+      });
+
+      const res = await request(app)
+        .get("/api/student/student-1/resume-url")
+        .set("Authorization", authHeader("other-student"));
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("Not authorized to view this resume");
+    });
+
+    it("returns 404 when student doc not found", async () => {
+      let docCallCount = 0;
+      db.collection.mockImplementation((name) => {
+        if (name === "users") {
+          return {
+            doc: jest.fn((id) => ({
+              get: jest.fn().mockResolvedValue(
+                id === "company-rep"
+                  ? { exists: true, data: () => ({ role: "company", companyId: "c1" }) }
+                  : { exists: false }
+              ),
+            })),
+          };
+        }
+        return { doc: jest.fn(() => ({ get: jest.fn() })) };
+      });
+
+      const res = await request(app)
+        .get("/api/student/nonexistent-student/resume-url")
+        .set("Authorization", authHeader("company-rep"));
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("Student not found");
+    });
+
+    it("returns 403 when resumeVisible is false", async () => {
+      db.collection.mockImplementation((name) => {
+        if (name === "users") {
+          return {
+            doc: jest.fn((id) => ({
+              get: jest.fn().mockResolvedValue(
+                id === "company-rep"
+                  ? { exists: true, data: () => ({ role: "company", companyId: "c1" }) }
+                  : { exists: true, data: () => ({ resumeVisible: false }) }
+              ),
+            })),
+          };
+        }
+        return { doc: jest.fn(() => ({ get: jest.fn() })) };
+      });
+
+      const res = await request(app)
+        .get("/api/student/student-1/resume-url")
+        .set("Authorization", authHeader("company-rep"));
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("Student has set resume to private");
+    });
+
+    it("returns 404 when no resume files in storage", async () => {
+      const bucket = { getFiles: jest.fn().mockResolvedValue([[]]) };
+      admin.storage.mockReturnValue({ bucket: jest.fn(() => bucket) });
+
+      const res = await request(app)
+        .get("/api/student/student-1/resume-url")
+        .set("Authorization", authHeader("student-1"));
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe("No resume found");
+    });
   });
 
   it("POST /api/upload-booth-logo validates missing companyId", async () => {

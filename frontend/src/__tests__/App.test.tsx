@@ -115,4 +115,10 @@ describe("App", () => {
     render(<App />)
     expect(screen.getByText("SubmissionsPage")).toBeInTheDocument()
   })
+
+  it("renders TailoredResumeViewPage at /dashboard/tailored-resume/:tailoredResumeId", () => {
+    globalThis.history.pushState({}, "", "/dashboard/tailored-resume/res-123")
+    render(<App />)
+    expect(screen.getByText("TailoredResumeViewPage")).toBeInTheDocument()
+  })
 })

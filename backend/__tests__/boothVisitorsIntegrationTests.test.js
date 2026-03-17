@@ -70,70 +70,98 @@ function setupDbForTrackView(options = {}) {
     visitorExists = false,
   } = options;
 
-  db.collection.mockImplementation((collName) => {
-    // Users collection
-    if (collName === "users") {
-      return {
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue(
-            mockDocSnap(
-              {
-                firstName: "John",
-                lastName: "Doe",
-                email: "student@test.com",
-                major: "Computer Science",
-              },
-              studentExists,
-              "student-123"
-            )
-          ),
-        })),
-      };
-    }
+  const userDocSnap = mockDocSnap(
+    {
+      firstName: "John",
+      lastName: "Doe",
+      email: "student@test.com",
+      major: "Computer Science",
+    },
+    studentExists,
+    "student-123"
+  );
 
-    // Booths collection
-    if (collName === "booths") {
-      return {
-        doc: jest.fn((boothId) => ({
-          get: jest.fn().mockResolvedValue(
-            mockDocSnap(
-              {
-                currentVisitors: [],
-                totalVisitorsCount: 0,
-              },
-              boothExists,
-              boothId
-            )
-          ),
-          update: jest.fn().mockResolvedValue(undefined),
-          collection: jest.fn((subCollName) => {
-            // studentVisits subcollection
-            if (subCollName === "studentVisits") {
-              return {
-                doc: jest.fn((studentId) => ({
-                  get: jest.fn().mockResolvedValue(
-                    mockDocSnap(null, visitorExists, studentId)
-                  ),
-                  set: jest.fn().mockResolvedValue(undefined),
-                  update: jest.fn().mockResolvedValue(undefined),
-                })),
-              };
-            }
-            return {};
-          }),
-        })),
-      };
-    }
+  const makeStudentVisitDoc = (studentId) => {
+    const snap = mockDocSnap(null, visitorExists, studentId);
+    return {
+      get: jest.fn().mockResolvedValue(snap),
+      set: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+  };
 
-    // Fairs collection (for resolveBooth fallback)
-    if (collName === "fairs") {
-      return {
-        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
-      };
-    }
+  const makeBoothDoc = (boothId) => {
+    const snap = mockDocSnap(
+      { currentVisitors: [], totalVisitorsCount: 0 },
+      boothExists,
+      boothId
+    );
+    const studentVisitsCol = { doc: jest.fn(makeStudentVisitDoc) };
+    return {
+      get: jest.fn().mockResolvedValue(snap),
+      update: jest.fn().mockResolvedValue(undefined),
+      collection: jest.fn((sub) => sub === "studentVisits" ? studentVisitsCol : {}),
+    };
+  };
 
-    return { doc: jest.fn(() => ({})) };
-  });
+  const userDocRef = { get: jest.fn().mockResolvedValue(userDocSnap) };
+  const collections = {
+    users: { doc: jest.fn(() => userDocRef) },
+    booths: { doc: jest.fn(makeBoothDoc) },
+    fairs: { get: jest.fn().mockResolvedValue(mockQuerySnap([])) },
+  };
+
+  db.collection.mockImplementation((collName) =>
+    collections[collName] ?? { doc: jest.fn(() => ({})) }
+  );
+}
+
+// Setup for fair-specific booth (resolveBooth lines 43-47)
+function setupDbForTrackViewFairBooth() {
+  const studentVisitDoc = {
+    get: jest.fn().mockResolvedValue(mockDocSnap(null, false, "student-123")),
+    set: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const fairBoothRef = {
+    get: jest.fn().mockResolvedValue(
+      mockDocSnap({ currentVisitors: [], totalVisitorsCount: 0 }, true, "fair-booth-1")
+    ),
+    update: jest.fn().mockResolvedValue(undefined),
+    collection: jest.fn((sub) =>
+      sub === "studentVisits" ? { doc: jest.fn(() => studentVisitDoc) } : {}
+    ),
+  };
+
+  const collections = {
+    users: {
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap(
+            { firstName: "John", lastName: "Doe", email: "student@test.com", major: "CS" },
+            true,
+            "student-123"
+          )
+        ),
+      })),
+    },
+    booths: {
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(mockDocSnap(null, false, "fair-booth-1")),
+      })),
+    },
+    fairs: {
+      get: jest.fn().mockResolvedValue(mockQuerySnap([{ id: "fair-1" }])),
+      doc: jest.fn(() => ({
+        collection: jest.fn((sub) => (sub === "booths" ? { doc: jest.fn(() => fairBoothRef) } : {})),
+      })),
+    },
+  };
+
+  db.collection.mockImplementation((collName) =>
+    collections[collName] ?? { doc: jest.fn(() => ({})) }
+  );
 }
 
 function setupDbForTrackLeave() {
@@ -362,6 +390,19 @@ describe("POST /api/booth/:boothId/track-view - Track Visitor Entry", () => {
       .send({});
 
     expect(res.status).toBe(500);
+  });
+
+  it("tracks view when booth is fair-specific (resolveBooth lines 43-47)", async () => {
+    setupDbForTrackViewFairBooth();
+
+    const res = await request(app)
+      .post("/api/booth/fair-booth-1/track-view")
+      .set("Authorization", studentAuth())
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.tracked).toBe(true);
   });
 });
 

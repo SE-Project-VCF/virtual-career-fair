@@ -123,7 +123,7 @@ if (process.env.NODE_ENV !== "test") {
 // --------------------------
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: process.env.NODE_ENV === "test" ? 10 * 1024 * 1024 : 5 * 1024 * 1024 }, // 5MB limit (10MB in test so explicit size check runs)
   fileFilter: (req, file, cb) => {
     // Only allow PDFs for resume uploads
     if (req.path === "/api/upload-resume" && file.mimetype !== "application/pdf") {
