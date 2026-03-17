@@ -72,9 +72,10 @@ describe("BoothView - Integration Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
-    global.fetch = vi.fn((url: string) => {
+    global.fetch = vi.fn((url: string | URL | Request) => {
+      const urlString = typeof url === "string" ? url : url.toString()
       // Mock fair is live response
-      if (url.includes("/api/fairs")) {
+      if (urlString.includes("/api/fairs")) {
         return Promise.resolve(
           new Response(JSON.stringify({ fairs: [{ isLive: true }] }), {
             status: 200,
