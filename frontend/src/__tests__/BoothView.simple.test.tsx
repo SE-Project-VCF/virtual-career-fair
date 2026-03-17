@@ -92,7 +92,7 @@ describe("BoothView - Smoke Tests", () => {
   });
 
   it("handles booth view filtering", () => {
-    const filterOptions = {
+    const filterOptions: any = {
       salaryMin: null,
       salaryMax: null,
       location: null,
@@ -107,7 +107,7 @@ describe("BoothView - Smoke Tests", () => {
   });
 
   it("manages error states for booth view", () => {
-    const errors = {
+    const errors: any = {
       boothLoadError: null,
       jobsLoadError: null,
       trackingError: null,

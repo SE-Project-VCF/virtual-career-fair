@@ -113,7 +113,7 @@ describe("Company - Smoke Tests", () => {
   });
 
   it("manages navigation state", () => {
-    const navState = {
+    const navState: any = {
       selectedTab: "jobs",
       expandedJob: null,
       showNewJobForm: false,
@@ -127,7 +127,7 @@ describe("Company - Smoke Tests", () => {
   });
 
   it("handles error states", () => {
-    const errors = {
+    const errors: any = {
       loadError: null,
       saveError: null,
       deleteError: null,
