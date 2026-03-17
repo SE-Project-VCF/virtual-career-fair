@@ -251,7 +251,7 @@ export default function FairBoothView() {
           onClick={() => navigate(`/fair/${fairId}/booths`)}
           sx={{ mb: 3 }}
         >
-          Back to {fair?.name ?? "Fair"} Booths
+          Back to {`${fair?.name ?? "Fair"} Booths`}
         </Button>
 
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}

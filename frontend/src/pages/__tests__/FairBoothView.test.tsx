@@ -21,6 +21,20 @@ vi.mock("../../config", () => ({ API_URL: "http://localhost:5000" }))
 vi.mock("../ProfileMenu", () => ({ default: () => <div data-testid="profile-menu" /> }))
 vi.mock("../../components/NotificationBell", () => ({ default: () => <div data-testid="notification-bell" /> }))
 vi.mock("../../utils/boothHistory", () => ({ trackBoothView: vi.fn() }))
+vi.mock("../../components/JobApplicationFormDialog", () => ({
+  default: ({ open, onClose, job, boothId, studentId }: any) =>
+    open ? (
+      <div data-testid="job-application-dialog">
+        <span data-testid="dialog-job-id">{job?.id}</span>
+        <span data-testid="dialog-company-id">{job?.companyId}</span>
+        <span data-testid="dialog-booth-id">{boothId}</span>
+        <span data-testid="dialog-student-id">{studentId}</span>
+        <button data-testid="dialog-close" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    ) : null,
+}))
 vi.mock("../../components/BaseLayout", () => ({
   default: ({ children, pageTitle }: any) => (
     <div data-testid="base-layout">
@@ -620,5 +634,339 @@ describe("FairBoothView", () => {
     expect(errorSpy).toHaveBeenCalledWith("Chat init failed:", expect.any(Error))
     expect(mockNavigate).not.toHaveBeenCalled()
     errorSpy.mockRestore()
+  })
+
+  describe("job Apply buttons (lines 337-365)", () => {
+    it("opens JobApplicationFormDialog when Apply Now is clicked for job with published applicationForm", async () => {
+      const user = userEvent.setup()
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "c1",
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [
+              {
+                id: "j1",
+                name: "Software Engineer",
+                description: "Great role",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                companyId: "c1",
+                applicationForm: { status: "published" as const },
+              },
+            ],
+          }),
+        })
+
+      renderFairBoothView()
+
+      await waitFor(() => expect(screen.getByText("Software Engineer")).toBeInTheDocument())
+
+      expect(screen.queryByTestId("job-application-dialog")).not.toBeInTheDocument()
+
+      const applyButtons = screen.getAllByRole("button", { name: /apply now/i })
+      await user.click(applyButtons[0])
+
+      await waitFor(() => {
+        expect(screen.getByTestId("job-application-dialog")).toBeInTheDocument()
+      })
+      expect(screen.getByTestId("dialog-job-id")).toHaveTextContent("j1")
+      expect(screen.getByTestId("dialog-company-id")).toHaveTextContent("c1")
+      expect(screen.getByTestId("dialog-booth-id")).toHaveTextContent("booth-1")
+      expect(screen.getByTestId("dialog-student-id")).toHaveTextContent("u1")
+    })
+
+    it("shows external Apply Now link for job with applicationLink and no published form", async () => {
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "c1",
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [
+              {
+                id: "j2",
+                name: "Data Analyst",
+                description: "Analyze data",
+                majorsAssociated: "Data Science",
+                applicationLink: "https://company.com/apply/j2",
+                companyId: "c1",
+                applicationForm: null,
+              },
+            ],
+          }),
+        })
+
+      renderFairBoothView()
+
+      await waitFor(() => expect(screen.getByText("Data Analyst")).toBeInTheDocument())
+
+      const applyLink = screen.getByRole("link", { name: /apply now/i })
+      expect(applyLink).toHaveAttribute("href", "https://company.com/apply/j2")
+      expect(applyLink).toHaveAttribute("target", "_blank")
+      expect(applyLink).toHaveAttribute("rel", "noopener noreferrer")
+    })
+
+    it("prioritizes published applicationForm over applicationLink when both exist", async () => {
+      const user = userEvent.setup()
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "c1",
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [
+              {
+                id: "j3",
+                name: "DevOps Engineer",
+                description: "DevOps role",
+                majorsAssociated: "CS",
+                applicationLink: "https://company.com/apply",
+                companyId: "c1",
+                applicationForm: { status: "published" as const },
+              },
+            ],
+          }),
+        })
+
+      renderFairBoothView()
+
+      await waitFor(() => expect(screen.getByText("DevOps Engineer")).toBeInTheDocument())
+
+      const applyButton = screen.getByRole("button", { name: /apply now/i })
+      await user.click(applyButton)
+
+      await waitFor(() => {
+        expect(screen.getByTestId("job-application-dialog")).toBeInTheDocument()
+      })
+      expect(screen.queryByRole("link", { name: /apply now/i })).not.toBeInTheDocument()
+    })
+
+    it("does not show Apply button when job has neither applicationLink nor published form", async () => {
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "c1",
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [
+              {
+                id: "j4",
+                name: "Intern",
+                description: "Internship",
+                majorsAssociated: "Any",
+                applicationLink: null,
+                companyId: "c1",
+                applicationForm: { status: "draft" as const },
+              },
+            ],
+          }),
+        })
+
+      renderFairBoothView()
+
+      await waitFor(() => expect(screen.getByText("Intern")).toBeInTheDocument())
+
+      expect(screen.queryByRole("button", { name: /apply now/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole("link", { name: /apply now/i })).not.toBeInTheDocument()
+    })
+  })
+
+  describe("JobApplicationFormDialog (lines 432-447)", () => {
+    it("closes dialog and resets state when onClose is called", async () => {
+      const user = userEvent.setup()
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "c1",
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [
+              {
+                id: "j1",
+                name: "Software Engineer",
+                description: "Great role",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                companyId: "c1",
+                applicationForm: { status: "published" as const },
+              },
+            ],
+          }),
+        })
+
+      renderFairBoothView()
+
+      await waitFor(() => expect(screen.getByText("Software Engineer")).toBeInTheDocument())
+
+      await user.click(screen.getByRole("button", { name: /apply now/i }))
+
+      await waitFor(() => expect(screen.getByTestId("job-application-dialog")).toBeInTheDocument())
+
+      await user.click(screen.getByTestId("dialog-close"))
+
+      await waitFor(() => {
+        expect(screen.queryByTestId("job-application-dialog")).not.toBeInTheDocument()
+      })
+    })
+
+    it("passes job.companyId to dialog and uses booth.companyId as fallback when job.companyId is null", async () => {
+      const user = userEvent.setup()
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "booth-company-id",
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [
+              {
+                id: "j5",
+                name: "Frontend Engineer",
+                description: "Frontend role",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                companyId: "booth-company-id",
+                applicationForm: { status: "published" as const },
+              },
+            ],
+          }),
+        })
+
+      renderFairBoothView()
+
+      await waitFor(() => expect(screen.getByText("Frontend Engineer")).toBeInTheDocument())
+
+      await user.click(screen.getByRole("button", { name: /apply now/i }))
+
+      await waitFor(() => expect(screen.getByTestId("job-application-dialog")).toBeInTheDocument())
+
+      expect(screen.getByTestId("dialog-company-id")).toHaveTextContent("booth-company-id")
+    })
+
+    it("passes boothId and studentId to JobApplicationFormDialog", async () => {
+      const user = userEvent.setup()
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "c1",
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [
+              {
+                id: "j6",
+                name: "Backend Engineer",
+                description: "Backend role",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                companyId: "c1",
+                applicationForm: { status: "published" as const },
+              },
+            ],
+          }),
+        })
+
+      renderFairBoothView()
+
+      await waitFor(() => expect(screen.getByText("Backend Engineer")).toBeInTheDocument())
+
+      await user.click(screen.getByRole("button", { name: /apply now/i }))
+
+      await waitFor(() => expect(screen.getByTestId("job-application-dialog")).toBeInTheDocument())
+
+      expect(screen.getByTestId("dialog-booth-id")).toHaveTextContent("booth-1")
+      expect(screen.getByTestId("dialog-student-id")).toHaveTextContent("u1")
+    })
   })
 })
