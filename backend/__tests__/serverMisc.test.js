@@ -376,4 +376,34 @@ describe("server misc endpoints", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.logoUrl).toBe("https://signed.example/logo");
   });
+
+  it("allows request with no Origin header (CORS)", async () => {
+    const res = await request(app)
+      .get("/api/debug/storage-bucket")
+      .set("Origin", "");
+    expect(res.status).toBe(200);
+  });
+
+  it("POST /api/upload-resume rejects non-PDF file via multer fileFilter", async () => {
+    const res = await request(app)
+      .post("/api/upload-resume")
+      .set("Authorization", authHeader("user-1"))
+      .attach("file", Buffer.from("not a pdf"), {
+        filename: "resume.txt",
+        contentType: "text/plain",
+      });
+    expect(res.status).toBe(500);
+  });
+
+  it("POST /api/upload-booth-logo rejects non-image file via multer fileFilter", async () => {
+    const res = await request(app)
+      .post("/api/upload-booth-logo")
+      .set("Authorization", authHeader("user-1"))
+      .field("companyId", "company-1")
+      .attach("file", Buffer.from("not an image"), {
+        filename: "doc.pdf",
+        contentType: "application/pdf",
+      });
+    expect(res.status).toBe(500);
+  });
 });
