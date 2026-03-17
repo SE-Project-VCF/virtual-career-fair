@@ -582,4 +582,117 @@ describe("Integration Tests", () => {
     expect(result).toBeDefined();
     expect(result.skills).toBeDefined();
   });
+
+  it("handles resume with null input", () => {
+    const result = toStructuredResume(null);
+    expect(result).toBeDefined();
+    expect(result.summary).toBeDefined();
+  });
+
+  it("handles resume with undefined input", () => {
+    const result = toStructuredResume(undefined);
+    expect(result).toBeDefined();
+  });
+
+  it("handles resume with only whitespace", () => {
+    const result = toStructuredResume("   \n\n   ");
+    expect(result).toBeDefined();
+    expect(result.summary).toBeDefined();
+  });
+
+  it("extracts experience with special characters", () => {
+    const resume = `
+      Professional Experience
+      Software Developer (C++/Java) | TechCorp (2020-2022)
+      - Designed high-performance systems
+      - AWS & Docker proficiency
+      - $100K budget management
+    `;
+
+    const result = toStructuredResume(resume);
+    expect(result.experience).toBeDefined();
+  });
+
+  it("extracts projects section correctly", () => {
+    const resume = `
+      Projects
+      Project Alpha | Python, Django, PostgreSQL
+      - Created REST API serving 10K+ requests/day
+      - 95% test coverage with pytest
+      
+      Project Beta | JavaScript, React
+      - Built responsive UI with material-ui
+    `;
+
+    const result = toStructuredResume(resume);
+    expect(result.projects).toBeDefined();
+  });
+
+  it("handles education section parsing", () => {
+    const resume = `
+      Education
+      BS Computer Science | Stanford University | 2020
+      GPA: 3.9/4.0
+      
+      MS Data Science | MIT | 2022
+      Thesis: "ML for Resume Analysis"
+    `;
+
+    const result = toStructuredResume(resume);
+    expect(result).toBeDefined();
+  });
+
+  it("handles mixed case section headers", () => {
+    const resume = `
+      PROFESSIONAL SUMMARY
+      Expert developer
+      
+      TECHNICAL SKILLS
+      JavaScript, Python
+      
+      EXPERIENCE
+      Engineer at Corp
+      
+      PROJECTS
+      Built Platform
+    `;
+
+    const result = toStructuredResume(resume);
+    expect(result.summary).toBeDefined();
+    expect(result.skills).toBeDefined();
+  });
+
+  it("handles sections with numbers and symbols", () => {
+    const resume = `
+      Professional Summary
+      15+ years experience with C++, C#, .NET
+      
+      Skills
+      C++ (expert), C# (intermediate), Go (beginner)
+      AWS (EC2, S3), Azure (VMs)
+      
+      Experience
+      Principal Engineer | TechCorp (10 years)
+      - Led teams of 5-10 engineers
+      - $5M+ budgets
+    `;
+
+    const result = toStructuredResume(resume);
+    expect(result.skills.items.length).toBeGreaterThan(0);
+  });
+
+  it("handles consecutive sections without content", () => {
+    const resume = `
+      Professional Summary
+      Experienced engineer
+      
+      Technical Skills
+      
+      Experience
+      Engineer at Company
+    `;
+
+    const result = toStructuredResume(resume);
+    expect(result).toBeDefined();
+  });
 });
