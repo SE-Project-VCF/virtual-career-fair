@@ -5,6 +5,8 @@ import { BrowserRouter } from "react-router-dom"
 import FairBoothView from "../FairBoothView"
 import { useFair } from "../../contexts/FairContext"
 import { authUtils } from "../../utils/auth"
+import * as firestore from "firebase/firestore"
+import { trackBoothView } from "../../utils/boothHistory"
 
 const mockNavigate = vi.fn()
 const mockBoothId = { boothId: "booth-1" }
@@ -49,6 +51,26 @@ const renderFairBoothView = () =>
       <FairBoothView />
     </BrowserRouter>
   )
+
+const boothFetchResponse = () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    companyName: "Tech Corp",
+    industry: "software",
+    companySize: "51-200",
+    location: "NYC",
+    description: "A great company",
+    contactName: "Jane",
+    contactEmail: "jane@tech.com",
+    companyId: "c1",
+  }),
+})
+const jobsFetchResponse = (jobs: any[] = []) => ({
+  ok: true,
+  status: 200,
+  json: async () => ({ jobs }),
+})
 
 describe("FairBoothView", () => {
   beforeEach(() => {
@@ -210,6 +232,44 @@ describe("FairBoothView", () => {
     expect(screen.queryByRole("button", { name: /message representative/i })).not.toBeInTheDocument()
   })
 
+  it("includes Authorization header when fetching booth (line 191)", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    renderFairBoothView()
+
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
+
+    const boothFetchCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]).includes("/booths/booth-1")
+    )
+    expect(boothFetchCall).toBeDefined()
+    expect(boothFetchCall![1]).toMatchObject({
+      headers: expect.objectContaining({
+        Authorization: "Bearer mock-token",
+      }),
+    })
+  })
+
   it("back button navigates to booths", async () => {
     const user = userEvent.setup()
     ;(globalThis.fetch as ReturnType<typeof vi.fn>)
@@ -241,5 +301,324 @@ describe("FairBoothView", () => {
     await user.click(backButton)
 
     expect(mockNavigate).toHaveBeenCalledWith("/fair/fair-1/booths")
+  })
+
+  it("calls track-leave on unmount when student viewed booth (lines 94, 106)", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    const { unmount } = render(
+      <BrowserRouter>
+        <FairBoothView />
+      </BrowserRouter>
+    )
+
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
+
+    unmount()
+
+    await waitFor(() => {
+      const trackLeaveCalls = fetchMock.mock.calls.filter(
+        (c) => String(c[0]).includes("/track-leave")
+      )
+      expect(trackLeaveCalls.length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it("uses originalBoothId for tracking when provided (line 154)", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+          originalBoothId: "original-booth-123",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    renderFairBoothView()
+
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
+
+    expect(trackBoothView).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({ boothId: "original-booth-123" })
+    )
+
+    const trackViewCalls = fetchMock.mock.calls.filter(
+      (c) => String(c[0]).includes("/track-view")
+    )
+    expect(trackViewCalls.some((c) => String(c[0]).includes("original-booth-123"))).toBe(true)
+  })
+
+  it("calls trackBoothView and backend track-view when booth loads as student (lines 165, 169)", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    renderFairBoothView()
+
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
+
+    expect(trackBoothView).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({
+        boothId: "booth-1",
+        companyName: "Tech Corp",
+      })
+    )
+
+    const trackViewCalls = fetchMock.mock.calls.filter(
+      (c) => String(c[0]).includes("/track-view")
+    )
+    expect(trackViewCalls.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("logs when backend booth track-view fails (line 177)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+    const boothRes = {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        companyName: "Tech Corp",
+        industry: "software",
+        companySize: "51-200",
+        location: "NYC",
+        description: "A great company",
+        contactName: "Jane",
+        contactEmail: "jane@tech.com",
+        companyId: "c1",
+      }),
+    }
+    const jobsRes = {
+      ok: true,
+      status: 200,
+      json: async () => ({ jobs: [] }),
+    }
+
+    fetchMock
+      .mockResolvedValueOnce(boothRes)
+      .mockResolvedValueOnce(jobsRes)
+      .mockRejectedValueOnce(new Error("Network error"))
+
+    renderFairBoothView()
+
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
+
+    expect(warnSpy).toHaveBeenCalledWith("Backend booth tracking failed:", expect.any(Error))
+    warnSpy.mockRestore()
+  })
+
+  it("logs when trackBoothView (history) fails (line 184)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.mocked(trackBoothView).mockRejectedValueOnce(new Error("Firestore error"))
+
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    renderFairBoothView()
+
+    await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
+
+    expect(warnSpy).toHaveBeenCalledWith("History tracking failed:", expect.any(Error))
+    warnSpy.mockRestore()
+  })
+
+  it("handleStartChat navigates to chat with repId when rep found (lines 219-234)", async () => {
+    const user = userEvent.setup()
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    const mockDoc = { data: () => ({ uid: "rep-uid-123" }) }
+    vi.mocked(firestore.getDocs).mockResolvedValueOnce({
+      empty: false,
+      docs: [mockDoc],
+    } as any)
+
+    renderFairBoothView()
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /message representative/i })).toBeInTheDocument()
+    )
+
+    await user.click(screen.getByRole("button", { name: /message representative/i }))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard/chat", { state: { repId: "rep-uid-123" } })
+    })
+  })
+
+  it("handleStartChat does not navigate when rep not found (snap.empty)", async () => {
+    const user = userEvent.setup()
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    vi.mocked(firestore.getDocs).mockResolvedValueOnce({
+      empty: true,
+      docs: [],
+    } as any)
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+    renderFairBoothView()
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /message representative/i })).toBeInTheDocument()
+    )
+
+    await user.click(screen.getByRole("button", { name: /message representative/i }))
+
+    await waitFor(() => expect(firestore.getDocs).toHaveBeenCalled())
+
+    expect(mockNavigate).not.toHaveBeenCalledWith("/dashboard/chat", expect.anything())
+    expect(warnSpy).toHaveBeenCalledWith("Representative not found")
+    warnSpy.mockRestore()
+  })
+
+  it("handleStartChat catches getDocs error and resets startingChat", async () => {
+    const user = userEvent.setup()
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    vi.mocked(firestore.getDocs).mockRejectedValueOnce(new Error("Firestore unavailable"))
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    renderFairBoothView()
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /message representative/i })).toBeInTheDocument()
+    )
+
+    await user.click(screen.getByRole("button", { name: /message representative/i }))
+
+    await waitFor(() => expect(firestore.getDocs).toHaveBeenCalled())
+
+    expect(errorSpy).toHaveBeenCalledWith("Chat init failed:", expect.any(Error))
+    expect(mockNavigate).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
   })
 })
