@@ -280,6 +280,7 @@ export default function JobApplicationFormDialog({
 
       await addDoc(collection(db, "jobApplications"), docData);
       setSuccess(true);
+      onClose();
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.error("Error submitting application:", err);

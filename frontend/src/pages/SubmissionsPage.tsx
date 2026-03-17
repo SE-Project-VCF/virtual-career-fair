@@ -66,6 +66,23 @@ function renderResponseValue(value: string | string[] | boolean | null): string 
   return String(value) || "—"
 }
 
+async function parseJsonOrThrow(res: Response, context: string): Promise<unknown> {
+  const contentType = res.headers.get("content-type") ?? ""
+  const text = await res.text()
+  if (!contentType.includes("application/json")) {
+    const preview = text.slice(0, 80).replace(/\n/g, " ")
+    throw new Error(
+      `Server returned non-JSON (${contentType}). ${context}. ` +
+        `Check that VITE_API_URL points to your backend. Response preview: ${preview}`
+    )
+  }
+  try {
+    return text ? JSON.parse(text) : {}
+  } catch {
+    throw new Error(`Invalid JSON from server. ${context}`)
+  }
+}
+
 function SubmissionCard({ submission, form, studentName }: Readonly<{ submission: Submission; form?: ApplicationForm; studentName?: string }>) {
   const [expanded, setExpanded] = useState(false)
   const [resumeLoading, setResumeLoading] = useState(false)
@@ -99,18 +116,13 @@ function SubmissionCard({ submission, form, studentName }: Readonly<{ submission
       const res = await fetch(`${API_URL}/api/applicant-resume-url/${submission.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      const text = await res.text()
+      const data = (await parseJsonOrThrow(res, "applicant-resume-url")) as { url?: string; error?: string }
       if (!res.ok) {
-        let message = "Failed to get resume URL"
-        try {
-          const data = JSON.parse(text)
-          message = data.error || message
-        } catch {
-          if (res.status === 404) message = "Resume not found or not attached to this application"
-        }
+        const message =
+          data.error ||
+          (res.status === 404 ? "Resume not found or not attached to this application" : "Failed to get resume URL")
         throw new Error(message)
       }
-      const data = JSON.parse(text)
       const url = data?.url
       if (url) window.open(url, "_blank", "noopener,noreferrer")
     } catch (err: any) {
@@ -131,11 +143,14 @@ function SubmissionCard({ submission, form, studentName }: Readonly<{ submission
       const res = await fetch(`${API_URL}/api/applicant-tailored-resume/${submission.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      const data = (await parseJsonOrThrow(res, "applicant-tailored-resume")) as {
+        tailoredText?: string
+        structured?: unknown
+        error?: string
+      }
       if (!res.ok) {
-        const data = await res.json()
         throw new Error(data.error || "Failed to load tailored resume")
       }
-      const data = await res.json()
       // Resolve content: prefer tailoredText, fall back to structured
       if (data.tailoredText) {
         setTailoredContent(formatPlainTextResume(data.tailoredText))

@@ -17,10 +17,6 @@ import {
   Chip,
   FormControlLabel,
   Checkbox,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from "@mui/material"
 import BaseLayout from "../components/BaseLayout"
 import { doc, getDoc, setDoc } from "firebase/firestore"
