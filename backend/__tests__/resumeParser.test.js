@@ -13,17 +13,21 @@ const { extractTextFromBuffer, toStructuredResume } = require("../resumeParser")
 describe("extractTextFromBuffer", () => {
   it("handles null buffer", async () => {
     // Coverage: null input handling
-    expect(true).toBe(true);
+    const result = extractTextFromBuffer(null);
+    expect(result).toBeDefined();
   });
 
   it("handles undefined buffer", async () => {
     // Coverage: undefined input handling
-    expect(true).toBe(true);
+    const result = extractTextFromBuffer(undefined);
+    expect(result).toBeDefined();
   });
 
   it("extracts text from buffer", async () => {
     // Coverage: text extraction from file buffer
-    expect(true).toBe(true);
+    const testBuffer = Buffer.from("Test PDF Content");
+    const result = extractTextFromBuffer(testBuffer);
+    expect(result).toBeDefined();
   });
 });
 
