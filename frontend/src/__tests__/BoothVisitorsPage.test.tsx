@@ -10,7 +10,7 @@ import { getDoc, doc } from "firebase/firestore"
 // Mock Firebase with getDoc
 vi.mock("firebase/firestore", () => ({
   getDoc: vi.fn(),
-  doc: vi.fn(),
+  doc: vi.fn((db, collection, id) => ({ _ref: `${collection}/${id}` })),
 }))
 
 // Mock Firebase database
@@ -60,9 +60,11 @@ describe("BoothVisitorsPage", () => {
       email: "user@example.com",
       role: "student",
     } as any)
-    
-    // Setup default getDoc mock - booth exists
-    vi.mocked(getDoc).mockResolvedValue({
+  })
+
+  // Helper to mock getDoc returning a successful booth
+  const mockBoothExists = () => {
+    vi.mocked(getDoc).mockImplementation(async () => ({
       exists: () => true,
       id: "booth-123",
       data: () => ({
@@ -72,8 +74,22 @@ describe("BoothVisitorsPage", () => {
         industry: "Technology",
         logoUrl: "https://example.com/logo.png",
       }),
-    } as any)
-  })
+    } as any))
+  }
+
+  // Helper to mock getDoc returning a booth that doesn't exist
+  const mockBoothNotFound = () => {
+    vi.mocked(getDoc).mockImplementation(async () => ({
+      exists: () => false,
+    } as any))
+  }
+
+  // Helper to mock getDoc throwing an error
+  const mockBoothFetchError = () => {
+    vi.mocked(getDoc).mockImplementation(async () => {
+      throw new Error("Firestore error")
+    })
+  }
 
   describe("Route Guards and Initialization", () => {
     it("redirects to /company when boothId is missing", async () => {
@@ -94,23 +110,18 @@ describe("BoothVisitorsPage", () => {
 
     it("shows error when booth fetch fails", async () => {
       vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
-      // Mock getDoc to throw an error
-      vi.mocked(getDoc).mockRejectedValueOnce(new Error("Firestore error"))
-      vi.mocked(global.fetch).mockRejectedValueOnce(new Error("Network error"))
+      mockBoothFetchError()
 
       renderWithRouter(<BoothVisitorsPage />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Failed to load booth data|error/i)).toBeInTheDocument()
+        expect(screen.getByText(/Failed to load booth data/i)).toBeInTheDocument()
       })
     })
 
     it("shows booth not found error when booth doesn't exist in Firestore", async () => {
       vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
-      // Mock getDoc to return a doc that doesn't exist
-      vi.mocked(getDoc).mockResolvedValueOnce({
-        exists: () => false,
-      } as any)
+      mockBoothNotFound()
 
       renderWithRouter(<BoothVisitorsPage />)
 
@@ -123,6 +134,7 @@ describe("BoothVisitorsPage", () => {
   describe("Booth Data Fetching", () => {
     beforeEach(() => {
       vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
+      mockBoothExists()
     })
 
     it("fetches booth data on component mount", async () => {
@@ -181,6 +193,7 @@ describe("BoothVisitorsPage", () => {
   describe("Visitor List Display", () => {
     beforeEach(() => {
       vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
+      mockBoothExists()
     })
 
     it("displays visitor list with correct columns", async () => {
@@ -612,6 +625,7 @@ describe("BoothVisitorsPage", () => {
   describe("Error Handling", () => {
     beforeEach(() => {
       vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
+      mockBoothExists()
     })
 
     it("handles fetch error gracefully", async () => {
