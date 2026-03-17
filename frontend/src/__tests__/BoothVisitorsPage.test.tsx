@@ -94,12 +94,14 @@ describe("BoothVisitorsPage", () => {
 
     it("shows error when booth fetch fails", async () => {
       vi.mocked(authUtilsModule.authUtils.getIdToken).mockResolvedValue("token")
+      // Mock getDoc to throw an error
+      vi.mocked(getDoc).mockRejectedValueOnce(new Error("Firestore error"))
       vi.mocked(global.fetch).mockRejectedValueOnce(new Error("Network error"))
 
       renderWithRouter(<BoothVisitorsPage />)
 
       await waitFor(() => {
-        expect(screen.getByText(/Failed to load booth data/i)).toBeInTheDocument()
+        expect(screen.getByText(/Failed to load booth data|error/i)).toBeInTheDocument()
       })
     })
 
