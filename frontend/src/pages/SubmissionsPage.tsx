@@ -54,7 +54,7 @@ function renderResponseValue(value: string | string[] | boolean | null): string 
   return String(value) || "—"
 }
 
-function SubmissionCard({ submission, form, studentName }: { submission: Submission; form?: ApplicationForm; studentName?: string }) {
+function SubmissionCard({ submission, form, studentName }: Readonly<{ submission: Submission; form?: ApplicationForm; studentName?: string }>) {
   const [expanded, setExpanded] = useState(false)
   const navigate = useNavigate()
 
@@ -119,6 +119,26 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
             form.fields.map((field) => {
               const value = submission.responses?.[field.id]
               const fileUrl = submission.fileUrls?.[field.id]
+              let fieldContent
+              if (field.type === "file") {
+                fieldContent = fileUrl ? (
+                  <Box>
+                    <Link href={fileUrl} target="_blank" rel="noopener noreferrer" variant="body2">
+                      View uploaded file
+                    </Link>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No file uploaded
+                  </Typography>
+                )
+              } else {
+                fieldContent = (
+                  <Typography variant="body2" color="text.primary" sx={{ mt: 0.25 }}>
+                    {renderResponseValue(value ?? null)}
+                  </Typography>
+                )
+              }
               return (
                 <Box key={field.id} sx={{ mb: 1.25 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -129,23 +149,7 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
                       </Typography>
                     )}
                   </Typography>
-                  {field.type === "file" ? (
-                    fileUrl ? (
-                      <Box>
-                        <Link href={fileUrl} target="_blank" rel="noopener noreferrer" variant="body2">
-                          View uploaded file
-                        </Link>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No file uploaded
-                      </Typography>
-                    )
-                  ) : (
-                    <Typography variant="body2" color="text.primary" sx={{ mt: 0.25 }}>
-                      {renderResponseValue(value ?? null)}
-                    </Typography>
-                  )}
+                  {fieldContent}
                 </Box>
               )
             })
@@ -339,7 +343,7 @@ export default function SubmissionsPage() {
                 ))}
               </Select>
               <Typography variant="body2" color="text.secondary" sx={{ ml: "auto" }}>
-                {filteredSubmissions.length} submission{filteredSubmissions.length !== 1 ? "s" : ""}
+                {filteredSubmissions.length} submission{filteredSubmissions.length === 1 ? "" : "s"}
               </Typography>
             </Box>
 
@@ -378,7 +382,7 @@ export default function SubmissionsPage() {
                         {job?.name ?? jobId}
                       </Typography>
                       <Chip
-                        label={`${jobSubs.length} submission${jobSubs.length !== 1 ? "s" : ""}`}
+                        label={`${jobSubs.length} submission${jobSubs.length === 1 ? "" : "s"}`}
                         size="small"
                       />
                     </Box>

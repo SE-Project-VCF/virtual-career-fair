@@ -7,7 +7,7 @@ function getServiceAccount() {
 
     // Fix escaped newlines in private key (important in env vars)
     if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
+      serviceAccount.private_key = serviceAccount.private_key.replaceAll(String.raw`\n`, "\n");
     }
 
     return serviceAccount;

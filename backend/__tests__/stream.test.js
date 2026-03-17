@@ -161,7 +161,7 @@ describe("POST /api/sync-stream-users", () => {
       .post("/api/sync-stream-users")
       .set("Authorization", authHeader());
     expect(res.status).toBe(500);
-    expect(res.body.error).toContain("DB error");
+    expect(res.body.error).toBe("DB error");
   });
 
   it("syncs users successfully", async () => {

@@ -473,7 +473,7 @@ describe("DELETE /api/resume/tailored/:tailoredResumeId", () => {
       update: jest.fn().mockRejectedValue(new Error("Invitation not found")),
     };
 
-    const { userDocRef, tailoredDocRef } = makeUserDocMock({
+    const { userDocRef } = makeUserDocMock({
       tailoredDocExists: true,
       tailoredDocData: { invitationId: "inv-999", status: "ready" },
     });

@@ -64,7 +64,7 @@ Return ONLY valid JSON array, no other text.`;
 
     const changes = JSON.parse(jsonText);
     if (!Array.isArray(changes)) {
-      throw new Error("Response is not an array");
+      throw new TypeError("Response is not an array");
     }
 
     return changes;
@@ -101,7 +101,7 @@ async function applyChanges(resumeRawText, approvedChanges) {
 
   // Clean up extra whitespace
   result = result
-    .replace(/\n\n\n+/g, "\n\n") // Multiple blank lines to double
+    .replaceAll(/\n\n\n+/g, "\n\n") // Multiple blank lines to double
     .trim();
 
   return result;

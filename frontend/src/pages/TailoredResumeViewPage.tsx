@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useId, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Container,
@@ -74,7 +74,7 @@ export default function TailoredResumeViewPage() {
       } else if (data.data.structured) {
         // Old structured format
         setOriginalResume(data.data.structured);
-        setEditedResume(JSON.parse(JSON.stringify(data.data.structured))); // deep copy for editing
+        setEditedResume(structuredClone(data.data.structured)); // deep copy for editing
       }
       
       setStudentNotes(data.data.studentNotes || "");
@@ -94,12 +94,12 @@ export default function TailoredResumeViewPage() {
   }, [tailoredResumeId]);
 
   const changes = useMemo(() => {
-    if (!originalResume || !tailoredResume || !tailoredResume.structured) return null;
+    if (!originalResume || !tailoredResume?.structured) return null;
     return countChanges(originalResume, tailoredResume.structured);
   }, [originalResume, tailoredResume]);
 
   const formattedText = useMemo(() => {
-    if (!tailoredResume || !tailoredResume.structured) return "";
+    if (!tailoredResume?.structured) return "";
     return formatResumeAsText(tailoredResume.structured);
   }, [tailoredResume]);
 
@@ -108,10 +108,10 @@ export default function TailoredResumeViewPage() {
     const element = document.createElement("a");
     const file = new Blob([textToDownload], { type: "text/plain" });
     element.href = URL.createObjectURL(file);
-    element.download = `tailored-resume-${tailoredResume.jobContext.jobTitle.replace(/\s+/g, "-")}.txt`;
+    element.download = `tailored-resume-${tailoredResume.jobContext.jobTitle.replaceAll(/\s+/g, "-")}.txt`;
     document.body.appendChild(element);
     element.click();
-    document.body.removeChild(element);
+    element.remove();
   };
 
   const handleSaveEdits = async () => {
@@ -246,7 +246,7 @@ export default function TailoredResumeViewPage() {
                       // Initialize with formatted text for better readability during editing
                       setEditedText(formatPlainTextResume(tailoredResume.tailoredText));
                     } else if (tailoredResume.structured) {
-                      setEditedResume(JSON.parse(JSON.stringify(tailoredResume.structured)));
+                      setEditedResume(structuredClone(tailoredResume.structured));
                     }
                   }}
                 >
@@ -338,67 +338,71 @@ export default function TailoredResumeViewPage() {
               Resume
             </Typography>
 
-            {tailoredResume.tailoredText ? (
-              // Plain text format (new change-approval method)
-              isEditing ? (
-                // Edit mode: show textarea for plain text
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={20}
-                  value={editedText}
-                  onChange={(e) => setEditedText(e.target.value)}
-                  placeholder="Edit your resume text here..."
-                  sx={{
-                    fontFamily: "monospace",
-                    fontSize: "0.9rem",
-                    "& .MuiInputBase-input": {
+            {(() => {
+              if (tailoredResume.tailoredText && isEditing) {
+                return (
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={20}
+                    value={editedText}
+                    onChange={(e) => setEditedText(e.target.value)}
+                    placeholder="Edit your resume text here..."
+                    sx={{
                       fontFamily: "monospace",
                       fontSize: "0.9rem",
-                      whiteSpace: "pre",
-                    },
-                  }}
-                />
-              ) : (
-                // View mode: display as formatted pre text
-                <pre
-                  style={{
-                    backgroundColor: "#fafafa",
-                    border: "1px solid #ddd",
-                    padding: "12px",
-                    borderRadius: "4px",
-                    overflow: "auto",
+                      "& .MuiInputBase-input": {
+                        fontFamily: "monospace",
+                        fontSize: "0.9rem",
+                        whiteSpace: "pre",
+                      },
+                    }}
+                  />
+                );
+              }
+              if (tailoredResume.tailoredText) {
+                return (
+                  <pre
+                    style={{
+                      backgroundColor: "#fafafa",
+                      border: "1px solid #ddd",
+                      padding: "12px",
+                      borderRadius: "4px",
+                      overflow: "auto",
+                      fontFamily: "monospace",
+                      fontSize: "0.9rem",
+                      lineHeight: "1.6",
+                      whiteSpace: "pre-wrap",
+                      wordWrap: "break-word",
+                    }}
+                  >
+                    {formatPlainTextResume(tailoredResume.tailoredText)}
+                  </pre>
+                );
+              }
+              if (isEditing && editedResume) {
+                return (
+                  <Box>
+                    <Typography variant="body2" sx={{ color: "gray", mb: 2 }}>
+                      📝 Edit mode - Click into fields to customize your resume
+                    </Typography>
+                    <ResumeEditor resume={editedResume} onUpdate={setEditedResume} />
+                  </Box>
+                );
+              }
+              return (
+                <Box
+                  sx={{
+                    whiteSpace: "pre-wrap",
                     fontFamily: "monospace",
                     fontSize: "0.9rem",
-                    lineHeight: "1.6",
-                    whiteSpace: "pre-wrap",
-                    wordWrap: "break-word",
+                    lineHeight: 1.6,
                   }}
                 >
-                  {formatPlainTextResume(tailoredResume.tailoredText)}
-                </pre>
-              )
-            ) : isEditing && editedResume ? (
-              // Structured format with editor (old method)
-              <Box>
-                <Typography variant="body2" sx={{ color: "gray", mb: 2 }}>
-                  📝 Edit mode - Click into fields to customize your resume
-                </Typography>
-                <ResumeEditor resume={editedResume} onUpdate={setEditedResume} />
-              </Box>
-            ) : (
-              // Structured format view (old method)
-              <Box
-                sx={{
-                  whiteSpace: "pre-wrap",
-                  fontFamily: "monospace",
-                  fontSize: "0.9rem",
-                  lineHeight: 1.6,
-                }}
-              >
-                {formattedText}
-              </Box>
-            )}
+                  {formattedText}
+                </Box>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -429,26 +433,27 @@ export default function TailoredResumeViewPage() {
 /**
  * Simple inline resume editor component
  */
-function ResumeEditor({ resume, onUpdate }: { resume: StructuredResume; onUpdate: (r: StructuredResume) => void }) {
+function ResumeEditor({ resume, onUpdate }: Readonly<{ resume: StructuredResume; onUpdate: (r: StructuredResume) => void }>) {
+  const id = useId();
   const handleSummaryChange = (text: string) => {
-    const updated = JSON.parse(JSON.stringify(resume));
-    updated.summary.text = text;
+    const updated = structuredClone(resume);
+    if (updated.summary) updated.summary.text = text;
     onUpdate(updated);
   };
 
   const handleBulletChange = (section: "experience" | "projects", parentIdx: number, bulletIdx: number, text: string) => {
-    const updated = JSON.parse(JSON.stringify(resume));
-    if (section === "experience") {
+    const updated = structuredClone(resume);
+    if (section === "experience" && updated.experience) {
       updated.experience[parentIdx].bullets[bulletIdx].text = text;
-    } else {
+    } else if (updated.projects) {
       updated.projects[parentIdx].bullets[bulletIdx].text = text;
     }
     onUpdate(updated);
   };
 
   const handleSkillChange = (index: number, text: string) => {
-    const updated = JSON.parse(JSON.stringify(resume));
-    updated.skills.items[index] = text;
+    const updated = structuredClone(resume);
+    if (updated.skills) updated.skills.items[index] = text;
     onUpdate(updated);
   };
 
@@ -480,7 +485,7 @@ function ResumeEditor({ resume, onUpdate }: { resume: StructuredResume; onUpdate
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             {resume.skills.items.map((skill: string, idx: number) => (
               <TextField
-                key={idx}
+                key={`${id}-skill-${idx}`}
                 size="small"
                 value={skill}
                 onChange={(e) => handleSkillChange(idx, e.target.value)}
@@ -498,14 +503,14 @@ function ResumeEditor({ resume, onUpdate }: { resume: StructuredResume; onUpdate
             Experience
           </Typography>
           {resume.experience.map((exp: any, expIdx: number) => (
-            <Paper key={expIdx} sx={{ p: 2, mb: 2, bgcolor: "#fafafa" }}>
+            <Paper key={`${id}-exp-${expIdx}`} sx={{ p: 2, mb: 2, bgcolor: "#fafafa" }}>
               <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
-                {exp.title} {exp.company && `- ${exp.company}`} {exp.start && `(${exp.start}${exp.end ? ` - ${exp.end}` : ""})`}
+                {exp.title} {exp.company && `- ${exp.company}`} {exp.start && `(${exp.start}${exp.end ? " - " + exp.end : ""})`}
               </Typography>
               <Box>
                 {(exp.bullets || []).map((bullet: any, bulletIdx: number) => (
                   <TextField
-                    key={bulletIdx}
+                    key={`${id}-exp-${expIdx}-bullet-${bulletIdx}`}
                     fullWidth
                     size="small"
                     value={bullet.text}
@@ -526,14 +531,14 @@ function ResumeEditor({ resume, onUpdate }: { resume: StructuredResume; onUpdate
             Projects
           </Typography>
           {resume.projects.map((proj: any, projIdx: number) => (
-            <Paper key={projIdx} sx={{ p: 2, mb: 2, bgcolor: "#fafafa" }}>
+            <Paper key={`${id}-proj-${projIdx}`} sx={{ p: 2, mb: 2, bgcolor: "#fafafa" }}>
               <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
                 {proj.name}
               </Typography>
               <Box>
                 {(proj.bullets || []).map((bullet: any, bulletIdx: number) => (
                   <TextField
-                    key={bulletIdx}
+                    key={`${id}-proj-${projIdx}-bullet-${bulletIdx}`}
                     fullWidth
                     size="small"
                     value={bullet.text}

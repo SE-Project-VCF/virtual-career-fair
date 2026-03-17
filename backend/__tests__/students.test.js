@@ -80,25 +80,53 @@ const sampleStudents = [
   },
 ];
 
+function makeDefaultNestedUserDoc(uid) {
+  return {
+    get: jest.fn().mockResolvedValue(
+      mockDocSnap({ role: "representative", companyId: "c1" }, true, uid)
+    ),
+    collection: jest.fn(() => ({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+      })),
+    })),
+  };
+}
+
+function makeBoothHistoryCollection(boothHistoryDocMocks, uid) {
+  return {
+    doc: jest.fn(() => ({
+      get: jest.fn().mockResolvedValue(
+        boothHistoryDocMocks[uid] || mockDocSnap(null, false)
+      ),
+    })),
+  };
+}
+
+function makeBoothAwareUserDoc(uid, boothHistoryDocMocks) {
+  return {
+    get: jest.fn().mockResolvedValue(
+      mockDocSnap({ role: "representative", companyId: "c1" }, true, uid)
+    ),
+    collection: jest.fn((subColl) => {
+      if (subColl === "boothHistory") {
+        return makeBoothHistoryCollection(boothHistoryDocMocks, uid);
+      }
+      return {
+        doc: jest.fn(() => ({
+          get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+        })),
+      };
+    }),
+  };
+}
+
 /** Set up the user auth check so the requester looks like a rep/owner. */
 function setupRepAuth(uid = "rep-1") {
   db.collection.mockImplementation((name) => {
     if (name === "users") {
       return {
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue(
-            mockDocSnap(
-              { role: "representative", companyId: "c1" },
-              true,
-              uid
-            )
-          ),
-          collection: jest.fn(() => ({
-            doc: jest.fn(() => ({
-              get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
-            })),
-          })),
-        })),
+        doc: jest.fn(() => makeDefaultNestedUserDoc(uid)),
         where: jest.fn().mockReturnThis(),
         get: jest.fn().mockResolvedValue(mockQuerySnap(sampleStudents)),
       };
@@ -246,8 +274,6 @@ describe("GET /api/students", () => {
   });
 
   it("filters students by boothId — only those who visited the booth", async () => {
-    const boothVisitorIds = ["s1", "s3"]; // Alice and Carol visited the booth
-
     db.collection.mockImplementation((name) => {
       if (name === "users") {
         const boothHistoryDocMocks = {
@@ -257,24 +283,7 @@ describe("GET /api/students", () => {
         };
 
         return {
-          doc: jest.fn((uid) => ({
-            get: jest.fn().mockResolvedValue(
-              mockDocSnap({ role: "representative", companyId: "c1" }, true, uid)
-            ),
-            collection: jest.fn((subColl) => {
-              if (subColl === "boothHistory") {
-                return {
-                  doc: jest.fn((boothId) => ({
-                    get: jest.fn().mockImplementation(() => {
-                      const parentId = uid;
-                      return Promise.resolve(boothHistoryDocMocks[parentId] || mockDocSnap(null, false));
-                    }),
-                  })),
-                };
-              }
-              return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
-            }),
-          })),
+          doc: jest.fn((uid) => makeBoothAwareUserDoc(uid, boothHistoryDocMocks)),
           where: jest.fn().mockReturnThis(),
           get: jest.fn().mockResolvedValue(mockQuerySnap(sampleStudents)),
         };
