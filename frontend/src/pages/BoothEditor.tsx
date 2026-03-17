@@ -1053,7 +1053,7 @@ export default function BoothEditor() {
               <Box sx={{ display: "flex", gap: 2 }}>
                 <Button
                   variant="outlined"
-                  onClick={() => (fairId ? navigate("/fairs") : navigate("/companies"))}
+                  onClick={() => navigate(fairId ? "/fairs" : `/company/${company.id}`)}
                   disabled={saving}
                   sx={{
                     borderColor: "#388560",
