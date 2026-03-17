@@ -13,7 +13,7 @@ vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom")
   return { ...actual, useNavigate: () => mockNavigate, useParams: () => mockBoothId }
 })
-vi.mock("../../utils/auth", () => ({ authUtils: { getCurrentUser: vi.fn() } }))
+vi.mock("../../utils/auth", () => ({ authUtils: { getCurrentUser: vi.fn(), getIdToken: vi.fn().mockResolvedValue("mock-token") } }))
 vi.mock("../../contexts/FairContext", () => ({ useFair: vi.fn(), FairProvider: ({ children }: any) => <>{children}</> }))
 vi.mock("../../config", () => ({ API_URL: "http://localhost:5000" }))
 vi.mock("../ProfileMenu", () => ({ default: () => <div data-testid="profile-menu" /> }))
