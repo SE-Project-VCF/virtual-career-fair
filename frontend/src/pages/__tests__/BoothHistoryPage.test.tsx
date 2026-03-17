@@ -366,6 +366,36 @@ describe('BoothHistoryPage', () => {
         // Placeholder is rendered when no logoUrl
       })
     })
+
+    it('should navigate to booth detail page when card is clicked', async () => {
+      ;(getDocs as any).mockResolvedValue({
+        docs: [{ data: () => mockBoothHistory[0] }],
+      })
+
+      renderPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('TechCorp')).toBeInTheDocument()
+      })
+
+      // Find the TechCorp company name and navigate up to find the clickable Card
+      const companyNameElement = screen.getByText('TechCorp')
+      let card = companyNameElement.closest('[class*="MuiCard"]') as Element | null
+      
+      // If direct MuiCard not found, try finding the Card's container
+      if (!card) {
+        const parentDiv = companyNameElement.closest('div')
+        if (parentDiv) {
+          card = parentDiv.closest('div')?.closest('div') as Element | null
+        }
+      }
+
+      if (card) {
+        fireEvent.click(card)
+      }
+
+      expect(mockNavigate).toHaveBeenCalledWith('/booth/booth-1')
+    })
   })
 
   describe('Empty State Actions', () => {
