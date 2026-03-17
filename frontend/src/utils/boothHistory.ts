@@ -1,6 +1,6 @@
 // src/utils/boothHistory.ts
 // Purpose: Centralized helper for recording booth views to Firestore.
-// This keeps "history tracking" logic out of UI components (cleaner & reusable).
+// Dual-writes to both the student's history and the booth's visitor subcollection.
 
 import { db } from "../firebase";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
@@ -22,21 +22,25 @@ export async function trackBoothView(uid: string, booth: BoothHistoryWrite) {
   // Deduping strategy:
   // Use boothId as the doc ID, so each booth appears only once in history.
   // Viewing the same booth again simply updates lastViewedAt.
-  const ref = doc(db, "users", uid, "boothHistory", booth.boothId);
+  const historyRef = doc(db, "users", uid, "boothHistory", booth.boothId);
+  const visitorRef = doc(db, "booths", booth.boothId, "visitors", uid);
 
-  // setDoc(..., {merge:true}) updates existing fields without overwriting the whole doc.
-  await setDoc(
-    ref,
-    {
-      boothId: booth.boothId,
-      companyName: booth.companyName,
-      industry: booth.industry ?? null,
-      location: booth.location ?? null,
-      logoUrl: booth.logoUrl ?? null,
+  const historyPayload = {
+    boothId: booth.boothId,
+    companyName: booth.companyName,
+    industry: booth.industry ?? null,
+    location: booth.location ?? null,
+    logoUrl: booth.logoUrl ?? null,
 
-      // serverTimestamp ensures the timestamp is consistent and trusted
-      lastViewedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+    // serverTimestamp ensures the timestamp is consistent and trusted
+    lastViewedAt: serverTimestamp(),
+  };
+
+  // Dual-write: student's booth history + booth-level visitor record
+  // Promise.all runs both writes in parallel (not sequential) for efficiency.
+  // Both use {merge:true} to avoid overwriting unrelated fields.
+  await Promise.all([
+    setDoc(historyRef, historyPayload, { merge: true }),
+    setDoc(visitorRef, { uid, lastViewedAt: serverTimestamp() }, { merge: true }),
+  ]);
 }

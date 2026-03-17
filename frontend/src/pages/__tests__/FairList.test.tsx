@@ -39,6 +39,20 @@ vi.mock("../../components/NotificationBell", () => ({
   default: () => <div data-testid="notification-bell" />,
 }))
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}))
+
 vi.mock("../../config", () => ({
   API_URL: "http://localhost:5000",
 }))
@@ -269,9 +283,7 @@ describe("FairList — View Fair navigation", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/fair/f1")
   })
 
-  it("navigates to /dashboard when back arrow is clicked", async () => {
-    const user = userEvent.setup()
-
+  it("renders the page layout wrapper", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ fairs: [] }),
@@ -281,12 +293,7 @@ describe("FairList — View Fair navigation", () => {
 
     await waitFor(() => expect(screen.getByText("No career fairs available")).toBeInTheDocument())
 
-    // The back arrow is an IconButton, find by its ArrowBackIcon aria-hidden or use the button role
-    const buttons = screen.getAllByRole("button")
-    // First button in the header is the back button
-    await user.click(buttons[0])
-
-    expect(mockNavigate).toHaveBeenCalledWith("/dashboard")
+    expect(screen.getByTestId("base-layout")).toBeInTheDocument()
   })
 
   it("shows Upcoming chip for future fair", async () => {

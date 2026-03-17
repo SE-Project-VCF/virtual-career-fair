@@ -64,7 +64,7 @@ Return ONLY valid JSON array, no other text.`;
 
     const changes = JSON.parse(jsonText);
     if (!Array.isArray(changes)) {
-      throw new Error("Response is not an array");
+      throw new TypeError("Response is not an array");
     }
 
     return changes;
@@ -101,7 +101,7 @@ async function applyChanges(resumeRawText, approvedChanges) {
 
   // Clean up extra whitespace
   result = result
-    .replace(/\n\n\n+/g, "\n\n") // Multiple blank lines to double
+    .replaceAll(/\n\n\n+/g, "\n\n") // Multiple blank lines to double
     .trim();
 
   return result;
@@ -144,11 +144,10 @@ ${resumeText}
 Output: Return ONLY the reformatted resume text, nothing else.`;
 
   try {
-    console.log("[REFORMAT] Calling Gemini with resume length:", resumeText.length);
+    console.log("[REFORMAT] Reformatting resume (length: " + resumeText.length + " chars)");
     const response = await model.generateContent(prompt);
     const formattedResume = response.response.text().trim();
-    console.log("[REFORMAT] Gemini returned formatted resume length:", formattedResume.length);
-    console.log("[REFORMAT] First 200 chars:", formattedResume.substring(0, 200));
+    console.log("[REFORMAT] Resume formatted successfully");
     return formattedResume;
   } catch (error) {
     console.error("[REFORMAT] Error reformatting resume with Gemini:", error);

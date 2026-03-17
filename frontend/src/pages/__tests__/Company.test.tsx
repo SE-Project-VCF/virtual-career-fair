@@ -53,6 +53,20 @@ vi.mock("../../firebase", () => ({
 // Import after mocks
 import { authUtils } from "../../utils/auth";
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}));
+
 // Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
@@ -197,8 +211,7 @@ describe("Company", () => {
 
   it("displays company name after loading", async () => {
     renderComp();
-    // Use getByRole to specifically target the h4 heading
-    expect(await screen.findByRole('heading', { name: /Tech Corp/i, level: 4 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Tech Corp/i })).toBeInTheDocument();
   });
 
   it("displays invite code", async () => {
@@ -357,9 +370,45 @@ describe("Company", () => {
     expect(authUtils.updateInviteCode).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), "A");
   });
 
+  it("sanitizes invite code input to uppercase alphanumeric", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/INVITE123/);
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      const editBtn = editButtons[0].closest("button");
+      if (editBtn) await user.click(editBtn);
+
+      const inviteInput: HTMLInputElement = screen.getByLabelText(/invite code/i);
+      await user.clear(inviteInput);
+      await user.type(inviteInput, "ab-12$cd");
+
+      expect(inviteInput.value).toBe("AB12CD");
+    }
+  });
+
   it("displays representatives list", async () => {
     renderComp();
     expect(await screen.findByText(/John Doe/i)).toBeInTheDocument();
+  });
+
+  it("shows empty representatives message when none have joined", async () => {
+    (getDoc as any).mockImplementation((docRef: any) => {
+      if (docRef.id === "company-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "company-1",
+          data: () => ({ ...mockCompanyData, representativeIDs: [] }),
+        });
+      }
+      return Promise.resolve({ exists: () => false });
+    });
+
+    renderComp();
+    expect(
+      await screen.findByText(/No representatives have joined this company yet/i)
+    ).toBeInTheDocument();
   });
 
   it("deletes representative", async () => {
@@ -1247,6 +1296,49 @@ describe("Company", () => {
     it("still displays job postings for representatives", async () => {
       renderComp();
       expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+  });
+
+  describe("Booth Navigation Buttons", () => {
+    it("navigates to public booth view when View Public Booth button is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      const viewBoothButton = screen.getByRole("button", { name: /View Public Booth/i });
+      await user.click(viewBoothButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1");
+    });
+
+    it("navigates to booth visitors analytics when View Visitors Analytics button is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      const visitorsButton = screen.getByRole("button", { name: /View Visitors Analytics/i });
+      await user.click(visitorsButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1/visitors");
+    });
+
+    it("hides booth view buttons when boothId is not set", async () => {
+      (getDoc as any).mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          companyName: "Tech Corp",
+          inviteCode: "INVITE123",
+          representativeIDs: ["rep-1"],
+          // boothId is undefined
+          ownerId: "owner-1",
+        }),
+      });
+
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      expect(screen.queryByRole("button", { name: /View Public Booth/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /View Visitors Analytics/i })).not.toBeInTheDocument();
     });
   });
 });

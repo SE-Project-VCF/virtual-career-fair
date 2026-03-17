@@ -11,7 +11,6 @@ import {
   TextField,
   Alert,
   CircularProgress,
-  IconButton,
   Select,
   MenuItem,
   FormControl,
@@ -40,7 +39,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import RestartAltIcon from "@mui/icons-material/RestartAlt"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 
 interface BoothData {
   companyName: string
@@ -697,40 +696,17 @@ export default function BoothEditor() {
   const boothPageTitle = resolvedBoothId ? "Edit Booth" : "Create Booth"
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                  {boothPageTitle}
-                </Typography>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
-                  Set up your company presence at the virtual career fair
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle={boothPageTitle}>
       <Container maxWidth="md" sx={{ py: 4 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}>
+            {fairId ? "Fairs" : "Company"}
+          </Button>
+          <BusinessIcon sx={{ color: "#388560" }} />
+          <Typography variant="body2" color="text.secondary">
+            Set up your company presence at the virtual career fair
+          </Typography>
+        </Box>
         {error && (
           <Alert 
             severity="error" 
@@ -1046,45 +1022,50 @@ export default function BoothEditor() {
             </Box>
 
             {/* Submit Buttons */}
-            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
-              <Button
-                variant="outlined"
-                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
-                disabled={saving || logoUploading}
-                sx={{
-                  borderColor: "#388560",
-                  color: "#388560",
-                  "&:hover": {
-                    borderColor: "#2d6b4d",
-                    bgcolor: "rgba(56, 133, 96, 0.05)",
-                  },
-                }}
-              >
-                Cancel
-              </Button>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, pt: 3, borderTop: "1px solid rgba(0,0,0,0.1)" }}>
+              <Box sx={{ display: "flex", gap: 2 }}>
+              </Box>
 
-              {(() => {
-                const activeBoothId = fairId ? fairBoothId : company.boothId
-                const savingText = activeBoothId ? "Updating..." : "Creating..."
-                const defaultText = activeBoothId ? "Update Booth" : "Create Booth"
-                const buttonText = saving ? savingText : defaultText
-                return (
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-                    disabled={saving || logoUploading}
-                    sx={{
-                      background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                      "&:hover": {
-                        background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                      },
-                    }}
-                  >
-                    {buttonText}
-                  </Button>
-                )
-              })()}
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate(fairId ? "/fairs" : `/company/${company.id}`)}
+                  disabled={saving}
+                  sx={{
+                    borderColor: "#388560",
+                    color: "#388560",
+                    "&:hover": {
+                      borderColor: "#2d6b4d",
+                      bgcolor: "rgba(56, 133, 96, 0.05)",
+                    },
+                  }}
+                >
+                  Cancel
+                </Button>
+
+                {(() => {
+                  const activeBoothId = fairId ? fairBoothId : company.boothId;
+                  const savingText = activeBoothId ? "Updating..." : "Creating...";
+                  const defaultText = activeBoothId ? "Update Booth" : "Create Booth";
+                  const buttonText = saving ? savingText : defaultText;
+                  return (
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      startIcon={saving ? <CircularProgress size={24} /> : <SaveIcon />}
+                      disabled={saving || logoUploading}
+                      sx={{
+                        background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                        "&:hover": {
+                          background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                        },
+                      }}
+                    >
+                      {buttonText}
+                    </Button>
+                  );
+                })()}
+              </Box>
             </Box>
           </form>
         </Card>
@@ -1107,6 +1088,6 @@ export default function BoothEditor() {
           </Typography>
         </Box>
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }

@@ -23,6 +23,7 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
+import BaseLayout from "../components/BaseLayout"
 import ProfileMenu from "./ProfileMenu"
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
 import NotificationBell from "../components/NotificationBell"
@@ -83,13 +84,37 @@ export default function FairBoothView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
+  const trackingBoothIdRef = useRef<string | null>(null)
   const [applyDialogOpen, setApplyDialogOpen] = useState(false)
   const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
   const isMountedRef = useRef(true)
 
+  const trackStudentBoothLeave = async () => {
+    try {
+      if (user?.uid && user.role === "student" && trackingBoothIdRef.current) {
+        const token = await authUtils.getIdToken()
+        if (token) {
+          await fetch(`${API_URL}/api/booth/${trackingBoothIdRef.current}/track-leave`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          })
+          console.log("[FAIR-BOOTH-VIEW] Tracked booth leave");
+        }
+      }
+    } catch (err) {
+      console.warn("Booth leave tracking failed:", err)
+    }
+  }
+
   useEffect(() => {
-    return () => { isMountedRef.current = false }
-  }, [])
+    return () => { 
+      isMountedRef.current = false
+      trackStudentBoothLeave()
+    }
+  }, [boothId, user?.uid])
 
   useEffect(() => {
     if (fairLoading || !fairId || !boothId) return
@@ -113,13 +138,35 @@ export default function FairBoothView() {
     if (!user?.uid || user.role !== "student" || !boothId) return
     
     try {
+      // Use the original booth ID for tracking if available, otherwise use fair-specific ID
+      const originalOrFairBoothId = boothData.originalBoothId || boothId;
+      trackingBoothIdRef.current = originalOrFairBoothId;
+      
+      // Track in local history
       await trackBoothView(user.uid, {
-        boothId,
+        boothId: originalOrFairBoothId,
         companyName: boothData.companyName,
         industry: boothData.industry,
         location: boothData.location,
         logoUrl: boothData.logoUrl,
       })
+      
+      // Track in backend for company analytics
+      const token = await authUtils.getIdToken();
+      if (token) {
+        try {
+          const url = `${API_URL}/api/booth/${originalOrFairBoothId}/track-view`
+          await fetch(url, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          })
+        } catch (err) {
+          console.warn("Backend booth tracking failed:", err)
+        }
+      }
     } catch (err) {
       console.warn("History tracking failed:", err)
     }
@@ -199,25 +246,7 @@ export default function FairBoothView() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <Box
-        sx={{
-          bgcolor: "primary.main",
-          color: "white",
-          py: 2,
-          px: 3,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography variant="h6" fontWeight="bold">Virtual Career Fair</Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <NotificationBell />
-          <ProfileMenu />
-        </Box>
-      </Box>
-
+    <BaseLayout pageTitle={booth?.companyName ?? "Booth"}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -418,6 +447,6 @@ export default function FairBoothView() {
           studentId={user?.uid ?? null}
         />
       )}
-    </Box>
+    </BaseLayout>
   )
 }

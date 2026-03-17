@@ -4,37 +4,28 @@ import {
   Container,
   Box,
   Typography,
-  Button,
   Card,
   CardContent,
   Grid,
   CircularProgress,
   Alert,
-  Chip,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { API_URL } from "../config"
+import BoothCardsSection from "../components/booths/BoothCardsSection"
+import {
+  FIRESTORE_IN_QUERY_LIMIT,
+  type BoothCardItem,
+} from "../components/booths/boothShared"
 import BusinessIcon from "@mui/icons-material/Business"
-import PeopleIcon from "@mui/icons-material/People"
 import EventIcon from "@mui/icons-material/Event"
-import LocationOnIcon from "@mui/icons-material/LocationOn"
 import WorkIcon from "@mui/icons-material/Work"
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import ProfileMenu from "./ProfileMenu"
-import NotificationBell from "../components/NotificationBell"
+import BaseLayout from "../components/BaseLayout"
 
-interface Booth {
-  id: string
-  companyName: string
-  industry: string
-  companySize: string
-  location: string
-  description: string
-  logoUrl?: string
+type Booth = BoothCardItem & {
   openPositions: number
-  companyId?: string
   hiringFor?: string
   website?: string
   careersPage?: string
@@ -42,21 +33,6 @@ interface Booth {
   contactEmail?: string
   contactPhone?: string
 }
-
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
-}
-
-// Firestore 'in' queries support a maximum of 30 values per query
-const FIRESTORE_IN_QUERY_LIMIT = 30
 
 export default function Booths() {
   const navigate = useNavigate()
@@ -233,7 +209,7 @@ export default function Booths() {
   }
 
   // Get companyId for each booth and count jobs
-  const getJobCountForBooth = (booth: Booth): number => {
+  const getJobCountForBooth = (booth: BoothCardItem): number => {
     if (booth.companyId) {
       return jobCounts[booth.companyId] || 0
     }
@@ -241,73 +217,7 @@ export default function Booths() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                Job Goblin - Virtual Career Fair
-              </Typography>
-              <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.9)", mt: 1 }}>
-                Explore opportunities from top companies
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              {user && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  {/* Dashboard button (existing) */}
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate("/dashboard")}
-                    sx={{
-                      color: "white",
-                      borderColor: "white",
-                      "&:hover": {
-                        borderColor: "white",
-                        bgcolor: "rgba(255,255,255,0.1)",
-                      },
-                    }}
-                  >
-                    Dashboard
-                  </Button>
-
-                  {/* Booth History button (NEW) - only for students, ALWAYS enabled */}
-                  {user.role === "student" && (
-                    <Button
-                      variant="outlined"
-                      onClick={() => navigate("/dashboard/booth-history")}
-                      sx={{
-                        color: "white",
-                        borderColor: "white",
-                        "&:hover": {
-                          borderColor: "white",
-                          bgcolor: "rgba(255,255,255,0.1)",
-                        },
-                      }}
-                    >
-                      Booth History
-                    </Button>
-                  )}
-                </Box>
-              )}
-
-              <NotificationBell />
-
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Browse Booths">
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Fair Name and Description Banner - Show when active */}
         {isLive && (scheduleName || scheduleDescription) && (
@@ -453,144 +363,15 @@ export default function Booths() {
             </Typography>
           </Card>
         )}
-        {!loading && booths.length > 0 && (
-          <>
-            <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a" }}>
-              Company Booths
-            </Typography>
-            <Grid container spacing={3}>
-              {booths.map((booth) => (
-                <Grid size={{ xs: 12, md: 6, lg: 4 }} key={booth.id}>
-                  <Card
-                    sx={{
-                      height: "100%",
-                      border: "1px solid rgba(56, 133, 96, 0.3)",
-                      transition: "transform 0.2s, box-shadow 0.2s",
-                      "&:hover": {
-                        transform: "translateY(-4px)",
-                        boxShadow: "0 8px 24px rgba(56, 133, 96, 0.3)",
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ p: 3 }}>
-                      {/* Company Logo & Name */}
-                      <Box sx={{ display: "flex", alignItems: "start", gap: 2, mb: 2 }}>
-                        {booth.logoUrl ? (
-                          <Box
-                            component="img"
-                            src={booth.logoUrl}
-                            alt={`${booth.companyName} logo`}
-                            sx={{
-                              width: 64,
-                              height: 64,
-                              borderRadius: 2,
-                              objectFit: "cover",
-                              border: "1px solid rgba(0,0,0,0.1)",
-                            }}
-                          />
-                        ) : (
-                          <Box
-                            sx={{
-                              width: 64,
-                              height: 64,
-                              borderRadius: 2,
-                              background: "linear-gradient(135deg, rgba(56, 133, 96, 0.1) 0%, rgba(176, 58, 108, 0.1) 100%)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <BusinessIcon sx={{ fontSize: 32, color: "#388560" }} />
-                          </Box>
-                        )}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5, lineHeight: 1.2 }}>
-                            {booth.companyName}
-                          </Typography>
-                          <Chip
-                            label={INDUSTRY_LABELS[booth.industry] || booth.industry}
-                            size="small"
-                            sx={{
-                              bgcolor: "rgba(56, 133, 96, 0.1)",
-                              color: "#388560",
-                              fontWeight: 500,
-                              fontSize: "0.75rem",
-                            }}
-                          />
-                        </Box>
-                      </Box>
-
-                      {/* Description */}
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{
-                          mb: 2,
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                          minHeight: 40,
-                        }}
-                      >
-                        {booth.description}
-                      </Typography>
-
-                      {/* Details */}
-                      <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <LocationOnIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {booth.location}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <PeopleIcon sx={{ fontSize: 16, color: "#b03a6c" }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {booth.companySize} employees
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      {/* Open Positions Badge & Button */}
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          pt: 2,
-                          borderTop: "1px solid rgba(0,0,0,0.1)",
-                        }}
-                      >
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
-                          {getJobCountForBooth(booth)} open position{getJobCountForBooth(booth) === 1 ? "" : "s"}
-                        </Typography>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          endIcon={<ArrowForwardIcon />}
-                          onClick={() => navigate(`/booth/${booth.id}`)}
-                          sx={{
-                            borderColor: "#388560",
-                            color: "#388560",
-                            "&:hover": {
-                              borderColor: "#2d6b4d",
-                              bgcolor: "rgba(56, 133, 96, 0.05)",
-                            },
-                          }}
-                        >
-                          Visit Booth
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-          </>
+        {!loading && (
+          <BoothCardsSection
+            booths={booths}
+            getJobCountForBooth={getJobCountForBooth}
+            onVisitBooth={(boothId) => navigate(`/booth/${boothId}`)}
+          />
         )}
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }
 

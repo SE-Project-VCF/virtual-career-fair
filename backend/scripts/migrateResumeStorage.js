@@ -8,7 +8,7 @@
  */
 
 const admin = require("firebase-admin");
-const path = require("path");
+const path = require("node:path");
 
 // Initialize Firebase Admin
 const keyPath = path.join(__dirname, "..", "privateKey.json");
@@ -19,6 +19,85 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
+
+function getLatestResume(resumeDocs) {
+  let latestResume = null;
+  let latestDoc = null;
+
+  for (const doc of resumeDocs) {
+    const resume = doc.data();
+    if (!latestResume || new Date(resume.createdAt) > new Date(latestResume.createdAt)) {
+      latestResume = resume;
+      latestDoc = doc;
+    }
+  }
+
+  return { latestResume, latestDoc };
+}
+
+async function migrateUserResume(userDoc) {
+  const userId = userDoc.id;
+  const userData = userDoc.data();
+
+  // Check if user has old resumes subcollection
+  const resumesSnap = await db
+    .collection("users")
+    .doc(userId)
+    .collection("resumes")
+    .get();
+
+  if (resumesSnap.empty) {
+    console.log(`⏭️  ${userId}: No resumes subcollection found, skipping`);
+    return "skipped";
+  }
+
+  console.log(
+    `📦 ${userId}: Found ${resumesSnap.docs.length} resume(s) in subcollection`
+  );
+
+  const { latestResume, latestDoc } = getLatestResume(resumesSnap.docs);
+
+  if (!latestResume?.structured) {
+    console.log(`   ⚠️  Resume has no structured data, skipping`);
+    return "skipped";
+  }
+
+  // Migrate to main document
+  console.log(`   📤 Migrating resume ${latestDoc.id}...`);
+
+  await db
+    .collection("users")
+    .doc(userId)
+    .set(
+      {
+        // Keep existing fields
+        resumePath: latestResume.storagePath || userData.resumePath,
+        currentResumePath: latestResume.storagePath || userData.resumePath,
+        resumeFileName: latestResume.fileName || userData.resumeFileName,
+        resumeUpdatedAt:
+          latestResume.updatedAt || userData.resumeUpdatedAt,
+
+        // NEW: Add structured resume
+        resumeStructured: latestResume.structured,
+        currentResumeId: latestDoc.id,
+
+        // Cleanup old fields if they exist
+        currentResumeId_old: admin.firestore.FieldValue.delete(),
+      },
+      { merge: true }
+    );
+
+  // Delete old subcollection documents
+  console.log(`   🗑️  Deleting old subcollection...`);
+  const batch = db.batch();
+  for (const doc of resumesSnap.docs) {
+    batch.delete(doc.ref);
+  }
+  await batch.commit();
+
+  console.log(`   ✅ ${userId}: Migration complete!\n`);
+  return "migrated";
+}
 
 async function migrateResumes() {
   console.log("🚀 Starting resume storage migration...\n");
@@ -33,81 +112,15 @@ async function migrateResumes() {
     console.log(`📋 Found ${usersSnap.docs.length} users to process\n`);
 
     for (const userDoc of usersSnap.docs) {
-      const userId = userDoc.id;
-      const userData = userDoc.data();
-
       try {
-        // Check if user has old resumes subcollection
-        const resumesSnap = await db
-          .collection("users")
-          .doc(userId)
-          .collection("resumes")
-          .get();
-
-        if (resumesSnap.empty) {
-          console.log(`⏭️  ${userId}: No resumes subcollection found, skipping`);
+        const result = await migrateUserResume(userDoc);
+        if (result === "migrated") {
+          migratedCount++;
+        } else {
           skippedCount++;
-          continue;
         }
-
-        console.log(
-          `📦 ${userId}: Found ${resumesSnap.docs.length} resume(s) in subcollection`
-        );
-
-        // Get the most recent resume (by createdAt)
-        let latestResume = null;
-        let latestDoc = null;
-
-        for (const doc of resumesSnap.docs) {
-          const resume = doc.data();
-          if (!latestResume || new Date(resume.createdAt) > new Date(latestResume.createdAt)) {
-            latestResume = resume;
-            latestDoc = doc;
-          }
-        }
-
-        if (!latestResume || !latestResume.structured) {
-          console.log(`   ⚠️  Resume has no structured data, skipping`);
-          skippedCount++;
-          continue;
-        }
-
-        // Migrate to main document
-        console.log(`   📤 Migrating resume ${latestDoc.id}...`);
-
-        await db
-          .collection("users")
-          .doc(userId)
-          .set(
-            {
-              // Keep existing fields
-              resumePath: latestResume.storagePath || userData.resumePath,
-              currentResumePath: latestResume.storagePath || userData.resumePath,
-              resumeFileName: latestResume.fileName || userData.resumeFileName,
-              resumeUpdatedAt:
-                latestResume.updatedAt || userData.resumeUpdatedAt,
-
-              // NEW: Add structured resume
-              resumeStructured: latestResume.structured,
-              currentResumeId: latestDoc.id,
-
-              // Cleanup old fields if they exist
-              currentResumeId_old: admin.firestore.FieldValue.delete(),
-            },
-            { merge: true }
-          );
-
-        // Delete old subcollection documents
-        console.log(`   🗑️  Deleting old subcollection...`);
-        const batch = db.batch();
-        for (const doc of resumesSnap.docs) {
-          batch.delete(doc.ref);
-        }
-        await batch.commit();
-
-        console.log(`   ✅ ${userId}: Migration complete!\n`);
-        migratedCount++;
       } catch (err) {
+        const userId = userDoc.id;
         console.error(`   ❌ ${userId}: Error - ${err.message}\n`);
         errorCount++;
       }
@@ -136,4 +149,8 @@ async function migrateResumes() {
   }
 }
 
-migrateResumes();
+module.exports = { migrateResumes };
+
+if (require.main === module) {
+  void migrateResumes(); // NOSONAR: CommonJS script entrypoint cannot use top-level await.
+}

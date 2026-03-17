@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import { getRepresentativeName } from "../utils/representativeUtils"
 import { useNavigate, useParams } from "react-router-dom"
 import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip } from "@mui/material"
 import { authUtils } from "../utils/auth"
@@ -22,7 +23,8 @@ import BarChartIcon from "@mui/icons-material/BarChart"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
-import ProfileMenu from "./ProfileMenu"
+import VisibilityIcon from "@mui/icons-material/Visibility"
+import BaseLayout from "../components/BaseLayout"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
@@ -69,22 +71,19 @@ interface JobInvitationStats {
   clickRate: string
 }
 
+// Helper function to compare jobs by creation date (descending)
+function compareJobsByDate(a: Job, b: Job): number {
+  if (!a.createdAt && !b.createdAt) return 0
+  if (!a.createdAt) return 1
+  if (!b.createdAt) return -1
+  return b.createdAt - a.createdAt
+}
+
 // Helper function to get save button label
 function getSaveButtonLabel(savingJob: boolean, editingJob: Job | null): string {
   if (savingJob) return "Saving..."
   if (editingJob) return "Update Job"
   return "Publish Job"
-}
-
-// Helper function to get representative display name
-function getRepresentativeName(rep: Representative): string {
-  if (rep.firstName && rep.lastName) {
-    return `${rep.firstName} ${rep.lastName}`
-  }
-  if (rep.firstName) {
-    return rep.firstName
-  }
-  return rep.email
 }
 
 function CompanyInfoCard({
@@ -340,7 +339,7 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
           </Button>
 
           {boothId && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 2, display: "flex", gap: 2, flexDirection: "column" }}>
               <Button
                 variant="outlined"
                 onClick={() => navigate(`/booth/${boothId}`)}
@@ -354,6 +353,21 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
                 }}
               >
                 View Public Booth
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<VisibilityIcon />}
+                onClick={() => navigate(`/booth/${boothId}/visitors`)}
+                sx={{
+                  borderColor: "#b03a6c",
+                  color: "#b03a6c",
+                  "&:hover": {
+                    borderColor: "#8b2854",
+                    bgcolor: "rgba(176, 58, 108, 0.05)",
+                  },
+                }}
+              >
+                View Visitors Analytics
               </Button>
             </Box>
           )}
@@ -589,12 +603,7 @@ export default function Company() {
       })
 
       // Sort by createdAt descending
-      jobsList.sort((a, b) => {
-        if (!a.createdAt && !b.createdAt) return 0
-        if (!a.createdAt) return 1
-        if (!b.createdAt) return -1
-        return b.createdAt - a.createdAt
-      })
+      jobsList.sort(compareJobsByDate)
       
       setJobs(jobsList)
 
@@ -999,7 +1008,7 @@ export default function Company() {
     )
   }
 
-  if (error && !company) {
+  if (error &&!company) {
     return (
       <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Card sx={{ p: 4, maxWidth: 500 }}>
@@ -1011,42 +1020,17 @@ export default function Company() {
       </Box>
     )
   }
-
   if (!company) return null
 
   const isOwner = userRole === "companyOwner" && company.ownerId === userId
   const saveButtonLabel = getSaveButtonLabel(savingJob, editingJob)
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton onClick={() => navigate(isOwner ? "/companies" : "/dashboard")} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                {company.companyName}
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle={company.companyName}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(isOwner ? "/companies" : "/dashboard")} sx={{ mb: 3 }}>
+          {"Companies"}
+        </Button>
         {error && (
           <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError("")}>
             {error}
@@ -1583,7 +1567,7 @@ export default function Company() {
         </DialogActions>
       </Dialog>
 
-    </Box>
+    </BaseLayout>
   )
 }
 

@@ -16,7 +16,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import PageHeader from "../components/PageHeader"
+import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -88,9 +88,7 @@ export default function FairBooths() {
   const isAdmin = user?.role === "administrator"
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <PageHeader />
-
+    <BaseLayout>
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
           <Button variant="text" onClick={() => navigate(`/fair/${fairId}`)}>
@@ -198,6 +196,6 @@ export default function FairBooths() {
           ))}
         </Grid>
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }

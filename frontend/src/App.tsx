@@ -9,12 +9,15 @@ import Company from "./pages/Company"
 import BoothEditor from "./pages/BoothEditor"
 import Booths from "./pages/Booths"
 import BoothView from "./pages/BoothView"
+import BoothVisitorsPage from "./pages/BoothVisitorsPage"
 import EmailVerificationPending from "./pages/EmailVerificationPending"
 import VerifyEmail from "./pages/VerifyEmail"
 import ChatPage from "./pages/ChatPage"
 import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage"
 import JobInvitations from "./pages/JobInvitations"
+import FairBoothsPage from "./pages/FairBoothsPage"
+import StudentFairBoothsPage from "./pages/StudentFairBoothsPage"
 import TailorResumeSimplePage from "./pages/TailorResumeSimplePage"
 import TailoredResumeViewPage from "./pages/TailoredResumeViewPage"
 import TailoredResumesPage from "./pages/TailoredResumesPage"
@@ -29,23 +32,23 @@ import { FairProvider } from "./contexts/FairContext"
 // Wrapper components to inject fairId from URL params into FairProvider
 function FairLandingWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId ?? ""}><FairLanding /></FairProvider>
+  return <FairProvider fairId={fairId || ""}><FairLanding /></FairProvider>
 }
 function FairBoothsWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId ?? ""}><FairBooths /></FairProvider>
+  return <FairProvider fairId={fairId || ""}><FairBooths /></FairProvider>
 }
 function FairBoothViewWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId ?? ""}><FairBoothView /></FairProvider>
+  return <FairProvider fairId={fairId || ""}><FairBoothView /></FairProvider>
 }
 function FairAdminWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId ?? ""}><FairAdminDashboard /></FairProvider>
+  return <FairProvider fairId={fairId || ""}><FairAdminDashboard /></FairProvider>
 }
 function FairBoothEditorWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
-  return <FairProvider fairId={fairId ?? ""}><BoothEditor /></FairProvider>
+  return <FairProvider fairId={fairId || ""}><BoothEditor /></FairProvider>
 }
 
 function App() {
@@ -66,12 +69,15 @@ function App() {
         <Route path="/invitations/:invitationId/tailor-simple" element={<TailorResumeSimplePage />} />
 
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/fairs/:fairId" element={<FairBoothsPage />} />
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />
         <Route path="/company/:companyId/submissions" element={<SubmissionsPage />} />
         <Route path="/booths" element={<Booths />} />
+        <Route path="/fairs/:fairId/booths" element={<StudentFairBoothsPage />} />
         <Route path="/booth/:boothId" element={<BoothView />} />
+        <Route path="/booth/:boothId/visitors" element={<BoothVisitorsPage />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/profile" element={<StudentProfilePage />} />

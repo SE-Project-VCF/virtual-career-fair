@@ -15,12 +15,14 @@ import {
   List,
   ListItemButton,
   Chip,
+  FormControlLabel,
+  Checkbox,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
 } from "@mui/material"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
@@ -40,6 +42,7 @@ export default function StudentProfilePage() {
   const [skills, setSkills] = useState("")
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [resumeUrl, setResumeUrl] = useState<string | null>(null)
+  const [resumeVisible, setResumeVisible] = useState(true)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -73,6 +76,7 @@ export default function StudentProfilePage() {
           setYear(validYears.includes(rawYear) ? rawYear : "")
           setSkills(data.skills || "")
           setResumeUrl(data.resumeUrl || null)
+          setResumeVisible(data.resumeVisible !== false)
         }
       } catch (err: any) {
         console.error("Error fetching profile:", err)
@@ -121,7 +125,7 @@ export default function StudentProfilePage() {
     if (!user || loadTailoredResumesDone.current) return
     loadTailoredResumesDone.current = true
     loadTailoredResumes()
-  }, [user])
+  }, [user?.uid])
 
   const handleViewTailoredResume = (resumeId: string) => {
     setTailoredDialogOpen(false)
@@ -180,14 +184,9 @@ export default function StudentProfilePage() {
         }
 
         const result = await response.json()
-        console.log("Upload response:", result)
         // Store the file path (not the URL)
         // Frontend will fetch signed URL when viewing
         uploadedUrl = result.filePath || null
-        console.log("uploadedUrl set to:", uploadedUrl)
-        if (!uploadedUrl) {
-          console.warn("Warning: filePath is empty/null from backend response")
-        }
       }
 
       await setDoc(
@@ -197,6 +196,7 @@ export default function StudentProfilePage() {
           expectedGradYear: year || null,
           skills,
           resumeUrl: uploadedUrl || null,
+          resumeVisible,
         },
         { merge: true }
       )
@@ -255,42 +255,30 @@ export default function StudentProfilePage() {
     }
   }
 
+  const handleResumeVisibilityToggle = async (checked: boolean) => {
+    setResumeVisible(checked)
+    
+    // Auto-save the visibility toggle to Firestore
+    if (!user) return
+    try {
+      const docRef = doc(db, "users", user.uid)
+      await setDoc(
+        docRef,
+        { resumeVisible: checked },
+        { merge: true }
+      )
+    } catch (err: any) {
+      console.error("Error saving resume visibility:", err)
+      setError("Failed to save resume visibility")
+    }
+  }
+
   if (!user) return null
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Container
-          maxWidth="lg"
-          sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-        >
-          <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-            Job Goblin - Virtual Career Fair
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {/* Other buttons can be added here */}
-            <ProfileMenu />
-          </Box>
-        </Container>
-      </Box>
-
-      {/* Profile Form */}
-      <Container maxWidth="sm" sx={{ py: 6 }}>
+    <BaseLayout pageTitle="Customize Profile">
+      <Container maxWidth="sm" sx={{ py: 4 }}>
         <Card sx={{ p: 4, borderRadius: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 3 }}>
-            Customize Profile
-          </Typography>
 
           <form onSubmit={handleSave} autoComplete="off">
             {error && (
@@ -386,6 +374,28 @@ export default function StudentProfilePage() {
               )}
             </Box>
 
+            {/* Resume Visibility Toggle */}
+            {resumeUrl && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: "rgba(56, 133, 96, 0.05)", borderRadius: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={resumeVisible}
+                      onChange={(e) => handleResumeVisibilityToggle(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label="Make Resume Visible"
+                  sx={{ mb: 0 }}
+                />
+                <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 1 }}>
+                  {resumeVisible
+                    ? "Your resume is visible to company representatives"
+                    : "Your resume is hidden from company representatives"}
+                </Typography>
+              </Box>
+            )}
+
             <Box
               sx={{
                 display: "flex",
@@ -469,6 +479,6 @@ export default function StudentProfilePage() {
           <Button onClick={() => setTailoredDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   )
 }

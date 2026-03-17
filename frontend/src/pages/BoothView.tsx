@@ -27,11 +27,10 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
-import NotificationBell from "../components/NotificationBell"
 
 interface Booth {
   id: string
@@ -149,8 +148,10 @@ export default function BoothView() {
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      // Track when user leaves the booth
+      trackStudentBoothLeave()
     }
-  }, [])
+  }, [boothId, user?.uid])
 
   const handleStartChat = async () => {
     try {
@@ -196,6 +197,7 @@ export default function BoothView() {
   const trackStudentBoothView = async (boothData: Booth) => {
     try {
       if (user?.uid && user.role === "student") {
+        // Track in local history
         await trackBoothView(user.uid, {
           boothId: boothData.id,
           companyName: boothData.companyName,
@@ -203,9 +205,52 @@ export default function BoothView() {
           location: boothData.location,
           logoUrl: boothData.logoUrl,
         });
+
+        // Track in backend for company analytics
+        const token = await authUtils.getIdToken();
+
+        if (token) {
+          try {
+            const url = `${API_URL}/api/booth/${boothData.id}/track-view`;
+
+            await fetch(url, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+            // Tracking completed
+          } catch (err) {
+            console.warn("Backend booth tracking failed:", err);
+          }
+        } else {
+          console.log("[BOOTH-VIEW] No token available");
+        }
+      } else {
+        console.warn("User missing or not a student");
       }
     } catch (err) {
       console.warn("History tracking failed:", err);
+    }
+  }
+
+  const trackStudentBoothLeave = async () => {
+    try {
+      if (user?.uid && user.role === "student" && boothId) {
+        const token = await authUtils.getIdToken();
+        if (token) {
+          await fetch(`${API_URL}/api/booth/${boothId}/track-leave`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Booth leave tracking failed:", err);
     }
   }
 
@@ -326,46 +371,11 @@ export default function BoothView() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Button
-                onClick={() => navigate("/booths")}
-                sx={{
-                  color: "white",
-                  minWidth: "auto",
-                  p: 1,
-                  "&:hover": {
-                    bgcolor: "rgba(255,255,255,0.1)",
-                  },
-                }}
-              >
-                <ArrowBackIcon />
-              </Button>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                {booth.companyName}
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <NotificationBell />
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle={booth.companyName}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/booths")} sx={{ mb: 3 }}>
+          Back to Booths
+        </Button>
         <Grid container spacing={3}>
           {/* Main Content */}
           <Grid size={{ xs: 12, md: 8 }}>
@@ -457,70 +467,77 @@ export default function BoothView() {
                       Job Openings ({jobs.length})
                     </Typography>
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {jobs.map((job) => (
-                        <Card
-                          key={job.id}
-                          sx={{
-                            border: "1px solid rgba(56, 133, 96, 0.2)",
-                            borderRadius: 2,
-                            transition: "box-shadow 0.2s",
-                            "&:hover": {
-                              boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
-                            },
-                          }}
-                        >
-                          <CardContent sx={{ p: 3 }}>
-                            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
-                                {job.name}
+                      {jobs.map((job) => {
+                        const hasPublishedForm = job.applicationForm?.status === "published"
+                        const buttonSx = {
+                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                          },
+                        }
+
+                        let applyButton = null
+                        if (hasPublishedForm) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              onClick={() => {
+                                setSelectedJobForApply(job)
+                                setApplyDialogOpen(true)
+                              }}
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        } else if (job.applicationLink) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              href={job.applicationLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        }
+
+                        return (
+                          <Card
+                            key={job.id}
+                            sx={{
+                              border: "1px solid rgba(56, 133, 96, 0.2)",
+                              borderRadius: 2,
+                              transition: "box-shadow 0.2s",
+                              "&:hover": {
+                                boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                              },
+                            }}
+                          >
+                            <CardContent sx={{ p: 3 }}>
+                              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
+                                  {job.name}
+                                </Typography>
+                                {applyButton}
+                              </Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
+                                {job.description}
                               </Typography>
-                              {job.applicationForm && job.applicationForm.status === "published" ? (
-                                <Button
-                                  variant="contained"
-                                  onClick={() => {
-                                    setSelectedJobForApply(job)
-                                    setApplyDialogOpen(true)
-                                  }}
-                                  sx={{
-                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                                    "&:hover": {
-                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                                    },
-                                  }}
-                                >
-                                  Apply Now
-                                </Button>
-                              ) : job.applicationLink ? (
-                                <Button
-                                  variant="contained"
-                                  href={job.applicationLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  sx={{
-                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                                    "&:hover": {
-                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                                    },
-                                  }}
-                                >
-                                  Apply Now
-                                </Button>
-                              ) : null}
-                            </Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
-                              {job.description}
-                            </Typography>
-                            <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
-                                Required Skills:
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {job.majorsAssociated}
-                              </Typography>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      ))}
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                                  Required Skills:
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {job.majorsAssociated}
+                                </Typography>
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
                     </Box>
                   </Box>
                 )}
@@ -710,7 +727,7 @@ export default function BoothView() {
           studentId={user?.role === "student" ? user.uid : null}
         />
       )}
-    </Box>
+    </BaseLayout>
   )
 }
 

@@ -57,7 +57,7 @@ function renderResponseValue(value: string | string[] | boolean | null): string 
   return String(value) || "—";
 }
 
-function SubmissionCard({ submission, form }: { submission: Submission; form?: ApplicationForm }) {
+function SubmissionCard({ submission, form }: Readonly<{ submission: Submission; form?: ApplicationForm }>) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -101,6 +101,26 @@ function SubmissionCard({ submission, form }: { submission: Submission; form?: A
             form.fields.map((field) => {
               const value = submission.responses?.[field.id];
               const fileUrl = submission.fileUrls?.[field.id];
+              let fieldContent;
+              if (field.type === "file") {
+                fieldContent = fileUrl ? (
+                  <Box>
+                    <Link href={fileUrl} target="_blank" rel="noopener noreferrer" variant="body2">
+                      View uploaded file
+                    </Link>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No file uploaded
+                  </Typography>
+                );
+              } else {
+                fieldContent = (
+                  <Typography variant="body2" color="text.primary" sx={{ mt: 0.25 }}>
+                    {renderResponseValue(value ?? null)}
+                  </Typography>
+                );
+              }
               return (
                 <Box key={field.id} sx={{ mb: 1.25 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -111,23 +131,7 @@ function SubmissionCard({ submission, form }: { submission: Submission; form?: A
                       </Typography>
                     )}
                   </Typography>
-                  {field.type === "file" ? (
-                    fileUrl ? (
-                      <Box>
-                        <Link href={fileUrl} target="_blank" rel="noopener noreferrer" variant="body2">
-                          View uploaded file
-                        </Link>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No file uploaded
-                      </Typography>
-                    )
-                  ) : (
-                    <Typography variant="body2" color="text.primary" sx={{ mt: 0.25 }}>
-                      {renderResponseValue(value ?? null)}
-                    </Typography>
-                  )}
+                  {fieldContent}
                 </Box>
               );
             })
@@ -167,7 +171,7 @@ export default function SubmissionsViewerDialog({
   onClose,
   companyId,
   jobs,
-}: SubmissionsViewerDialogProps) {
+}: Readonly<SubmissionsViewerDialogProps>) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -223,7 +227,7 @@ export default function SubmissionsViewerDialog({
   }, {});
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { maxHeight: "90vh" } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth slotProps={{ paper: { sx: { maxHeight: "90vh" } } }}>
       <DialogTitle>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -291,7 +295,7 @@ export default function SubmissionsViewerDialog({
                   <Typography variant="subtitle2" fontWeight={700} color="#388560">
                     {job?.name ?? jobId}
                   </Typography>
-                  <Chip label={`${jobSubs.length} submission${jobSubs.length !== 1 ? "s" : ""}`} size="small" />
+                  <Chip label={`${jobSubs.length} submission${jobSubs.length === 1 ? "" : "s"}`} size="small" />
                 </Box>
                 <Divider sx={{ mb: 1.5 }} />
                 {jobSubs.map((sub) => (

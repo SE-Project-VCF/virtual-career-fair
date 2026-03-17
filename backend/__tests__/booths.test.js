@@ -205,6 +205,6 @@ describe("POST /api/booths", () => {
       });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toContain("DB error");
+    expect(res.body.error).toBe("DB error");
   });
 });
