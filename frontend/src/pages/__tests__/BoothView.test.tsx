@@ -1044,6 +1044,7 @@ describe("BoothView", () => {
       vi.mocked(authUtils.getCurrentUser).mockReturnValue({
         uid: "student-1",
         role: "student",
+        email: "student@example.com",
       });
       vi.mocked(authUtils.getIdToken).mockResolvedValue("test-token");
 
@@ -1079,6 +1080,7 @@ describe("BoothView", () => {
       vi.mocked(authUtils.getCurrentUser).mockReturnValue({
         uid: "student-1",
         role: "student",
+        email: "student@example.com",
       });
       vi.mocked(authUtils.getIdToken).mockResolvedValue(null);
 
@@ -1115,6 +1117,7 @@ describe("BoothView", () => {
       vi.mocked(authUtils.getCurrentUser).mockReturnValue({
         uid: "company-1",
         role: "companyOwner",
+        email: "company@example.com",
       });
 
       renderBoothView();
