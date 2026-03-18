@@ -14,6 +14,12 @@ import {
   Chip,
   Divider,
   Link,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Rating,
 } from "@mui/material"
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
@@ -141,6 +147,17 @@ export default function BoothView() {
   const [startingChat, setStartingChat] = useState(false)
   const [applyDialogOpen, setApplyDialogOpen] = useState(false)
   const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
+
+  // Rating state
+  const [myRating, setMyRating] = useState<{ rating: number; comment: string | null; createdAt: number | null } | null | undefined>(undefined)
+  const [ratingValue, setRatingValue] = useState<number | null>(null)
+  const [ratingComment, setRatingComment] = useState("")
+  const [submittingRating, setSubmittingRating] = useState(false)
+  const [ratingError, setRatingError] = useState("")
+  const [ratingSuccess, setRatingSuccess] = useState("")
+  const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false)
+  const [resubmitValue, setResubmitValue] = useState<number | null>(null)
+  const [resubmitComment, setResubmitComment] = useState("")
 
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
@@ -306,6 +323,7 @@ export default function BoothView() {
 
       setBooth(boothData)
       await trackStudentBoothView(boothData)
+      await fetchMyRating(boothId)
 
       const companyId = await findCompanyIdForBooth(boothId, boothData)
       if (companyId) {
@@ -320,6 +338,51 @@ export default function BoothView() {
       if (isMountedRef.current) {
         setLoading(false)
       }
+    }
+  }
+
+  const fetchMyRating = async (id: string) => {
+    if (user?.role !== "student") return
+    try {
+      const token = await authUtils.getIdToken()
+      const res = await fetch(`${API_URL}/api/booths/${id}/ratings/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!isMountedRef.current) return
+      if (res.ok) {
+        const data = await res.json()
+        setMyRating(data.rating)
+      } else {
+        setMyRating(null)
+      }
+    } catch {
+      if (isMountedRef.current) setMyRating(null)
+    }
+  }
+
+  const submitRating = async (value: number | null, comment: string, onSuccess: () => void) => {
+    if (!boothId || !value) return
+    setSubmittingRating(true)
+    setRatingError("")
+    try {
+      const token = await authUtils.getIdToken()
+      const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ rating: value, comment: comment.trim() || undefined }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setRatingError(data.error || "Failed to submit rating")
+        return
+      }
+      setMyRating({ rating: value, comment: comment.trim() || null, createdAt: Date.now() })
+      setRatingSuccess("Review submitted!")
+      onSuccess()
+    } catch {
+      setRatingError("Failed to submit rating")
+    } finally {
+      setSubmittingRating(false)
     }
   }
 
@@ -686,7 +749,7 @@ export default function BoothView() {
             </Card>
 
             {/* Open Positions Card */}
-            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)", mb: 3 }}>
               <CardContent sx={{ p: 3, textAlign: "center" }}>
                 <Box
                   sx={{
@@ -711,9 +774,112 @@ export default function BoothView() {
                 </Typography>
               </CardContent>
             </Card>
+
+            {/* Rating Card — students only */}
+            {user?.role === "student" && myRating !== undefined && (
+              <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a" }}>
+                    Rate This Booth
+                  </Typography>
+
+                  {ratingError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setRatingError("")}>{ratingError}</Alert>}
+                  {ratingSuccess && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setRatingSuccess("")}>{ratingSuccess}</Alert>}
+
+                  {myRating ? (
+                    // Show existing review
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your review</Typography>
+                      <Rating value={myRating.rating} readOnly size="small" />
+                      {myRating.comment && (
+                        <Typography variant="body2" sx={{ mt: 0.5, color: "#444" }}>{myRating.comment}</Typography>
+                      )}
+                      {myRating.createdAt && (
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                          {new Date(myRating.createdAt).toLocaleDateString()}
+                        </Typography>
+                      )}
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{ mt: 2, borderColor: "#388560", color: "#388560" }}
+                        onClick={() => { setResubmitValue(null); setResubmitComment(""); setResubmitDialogOpen(true) }}
+                      >
+                        Resubmit Review
+                      </Button>
+                    </Box>
+                  ) : (
+                    // Show submission form
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your rating</Typography>
+                      <Rating
+                        value={ratingValue}
+                        onChange={(_, v) => setRatingValue(v)}
+                        size="large"
+                      />
+                      <TextField
+                        label="Comment (optional)"
+                        value={ratingComment}
+                        onChange={(e) => setRatingComment(e.target.value)}
+                        fullWidth
+                        multiline
+                        rows={2}
+                        size="small"
+                        sx={{ mt: 2, mb: 2 }}
+                      />
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        disabled={!ratingValue || submittingRating}
+                        onClick={() => submitRating(ratingValue, ratingComment, () => { setRatingValue(null); setRatingComment("") })}
+                        sx={{ background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)" }}
+                      >
+                        {submittingRating ? "Submitting..." : "Submit Review"}
+                      </Button>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </Grid>
         </Grid>
       </Container>
+
+      {/* Resubmit Review Dialog */}
+      <Dialog open={resubmitDialogOpen} onClose={() => setResubmitDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Resubmit Review</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>New rating</Typography>
+            <Rating
+              value={resubmitValue}
+              onChange={(_, v) => setResubmitValue(v)}
+              size="large"
+            />
+            <TextField
+              label="Comment (optional)"
+              value={resubmitComment}
+              onChange={(e) => setResubmitComment(e.target.value)}
+              fullWidth
+              multiline
+              rows={3}
+              size="small"
+              sx={{ mt: 2 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResubmitDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!resubmitValue || submittingRating}
+            onClick={() => submitRating(resubmitValue, resubmitComment, () => setResubmitDialogOpen(false))}
+            sx={{ background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)" }}
+          >
+            {submittingRating ? "Submitting..." : "Submit"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {selectedJobForApply && (
         <JobApplicationFormDialog
