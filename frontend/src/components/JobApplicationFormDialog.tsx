@@ -48,8 +48,82 @@ interface TailoredResumeSummary {
 
 type FieldValue = string | string[] | boolean | File | null;
 
-// "none" | "profile" | <tailoredResumeId>
-type ResumeChoice = "none" | "profile" | string;
+function extractProfileResumePath(data: Record<string, unknown>): string | null {
+  const path = data.resumePath ?? data.currentResumePath;
+  if (path && typeof path === "string") return path;
+  const url = data.resumeUrl;
+  if (typeof url === "string" && !url.startsWith("http")) return url;
+  return null;
+}
+
+function safeStr(val: unknown): string {
+  return typeof val === "string" ? val : "";
+}
+
+function buildPrefillFromProfile(
+  form: ApplicationForm | null | undefined,
+  data: Record<string, unknown>
+): Record<string, string> {
+  if (!form?.fields) return {};
+  const authUser = auth.currentUser;
+  const fieldIds = new Set(form.fields.map((f) => f.id));
+  const prefill: Record<string, string> = {};
+  if (fieldIds.has("fullName")) prefill.fullName = safeStr(authUser?.displayName ?? data.displayName);
+  if (fieldIds.has("email")) prefill.email = safeStr(authUser?.email ?? data.email);
+  if (fieldIds.has("graduationYear")) prefill.graduationYear = safeStr(data.expectedGradYear);
+  if (fieldIds.has("major")) prefill.major = safeStr(data.major);
+  if (fieldIds.has("skills")) prefill.skills = safeStr(data.skills);
+  return prefill;
+}
+
+function formatTailoredResumeLabel(r: { jobContext?: { jobTitle?: string }; createdAt?: { toDate?: () => Date } | string }): string {
+  const title = r.jobContext?.jobTitle ?? "Untitled";
+  const raw = r.createdAt;
+  if (raw && typeof raw === "object" && typeof raw.toDate === "function") {
+    return `${title} – ${new Date(raw.toDate()).toLocaleDateString()}`;
+  }
+  if (typeof raw === "string") {
+    return `${title} – ${new Date(raw).toLocaleDateString()}`;
+  }
+  return `${title} – Unknown date`;
+}
+
+async function fetchTailoredResumeSummaries(): Promise<TailoredResumeSummary[]> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return [];
+  const res = await fetch(`${API_URL}/api/resume/tailored`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const resumes = data.resumes ?? [];
+  return resumes.map((r: any) => ({ id: r.id, label: formatTailoredResumeLabel(r) }));
+}
+
+/** Resume choice: "none" | "profile" | tailored resume id */
+function buildResumeFields(
+  resumeChoice: string,
+  profileResumePath: string | null,
+  profileResumeFileName: string | null,
+  tailoredResumes: TailoredResumeSummary[]
+): Record<string, unknown> {
+  if (resumeChoice === "profile" && profileResumePath) {
+    return {
+      attachedResumePath: profileResumePath,
+      attachedResumeFileName: profileResumeFileName ?? null,
+    };
+  }
+  if (resumeChoice !== "none" && resumeChoice !== "profile") {
+    const chosen = tailoredResumes.find((r) => r.id === resumeChoice);
+    if (chosen) {
+      return {
+        attachedTailoredResumeId: chosen.id,
+        attachedTailoredResumeLabel: chosen.label,
+      };
+    }
+  }
+  return {};
+}
 
 export default function JobApplicationFormDialog({
   open,
@@ -70,7 +144,7 @@ export default function JobApplicationFormDialog({
   const [profileResumeFileName, setProfileResumeFileName] = useState<string | null>(null);
   const [tailoredResumes, setTailoredResumes] = useState<TailoredResumeSummary[]>([]);
   const [resumesLoading, setResumesLoading] = useState(false);
-  const [resumeChoice, setResumeChoice] = useState<ResumeChoice>("none");
+  const [resumeChoice, setResumeChoice] = useState<string>("none");
 
   useEffect(() => {
     if (!open || !studentId) return;
@@ -79,67 +153,25 @@ export default function JobApplicationFormDialog({
     const load = async () => {
       setResumesLoading(true);
       try {
-        // 1. Profile resume and user data from Firestore
         const snap = await getDoc(doc(db, "users", studentId));
         const data = snap.exists() ? snap.data() : null;
 
         if (!cancelled && data) {
-          // Resume fields
-          const path: string | null =
-            data.resumePath ?? data.currentResumePath ?? (typeof data.resumeUrl === "string" && !data.resumeUrl.startsWith("http") ? data.resumeUrl : null) ?? null;
-          const name: string | null = data.resumeFileName ?? null;
+          const path = extractProfileResumePath(data);
+          const name = (data.resumeFileName as string) ?? null;
           setProfileResumePath(path);
           setProfileResumeFileName(name);
           if (path) setResumeChoice("profile");
 
-          // 2. Pre-fill form values from profile (only for known field IDs in this form)
-          if (form?.fields) {
-            const authUser = auth.currentUser;
-            const fieldIds = new Set(form.fields.map((f) => f.id));
-            const prefill: Record<string, string> = {};
-
-            if (fieldIds.has("fullName")) {
-              prefill.fullName = (authUser?.displayName ?? data.displayName ?? "").toString();
-            }
-            if (fieldIds.has("email")) {
-              prefill.email = (authUser?.email ?? data.email ?? "").toString();
-            }
-            if (fieldIds.has("graduationYear")) {
-              prefill.graduationYear = (data.expectedGradYear ?? "").toString();
-            }
-            if (fieldIds.has("major")) {
-              prefill.major = (data.major ?? "").toString();
-            }
-            if (fieldIds.has("skills")) {
-              prefill.skills = (data.skills ?? "").toString();
-            }
-
-            if (Object.keys(prefill).length > 0) {
-              setValues((prev) => ({ ...prev, ...prefill }));
-            }
+          const prefill = buildPrefillFromProfile(form, data);
+          if (Object.keys(prefill).length > 0) {
+            setValues((prev) => ({ ...prev, ...prefill }));
           }
         }
 
-        // 3. Tailored resumes via API
-        const token = await auth.currentUser?.getIdToken();
-        if (token && !cancelled) {
-          const res = await fetch(`${API_URL}/api/resume/tailored`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const summaries: TailoredResumeSummary[] = (data.resumes ?? []).map((r: any) => ({
-              id: r.id,
-              label: `${r.jobContext?.jobTitle ?? "Untitled"} – ${
-                r.createdAt?.toDate
-                  ? new Date(r.createdAt.toDate()).toLocaleDateString()
-                  : r.createdAt
-                    ? new Date(r.createdAt).toLocaleDateString()
-                    : "Unknown date"
-              }`,
-            }));
-            if (!cancelled) setTailoredResumes(summaries);
-          }
+        if (!cancelled) {
+          const summaries = await fetchTailoredResumeSummaries();
+          if (!cancelled) setTailoredResumes(summaries);
         }
       } catch {
         // silently ignore — resume attachment is optional
@@ -162,7 +194,7 @@ export default function JobApplicationFormDialog({
     }
   }, [open]);
 
-  if (!form || form.status !== "published") {
+  if (form?.status !== "published") {
     return null;
   }
 
@@ -250,22 +282,12 @@ export default function JobApplicationFormDialog({
         }
       }
 
-      // Build resume attachment fields
-      let resumeFields: Record<string, any> = {};
-      if (resumeChoice === "profile" && profileResumePath) {
-        resumeFields = {
-          attachedResumePath: profileResumePath,
-          attachedResumeFileName: profileResumeFileName ?? null,
-        };
-      } else if (resumeChoice !== "none" && resumeChoice !== "profile") {
-        const chosen = tailoredResumes.find((r) => r.id === resumeChoice);
-        if (chosen) {
-          resumeFields = {
-            attachedTailoredResumeId: chosen.id,
-            attachedTailoredResumeLabel: chosen.label,
-          };
-        }
-      }
+      const resumeFields = buildResumeFields(
+        resumeChoice,
+        profileResumePath,
+        profileResumeFileName,
+        tailoredResumes
+      );
 
       const docData: any = {
         jobId: job.id,
@@ -483,24 +505,26 @@ export default function JobApplicationFormDialog({
             Resume
           </Typography>
 
-          {resumesLoading ? (
+          {resumesLoading && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <CircularProgress size={14} sx={{ color: "#388560" }} />
               <Typography variant="caption" color="text.secondary">
                 Loading your resumes…
               </Typography>
             </Box>
-          ) : !hasAnyResume ? (
+          )}
+          {!resumesLoading && !hasAnyResume && (
             <Typography variant="body2" color="text.secondary">
               No resume on file.{" "}
               <Typography component="span" variant="body2" color="#388560" sx={{ fontStyle: "italic" }}>
                 Upload one from your profile, or create a tailored resume from a job invitation.
               </Typography>
             </Typography>
-          ) : (
+          )}
+          {!resumesLoading && hasAnyResume && (
             <RadioGroup
               value={resumeChoice}
-              onChange={(e) => setResumeChoice(e.target.value as ResumeChoice)}
+              onChange={(e) => setResumeChoice(e.target.value)}
             >
               <FormControlLabel
                 value="none"
