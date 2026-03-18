@@ -34,7 +34,7 @@ import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
 import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
-import { INDUSTRY_LABELS, fetchMyBoothRating } from "../utils/boothConstants"
+import { INDUSTRY_LABELS, fetchMyBoothRating, submitBoothRating } from "../utils/boothConstants"
 
 interface Booth {
   id: string
@@ -331,31 +331,13 @@ export default function BoothView() {
   const fetchMyRating = (id: string) =>
     fetchMyBoothRating(id, user?.role, isMountedRef, setMyRating)
 
-  const submitRating = async (value: number | null, comment: string, onSuccess: () => void) => {
-    if (!boothId || !value) return
-    setSubmittingRating(true)
-    setRatingError("")
-    try {
-      const token = await authUtils.getIdToken()
-      const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ rating: value, comment: comment.trim() || undefined }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        setRatingError(data.error || "Failed to submit rating")
-        return
-      }
-      setMyRating({ rating: value, comment: comment.trim() || null, createdAt: Date.now() })
-      setRatingSuccess("Review submitted!")
-      onSuccess()
-    } catch {
-      setRatingError("Failed to submit rating")
-    } finally {
-      setSubmittingRating(false)
-    }
-  }
+  const submitRating = (value: number | null, comment: string, onSuccess: () => void) =>
+    submitBoothRating(boothId ?? null, value, comment, onSuccess, {
+      setSubmittingRating,
+      setRatingError,
+      setMyRating,
+      setRatingSuccess,
+    })
 
   const fetchJobs = async (companyId: string) => {
     try {

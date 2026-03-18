@@ -457,7 +457,6 @@ describe("server misc endpoints", () => {
     });
 
     it("returns 404 when student doc not found", async () => {
-      let docCallCount = 0;
       db.collection.mockImplementation((name) => {
         if (name === "users") {
           return {

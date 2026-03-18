@@ -34,7 +34,7 @@ import { collection, getDocs, query, where } from "firebase/firestore"
 import { db, auth } from "../firebase"
 import { trackBoothView } from "../utils/boothHistory"
 import { API_URL } from "../config"
-import { INDUSTRY_LABELS, fetchMyBoothRating } from "../utils/boothConstants"
+import { INDUSTRY_LABELS, fetchMyBoothRating, submitBoothRating } from "../utils/boothConstants"
 import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 
 interface Booth {
@@ -234,31 +234,13 @@ export default function FairBoothView() {
   const fetchMyRating = (mainBoothId: string) =>
     fetchMyBoothRating(mainBoothId, user?.role, isMountedRef, setMyRating)
 
-  const submitRating = async (value: number | null, comment: string, onSuccess: () => void) => {
-    if (!ratingBoothId || !value) return
-    setSubmittingRating(true)
-    setRatingError("")
-    try {
-      const token = await authUtils.getIdToken()
-      const res = await fetch(`${API_URL}/api/booths/${ratingBoothId}/ratings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ rating: value, comment: comment.trim() || undefined }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        setRatingError(data.error || "Failed to submit rating")
-        return
-      }
-      setMyRating({ rating: value, comment: comment.trim() || null, createdAt: Date.now() })
-      setRatingSuccess("Review submitted!")
-      onSuccess()
-    } catch {
-      setRatingError("Failed to submit rating")
-    } finally {
-      setSubmittingRating(false)
-    }
-  }
+  const submitRating = (value: number | null, comment: string, onSuccess: () => void) =>
+    submitBoothRating(ratingBoothId, value, comment, onSuccess, {
+      setSubmittingRating,
+      setRatingError,
+      setMyRating,
+      setRatingSuccess,
+    })
 
   const handleStartChat = async () => {
     if (!booth || startingChat || !isMountedRef.current) return
