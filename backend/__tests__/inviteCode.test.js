@@ -40,7 +40,6 @@ jest.mock("../helpers", () => {
 const request = require("supertest");
 const app = require("../server");
 const { db } = require("../firebase");
-const { hmacInviteCode } = require("../helpers");
 
 describe("POST /api/update-invite-code", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -110,16 +109,16 @@ describe("POST /api/update-invite-code", () => {
 
   it("returns 400 when invite code is already in use", async () => {
     const takenCode = "TAKEN123";
-    const takenHmac = hmacInviteCode(takenCode);
     db.collection.mockImplementation(() => ({
       doc: jest.fn(() => ({
         get: jest.fn().mockResolvedValue(
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
+      where: jest.fn().mockReturnThis(),
       get: jest.fn().mockResolvedValue({
         docs: [
-          { id: "other-company-id", data: () => ({ inviteCodeHmac: takenHmac }) },
+          { id: "other-company-id", data: () => ({ inviteCode: takenCode }) },
         ],
       }),
     }));
@@ -138,6 +137,7 @@ describe("POST /api/update-invite-code", () => {
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
+      where: jest.fn().mockReturnThis(),
       get: jest.fn().mockResolvedValue({ docs: [] }), // no duplicate codes
     }));
 
@@ -168,6 +168,7 @@ describe("POST /api/update-invite-code", () => {
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
+      where: jest.fn().mockReturnThis(),
       get: jest.fn().mockResolvedValue({ docs: [] }), // no duplicate codes
     }));
 

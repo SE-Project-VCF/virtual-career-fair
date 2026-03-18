@@ -6,7 +6,7 @@ const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
-const { removeUndefined, generateInviteCode, encryptInviteCode, decryptInviteCode, hmacInviteCode, validateJobInput, parseUTCToTimestamp, verifyAdmin, verifyFirebaseToken } = require("./helpers");
+const { removeUndefined, generateInviteCode, validateJobInput, parseUTCToTimestamp, verifyAdmin, verifyFirebaseToken } = require("./helpers");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Fair routes (multi-fair support)
@@ -199,8 +199,7 @@ app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (r
     const rawCode = generateInviteCode();
 
     await db.collection("fairs").doc(fairId).update({
-      inviteCodeEncrypted: encryptInviteCode(rawCode),
-      inviteCodeHmac: hmacInviteCode(rawCode),
+      inviteCode: rawCode,
       updatedAt: admin.firestore.Timestamp.now(),
       updatedBy: adminUid,
     });
@@ -685,8 +684,7 @@ app.post("/api/register-user", async (req, res) => {
           companyId,
           companyName,
           ownerId: userRecord.uid,
-          inviteCodeEncrypted: encryptInviteCode(plainInviteCode),
-          inviteCodeHmac: hmacInviteCode(plainInviteCode),
+          inviteCode: plainInviteCode,
           createdAt: admin.firestore.Timestamp.now(),
         })
       );
@@ -2455,18 +2453,14 @@ app.post("/api/update-invite-code", async (req, res) => {
       inviteCode = generateInviteCode();
     }
 
-    // Duplicate check: compare by HMAC so we never store/compare plaintext
-    const newHmac = hmacInviteCode(inviteCode);
-    const companiesSnapshot = await db.collection("companies").get();
-    const companiesWithCode = companiesSnapshot.docs.filter(
-      (doc) => doc.data().inviteCodeHmac === newHmac && doc.id !== companyId
-    );
+    // Duplicate check: ensure no other company uses this invite code
+    const companiesSnapshot = await db.collection("companies").where("inviteCode", "==", inviteCode.toUpperCase()).get();
+    const companiesWithCode = companiesSnapshot.docs.filter((doc) => doc.id !== companyId);
 
     if (companiesWithCode.length > 0) {
       return res.status(400).json({ error: "This invite code is already in use by another company" });
     }
 
-    // Atomic update — store encrypted blob + HMAC index; no plaintext
     await db.runTransaction(async (transaction) => {
       const companyRef = db.collection("companies").doc(companyId);
       const companySnap = await transaction.get(companyRef);
@@ -2476,8 +2470,7 @@ app.post("/api/update-invite-code", async (req, res) => {
       }
 
       transaction.update(companyRef, {
-        inviteCodeEncrypted: encryptInviteCode(inviteCode),
-        inviteCodeHmac: newHmac,
+        inviteCode: inviteCode.toUpperCase(),
         inviteCodeUpdatedAt: admin.firestore.Timestamp.now(),
       });
     });
@@ -2515,8 +2508,7 @@ app.post("/api/companies", verifyFirebaseToken, async (req, res) => {
       companyId,
       companyName: companyName.trim(),
       ownerId,
-      inviteCodeEncrypted: encryptInviteCode(rawCode),
-      inviteCodeHmac: hmacInviteCode(rawCode),
+      inviteCode: rawCode,
       createdAt: admin.firestore.Timestamp.now(),
     }));
 
@@ -2542,8 +2534,7 @@ app.post("/api/link-company", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ error: "Invite code is required" });
     }
 
-    const codeHmac = hmacInviteCode(inviteCode.trim());
-    const companiesSnap = await db.collection("companies").where("inviteCodeHmac", "==", codeHmac).get();
+    const companiesSnap = await db.collection("companies").where("inviteCode", "==", inviteCode.trim().toUpperCase()).get();
     if (companiesSnap.empty) return res.status(400).json({ error: "Invalid invite code." });
 
     const companyDoc = companiesSnap.docs[0];
@@ -2581,7 +2572,7 @@ app.get("/api/companies/:companyId/invite-code", verifyFirebaseToken, async (req
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) return res.status(404).json({ error: "Company not found" });
 
-    const { ownerId, inviteCodeEncrypted } = companyDoc.data();
+    const { ownerId, inviteCode } = companyDoc.data();
 
     const userDoc = await db.collection("users").doc(requestingUid).get();
     const isAdmin = userDoc.exists && userDoc.data().role === "administrator";
@@ -2591,11 +2582,10 @@ app.get("/api/companies/:companyId/invite-code", verifyFirebaseToken, async (req
       return res.status(403).json({ error: "Only the company owner or an admin can view the invite code" });
     }
 
-    if (!inviteCodeEncrypted) {
+    if (!inviteCode) {
       return res.status(404).json({ error: "No invite code found. Please generate one." });
     }
 
-    const inviteCode = decryptInviteCode(inviteCodeEncrypted);
     return res.json({ inviteCode });
   } catch (err) {
     console.error("GET /api/companies/:companyId/invite-code error:", err);
@@ -4319,6 +4309,120 @@ app.get("/api/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) =>
   } catch (err) {
     console.error("Error fetching booth visitors:", err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ============================================================
+   BOOTH RATINGS
+============================================================ */
+app.get("/api/test-rating-route", (req, res) => res.json({ ok: true }));
+
+/**
+ * POST /api/booths/:boothId/ratings
+ * Student submits (or overwrites) a rating for a booth
+ */
+app.post("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const studentId = req.user.uid;
+
+    const userDoc = await db.collection("users").doc(studentId).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().role !== "student") return res.status(403).json({ error: "Only students can submit ratings" });
+
+    const { rating, comment } = req.body;
+    if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "rating must be a number between 1 and 5" });
+    }
+
+    const boothDoc = await db.collection("booths").doc(boothId).get();
+    if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
+
+    await db.collection("booths").doc(boothId).collection("ratings").doc(studentId).set({
+      studentId,
+      rating,
+      comment: comment?.trim() || null,
+      createdAt: admin.firestore.Timestamp.now(),
+    });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("POST /api/booths/:boothId/ratings error:", err);
+    return res.status(500).json({ error: "Failed to submit rating" });
+  }
+});
+
+/**
+ * GET /api/booths/:boothId/ratings/me
+ * Get the current student's own rating for a booth
+ */
+app.get("/api/booths/:boothId/ratings/me", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const studentId = req.user.uid;
+
+    const ratingDoc = await db.collection("booths").doc(boothId).collection("ratings").doc(studentId).get();
+    if (!ratingDoc.exists) return res.json({ rating: null });
+
+    const data = ratingDoc.data();
+    return res.json({
+      rating: {
+        rating: data.rating,
+        comment: data.comment || null,
+        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/booths/:boothId/ratings/me error:", err);
+    return res.status(500).json({ error: "Failed to fetch rating" });
+  }
+});
+
+/**
+ * GET /api/booths/:boothId/ratings
+ * Get all ratings for a booth — company owner/rep (own booth only) or admin
+ * Reviews are returned anonymously (no studentId)
+ */
+app.get("/api/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const userId = req.user.uid;
+
+    const boothDoc = await db.collection("booths").doc(boothId).get();
+    if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
+
+    const adminErr = await verifyAdmin(userId);
+    if (adminErr) {
+      // Not admin — must be owner/rep of the company that owns this booth
+      const userDoc = await db.collection("users").doc(userId).get();
+      if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+      const companyId = userDoc.data().companyId;
+      if (!companyId) return res.status(403).json({ error: "Unauthorized" });
+      const companyDoc = await db.collection("companies").doc(companyId).get();
+      if (!companyDoc.exists || companyDoc.data().boothId !== boothId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+    }
+
+    const ratingsSnap = await db.collection("booths").doc(boothId).collection("ratings").get();
+    const ratings = ratingsSnap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        rating: data.rating,
+        comment: data.comment || null,
+        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+      };
+    });
+
+    const totalRatings = ratings.length;
+    const averageRating = totalRatings > 0
+      ? ratings.reduce((sum, r) => sum + r.rating, 0) / totalRatings
+      : null;
+
+    return res.json({ ratings, totalRatings, averageRating });
+  } catch (err) {
+    console.error("GET /api/booths/:boothId/ratings error:", err);
+    return res.status(500).json({ error: "Failed to fetch ratings" });
   }
 });
 

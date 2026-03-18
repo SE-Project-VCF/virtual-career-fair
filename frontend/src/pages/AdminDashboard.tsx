@@ -207,6 +207,9 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
                         />
                       </TableCell>
                       <TableCell align="right">
+                        <Button size="small" onClick={() => navigate(`/admin/fairs/${fair.id}`)} sx={{ mr: 1 }}>
+                          Reviews
+                        </Button>
                         <Button size="small" onClick={() => navigate(`/fair/${fair.id}/admin`)} sx={{ mr: 1 }}>
                           Manage
                         </Button>

@@ -239,12 +239,9 @@ describe("GET /api/fairs/:fairId – branches", () => {
     expect(res.status).toBe(500);
   });
 
-  it("returns fair with inviteCode for admin with encrypted invite code", async () => {
-    // Provide a real encrypted invite code so decryptInviteCode can work
-    const { encryptInviteCode } = require("../helpers");
-    const encrypted = encryptInviteCode("TESTCODE");
+  it("returns fair with inviteCode for admin", async () => {
     setupSimpleFairs({
-      fair: { ...FAIR_DATA, inviteCodeEncrypted: encrypted },
+      fair: { ...FAIR_DATA, inviteCode: "TESTCODE" },
     });
     // admin role lookup: users collection for requesting user
     db.collection.mockImplementation((name) => {
@@ -252,7 +249,7 @@ describe("GET /api/fairs/:fairId – branches", () => {
         return {
           doc: jest.fn(() => ({
             get: jest.fn().mockResolvedValue(mockDocSnap(
-              { ...FAIR_DATA, inviteCodeEncrypted: encrypted },
+              { ...FAIR_DATA, inviteCode: "TESTCODE" },
               true, "fair-id"
             )),
           })),
@@ -272,7 +269,6 @@ describe("GET /api/fairs/:fairId – branches", () => {
       .get("/api/fairs/fair-id")
       .set("Authorization", authHeader());
     expect(res.status).toBe(200);
-    // inviteCode should be decrypted and returned to admin
     expect(res.body.inviteCode).toBe("TESTCODE");
   });
 
@@ -541,9 +537,8 @@ describe("POST /api/fairs/:fairId/enroll – helper branches", () => {
     // Let's test this by passing an inviteCode that resolves successfully to a fair
     // Then companyId is resolved from user (but user has none)
     // For a successful HMAC lookup, we'll configure the where/get to return the fairDoc
-    const { hmacInviteCode, encryptInviteCode } = require("../helpers");
     const code = "MYCODE12";
-    const fairDocWithHmac = { ...FAIR_DATA, inviteCodeHmac: hmacInviteCode(code), inviteCodeEncrypted: encryptInviteCode(code) };
+    const fairDocWithHmac = { ...FAIR_DATA, inviteCode: code.toUpperCase() };
 
     db.collection.mockImplementation((name) => {
       if (name === "fairs") {
@@ -767,6 +762,70 @@ describe("GET /api/fairs/:fairId/booths – error paths", () => {
       .set("Authorization", authHeader());
     expect(res.status).toBe(200);
     expect(res.body.booths).toBeDefined();
+  });
+
+  it("returns booths with ratings when booth has originalBoothId (admin)", async () => {
+    evaluateFairStatusForFair.mockResolvedValue({ isLive: false });
+
+    const ratingDocs = [
+      { id: "s1", data: () => ({ rating: 4, comment: "Nice", createdAt: { toMillis: () => 1000 } }) },
+      { id: "s2", data: () => ({ rating: 2, comment: null, createdAt: null }) },
+    ];
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_DATA, true, "fair-id")),
+            collection: jest.fn((sub) => {
+              if (sub === "booths") {
+                return {
+                  doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+                  get: jest.fn().mockResolvedValue(mockQuerySnap([
+                    { id: "b1", data: () => ({ companyName: "Acme", originalBoothId: "global-booth-1" }) },
+                  ])),
+                  where: jest.fn().mockReturnThis(),
+                  orderBy: jest.fn().mockReturnThis(),
+                };
+              }
+              return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+            }),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true, "admin-uid")),
+          })),
+        };
+      }
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            collection: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue(mockQuerySnap(ratingDocs)),
+            })),
+          })),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .get("/api/fairs/fair-id/booths")
+      .set("Authorization", authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.booths).toHaveLength(1);
+    expect(res.body.booths[0].totalRatings).toBe(2);
+    expect(res.body.booths[0].averageRating).toBe(3);
   });
 });
 

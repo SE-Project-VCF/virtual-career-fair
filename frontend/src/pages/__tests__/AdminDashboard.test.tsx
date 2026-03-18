@@ -597,6 +597,24 @@ describe("AdminDashboard", () => {
       });
     });
 
+    it("navigates to fair reviews when Reviews button is clicked", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "fair-42", name: "Fair With Reviews", isLive: false, startTime: null, endTime: null }],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByRole("button", { name: /reviews/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /reviews/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/admin/fairs/fair-42");
+    });
+
     it("navigates to fair admin when Manage button is clicked", async () => {
       const user = userEvent.setup();
       globalThis.fetch = vi.fn().mockResolvedValue({

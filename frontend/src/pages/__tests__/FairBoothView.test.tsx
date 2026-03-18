@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { BrowserRouter } from "react-router-dom"
@@ -921,6 +921,112 @@ describe("FairBoothView", () => {
 
       expect(screen.getByTestId("dialog-company-id")).toHaveTextContent("booth-company-id")
     })
+
+  describe("Rating functionality", () => {
+    const setupRatingFetch = (ratingData: any = null) => {
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes(`/fairs/fair-1/booths/booth-1`)) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              companyName: "Tech Corp",
+              industry: "software",
+              companySize: "51-200",
+              location: "NYC",
+              description: "A great company",
+              contactName: "Jane",
+              contactEmail: "jane@tech.com",
+              companyId: "c1",
+              originalBoothId: "root-booth-1",
+            }),
+          });
+        }
+        if (url.includes("/jobs")) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({ jobs: [] }) });
+        }
+        if (url.includes("/track-view") || url.includes("/track-leave")) {
+          return Promise.resolve({ ok: true, json: async () => ({}) });
+        }
+        if (url.includes("/ratings/me")) {
+          return Promise.resolve({ ok: true, json: async () => ({ rating: ratingData }) });
+        }
+        if (url.includes("/ratings")) {
+          return Promise.resolve({ ok: true, json: async () => ({}) });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+    };
+
+    it("shows rating form when booth has originalBoothId and no existing rating", async () => {
+      setupRatingFetch(null);
+      renderFairBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Rate This Booth")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Submit Review/ })).toBeInTheDocument();
+      });
+    });
+
+    it("shows existing review when student already rated", async () => {
+      setupRatingFetch({ rating: 5, comment: "Loved it!", createdAt: 2000000 });
+      renderFairBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Your review")).toBeInTheDocument();
+        expect(screen.getByText("Loved it!")).toBeInTheDocument();
+      });
+    });
+
+    it("shows 'Rating not available' when booth has no originalBoothId", async () => {
+      // booth without originalBoothId
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            companyName: "Tech Corp",
+            industry: "software",
+            companySize: "51-200",
+            location: "NYC",
+            description: "A great company",
+            contactName: "Jane",
+            contactEmail: "jane@tech.com",
+            companyId: "c1",
+          }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ jobs: [] }) });
+
+      renderFairBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText(/rating not available/i)).toBeInTheDocument();
+      });
+    });
+
+    it("submits rating successfully in FairBoothView", async () => {
+      const user = userEvent.setup();
+      setupRatingFetch(null);
+      renderFairBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Rate This Booth")).toBeInTheDocument();
+      });
+
+      const radios = screen.getAllByRole("radio");
+      fireEvent.click(radios[4]); // 5 stars
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Submit Review/ })).not.toBeDisabled();
+      });
+
+      await user.click(screen.getByRole("button", { name: /Submit Review/ }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Review submitted!")).toBeInTheDocument();
+      });
+    });
+  });
 
     it("passes boothId and studentId to JobApplicationFormDialog", async () => {
       const user = userEvent.setup()
