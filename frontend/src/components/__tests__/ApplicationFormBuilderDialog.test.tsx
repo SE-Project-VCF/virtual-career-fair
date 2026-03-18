@@ -129,6 +129,47 @@ describe("ApplicationFormBuilderDialog", () => {
       render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={existingForm} />)
       expect(screen.getByDisplayValue("Your name")).toBeInTheDocument()
     })
+
+    it("deletes a field when delete button is clicked and removes it from the form", async () => {
+      const user = userEvent.setup()
+      const formWithTwoFields: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "shortText", label: "First field", required: true },
+          { id: "f2", type: "shortText", label: "Second field", required: false },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithTwoFields} />)
+
+      const firstFieldInput = screen.getByDisplayValue("First field")
+      const fieldCard = firstFieldInput.closest(".MuiPaper-root") as HTMLElement
+      const deleteBtn = fieldCard.querySelector('[data-testid="DeleteIcon"]')?.closest("button")!
+      await user.click(deleteBtn)
+
+      expect(screen.queryByDisplayValue("First field")).not.toBeInTheDocument()
+      expect(screen.getByDisplayValue("Second field")).toBeInTheDocument()
+    })
+
+    it("shows correct field count after deleting a field", async () => {
+      const user = userEvent.setup()
+      const formWithTwoFields: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "shortText", label: "A", required: false },
+          { id: "f2", type: "shortText", label: "B", required: false },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithTwoFields} />)
+
+      expect(screen.getByText("2 fields configured")).toBeInTheDocument()
+
+      const firstFieldInput = screen.getByDisplayValue("A")
+      const fieldCard = firstFieldInput.closest(".MuiPaper-root") as HTMLElement
+      const deleteBtn = fieldCard.querySelector('[data-testid="DeleteIcon"]')?.closest("button")!
+      await user.click(deleteBtn)
+
+      expect(screen.getByText("1 field configured")).toBeInTheDocument()
+    })
   })
 
   describe("Validation", () => {
@@ -156,6 +197,79 @@ describe("ApplicationFormBuilderDialog", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("alert")).toBeInTheDocument()
+      })
+    })
+
+    it('shows error "Add at least one field" when saving with no fields', async () => {
+      const user = userEvent.setup()
+      const formWithOneField: ApplicationForm = {
+        ...existingForm,
+        fields: [{ id: "f1", type: "shortText", label: "Name", required: true }],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithOneField} />)
+
+      const fieldInput = screen.getByDisplayValue("Name")
+      const fieldCard = fieldInput.closest(".MuiPaper-root") as HTMLElement
+      const deleteBtn = fieldCard.querySelector('[data-testid="DeleteIcon"]')?.closest("button")!
+      await user.click(deleteBtn)
+
+      expect(screen.getByText("No fields yet.")).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText("Add at least one field to your application form.")).toBeInTheDocument()
+      })
+    })
+
+    it("shows error when singleSelect field has no options", async () => {
+      const user = userEvent.setup()
+      const formWithSelect: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "singleSelect", label: "Choose one", required: false, options: [] },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithSelect} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText("Provide at least one option.")).toBeInTheDocument()
+      })
+    })
+
+    it("shows error when multiSelect field has no options", async () => {
+      const user = userEvent.setup()
+      const formWithMultiSelect: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "multiSelect", label: "Choose many", required: false, options: [] },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithMultiSelect} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText("Provide at least one option.")).toBeInTheDocument()
+      })
+    })
+
+    it("shows 'Please fix the highlighted fields' when multiple validation errors exist", async () => {
+      const user = userEvent.setup()
+      const invalidForm: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "shortText", label: "", required: false },
+          { id: "f2", type: "singleSelect", label: "Pick", required: false, options: [] },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={invalidForm} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/Please fix the highlighted fields before saving\./)).toBeInTheDocument()
       })
     })
   })
@@ -250,6 +364,82 @@ describe("ApplicationFormBuilderDialog", () => {
         expect(body.status).toBe("draft")
       })
     })
+
+    it("includes publishedAt when status is published", async () => {
+      const user = userEvent.setup()
+      const publishedForm: ApplicationForm = { ...existingForm, status: "published" }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={publishedForm} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        const body = JSON.parse((global.fetch as any).mock.calls[0][1].body)
+        expect(body.publishedAt).toBeDefined()
+        expect(typeof body.publishedAt).toBe("number")
+      })
+    })
+
+    it("includes description in request body when non-empty", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={existingForm} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        const body = JSON.parse((global.fetch as any).mock.calls[0][1].body)
+        expect(body.description).toBe("Fill this in")
+      })
+    })
+
+    it("omits description when empty", async () => {
+      const user = userEvent.setup()
+      const formWithoutDesc: ApplicationForm = { ...existingForm, description: undefined }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithoutDesc} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        const body = JSON.parse((global.fetch as any).mock.calls[0][1].body)
+        expect(body.description).toBeUndefined()
+      })
+    })
+
+    it("trims and filters options for select fields when saving", async () => {
+      const user = userEvent.setup()
+      const formWithSelect: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          {
+            id: "f1",
+            type: "singleSelect",
+            label: "Pick",
+            required: false,
+            options: ["  A  ", "B", "", "  C  "],
+          },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithSelect} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        const body = JSON.parse((global.fetch as any).mock.calls[0][1].body)
+        expect(body.fields[0].options).toEqual(["A", "B", "C"])
+      })
+    })
+
+    it("does not make API call when save is blocked by validation", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} />)
+
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toBeInTheDocument()
+      })
+      expect(global.fetch).not.toHaveBeenCalled()
+    })
   })
 
   describe("Cancel / close", () => {
@@ -260,6 +450,30 @@ describe("ApplicationFormBuilderDialog", () => {
 
       await user.click(screen.getByRole("button", { name: /cancel/i }))
       expect(onClose).toHaveBeenCalled()
+    })
+
+    it("disables Cancel and Save buttons while save is in progress (handleClose guard)", async () => {
+      let resolveFetch: (value: any) => void
+      const fetchPromise = new Promise<Response>((resolve) => {
+        resolveFetch = resolve
+      })
+      ;(global.fetch as any).mockReturnValue(fetchPromise)
+
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={existingForm} />)
+
+      const saveButton = screen.getByRole("button", { name: /save/i })
+      await user.click(saveButton)
+
+      const cancelButton = screen.getByRole("button", { name: /cancel/i })
+      expect(cancelButton).toBeDisabled()
+      expect(saveButton).toBeDisabled()
+      expect(saveButton).toHaveTextContent("Saving...")
+
+      resolveFetch!({ ok: true, json: () => Promise.resolve({ success: true }) })
+      await waitFor(() => {
+        expect(cancelButton).not.toBeDisabled()
+      })
     })
   })
 })
