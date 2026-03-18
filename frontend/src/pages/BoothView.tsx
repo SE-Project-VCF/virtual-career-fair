@@ -34,7 +34,7 @@ import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
 import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
-import { INDUSTRY_LABELS } from "../utils/boothConstants"
+import { INDUSTRY_LABELS, fetchMyBoothRating } from "../utils/boothConstants"
 
 interface Booth {
   id: string
@@ -328,24 +328,8 @@ export default function BoothView() {
     }
   }
 
-  const fetchMyRating = async (id: string) => {
-    if (user?.role !== "student") return
-    try {
-      const token = await authUtils.getIdToken()
-      const res = await fetch(`${API_URL}/api/booths/${id}/ratings/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!isMountedRef.current) return
-      if (res.ok) {
-        const data = await res.json()
-        setMyRating(data.rating)
-      } else {
-        setMyRating(null)
-      }
-    } catch {
-      if (isMountedRef.current) setMyRating(null)
-    }
-  }
+  const fetchMyRating = (id: string) =>
+    fetchMyBoothRating(id, user?.role, isMountedRef, setMyRating)
 
   const submitRating = async (value: number | null, comment: string, onSuccess: () => void) => {
     if (!boothId || !value) return

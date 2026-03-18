@@ -34,7 +34,7 @@ import { collection, getDocs, query, where } from "firebase/firestore"
 import { db, auth } from "../firebase"
 import { trackBoothView } from "../utils/boothHistory"
 import { API_URL } from "../config"
-import { INDUSTRY_LABELS } from "../utils/boothConstants"
+import { INDUSTRY_LABELS, fetchMyBoothRating } from "../utils/boothConstants"
 import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 
 interface Booth {
@@ -231,24 +231,8 @@ export default function FairBoothView() {
     }
   }
 
-  const fetchMyRating = async (mainBoothId: string) => {
-    if (user?.role !== "student") return
-    try {
-      const token = await authUtils.getIdToken()
-      const res = await fetch(`${API_URL}/api/booths/${mainBoothId}/ratings/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!isMountedRef.current) return
-      if (res.ok) {
-        const data = await res.json()
-        setMyRating(data.rating)
-      } else {
-        setMyRating(null)
-      }
-    } catch {
-      if (isMountedRef.current) setMyRating(null)
-    }
-  }
+  const fetchMyRating = (mainBoothId: string) =>
+    fetchMyBoothRating(mainBoothId, user?.role, isMountedRef, setMyRating)
 
   const submitRating = async (value: number | null, comment: string, onSuccess: () => void) => {
     if (!ratingBoothId || !value) return
