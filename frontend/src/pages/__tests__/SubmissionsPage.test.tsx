@@ -75,6 +75,15 @@ function mockJsonResponse(data: object, ok = true, status = 200) {
     json: () => Promise.resolve(data),
   })
 }
+function mockNonJsonResponse(htmlBody: string, status = 200) {
+  return Promise.resolve({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: (name: string) => (name === "content-type" ? "text/html" : null) },
+    text: () => Promise.resolve(htmlBody),
+    json: () => Promise.reject(new Error("Not JSON")),
+  })
+}
 global.fetch = vi.fn()
 
 /* ---- window.open mock ---- */
@@ -95,6 +104,22 @@ const mockJobs = [
     },
   },
 ]
+
+const jobWithMixedFields = {
+  id: "job-mixed",
+  name: "Data Analyst",
+  companyId: "company-1",
+  applicationForm: {
+    title: "DA Application",
+    status: "published",
+    fields: [
+      { id: "q1", type: "shortText", label: "Name", required: true },
+      { id: "q2", type: "checkbox", label: "Available?", required: false },
+      { id: "q3", type: "multiSelect", label: "Skills", required: false },
+      { id: "q4", type: "file", label: "Portfolio", required: false },
+    ],
+  },
+}
 
 const mockSubmissions = [
   {
@@ -135,6 +160,17 @@ const submissionWithTailored = {
   attachedTailoredResumeId: "tr-1",
   attachedTailoredResumeLabel: "Frontend Dev – 3/1/2026",
   submittedAt: 1700000003000,
+}
+
+const submissionWithFileUrlsResume = {
+  id: "sub-fileurls",
+  jobId: "job-1",
+  companyId: "company-1",
+  studentId: "student-5",
+  responses: {},
+  attachedResumePath: "resumes/student-5/cv.pdf",
+  fileUrls: { resume: "https://storage.example.com/resume.pdf" },
+  submittedAt: 1700000004000,
 }
 
 function renderPage() {
@@ -407,6 +443,76 @@ describe("SubmissionsPage", () => {
       })
     })
 
+    it("View Resume opens fileUrls.resume URL directly without fetching when present", async () => {
+      const user = await renderWithSubmission(submissionWithFileUrlsResume)
+
+      const resumeBtn = await screen.findByRole("button", { name: /view resume/i })
+      await user.click(resumeBtn)
+
+      await waitFor(() => {
+        expect(global.fetch).not.toHaveBeenCalledWith(
+          expect.stringContaining("/api/applicant-resume-url"),
+          expect.anything()
+        )
+        expect(mockWindowOpen).toHaveBeenCalledWith(
+          "https://storage.example.com/resume.pdf",
+          "_blank",
+          "noopener,noreferrer"
+        )
+      })
+    })
+
+    it("View Resume shows loading state while fetching URL", async () => {
+      let resolveFetch: (v: any) => void
+      const fetchPromise = new Promise<any>((resolve) => {
+        resolveFetch = resolve
+      })
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) return mockJsonResponse({ jobs: mockJobs })
+        if (url.includes("/api/companies")) {
+          return mockJsonResponse({ success: true, submissions: [submissionWithResume] })
+        }
+        if (url.includes("/api/applicant-resume-url")) return fetchPromise
+        return mockJsonResponse({})
+      })
+
+      renderPage()
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+      await user.click(screen.getAllByText(/ID:/)[0])
+
+      const resumeBtn = await screen.findByRole("button", { name: /view resume/i })
+      await user.click(resumeBtn)
+
+      expect(screen.getByRole("button", { name: /loading/i })).toBeInTheDocument()
+
+      resolveFetch!(await mockJsonResponse({ url: "https://example.com/signed.pdf" }))
+      await waitFor(() => expect(screen.queryByRole("button", { name: /loading/i })).not.toBeInTheDocument())
+    })
+
+    it("View Resume handles 404 with appropriate error message", async () => {
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) return mockJsonResponse({ jobs: mockJobs })
+        if (url.includes("/api/companies")) {
+          return mockJsonResponse({ success: true, submissions: [submissionWithResume] })
+        }
+        if (url.includes("/api/applicant-resume-url")) {
+          return mockJsonResponse({ error: "Resume not found" }, false, 404)
+        }
+        return mockJsonResponse({})
+      })
+
+      renderPage()
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+      await user.click(screen.getAllByText(/ID:/)[0])
+      await user.click(await screen.findByRole("button", { name: /view resume/i }))
+
+      await waitFor(() => {
+        expect(mockWindowOpen).not.toHaveBeenCalled()
+      })
+    })
+
     it("shows View Tailored Resume button when submission has attachedTailoredResumeId", async () => {
       await renderWithSubmission(submissionWithTailored)
       await waitFor(() => {
@@ -468,6 +574,199 @@ describe("SubmissionsPage", () => {
       await waitFor(() => {
         expect(screen.getByText("Not authorized")).toBeInTheDocument()
       })
+    })
+
+    it("tailored resume dialog shows error when API returns non-JSON (parseJsonOrThrow)", async () => {
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) return mockJsonResponse({ jobs: mockJobs })
+        if (url.includes("/api/companies")) {
+          return mockJsonResponse({ success: true, submissions: [submissionWithTailored] })
+        }
+        if (url.includes("/api/applicant-tailored-resume")) {
+          return mockNonJsonResponse("<html><body>Server Error</body></html>")
+        }
+        return mockJsonResponse({})
+      })
+
+      renderPage()
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+      await user.click(screen.getAllByText(/ID:/)[0])
+      await user.click(await screen.findByRole("button", { name: /tailored resume/i }))
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toHaveTextContent(/Server returned non-JSON|Check that VITE_API_URL/)
+      })
+    })
+
+    it("tailored resume uses structured data when tailoredText is absent", async () => {
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) return mockJsonResponse({ jobs: mockJobs })
+        if (url.includes("/api/companies")) {
+          return mockJsonResponse({ success: true, submissions: [submissionWithTailored] })
+        }
+        if (url.includes("/api/applicant-tailored-resume")) {
+          return mockJsonResponse({
+            structured: { summary: { text: "Experienced data analyst with 5 years in SQL." } },
+          })
+        }
+        return mockJsonResponse({})
+      })
+
+      renderPage()
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+      await user.click(screen.getAllByText(/ID:/)[0])
+      await user.click(await screen.findByRole("button", { name: /tailored resume/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/PROFESSIONAL SUMMARY|Experienced data analyst/)).toBeInTheDocument()
+      })
+    })
+
+    it("tailored resume shows '(No content found)' when neither tailoredText nor structured", async () => {
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) return mockJsonResponse({ jobs: mockJobs })
+        if (url.includes("/api/companies")) {
+          return mockJsonResponse({ success: true, submissions: [submissionWithTailored] })
+        }
+        if (url.includes("/api/applicant-tailored-resume")) {
+          return mockJsonResponse({})
+        }
+        return mockJsonResponse({})
+      })
+
+      renderPage()
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+      await user.click(screen.getAllByText(/ID:/)[0])
+      await user.click(await screen.findByRole("button", { name: /tailored resume/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText("(No content found)")).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe("Form field rendering (renderResponseValue, lines 222-309)", () => {
+    async function renderWithJobAndSubmission(job: object, submission: object) {
+      const user = userEvent.setup()
+      ;(global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/jobs")) return mockJsonResponse({ jobs: [job] })
+        if (url.includes("/api/companies")) {
+          return mockJsonResponse({ success: true, submissions: [submission] })
+        }
+        return mockJsonResponse({})
+      })
+      renderPage()
+      await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument())
+      await user.click(screen.getAllByText(/ID:/)[0])
+      return user
+    }
+
+    it("renders boolean as Yes/No", async () => {
+      await renderWithJobAndSubmission(jobWithMixedFields, {
+        id: "sub-1",
+        jobId: "job-mixed",
+        companyId: "company-1",
+        studentId: "student-1",
+        responses: { q1: "John", q2: true, q3: null, q4: null },
+        submittedAt: 1700000000000,
+      })
+      expect(screen.getByText("Yes")).toBeInTheDocument()
+    })
+
+    it("renders array as comma-joined string", async () => {
+      await renderWithJobAndSubmission(jobWithMixedFields, {
+        id: "sub-1",
+        jobId: "job-mixed",
+        companyId: "company-1",
+        studentId: "student-1",
+        responses: { q1: "Jane", q2: false, q3: ["Python", "SQL", "R"], q4: null },
+        submittedAt: 1700000000000,
+      })
+      expect(screen.getByText("Python, SQL, R")).toBeInTheDocument()
+    })
+
+    it("renders null/undefined as em dash", async () => {
+      await renderWithJobAndSubmission(jobWithMixedFields, {
+        id: "sub-1",
+        jobId: "job-mixed",
+        companyId: "company-1",
+        studentId: "student-1",
+        responses: { q1: "Test", q2: null, q3: [], q4: null },
+        submittedAt: 1700000000000,
+      })
+      const dashes = screen.getAllByText("—")
+      expect(dashes.length).toBeGreaterThan(0)
+    })
+
+    it("renders file field with View uploaded file link when fileUrl present", async () => {
+      await renderWithJobAndSubmission(
+        jobWithMixedFields,
+        {
+          id: "sub-1",
+          jobId: "job-mixed",
+          companyId: "company-1",
+          studentId: "student-1",
+          responses: { q1: "Alice", q2: false, q3: null, q4: null },
+          fileUrls: { q4: "https://example.com/portfolio.pdf" },
+          submittedAt: 1700000000000,
+        }
+      )
+      expect(screen.getByRole("link", { name: /view uploaded file/i })).toHaveAttribute(
+        "href",
+        "https://example.com/portfolio.pdf"
+      )
+    })
+
+    it("renders file field as 'No file uploaded' when no fileUrl", async () => {
+      await renderWithJobAndSubmission(jobWithMixedFields, {
+        id: "sub-1",
+        jobId: "job-mixed",
+        companyId: "company-1",
+        studentId: "student-1",
+        responses: { q1: "Bob", q2: false, q3: null, q4: null },
+        submittedAt: 1700000000000,
+      })
+      expect(screen.getByText("No file uploaded")).toBeInTheDocument()
+    })
+
+    it("fallback: renders responses and fileUrls when no form fields", async () => {
+      const jobNoForm = {
+        id: "job-nf",
+        name: "Legacy Job",
+        companyId: "company-1",
+        applicationForm: { title: "Legacy", status: "published", fields: [] },
+      }
+      await renderWithJobAndSubmission(jobNoForm, {
+        id: "sub-1",
+        jobId: "job-nf",
+        companyId: "company-1",
+        studentId: "student-1",
+        responses: { custom_key: "Custom answer", other: "More text" },
+        fileUrls: { attachment: "https://example.com/file.pdf" },
+        submittedAt: 1700000000000,
+      })
+      expect(screen.getByText("custom_key")).toBeInTheDocument()
+      expect(screen.getByText("Custom answer")).toBeInTheDocument()
+      expect(screen.getByText("other")).toBeInTheDocument()
+      expect(screen.getByText("More text")).toBeInTheDocument()
+      expect(screen.getByText("attachment (file)")).toBeInTheDocument()
+      expect(screen.getByRole("link", { name: /view uploaded file/i })).toBeInTheDocument()
+    })
+
+    it("shows required asterisk for required form fields", async () => {
+      await renderWithJobAndSubmission(jobWithMixedFields, {
+        id: "sub-1",
+        jobId: "job-mixed",
+        companyId: "company-1",
+        studentId: "student-1",
+        responses: { q1: "Name", q2: false, q3: null, q4: null },
+        submittedAt: 1700000000000,
+      })
+      expect(screen.getAllByText("Name").length).toBeGreaterThan(0)
+      expect(screen.getByText("*")).toBeInTheDocument()
     })
   })
 })

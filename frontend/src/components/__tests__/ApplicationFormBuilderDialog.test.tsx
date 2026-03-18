@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import ApplicationFormBuilderDialog from "../ApplicationFormBuilderDialog"
 import type { ApplicationForm } from "../../types/applicationForm"
+import { STANDARD_APPLICATION_TEMPLATE } from "../../constants/applicationFormTemplate"
 
 /* ---- Firebase mocks ---- */
 vi.mock("../../firebase", () => ({
@@ -24,6 +25,27 @@ vi.mock("../../config", () => ({
 
 /* ---- fetch mock ---- */
 global.fetch = vi.fn()
+
+/* ---- Drag-and-drop: capture onDragEnd for handleDragEnd tests ---- */
+let captureOnDragEnd: ((result: any) => void) | null = null
+vi.mock("@hello-pangea/dnd", () => {
+  const React = require("react")
+  return {
+    DragDropContext: ({ children, onDragEnd }: any) => {
+      captureOnDragEnd = onDragEnd
+      return React.createElement("div", { "data-testid": "dnd-context" }, children)
+    },
+    Droppable: ({ children }: any) => {
+      const provided = { innerRef: () => {}, droppableProps: {}, placeholder: null }
+      return typeof children === "function" ? children(provided) : children
+    },
+    Draggable: ({ children }: any) => {
+      const provided = { innerRef: () => {}, draggableProps: {}, dragHandleProps: {} }
+      const snapshot = { isDragging: false }
+      return typeof children === "function" ? children(provided, snapshot) : children
+    },
+  }
+})
 
 const defaultProps = {
   open: true,
@@ -112,6 +134,62 @@ describe("ApplicationFormBuilderDialog", () => {
     })
   })
 
+  describe("handleChooseCreationMode", () => {
+    it("template: loads standard template with job name as title and template description", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} />)
+
+      await user.click(screen.getByRole("button", { name: /use standard template/i }))
+
+      expect(screen.getByDisplayValue("Application for Software Engineer")).toBeInTheDocument()
+      expect(screen.getByDisplayValue(STANDARD_APPLICATION_TEMPLATE.description!)).toBeInTheDocument()
+    })
+
+    it("template: loads all template fields", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} />)
+
+      await user.click(screen.getByRole("button", { name: /use standard template/i }))
+
+      for (const field of STANDARD_APPLICATION_TEMPLATE.fields) {
+        expect(screen.getByDisplayValue(field.label)).toBeInTheDocument()
+      }
+    })
+
+    it("template: sets status to draft", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} />)
+
+      await user.click(screen.getByRole("button", { name: /use standard template/i }))
+
+      expect(screen.getByText("Draft")).toBeInTheDocument()
+    })
+
+    it("scratch: sets title with job name and empty description", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} />)
+
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
+
+      expect(screen.getByDisplayValue("Application for Software Engineer")).toBeInTheDocument()
+      const descInput = screen.getByLabelText(/form description/i)
+      expect(descInput).toHaveValue("")
+    })
+
+    it("scratch: creates one blank shortText field with required=true", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} />)
+
+      await user.click(screen.getByRole("button", { name: /build from scratch/i }))
+
+      expect(screen.getByText("1 field configured")).toBeInTheDocument()
+      const labelInputs = screen.getAllByLabelText(/field label/i)
+      expect(labelInputs).toHaveLength(1)
+      expect(labelInputs[0]).toHaveValue("")
+      expect(screen.getByRole("checkbox", { name: /required/i })).toBeChecked()
+    })
+  })
+
   describe("Field management", () => {
     it("adds a new field when Add field is clicked", async () => {
       const user = userEvent.setup()
@@ -169,6 +247,166 @@ describe("ApplicationFormBuilderDialog", () => {
       await user.click(deleteBtn)
 
       expect(screen.getByText("1 field configured")).toBeInTheDocument()
+    })
+
+    it("handleFieldChange: updates field label when typing in label input", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={existingForm} />)
+
+      const labelInput = screen.getByDisplayValue("Your name")
+      await user.clear(labelInput)
+      await user.type(labelInput, "Full Name")
+
+      expect(screen.getByDisplayValue("Full Name")).toBeInTheDocument()
+    })
+
+    it("handleFieldChange: clears label error when user edits field label", async () => {
+      const user = userEvent.setup()
+      const formWithEmptyLabel: ApplicationForm = {
+        ...existingForm,
+        fields: [{ id: "f1", type: "shortText", label: "", required: false }],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithEmptyLabel} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+      expect(screen.getByText("Field label is required.")).toBeInTheDocument()
+
+      await user.type(screen.getByLabelText(/field label/i), "New label")
+      expect(screen.queryByText("Field label is required.")).not.toBeInTheDocument()
+    })
+
+    it("handleFieldChange: updates required when checkbox is toggled", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={existingForm} />)
+
+      const requiredCheckbox = screen.getByRole("checkbox", { name: /required/i })
+      expect(requiredCheckbox).toBeChecked()
+
+      await user.click(requiredCheckbox)
+      expect(requiredCheckbox).not.toBeChecked()
+    })
+
+    it("handleFieldTypeChange: changes field type via Select and updates options for select types", async () => {
+      const user = userEvent.setup()
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={existingForm} />)
+
+      const typeSelect = screen.getByLabelText(/^type$/i)
+      await user.click(typeSelect)
+      await user.click(screen.getByRole("option", { name: /single select/i }))
+
+      expect(screen.getByLabelText(/options \(comma-separated\)/i)).toBeInTheDocument()
+      expect(screen.getByDisplayValue("")).toBeInTheDocument()
+    })
+
+    it("handleFieldTypeChange: clears options error when type is changed", async () => {
+      const user = userEvent.setup()
+      const formWithSelectNoOptions: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "singleSelect", label: "Pick", required: false, options: [] },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithSelectNoOptions} />)
+
+      await user.click(screen.getByRole("button", { name: /save/i }))
+      expect(screen.getByText("Provide at least one option.")).toBeInTheDocument()
+
+      const typeSelect = screen.getByLabelText(/^type$/i)
+      await user.click(typeSelect)
+      await user.click(screen.getByRole("option", { name: /short text/i }))
+
+      expect(screen.queryByText("Provide at least one option.")).not.toBeInTheDocument()
+    })
+
+    it("handleOptionsChange: splits comma-separated input into options", async () => {
+      const user = userEvent.setup()
+      const formWithSelect: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "singleSelect", label: "Pick", required: false, options: ["A", "B"] },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithSelect} />)
+
+      const optionsInput = screen.getByLabelText(/options \(comma-separated\)/i)
+      await user.clear(optionsInput)
+      await user.type(optionsInput, "Yes, No, Maybe")
+
+      expect(screen.getByDisplayValue("Yes, No, Maybe")).toBeInTheDocument()
+    })
+
+    it("handleOptionsChange: trims whitespace and saves trimmed options", async () => {
+      const user = userEvent.setup()
+      const formWithSelect: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "singleSelect", label: "Pick", required: false, options: [""] },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithSelect} />)
+
+      const optionsInput = screen.getByLabelText(/options \(comma-separated\)/i)
+      await user.clear(optionsInput)
+      await user.type(optionsInput, "  X  ,  Y  ,  Z  ")
+      await user.click(screen.getByRole("button", { name: /save/i }))
+
+      await waitFor(() => {
+        const body = JSON.parse((global.fetch as any).mock.calls[0][1].body)
+        expect(body.fields[0].options).toEqual(["X", "Y", "Z"])
+      })
+    })
+  })
+
+  describe("handleDragEnd", () => {
+    it("reorders fields when drag result has destination", async () => {
+      const formWithThreeFields: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "shortText", label: "First", required: false },
+          { id: "f2", type: "shortText", label: "Second", required: false },
+          { id: "f3", type: "shortText", label: "Third", required: false },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithThreeFields} />)
+
+      expect(screen.getByDisplayValue("First")).toBeInTheDocument()
+      expect(captureOnDragEnd).not.toBeNull()
+
+      captureOnDragEnd!({
+        source: { index: 0 },
+        destination: { index: 2 },
+        draggableId: "f1",
+      })
+
+      await waitFor(() => {
+        const inputs = screen.getAllByDisplayValue(/First|Second|Third/)
+        expect(inputs.map((i) => (i as HTMLInputElement).value)).toEqual(["Second", "Third", "First"])
+      })
+    })
+
+    it("does nothing when drag result has no destination", async () => {
+      const formWithTwoFields: ApplicationForm = {
+        ...existingForm,
+        fields: [
+          { id: "f1", type: "shortText", label: "A", required: false },
+          { id: "f2", type: "shortText", label: "B", required: false },
+        ],
+      }
+      render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithTwoFields} />)
+
+      captureOnDragEnd!({
+        source: { index: 0 },
+        destination: null,
+        draggableId: "f1",
+      })
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("A")).toBeInTheDocument()
+        expect(screen.getByDisplayValue("B")).toBeInTheDocument()
+      })
+      const inputs = screen.getAllByDisplayValue(/A|B/)
+      expect(inputs[0]).toHaveValue("A")
+      expect(inputs[1]).toHaveValue("B")
     })
   })
 
