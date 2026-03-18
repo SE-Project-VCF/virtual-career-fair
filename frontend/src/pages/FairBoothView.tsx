@@ -13,10 +13,6 @@ import {
   Chip,
   Divider,
   Link,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   Rating,
 } from "@mui/material"
@@ -38,6 +34,8 @@ import { collection, getDocs, query, where } from "firebase/firestore"
 import { db, auth } from "../firebase"
 import { trackBoothView } from "../utils/boothHistory"
 import { API_URL } from "../config"
+import { INDUSTRY_LABELS } from "../utils/boothConstants"
+import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 
 interface Booth {
   id: string
@@ -66,17 +64,6 @@ interface Job {
   applicationForm?: ApplicationForm | null
 }
 
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
-}
 
 export default function FairBoothView() {
   const navigate = useNavigate()
@@ -562,32 +549,16 @@ export default function FairBoothView() {
         )}
       </Container>
 
-      <Dialog open={resubmitDialogOpen} onClose={() => setResubmitDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Resubmit Review</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 1 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>New rating</Typography>
-            <Rating value={resubmitValue} onChange={(_, v) => setResubmitValue(v)} size="large" />
-            <TextField
-              label="Comment (optional)"
-              value={resubmitComment}
-              onChange={(e) => setResubmitComment(e.target.value)}
-              fullWidth multiline rows={3} size="small"
-              sx={{ mt: 2 }}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResubmitDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            disabled={!resubmitValue || submittingRating}
-            onClick={() => submitRating(resubmitValue, resubmitComment, () => setResubmitDialogOpen(false))}
-          >
-            {submittingRating ? "Submitting..." : "Submit"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ResubmitReviewDialog
+        open={resubmitDialogOpen}
+        onClose={() => setResubmitDialogOpen(false)}
+        resubmitValue={resubmitValue}
+        setResubmitValue={setResubmitValue}
+        resubmitComment={resubmitComment}
+        setResubmitComment={setResubmitComment}
+        submittingRating={submittingRating}
+        onSubmit={submitRating}
+      />
       {selectedJobForApply && booth && (
         <JobApplicationFormDialog
           open={applyDialogOpen}

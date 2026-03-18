@@ -14,10 +14,6 @@ import {
   Chip,
   Divider,
   Link,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   Rating,
 } from "@mui/material"
@@ -35,8 +31,10 @@ import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import BaseLayout from "../components/BaseLayout"
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
+import { INDUSTRY_LABELS } from "../utils/boothConstants"
 
 interface Booth {
   id: string
@@ -123,17 +121,6 @@ async function findCompanyIdForBooth(boothId: string, boothData: Booth): Promise
   return undefined
 }
 
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
-}
 
 export default function BoothView() {
   const navigate = useNavigate()
@@ -845,41 +832,16 @@ export default function BoothView() {
         </Grid>
       </Container>
 
-      {/* Resubmit Review Dialog */}
-      <Dialog open={resubmitDialogOpen} onClose={() => setResubmitDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Resubmit Review</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 1 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>New rating</Typography>
-            <Rating
-              value={resubmitValue}
-              onChange={(_, v) => setResubmitValue(v)}
-              size="large"
-            />
-            <TextField
-              label="Comment (optional)"
-              value={resubmitComment}
-              onChange={(e) => setResubmitComment(e.target.value)}
-              fullWidth
-              multiline
-              rows={3}
-              size="small"
-              sx={{ mt: 2 }}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setResubmitDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            disabled={!resubmitValue || submittingRating}
-            onClick={() => submitRating(resubmitValue, resubmitComment, () => setResubmitDialogOpen(false))}
-            sx={{ background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)" }}
-          >
-            {submittingRating ? "Submitting..." : "Submit"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ResubmitReviewDialog
+        open={resubmitDialogOpen}
+        onClose={() => setResubmitDialogOpen(false)}
+        resubmitValue={resubmitValue}
+        setResubmitValue={setResubmitValue}
+        resubmitComment={resubmitComment}
+        setResubmitComment={setResubmitComment}
+        submittingRating={submittingRating}
+        onSubmit={submitRating}
+      />
 
       {selectedJobForApply && (
         <JobApplicationFormDialog
