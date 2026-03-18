@@ -17,14 +17,11 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  IconButton,
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
-import ProfileMenu from "./ProfileMenu"
-import NotificationBell from "../components/NotificationBell"
+import BaseLayout from "../components/BaseLayout"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -210,42 +207,11 @@ export default function FairList() {
   const leaveDialogFair = fairs.find((f) => f.id === leaveDialogFairId)
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <IconButton onClick={() => navigate("/dashboard")} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-                Career Fairs
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <NotificationBell />
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Career Fairs">
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            Career Fairs
-          </Typography>
-          <Typography color="text.secondary">
-            Browse and join available virtual career fairs
-          </Typography>
-        </Box>
+        <Typography color="text.secondary" sx={{ mb: 4 }}>
+          Browse and join available virtual career fairs
+        </Typography>
 
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -450,6 +416,6 @@ export default function FairList() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   )
 }

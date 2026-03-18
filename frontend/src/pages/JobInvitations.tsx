@@ -12,10 +12,8 @@ import {
   Alert,
   Tabs,
   Tab,
-  IconButton,
   Divider,
 } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import WorkIcon from "@mui/icons-material/Work";
 import BusinessIcon from "@mui/icons-material/Business";
 import PersonIcon from "@mui/icons-material/Person";
@@ -23,7 +21,7 @@ import LaunchIcon from "@mui/icons-material/Launch";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import EditIcon from "@mui/icons-material/Edit";
 import { authUtils } from "../utils/auth";
-import ProfileMenu from "./ProfileMenu";
+import BaseLayout from "../components/BaseLayout";
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog";
 import type { ApplicationForm } from "../types/applicationForm";
 
@@ -237,38 +235,12 @@ export default function JobInvitations() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-          color: "white",
-          py: 3,
-          mb: 4,
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <IconButton onClick={() => navigate("/dashboard")} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <Box>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                  Job Invitations
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
-                  {invitations.length} invitation{invitations.length > 1 ? "s" : ""} received
-                  {newInvitationsCount > 0 && ` • ${newInvitationsCount} new`}
-                </Typography>
-              </Box>
-            </Box>
-            <ProfileMenu />
-          </Box>
-        </Container>
-      </Box>
-
-      <Container maxWidth="lg" sx={{ pb: 4 }}>
+    <BaseLayout pageTitle="Job Invitations">
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          {invitations.length} invitation{invitations.length > 1 ? "s" : ""} received
+          {newInvitationsCount > 0 && ` • ${newInvitationsCount} new`}
+        </Typography>
         {/* Filter Tabs */}
         <Card sx={{ mb: 3 }}>
           <Tabs
@@ -485,6 +457,6 @@ export default function JobInvitations() {
           studentId={user?.uid || null}
         />
       )}
-    </Box>
+    </BaseLayout>
   );
 }

@@ -387,22 +387,90 @@ class PatchValidator {
    * Extract metrics from text: numbers, percentages, years, ranges
    */
   extractMetrics(text) {
-    const patterns = [
-      /\d{4}(?:-\d{4})?/g,      // Years: 2022, 2022-2023
-      /\d+(?:\.\d+)?%/g,        // Percentages: 50%, 99.9%
-      /\$\d+[KM]?/g,         // Money: $10K, $5M
-      /\d+\+(?:\s*users?|views?)/gi, // Usage counts: 10K+ users
-      /\b(?:first|second|top)\s+\d+/gi, // Ordinals: top 10
-      /v?\d+\.\d+(?:\.\d+)?/g   // Versions: v3.2.1
-    ];
-
     const matches = new Set();
-    patterns.forEach(pattern => {
-      const found = text.match(pattern);
-      if (found) found.forEach(m => matches.add(m));
-    });
+    const words = text.split(/\s+/).filter(Boolean);
+
+    for (let i = 0; i < words.length; i++) {
+      const token = words[i].replaceAll(/[(),]/g, "");
+      this._extractStandaloneMetrics(token).forEach(metric => matches.add(metric));
+
+      const ordinalMetric = this._extractOrdinalMetric(words, i, token);
+      if (ordinalMetric) matches.add(ordinalMetric);
+
+      const usageMetric = this._extractUsageMetric(words, i, token);
+      if (usageMetric) matches.add(usageMetric);
+    }
 
     return Array.from(matches);
+  }
+
+  _extractStandaloneMetrics(token) {
+    const metrics = [];
+    if (this._isYearOrYearRange(token)) metrics.push(token);
+    if (this._isPercentage(token)) metrics.push(token);
+    if (this._isMoneyToken(token)) metrics.push(token);
+    if (this._isVersionToken(token)) metrics.push(token);
+    return metrics;
+  }
+
+  _extractOrdinalMetric(words, index, token) {
+    const lower = token.toLowerCase();
+    if (lower !== "first" && lower !== "second" && lower !== "top") return null;
+    if (!words[index + 1]) return null;
+
+    const next = words[index + 1].replaceAll(/\D/g, "");
+    if (next.length === 0) return null;
+    return `${lower} ${next}`;
+  }
+
+  _extractUsageMetric(words, index, token) {
+    if (!token.endsWith("+") || !words[index + 1]) return null;
+
+    const label = words[index + 1].toLowerCase().replaceAll(/[^a-z]/g, "");
+    if (label === "user" || label === "users" || label === "view" || label === "views") {
+      return `${token} ${label}`;
+    }
+    return null;
+  }
+
+  _isDigits(value) {
+    if (!value || value.length === 0) return false;
+    for (const ch of value) {
+      if (ch < "0" || ch > "9") return false;
+    }
+    return true;
+  }
+
+  _isYear(value) {
+    return value.length === 4 && this._isDigits(value);
+  }
+
+  _isYearOrYearRange(value) {
+    if (this._isYear(value)) return true;
+    const parts = value.split("-");
+    return parts.length === 2 && this._isYear(parts[0]) && this._isYear(parts[1]);
+  }
+
+  _isPercentage(value) {
+    if (!value.endsWith("%")) return false;
+    const numberText = value.slice(0, -1);
+    if (!numberText) return false;
+    return Number.isFinite(Number(numberText));
+  }
+
+  _isMoneyToken(value) {
+    if (!value.startsWith("$") || value.length < 2) return false;
+    const suffix = value.at(-1);
+    const hasSuffix = suffix === "K" || suffix === "M";
+    const numberText = hasSuffix ? value.slice(1, -1) : value.slice(1);
+    return numberText.length > 0 && Number.isFinite(Number(numberText));
+  }
+
+  _isVersionToken(value) {
+    const normalized = value.startsWith("v") ? value.slice(1) : value;
+    const parts = normalized.split(".");
+    if (parts.length < 2 || parts.length > 3) return false;
+    return parts.every(part => part.length > 0 && this._isDigits(part));
   }
 
   /**

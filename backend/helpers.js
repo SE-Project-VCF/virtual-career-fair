@@ -16,43 +16,6 @@ function generateInviteCode() {
   return crypto.randomBytes(6).toString("hex").toUpperCase();
 }
 
-/**
- * Encrypt an invite code with AES-256-GCM for storage in Firestore.
- * Returns a hex string: 12-byte IV + 16-byte GCM tag + ciphertext.
- */
-function encryptInviteCode(plaintext) {
-  const key = Buffer.from(process.env.INVITE_CODE_SECRET, "hex");
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, enc]).toString("hex");
-}
-
-/**
- * Decrypt an invite code previously encrypted with encryptInviteCode.
- */
-function decryptInviteCode(encryptedHex) {
-  const key = Buffer.from(process.env.INVITE_CODE_SECRET, "hex");
-  const buf = Buffer.from(encryptedHex, "hex");
-  const iv  = buf.subarray(0, 12);
-  const tag = buf.subarray(12, 28);
-  const enc = buf.subarray(28);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
-}
-
-/**
- * Produce a deterministic HMAC of an invite code for use as a Firestore query index.
- * Always uppercases the input so lookups are case-insensitive.
- */
-function hmacInviteCode(plaintext) {
-  return crypto
-    .createHmac("sha256", process.env.INVITE_CODE_SECRET)
-    .update(plaintext.toUpperCase())
-    .digest("hex");
-}
 
 /**
  * Parse datetime string as UTC and return Firestore Timestamp.
@@ -189,9 +152,6 @@ async function verifyFirebaseToken(req, res, next) {
 module.exports = {
   removeUndefined,
   generateInviteCode,
-  encryptInviteCode,
-  decryptInviteCode,
-  hmacInviteCode,
   parseUTCToTimestamp,
   verifyAdmin,
   evaluateFairStatusForFair,

@@ -35,6 +35,7 @@ vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
     isAuthenticated: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-token"),
   },
 }))
 
@@ -67,6 +68,20 @@ vi.mock("../../firebase", () => ({
 
 vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
+}))
+
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
 }))
 
 vi.mock("../../contexts/FairContext", () => ({
@@ -243,6 +258,11 @@ describe("BoothEditor – fair-scoped", () => {
     it("PUTs to the fair booth API and navigates to /fairs on success", async () => {
       const user = userEvent.setup()
       ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: async () => fairBoothPayload,
+      })
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: async () => ({}),
       })
@@ -273,6 +293,11 @@ describe("BoothEditor – fair-scoped", () => {
 
     it("shows generic error when PUT request fails", async () => {
       const user = userEvent.setup()
+      ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        json: async () => fairBoothPayload,
+      })
       ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
         json: async () => ({ error: "Update failed" }),
@@ -377,8 +402,7 @@ describe("BoothEditor – fair-scoped", () => {
         expect(screen.getByRole("heading", { name: /create booth/i })).toBeInTheDocument()
       )
 
-      // First button in the header is the ArrowBack icon button
-      await user.click(screen.getAllByRole("button")[0])
+      await user.click(screen.getByRole("button", { name: /fairs/i }))
       expect(mockNavigate).toHaveBeenCalledWith("/fairs")
     })
 

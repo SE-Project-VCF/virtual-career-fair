@@ -13,6 +13,20 @@ vi.mock("react-router-dom", async () => {
 })
 vi.mock("../../utils/auth", () => ({ authUtils: { getCurrentUser: vi.fn() } }))
 vi.mock("../ProfileMenu", () => ({ default: () => <div data-testid="profile-menu" /> }))
+vi.mock("../../components/NotificationBell", () => ({ default: () => <div data-testid="notification-bell" /> }))
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}))
 
 const mockInvitation = {
   id: "inv-1",
@@ -486,20 +500,16 @@ describe("JobInvitations — misc rendering", () => {
     })
   })
 
-  it("navigates to /dashboard when back arrow is clicked", async () => {
+  it("renders inside the page layout wrapper", async () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({ invitations: [] }),
     })
 
-    const user = userEvent.setup()
     renderJobInvitations()
 
     await waitFor(() => expect(screen.getByText(/No job invitations yet/i)).toBeInTheDocument())
 
-    const buttons = screen.getAllByRole("button")
-    await user.click(buttons[0])
-
-    expect(mockNavigate).toHaveBeenCalledWith("/dashboard")
+    expect(screen.getByTestId("base-layout")).toBeInTheDocument()
   })
 })

@@ -14,6 +14,8 @@ import {
   Chip,
   Divider,
   Link,
+  TextField,
+  Rating,
 } from "@mui/material"
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
@@ -27,11 +29,12 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
-import NotificationBell from "../components/NotificationBell"
+import { INDUSTRY_LABELS, fetchMyBoothRating, submitBoothRating } from "../utils/boothConstants"
 
 interface Booth {
   id: string
@@ -118,17 +121,6 @@ async function findCompanyIdForBooth(boothId: string, boothData: Booth): Promise
   return undefined
 }
 
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
-}
 
 export default function BoothView() {
   const navigate = useNavigate()
@@ -143,14 +135,27 @@ export default function BoothView() {
   const [applyDialogOpen, setApplyDialogOpen] = useState(false)
   const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
 
+  // Rating state
+  const [myRating, setMyRating] = useState<{ rating: number; comment: string | null; createdAt: number | null } | null | undefined>(undefined)
+  const [ratingValue, setRatingValue] = useState<number | null>(null)
+  const [ratingComment, setRatingComment] = useState("")
+  const [submittingRating, setSubmittingRating] = useState(false)
+  const [ratingError, setRatingError] = useState("")
+  const [ratingSuccess, setRatingSuccess] = useState("")
+  const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false)
+  const [resubmitValue, setResubmitValue] = useState<number | null>(null)
+  const [resubmitComment, setResubmitComment] = useState("")
+
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      // Track when user leaves the booth
+      trackStudentBoothLeave()
     }
-  }, [])
+  }, [boothId, user?.uid])
 
   const handleStartChat = async () => {
     try {
@@ -196,6 +201,7 @@ export default function BoothView() {
   const trackStudentBoothView = async (boothData: Booth) => {
     try {
       if (user?.uid && user.role === "student") {
+        // Track in local history
         await trackBoothView(user.uid, {
           boothId: boothData.id,
           companyName: boothData.companyName,
@@ -203,9 +209,52 @@ export default function BoothView() {
           location: boothData.location,
           logoUrl: boothData.logoUrl,
         });
+
+        // Track in backend for company analytics
+        const token = await authUtils.getIdToken();
+
+        if (token) {
+          try {
+            const url = `${API_URL}/api/booth/${boothData.id}/track-view`;
+
+            await fetch(url, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+            // Tracking completed
+          } catch (err) {
+            console.warn("Backend booth tracking failed:", err);
+          }
+        } else {
+          console.log("[BOOTH-VIEW] No token available");
+        }
+      } else {
+        console.warn("User missing or not a student");
       }
     } catch (err) {
       console.warn("History tracking failed:", err);
+    }
+  }
+
+  const trackStudentBoothLeave = async () => {
+    try {
+      if (user?.uid && user.role === "student" && boothId) {
+        const token = await authUtils.getIdToken();
+        if (token) {
+          await fetch(`${API_URL}/api/booth/${boothId}/track-leave`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Booth leave tracking failed:", err);
     }
   }
 
@@ -261,6 +310,7 @@ export default function BoothView() {
 
       setBooth(boothData)
       await trackStudentBoothView(boothData)
+      await fetchMyRating(boothId)
 
       const companyId = await findCompanyIdForBooth(boothId, boothData)
       if (companyId) {
@@ -277,6 +327,17 @@ export default function BoothView() {
       }
     }
   }
+
+  const fetchMyRating = (id: string) =>
+    fetchMyBoothRating(id, user?.role, isMountedRef, setMyRating)
+
+  const submitRating = (value: number | null, comment: string, onSuccess: () => void) =>
+    submitBoothRating(boothId ?? null, value, comment, onSuccess, {
+      setSubmittingRating,
+      setRatingError,
+      setMyRating,
+      setRatingSuccess,
+    })
 
   const fetchJobs = async (companyId: string) => {
     try {
@@ -326,46 +387,11 @@ export default function BoothView() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Button
-                onClick={() => navigate("/booths")}
-                sx={{
-                  color: "white",
-                  minWidth: "auto",
-                  p: 1,
-                  "&:hover": {
-                    bgcolor: "rgba(255,255,255,0.1)",
-                  },
-                }}
-              >
-                <ArrowBackIcon />
-              </Button>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                {booth.companyName}
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <NotificationBell />
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle={booth.companyName}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/booths")} sx={{ mb: 3 }}>
+          Back to Booths
+        </Button>
         <Grid container spacing={3}>
           {/* Main Content */}
           <Grid size={{ xs: 12, md: 8 }}>
@@ -457,70 +483,77 @@ export default function BoothView() {
                       Job Openings ({jobs.length})
                     </Typography>
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {jobs.map((job) => (
-                        <Card
-                          key={job.id}
-                          sx={{
-                            border: "1px solid rgba(56, 133, 96, 0.2)",
-                            borderRadius: 2,
-                            transition: "box-shadow 0.2s",
-                            "&:hover": {
-                              boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
-                            },
-                          }}
-                        >
-                          <CardContent sx={{ p: 3 }}>
-                            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
-                                {job.name}
+                      {jobs.map((job) => {
+                        const hasPublishedForm = job.applicationForm?.status === "published"
+                        const buttonSx = {
+                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                          },
+                        }
+
+                        let applyButton = null
+                        if (hasPublishedForm) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              onClick={() => {
+                                setSelectedJobForApply(job)
+                                setApplyDialogOpen(true)
+                              }}
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        } else if (job.applicationLink) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              href={job.applicationLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        }
+
+                        return (
+                          <Card
+                            key={job.id}
+                            sx={{
+                              border: "1px solid rgba(56, 133, 96, 0.2)",
+                              borderRadius: 2,
+                              transition: "box-shadow 0.2s",
+                              "&:hover": {
+                                boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                              },
+                            }}
+                          >
+                            <CardContent sx={{ p: 3 }}>
+                              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
+                                  {job.name}
+                                </Typography>
+                                {applyButton}
+                              </Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
+                                {job.description}
                               </Typography>
-                              {job.applicationForm && job.applicationForm.status === "published" ? (
-                                <Button
-                                  variant="contained"
-                                  onClick={() => {
-                                    setSelectedJobForApply(job)
-                                    setApplyDialogOpen(true)
-                                  }}
-                                  sx={{
-                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                                    "&:hover": {
-                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                                    },
-                                  }}
-                                >
-                                  Apply Now
-                                </Button>
-                              ) : job.applicationLink ? (
-                                <Button
-                                  variant="contained"
-                                  href={job.applicationLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  sx={{
-                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                                    "&:hover": {
-                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                                    },
-                                  }}
-                                >
-                                  Apply Now
-                                </Button>
-                              ) : null}
-                            </Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
-                              {job.description}
-                            </Typography>
-                            <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
-                                Required Skills:
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {job.majorsAssociated}
-                              </Typography>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      ))}
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                                  Required Skills:
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {job.majorsAssociated}
+                                </Typography>
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
                     </Box>
                   </Box>
                 )}
@@ -669,7 +702,7 @@ export default function BoothView() {
             </Card>
 
             {/* Open Positions Card */}
-            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)", mb: 3 }}>
               <CardContent sx={{ p: 3, textAlign: "center" }}>
                 <Box
                   sx={{
@@ -694,9 +727,87 @@ export default function BoothView() {
                 </Typography>
               </CardContent>
             </Card>
+
+            {/* Rating Card — students only */}
+            {user?.role === "student" && myRating !== undefined && (
+              <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a" }}>
+                    Rate This Booth
+                  </Typography>
+
+                  {ratingError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setRatingError("")}>{ratingError}</Alert>}
+                  {ratingSuccess && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setRatingSuccess("")}>{ratingSuccess}</Alert>}
+
+                  {myRating ? (
+                    // Show existing review
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your review</Typography>
+                      <Rating value={myRating.rating} readOnly size="small" />
+                      {myRating.comment && (
+                        <Typography variant="body2" sx={{ mt: 0.5, color: "#444" }}>{myRating.comment}</Typography>
+                      )}
+                      {myRating.createdAt && (
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                          {new Date(myRating.createdAt).toLocaleDateString()}
+                        </Typography>
+                      )}
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{ mt: 2, borderColor: "#388560", color: "#388560" }}
+                        onClick={() => { setResubmitValue(null); setResubmitComment(""); setResubmitDialogOpen(true) }}
+                      >
+                        Resubmit Review
+                      </Button>
+                    </Box>
+                  ) : (
+                    // Show submission form
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your rating</Typography>
+                      <Rating
+                        value={ratingValue}
+                        onChange={(_, v) => setRatingValue(v)}
+                        size="large"
+                      />
+                      <TextField
+                        label="Comment (optional)"
+                        value={ratingComment}
+                        onChange={(e) => setRatingComment(e.target.value)}
+                        fullWidth
+                        multiline
+                        rows={2}
+                        size="small"
+                        sx={{ mt: 2, mb: 2 }}
+                      />
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        disabled={!ratingValue || submittingRating}
+                        onClick={() => submitRating(ratingValue, ratingComment, () => { setRatingValue(null); setRatingComment("") })}
+                        sx={{ background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)" }}
+                      >
+                        {submittingRating ? "Submitting..." : "Submit Review"}
+                      </Button>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </Grid>
         </Grid>
       </Container>
+
+      <ResubmitReviewDialog
+        open={resubmitDialogOpen}
+        onClose={() => setResubmitDialogOpen(false)}
+        resubmitValue={resubmitValue}
+        setResubmitValue={setResubmitValue}
+        resubmitComment={resubmitComment}
+        setResubmitComment={setResubmitComment}
+        submittingRating={submittingRating}
+        onSubmit={submitRating}
+      />
 
       {selectedJobForApply && (
         <JobApplicationFormDialog
@@ -710,7 +821,7 @@ export default function BoothView() {
           studentId={user?.role === "student" ? user.uid : null}
         />
       )}
-    </Box>
+    </BaseLayout>
   )
 }
 

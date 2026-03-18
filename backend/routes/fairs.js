@@ -6,9 +6,6 @@ const admin = require("firebase-admin");
 const {
   removeUndefined,
   generateInviteCode,
-  encryptInviteCode,
-  decryptInviteCode,
-  hmacInviteCode,
   parseUTCToTimestamp,
   verifyAdmin,
   evaluateFairStatusForFair,
@@ -50,7 +47,7 @@ function buildHttpError(status, message) {
 async function resolveFairIdFromInviteCode(fairId, inviteCode) {
   if (!inviteCode) return fairId;
 
-  const fairSnap = await db.collection("fairs").where("inviteCodeHmac", "==", hmacInviteCode(inviteCode)).get();
+  const fairSnap = await db.collection("fairs").where("inviteCode", "==", inviteCode.toUpperCase()).get();
   if (fairSnap.empty) throw buildHttpError(400, "Invalid invite code");
 
   return fairSnap.docs[0].id;
@@ -110,6 +107,7 @@ async function getCompanyAndBoothSnapshot(companyId) {
       const bData = boothDoc.data();
       boothSnapshot = {
         companyId,
+        originalBoothId: company.boothId,
         companyName: bData.companyName || company.companyName || "",
         industry: bData.industry || null,
         companySize: bData.companySize || null,
@@ -263,12 +261,8 @@ router.get("/api/fairs/:fairId", async (req, res) => {
     const isAdmin = requestingRole === "administrator";
 
     let inviteCode;
-    if (isAdmin && data.inviteCodeEncrypted) {
-      try {
-        inviteCode = decryptInviteCode(data.inviteCodeEncrypted);
-      } catch (error_) {
-        console.error("Failed to decrypt invite code:", error_);
-      }
+    if (isAdmin && data.inviteCode) {
+      inviteCode = data.inviteCode;
     }
 
     const response = {
@@ -334,16 +328,14 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
       isLive: false,
       startTime: parsedStart,
       endTime: parsedEnd,
-      inviteCodeEncrypted: encryptInviteCode(rawCode),
-      inviteCodeHmac: hmacInviteCode(rawCode),
+      inviteCode: rawCode,
       createdAt: admin.firestore.Timestamp.now(),
       createdBy: adminUid,
       updatedAt: admin.firestore.Timestamp.now(),
     });
 
     const fairRef = await db.collection("fairs").add(fairData);
-    // Return plaintext code to admin; encrypted blob stays server-side
-    return res.status(201).json({ id: fairRef.id, ...fairData, inviteCode: rawCode });
+    return res.status(201).json({ id: fairRef.id, ...fairData });
   } catch (err) {
     console.error("POST /api/fairs error:", err);
     return res.status(500).json({ error: "Failed to create fair" });
@@ -459,8 +451,7 @@ router.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async
     const rawCode = generateInviteCode();
 
     await db.collection("fairs").doc(fairId).update({
-      inviteCodeEncrypted: encryptInviteCode(rawCode),
-      inviteCodeHmac: hmacInviteCode(rawCode),
+      inviteCode: rawCode,
       updatedAt: admin.firestore.Timestamp.now(),
       updatedBy: adminUid,
     });
@@ -608,7 +599,8 @@ router.delete("/api/fairs/:fairId/enrollments/:companyId", verifyFirebaseToken, 
    FAIR-SCOPED BOOTHS
 ======================================================= */
 
-/* GET /api/fairs/:fairId/booths - public (gated on isLive for students) */
+/* GET /api/fairs/:fairId/booths - public (gated on isLive for students)
+   For admin: returns FairData shape with ratings aggregated per booth */
 router.get("/api/fairs/:fairId/booths", async (req, res) => {
   const { fairId } = req.params;
   try {
@@ -628,6 +620,57 @@ router.get("/api/fairs/:fairId/booths", async (req, res) => {
       .collection("booths")
       .orderBy("companyName")
       .get();
+
+    // For admin: return FairData shape with ratings
+    if (isAdmin) {
+      const fairDoc = await db.collection("fairs").doc(fairId).get();
+      const fairData = fairDoc.data();
+
+      const boothsWithRatings = await Promise.all(
+        snap.docs.map(async (doc) => {
+          const booth = doc.data();
+          const originalBoothId = booth.originalBoothId;
+
+          let ratings = [];
+          if (originalBoothId) {
+            const ratingsSnap = await db
+              .collection("booths")
+              .doc(originalBoothId)
+              .collection("ratings")
+              .get();
+            ratings = ratingsSnap.docs.map((r) => {
+              const d = r.data();
+              return {
+                studentId: r.id,
+                rating: d.rating,
+                comment: d.comment || null,
+                createdAt: d.createdAt ? d.createdAt.toMillis() : null,
+              };
+            });
+          }
+
+          const totalRatings = ratings.length;
+          const averageRating = totalRatings > 0
+            ? ratings.reduce((sum, r) => sum + r.rating, 0) / totalRatings
+            : null;
+
+          return {
+            boothId: doc.id,
+            companyName: booth.companyName || "",
+            averageRating,
+            totalRatings,
+            ratings,
+          };
+        })
+      );
+
+      return res.json({
+        fairName: fairData.name || "",
+        startTime: fairData.startTime ? fairData.startTime.toMillis() : null,
+        endTime: fairData.endTime ? fairData.endTime.toMillis() : null,
+        booths: boothsWithRatings,
+      });
+    }
 
     const booths = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     return res.json({ booths });

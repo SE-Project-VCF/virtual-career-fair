@@ -21,7 +21,7 @@ vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
     isAuthenticated: vi.fn(),
-    getIdToken: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-token"),
   },
 }));
 
@@ -50,6 +50,20 @@ vi.mock("../../firebase", () => ({
 
 vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
+}));
+
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
 }));
 
 const renderBoothEditor = () => {
@@ -405,12 +419,10 @@ describe("BoothEditor", () => {
       renderBoothEditor();
 
       await waitFor(() => {
-        const backButtons = screen.getAllByRole("button");
-        expect(backButtons.length).toBeGreaterThan(0);
+        expect(screen.getByRole("button", { name: /company/i })).toBeInTheDocument();
       });
 
-      const backButton = screen.getAllByRole("button")[0]; // ArrowBackIcon button
-      await user.click(backButton);
+      await user.click(screen.getByRole("button", { name: /company/i }));
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1");
     });
   });

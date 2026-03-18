@@ -53,6 +53,20 @@ vi.mock("../../firebase", () => ({
 // Import after mocks
 import { authUtils } from "../../utils/auth";
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}));
+
 // Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
@@ -144,6 +158,36 @@ describe("Company", () => {
 
   const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
 
+  it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
+        return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+      }
+      if (url.includes('/api/booths/') && url.includes('/ratings')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            ratings: [
+              { rating: 5, comment: "Excellent booth!", createdAt: 1000000 },
+              { rating: 4, comment: null, createdAt: null },
+            ],
+            totalRatings: 2,
+            averageRating: 4.5,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({ error: "Not found" }) });
+    });
+
+    renderComp();
+
+    await waitFor(() => {
+      expect(screen.getByText("Booth Reviews")).toBeInTheDocument();
+      expect(screen.getByText("Excellent booth!")).toBeInTheDocument();
+      expect(screen.getByText(/2 reviews/)).toBeInTheDocument();
+    }, { timeout: 5000 });
+  });
+
   it("redirects unauthenticated users to login", () => {
     (authUtils.isAuthenticated as any).mockReturnValue(false);
     renderComp();
@@ -197,8 +241,7 @@ describe("Company", () => {
 
   it("displays company name after loading", async () => {
     renderComp();
-    // Use getByRole to specifically target the h4 heading
-    expect(await screen.findByRole('heading', { name: /Tech Corp/i, level: 4 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Tech Corp/i })).toBeInTheDocument();
   });
 
   it("displays invite code", async () => {
@@ -357,9 +400,45 @@ describe("Company", () => {
     expect(authUtils.updateInviteCode).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), "A");
   });
 
+  it("sanitizes invite code input to uppercase alphanumeric", async () => {
+    const user = userEvent.setup();
+    renderComp();
+    await screen.findByText(/INVITE123/);
+
+    const editButtons = screen.queryAllByTestId("EditIcon");
+    if (editButtons.length > 0) {
+      const editBtn = editButtons[0].closest("button");
+      if (editBtn) await user.click(editBtn);
+
+      const inviteInput: HTMLInputElement = screen.getByLabelText(/invite code/i);
+      await user.clear(inviteInput);
+      await user.type(inviteInput, "ab-12$cd");
+
+      expect(inviteInput.value).toBe("AB12CD");
+    }
+  });
+
   it("displays representatives list", async () => {
     renderComp();
     expect(await screen.findByText(/John Doe/i)).toBeInTheDocument();
+  });
+
+  it("shows empty representatives message when none have joined", async () => {
+    (getDoc as any).mockImplementation((docRef: any) => {
+      if (docRef.id === "company-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "company-1",
+          data: () => ({ ...mockCompanyData, representativeIDs: [] }),
+        });
+      }
+      return Promise.resolve({ exists: () => false });
+    });
+
+    renderComp();
+    expect(
+      await screen.findByText(/No representatives have joined this company yet/i)
+    ).toBeInTheDocument();
   });
 
   it("deletes representative", async () => {
@@ -767,7 +846,15 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
-      globalThis.fetch = vi.fn();
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
     });
 
     it("fetches and displays job invitation stats", async () => {
@@ -1174,19 +1261,19 @@ describe("Company", () => {
     it("shows error when form deletion API call fails", async () => {
       const user = userEvent.setup();
 
-      (globalThis.fetch as any)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ inviteCode: "INVITE123" }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
-        })
-        .mockResolvedValueOnce({
-          ok: false,
-          json: async () => ({ error: "Unauthorized to delete form" }),
-        });
+      (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
+        if (url.includes("/job-invitations/stats")) {
+          return Promise.resolve({ ok: true, json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }) });
+        }
+        if (url.includes("/ratings")) {
+          return Promise.resolve({ ok: true, json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }) });
+        }
+        // form deletion and any other calls
+        return Promise.resolve({ ok: false, json: async () => ({ error: "Unauthorized to delete form" }) });
+      });
 
       (getDocs as any).mockResolvedValue({
         forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
@@ -1247,6 +1334,49 @@ describe("Company", () => {
     it("still displays job postings for representatives", async () => {
       renderComp();
       expect(await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    });
+  });
+
+  describe("Booth Navigation Buttons", () => {
+    it("navigates to public booth view when View Public Booth button is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      const viewBoothButton = screen.getByRole("button", { name: /View Public Booth/i });
+      await user.click(viewBoothButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1");
+    });
+
+    it("navigates to booth visitors analytics when View Visitors Analytics button is clicked", async () => {
+      const user = userEvent.setup();
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      const visitorsButton = screen.getByRole("button", { name: /View Visitors Analytics/i });
+      await user.click(visitorsButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1/visitors");
+    });
+
+    it("hides booth view buttons when boothId is not set", async () => {
+      (getDoc as any).mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          companyName: "Tech Corp",
+          inviteCode: "INVITE123",
+          representativeIDs: ["rep-1"],
+          // boothId is undefined
+          ownerId: "owner-1",
+        }),
+      });
+
+      renderComp();
+      await screen.findByRole('heading', { name: /Tech Corp/i });
+
+      expect(screen.queryByRole("button", { name: /View Public Booth/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /View Visitors Analytics/i })).not.toBeInTheDocument();
     });
   });
 });

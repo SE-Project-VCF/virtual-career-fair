@@ -26,8 +26,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import BusinessIcon from "@mui/icons-material/Business"
 import AddIcon from "@mui/icons-material/Add"
 import PeopleIcon from "@mui/icons-material/People"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import DeleteIcon from "@mui/icons-material/Delete"
 import EditIcon from "@mui/icons-material/Edit"
 import RefreshIcon from "@mui/icons-material/Refresh"
@@ -266,33 +265,7 @@ export default function CompanyManagement() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <IconButton onClick={() => navigate("/dashboard")} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-                Company Management
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Company Management">
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Box sx={{ mb: 3 }}>
           <Button
@@ -587,7 +560,7 @@ export default function CompanyManagement() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   )
 }
 

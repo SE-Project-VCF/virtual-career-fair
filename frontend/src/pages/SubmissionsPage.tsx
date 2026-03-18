@@ -4,10 +4,15 @@ import { useNavigate, useParams } from "react-router-dom"
 import {
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Collapse,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   Link,
@@ -17,14 +22,17 @@ import {
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import AssignmentIcon from "@mui/icons-material/Assignment"
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
+import DescriptionIcon from "@mui/icons-material/Description"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 import ChatIcon from "@mui/icons-material/Chat"
+import { formatResumeAsText, formatPlainTextResume } from "../utils/resumeFormatter"
 import { auth, db } from "../firebase"
 import { doc, getDoc } from "firebase/firestore"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import type { ApplicationForm } from "../types/applicationForm"
 
 interface Submission {
@@ -34,6 +42,10 @@ interface Submission {
   studentId: string
   responses: Record<string, string | string[] | boolean | null>
   fileUrls?: Record<string, string>
+  attachedResumePath?: string
+  attachedResumeFileName?: string
+  attachedTailoredResumeId?: string
+  attachedTailoredResumeLabel?: string
   submittedAt: number
 }
 
@@ -54,13 +66,105 @@ function renderResponseValue(value: string | string[] | boolean | null): string 
   return String(value) || "—"
 }
 
-function SubmissionCard({ submission, form, studentName }: { submission: Submission; form?: ApplicationForm; studentName?: string }) {
+async function parseJsonOrThrow(res: Response, context: string): Promise<unknown> {
+  const contentType = res.headers.get("content-type") ?? ""
+  const text = await res.text()
+  if (!contentType.includes("application/json")) {
+    const preview = text.slice(0, 80).replaceAll("\n", " ")
+    throw new Error(
+      `Server returned non-JSON (${contentType}). ${context}. ` +
+        `Check that VITE_API_URL points to your backend. Response preview: ${preview}`
+    )
+  }
+  try {
+    return text ? JSON.parse(text) : {}
+  } catch {
+    throw new Error(`Invalid JSON from server. ${context}`)
+  }
+}
+
+function SubmissionCard({ submission, form, studentName }: Readonly<{ submission: Submission; form?: ApplicationForm; studentName?: string }>) {
   const [expanded, setExpanded] = useState(false)
+  const [resumeLoading, setResumeLoading] = useState(false)
+  const [tailoredDialogOpen, setTailoredDialogOpen] = useState(false)
+  const [tailoredLoading, setTailoredLoading] = useState(false)
+  const [tailoredContent, setTailoredContent] = useState<string>("")
+  const [tailoredError, setTailoredError] = useState("")
   const navigate = useNavigate()
 
   const handleChat = (e: React.MouseEvent) => {
     e.stopPropagation()
     navigate("/dashboard/chat", { state: { repId: submission.studentId } })
+  }
+
+  const handleViewResume = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setResumeLoading(true)
+      // If resume is in fileUrls (e.g. from form file field "Attach resume"), use URL directly
+      const fileUrls = submission.fileUrls ?? {}
+      const resumeFileUrl =
+        fileUrls["resume"] ??
+        fileUrls["attach_resume"] ??
+        fileUrls["resume_upload"] ??
+        Object.values(fileUrls).find((v): v is string => typeof v === "string" && v.startsWith("http"))
+      if (resumeFileUrl?.startsWith("http")) {
+        window.open(resumeFileUrl, "_blank", "noopener,noreferrer")
+        return
+      }
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/applicant-resume-url/${submission.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = (await parseJsonOrThrow(res, "applicant-resume-url")) as { url?: string; error?: string }
+      if (!res.ok) {
+        const message =
+          data.error ||
+          (res.status === 404 ? "Resume not found or not attached to this application" : "Failed to get resume URL")
+        throw new Error(message)
+      }
+      const url = data?.url
+      if (url) window.open(url, "_blank", "noopener,noreferrer")
+    } catch (err: any) {
+      console.error("Error fetching resume URL:", err)
+    } finally {
+      setResumeLoading(false)
+    }
+  }
+
+  const handleViewTailoredResume = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setTailoredContent("")
+    setTailoredError("")
+    setTailoredDialogOpen(true)
+    try {
+      setTailoredLoading(true)
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/applicant-tailored-resume/${submission.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = (await parseJsonOrThrow(res, "applicant-tailored-resume")) as {
+        tailoredText?: string
+        structured?: unknown
+        error?: string
+      }
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load tailored resume")
+      }
+      // Resolve content: prefer tailoredText, fall back to structured
+      if (data.tailoredText) {
+        setTailoredContent(formatPlainTextResume(data.tailoredText))
+      } else if (data.structured) {
+        setTailoredContent(formatResumeAsText(data.structured))
+      } else {
+        setTailoredContent("(No content found)")
+      }
+    } catch (err: any) {
+      console.error("Error loading tailored resume:", err)
+      setTailoredError(err.message || "Failed to load tailored resume")
+    } finally {
+      setTailoredLoading(false)
+    }
   }
 
   return (
@@ -115,10 +219,118 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
 
       <Collapse in={expanded}>
         <Box sx={{ px: 2, py: 1.5 }}>
+          {(submission.attachedResumePath || submission.attachedTailoredResumeId) && (
+            <Box sx={{ mb: 1.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
+              {submission.attachedResumePath && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<DescriptionIcon fontSize="small" />}
+                  onClick={handleViewResume}
+                  disabled={resumeLoading}
+                  sx={{
+                    borderColor: "#388560",
+                    color: "#388560",
+                    "&:hover": { borderColor: "#2d6b4d", color: "#2d6b4d", bgcolor: "rgba(56,133,96,0.06)" },
+                  }}
+                >
+                  {(() => {
+                    if (resumeLoading) return "Loading..."
+                    if (submission.attachedResumeFileName) return `View Resume (${submission.attachedResumeFileName})`
+                    return "View Resume"
+                  })()}
+                </Button>
+              )}
+              {submission.attachedTailoredResumeId && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AutoAwesomeIcon fontSize="small" />}
+                  onClick={handleViewTailoredResume}
+                  sx={{
+                    borderColor: "#388560",
+                    color: "#388560",
+                    "&:hover": { borderColor: "#2d6b4d", color: "#2d6b4d", bgcolor: "rgba(56,133,96,0.06)" },
+                  }}
+                >
+                  {submission.attachedTailoredResumeLabel
+                    ? `Tailored Resume: ${submission.attachedTailoredResumeLabel}`
+                    : "View Tailored Resume"}
+                </Button>
+              )}
+              <Box sx={{ width: "100%", mt: 0.5 }}>
+                <Divider />
+              </Box>
+            </Box>
+          )}
+
+          {/* Tailored resume dialog */}
+          <Dialog
+            open={tailoredDialogOpen}
+            onClose={() => setTailoredDialogOpen(false)}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>
+              {submission.attachedTailoredResumeLabel
+                ? `Tailored Resume: ${submission.attachedTailoredResumeLabel}`
+                : "Tailored Resume"}
+            </DialogTitle>
+            <DialogContent dividers>
+              {tailoredLoading && (
+                <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                  <CircularProgress sx={{ color: "#388560" }} />
+                </Box>
+              )}
+              {tailoredError && <Alert severity="error">{tailoredError}</Alert>}
+              {!tailoredLoading && !tailoredError && tailoredContent && (
+                <pre
+                  style={{
+                    backgroundColor: "#fafafa",
+                    border: "1px solid #ddd",
+                    padding: "12px",
+                    borderRadius: "4px",
+                    overflow: "auto",
+                    fontFamily: "monospace",
+                    fontSize: "0.875rem",
+                    lineHeight: "1.6",
+                    whiteSpace: "pre-wrap",
+                    wordWrap: "break-word",
+                    margin: 0,
+                  }}
+                >
+                  {tailoredContent}
+                </pre>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setTailoredDialogOpen(false)}>Close</Button>
+            </DialogActions>
+          </Dialog>
           {form && form.fields.length > 0 ? (
             form.fields.map((field) => {
               const value = submission.responses?.[field.id]
               const fileUrl = submission.fileUrls?.[field.id]
+              let fieldContent
+              if (field.type === "file") {
+                fieldContent = fileUrl ? (
+                  <Box>
+                    <Link href={fileUrl} target="_blank" rel="noopener noreferrer" variant="body2">
+                      View uploaded file
+                    </Link>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No file uploaded
+                  </Typography>
+                )
+              } else {
+                fieldContent = (
+                  <Typography variant="body2" color="text.primary" sx={{ mt: 0.25 }}>
+                    {renderResponseValue(value ?? null)}
+                  </Typography>
+                )
+              }
               return (
                 <Box key={field.id} sx={{ mb: 1.25 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -129,23 +341,7 @@ function SubmissionCard({ submission, form, studentName }: { submission: Submiss
                       </Typography>
                     )}
                   </Typography>
-                  {field.type === "file" ? (
-                    fileUrl ? (
-                      <Box>
-                        <Link href={fileUrl} target="_blank" rel="noopener noreferrer" variant="body2">
-                          View uploaded file
-                        </Link>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No file uploaded
-                      </Typography>
-                    )
-                  ) : (
-                    <Typography variant="body2" color="text.primary" sx={{ mt: 0.25 }}>
-                      {renderResponseValue(value ?? null)}
-                    </Typography>
-                  )}
+                  {fieldContent}
                 </Box>
               )
             })
@@ -266,35 +462,11 @@ export default function SubmissionsPage() {
   }, {})
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton onClick={() => navigate(`/company/${companyId}`)} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <AssignmentIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                Application Submissions
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Application Submissions">
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/company/${companyId}`)} sx={{ mb: 3 }}>
+          Back to Company
+        </Button>
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
             <CircularProgress sx={{ color: "#388560" }} />
@@ -339,7 +511,7 @@ export default function SubmissionsPage() {
                 ))}
               </Select>
               <Typography variant="body2" color="text.secondary" sx={{ ml: "auto" }}>
-                {filteredSubmissions.length} submission{filteredSubmissions.length !== 1 ? "s" : ""}
+                {filteredSubmissions.length} submission{filteredSubmissions.length === 1 ? "" : "s"}
               </Typography>
             </Box>
 
@@ -378,7 +550,7 @@ export default function SubmissionsPage() {
                         {job?.name ?? jobId}
                       </Typography>
                       <Chip
-                        label={`${jobSubs.length} submission${jobSubs.length !== 1 ? "s" : ""}`}
+                        label={`${jobSubs.length} submission${jobSubs.length === 1 ? "" : "s"}`}
                         size="small"
                       />
                     </Box>
@@ -398,6 +570,6 @@ export default function SubmissionsPage() {
           </>
         )}
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }

@@ -51,6 +51,8 @@ describe("trackBoothView", () => {
       },
       { merge: true }
     )
+    // Only one write now - visitor record is handled by backend
+    expect(setDoc).toHaveBeenCalledTimes(1)
   })
 
   it("tracks booth view with minimal fields", async () => {
