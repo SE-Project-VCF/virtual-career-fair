@@ -9,6 +9,10 @@ import {
   CircularProgress,
   Collapse,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   Link,
@@ -18,9 +22,12 @@ import {
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import AssignmentIcon from "@mui/icons-material/Assignment"
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
+import DescriptionIcon from "@mui/icons-material/Description"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
 import ChatIcon from "@mui/icons-material/Chat"
+import { formatResumeAsText, formatPlainTextResume } from "../utils/resumeFormatter"
 import { auth, db } from "../firebase"
 import { doc, getDoc } from "firebase/firestore"
 import { authUtils } from "../utils/auth"
@@ -35,6 +42,10 @@ interface Submission {
   studentId: string
   responses: Record<string, string | string[] | boolean | null>
   fileUrls?: Record<string, string>
+  attachedResumePath?: string
+  attachedResumeFileName?: string
+  attachedTailoredResumeId?: string
+  attachedTailoredResumeLabel?: string
   submittedAt: number
 }
 
@@ -55,13 +66,105 @@ function renderResponseValue(value: string | string[] | boolean | null): string 
   return String(value) || "—"
 }
 
+async function parseJsonOrThrow(res: Response, context: string): Promise<unknown> {
+  const contentType = res.headers.get("content-type") ?? ""
+  const text = await res.text()
+  if (!contentType.includes("application/json")) {
+    const preview = text.slice(0, 80).replaceAll("\n", " ")
+    throw new Error(
+      `Server returned non-JSON (${contentType}). ${context}. ` +
+        `Check that VITE_API_URL points to your backend. Response preview: ${preview}`
+    )
+  }
+  try {
+    return text ? JSON.parse(text) : {}
+  } catch {
+    throw new Error(`Invalid JSON from server. ${context}`)
+  }
+}
+
 function SubmissionCard({ submission, form, studentName }: Readonly<{ submission: Submission; form?: ApplicationForm; studentName?: string }>) {
   const [expanded, setExpanded] = useState(false)
+  const [resumeLoading, setResumeLoading] = useState(false)
+  const [tailoredDialogOpen, setTailoredDialogOpen] = useState(false)
+  const [tailoredLoading, setTailoredLoading] = useState(false)
+  const [tailoredContent, setTailoredContent] = useState<string>("")
+  const [tailoredError, setTailoredError] = useState("")
   const navigate = useNavigate()
 
   const handleChat = (e: React.MouseEvent) => {
     e.stopPropagation()
     navigate("/dashboard/chat", { state: { repId: submission.studentId } })
+  }
+
+  const handleViewResume = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setResumeLoading(true)
+      // If resume is in fileUrls (e.g. from form file field "Attach resume"), use URL directly
+      const fileUrls = submission.fileUrls ?? {}
+      const resumeFileUrl =
+        fileUrls["resume"] ??
+        fileUrls["attach_resume"] ??
+        fileUrls["resume_upload"] ??
+        Object.values(fileUrls).find((v): v is string => typeof v === "string" && v.startsWith("http"))
+      if (resumeFileUrl?.startsWith("http")) {
+        window.open(resumeFileUrl, "_blank", "noopener,noreferrer")
+        return
+      }
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/applicant-resume-url/${submission.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = (await parseJsonOrThrow(res, "applicant-resume-url")) as { url?: string; error?: string }
+      if (!res.ok) {
+        const message =
+          data.error ||
+          (res.status === 404 ? "Resume not found or not attached to this application" : "Failed to get resume URL")
+        throw new Error(message)
+      }
+      const url = data?.url
+      if (url) window.open(url, "_blank", "noopener,noreferrer")
+    } catch (err: any) {
+      console.error("Error fetching resume URL:", err)
+    } finally {
+      setResumeLoading(false)
+    }
+  }
+
+  const handleViewTailoredResume = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setTailoredContent("")
+    setTailoredError("")
+    setTailoredDialogOpen(true)
+    try {
+      setTailoredLoading(true)
+      const token = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/applicant-tailored-resume/${submission.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = (await parseJsonOrThrow(res, "applicant-tailored-resume")) as {
+        tailoredText?: string
+        structured?: unknown
+        error?: string
+      }
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load tailored resume")
+      }
+      // Resolve content: prefer tailoredText, fall back to structured
+      if (data.tailoredText) {
+        setTailoredContent(formatPlainTextResume(data.tailoredText))
+      } else if (data.structured) {
+        setTailoredContent(formatResumeAsText(data.structured))
+      } else {
+        setTailoredContent("(No content found)")
+      }
+    } catch (err: any) {
+      console.error("Error loading tailored resume:", err)
+      setTailoredError(err.message || "Failed to load tailored resume")
+    } finally {
+      setTailoredLoading(false)
+    }
   }
 
   return (
@@ -116,6 +219,94 @@ function SubmissionCard({ submission, form, studentName }: Readonly<{ submission
 
       <Collapse in={expanded}>
         <Box sx={{ px: 2, py: 1.5 }}>
+          {(submission.attachedResumePath || submission.attachedTailoredResumeId) && (
+            <Box sx={{ mb: 1.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
+              {submission.attachedResumePath && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<DescriptionIcon fontSize="small" />}
+                  onClick={handleViewResume}
+                  disabled={resumeLoading}
+                  sx={{
+                    borderColor: "#388560",
+                    color: "#388560",
+                    "&:hover": { borderColor: "#2d6b4d", color: "#2d6b4d", bgcolor: "rgba(56,133,96,0.06)" },
+                  }}
+                >
+                  {(() => {
+                    if (resumeLoading) return "Loading..."
+                    if (submission.attachedResumeFileName) return `View Resume (${submission.attachedResumeFileName})`
+                    return "View Resume"
+                  })()}
+                </Button>
+              )}
+              {submission.attachedTailoredResumeId && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AutoAwesomeIcon fontSize="small" />}
+                  onClick={handleViewTailoredResume}
+                  sx={{
+                    borderColor: "#388560",
+                    color: "#388560",
+                    "&:hover": { borderColor: "#2d6b4d", color: "#2d6b4d", bgcolor: "rgba(56,133,96,0.06)" },
+                  }}
+                >
+                  {submission.attachedTailoredResumeLabel
+                    ? `Tailored Resume: ${submission.attachedTailoredResumeLabel}`
+                    : "View Tailored Resume"}
+                </Button>
+              )}
+              <Box sx={{ width: "100%", mt: 0.5 }}>
+                <Divider />
+              </Box>
+            </Box>
+          )}
+
+          {/* Tailored resume dialog */}
+          <Dialog
+            open={tailoredDialogOpen}
+            onClose={() => setTailoredDialogOpen(false)}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>
+              {submission.attachedTailoredResumeLabel
+                ? `Tailored Resume: ${submission.attachedTailoredResumeLabel}`
+                : "Tailored Resume"}
+            </DialogTitle>
+            <DialogContent dividers>
+              {tailoredLoading && (
+                <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                  <CircularProgress sx={{ color: "#388560" }} />
+                </Box>
+              )}
+              {tailoredError && <Alert severity="error">{tailoredError}</Alert>}
+              {!tailoredLoading && !tailoredError && tailoredContent && (
+                <pre
+                  style={{
+                    backgroundColor: "#fafafa",
+                    border: "1px solid #ddd",
+                    padding: "12px",
+                    borderRadius: "4px",
+                    overflow: "auto",
+                    fontFamily: "monospace",
+                    fontSize: "0.875rem",
+                    lineHeight: "1.6",
+                    whiteSpace: "pre-wrap",
+                    wordWrap: "break-word",
+                    margin: 0,
+                  }}
+                >
+                  {tailoredContent}
+                </pre>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setTailoredDialogOpen(false)}>Close</Button>
+            </DialogActions>
+          </Dialog>
           {form && form.fields.length > 0 ? (
             form.fields.map((field) => {
               const value = submission.responses?.[field.id]

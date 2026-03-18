@@ -52,6 +52,47 @@ async function resolveBooth(boothId) {
   return null;
 }
 
+/**
+ * Resolves applicant resume path or URL from application data.
+ * Returns { type: "url"|"path", value } or { type: null } if not found.
+ */
+async function resolveApplicantResumePathOrUrl(appData, studentId) {
+  const pathOrUrl =
+    appData.attachedResumePath ||
+    appData.fileUrls?.resume ||
+    appData.fileUrls?.attach_resume ||
+    appData.fileUrls?.resume_upload;
+
+  if (pathOrUrl && typeof pathOrUrl === "string" && pathOrUrl.startsWith("http")) {
+    return { type: "url", value: pathOrUrl };
+  }
+  if (pathOrUrl && typeof pathOrUrl === "string") {
+    return { type: "path", value: pathOrUrl };
+  }
+  if (!studentId) return { type: null };
+
+  const userDoc = await db.collection("users").doc(studentId).get();
+  if (!userDoc.exists) return { type: null };
+
+  const userData = userDoc.data();
+  const p = userData.currentResumePath || userData.resumePath || userData.resumeUrl;
+  if (p && typeof p === "string" && !p.startsWith("http")) {
+    return { type: "path", value: p };
+  }
+  return { type: null };
+}
+
+/**
+ * Ensures the user can view company resumes. Returns error response args or null if authorized.
+ */
+async function requireCompanyResumeViewAccess(companyId, userId) {
+  const auth = await checkCompanyAuthorization(companyId, userId);
+  if (auth.authorized) return null;
+  const status = auth.error === "Invalid company ID" ? 404 : 403;
+  const message = status === 404 ? "Company not found" : "Not authorized to view this resume";
+  return { status, error: message };
+}
+
 // --------------------------
 // ENVIRONMENT VALIDATION
 // --------------------------
@@ -1058,6 +1099,112 @@ app.get("/api/companies/:companyId/submissions", verifyFirebaseToken, async (req
   } catch (err) {
     console.error("Error fetching submissions:", err);
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ----------------------------------------------------
+   GET APPLICANT RESUME URL (for company reps/owners)
+   Generates a signed URL for a student's attached resume
+   on a specific job application.
+---------------------------------------------------- */
+app.get("/api/applicant-resume-url/:applicationId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+
+    const appDoc = await db.collection("jobApplications").doc(applicationId).get();
+    if (!appDoc.exists) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+
+    const appData = appDoc.data();
+    const { companyId, studentId } = appData;
+
+    const authError = await requireCompanyResumeViewAccess(companyId, req.user.uid);
+    if (authError) {
+      return res.status(authError.status).json({ error: authError.error });
+    }
+
+    const resolved = await resolveApplicantResumePathOrUrl(appData, studentId);
+    if (resolved.type === "url") {
+      return res.json({ url: resolved.value });
+    }
+    if (resolved.type !== "path") {
+      return res.status(404).json({ error: "No resume attached to this application" });
+    }
+
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(resolved.value);
+    const [exists] = await file.exists();
+    if (!exists) {
+      return res.status(404).json({ error: "Resume file not found in storage" });
+    }
+
+    const [signedUrl] = await file.getSignedUrl({
+      version: "v4",
+      action: "read",
+      expires: Date.now() + 60 * 60 * 1000, // 1 hour
+    });
+
+    return res.json({ url: signedUrl });
+  } catch (err) {
+    console.error("Error generating applicant resume URL:", err);
+    return res.status(500).json({ error: err.message || "Failed to generate resume URL" });
+  }
+});
+
+/* ----------------------------------------------------
+   GET APPLICANT TAILORED RESUME CONTENT (for company reps/owners)
+   Returns the text content of a tailored resume attached to an application.
+---------------------------------------------------- */
+app.get("/api/applicant-tailored-resume/:applicationId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+
+    const appDoc = await db.collection("jobApplications").doc(applicationId).get();
+    if (!appDoc.exists) {
+      return res.status(404).json({ error: "Application not found" });
+    }
+
+    const appData = appDoc.data();
+    const { companyId, studentId, attachedTailoredResumeId } = appData;
+
+    if (!attachedTailoredResumeId) {
+      return res.status(404).json({ error: "No tailored resume attached to this application" });
+    }
+
+    // Verify requester is the company's owner or rep
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    if (!companyDoc.exists) {
+      return res.status(404).json({ error: "Company not found" });
+    }
+    const companyData = companyDoc.data();
+    const reps = companyData.representativeIDs || [];
+    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
+      return res.status(403).json({ error: "Not authorized to view this resume" });
+    }
+
+    // Fetch the tailored resume from the student's subcollection
+    const tailoredDoc = await db
+      .collection("users")
+      .doc(studentId)
+      .collection("tailoredResumes")
+      .doc(attachedTailoredResumeId)
+      .get();
+
+    if (!tailoredDoc.exists) {
+      return res.status(404).json({ error: "Tailored resume not found" });
+    }
+
+    const data = tailoredDoc.data();
+    return res.json({
+      tailoredText: data.tailoredText ?? null,
+      structured: data.structured ?? null,
+      jobContext: data.jobContext ?? null,
+      method: data.method ?? null,
+    });
+  } catch (err) {
+    console.error("Error fetching applicant tailored resume:", err);
+    return res.status(500).json({ error: err.message || "Failed to fetch tailored resume" });
   }
 });
 

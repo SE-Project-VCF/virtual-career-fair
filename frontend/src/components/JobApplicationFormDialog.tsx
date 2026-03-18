@@ -1,23 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Alert,
   Box,
   Button,
   Checkbox,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   FormControlLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   Select,
   TextField,
   Typography,
 } from "@mui/material";
-import { collection, addDoc } from "firebase/firestore";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import { collection, addDoc, doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { db, storage, auth } from "../firebase";
+import { API_URL } from "../config";
 import type { ApplicationForm, FormField } from "../types/applicationForm";
 
 interface JobForApply {
@@ -35,7 +41,89 @@ interface JobApplicationFormDialogProps {
   studentId: string | null;
 }
 
+interface TailoredResumeSummary {
+  id: string;
+  label: string; // e.g. "Software Engineer – Mar 2026"
+}
+
 type FieldValue = string | string[] | boolean | File | null;
+
+function extractProfileResumePath(data: Record<string, unknown>): string | null {
+  const path = data.resumePath ?? data.currentResumePath;
+  if (path && typeof path === "string") return path;
+  const url = data.resumeUrl;
+  if (typeof url === "string" && !url.startsWith("http")) return url;
+  return null;
+}
+
+function safeStr(val: unknown): string {
+  return typeof val === "string" ? val : "";
+}
+
+function buildPrefillFromProfile(
+  form: ApplicationForm | null | undefined,
+  data: Record<string, unknown>
+): Record<string, string> {
+  if (!form?.fields) return {};
+  const authUser = auth.currentUser;
+  const fieldIds = new Set(form.fields.map((f) => f.id));
+  const prefill: Record<string, string> = {};
+  if (fieldIds.has("fullName")) prefill.fullName = safeStr(authUser?.displayName ?? data.displayName);
+  if (fieldIds.has("email")) prefill.email = safeStr(authUser?.email ?? data.email);
+  if (fieldIds.has("graduationYear")) prefill.graduationYear = safeStr(data.expectedGradYear);
+  if (fieldIds.has("major")) prefill.major = safeStr(data.major);
+  if (fieldIds.has("skills")) prefill.skills = safeStr(data.skills);
+  return prefill;
+}
+
+function formatTailoredResumeLabel(r: { jobContext?: { jobTitle?: string }; createdAt?: { toDate?: () => Date } | string }): string {
+  const title = r.jobContext?.jobTitle ?? "Untitled";
+  const raw = r.createdAt;
+  if (raw && typeof raw === "object" && typeof raw.toDate === "function") {
+    return `${title} – ${new Date(raw.toDate()).toLocaleDateString()}`;
+  }
+  if (typeof raw === "string") {
+    return `${title} – ${new Date(raw).toLocaleDateString()}`;
+  }
+  return `${title} – Unknown date`;
+}
+
+async function fetchTailoredResumeSummaries(): Promise<TailoredResumeSummary[]> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return [];
+  const res = await fetch(`${API_URL}/api/resume/tailored`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const resumes = data.resumes ?? [];
+  return resumes.map((r: any) => ({ id: r.id, label: formatTailoredResumeLabel(r) }));
+}
+
+/** Resume choice: "none" | "profile" | tailored resume id */
+function buildResumeFields(
+  resumeChoice: string,
+  profileResumePath: string | null,
+  profileResumeFileName: string | null,
+  tailoredResumes: TailoredResumeSummary[]
+): Record<string, unknown> {
+  if (resumeChoice === "profile" && profileResumePath) {
+    return {
+      attachedResumePath: profileResumePath,
+      attachedResumeFileName: profileResumeFileName ?? null,
+    };
+  }
+  if (resumeChoice !== "none" && resumeChoice !== "profile") {
+    const chosen = tailoredResumes.find((r) => r.id === resumeChoice);
+    if (chosen) {
+      return {
+        attachedTailoredResumeId: chosen.id,
+        attachedTailoredResumeLabel: chosen.label,
+      };
+    }
+  }
+  return {};
+}
 
 export default function JobApplicationFormDialog({
   open,
@@ -50,6 +138,61 @@ export default function JobApplicationFormDialog({
   const [submitting, setSubmitting] = useState(false);
   const [topError, setTopError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  // Resume state
+  const [profileResumePath, setProfileResumePath] = useState<string | null>(null);
+  const [profileResumeFileName, setProfileResumeFileName] = useState<string | null>(null);
+  const [tailoredResumes, setTailoredResumes] = useState<TailoredResumeSummary[]>([]);
+  const [resumesLoading, setResumesLoading] = useState(false);
+  const [resumeChoice, setResumeChoice] = useState<string>("none");
+
+  useEffect(() => {
+    if (!open || !studentId) return;
+    let cancelled = false;
+
+    const load = async () => {
+      setResumesLoading(true);
+      try {
+        const snap = await getDoc(doc(db, "users", studentId));
+        const data = snap.exists() ? snap.data() : null;
+
+        if (!cancelled && data) {
+          const path = extractProfileResumePath(data);
+          const name = (data.resumeFileName as string) ?? null;
+          setProfileResumePath(path);
+          setProfileResumeFileName(name);
+          if (path) setResumeChoice("profile");
+
+          const prefill = buildPrefillFromProfile(form, data);
+          if (Object.keys(prefill).length > 0) {
+            setValues((prev) => ({ ...prev, ...prefill }));
+          }
+        }
+
+        if (!cancelled) {
+          const summaries = await fetchTailoredResumeSummaries();
+          if (!cancelled) setTailoredResumes(summaries);
+        }
+      } catch {
+        // silently ignore — resume attachment is optional
+      } finally {
+        if (!cancelled) setResumesLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [open, studentId, form]);
+
+  // Reset values when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setValues({});
+      setErrors({});
+      setTopError("");
+      setSuccess(false);
+    }
+  }, [open]);
 
   if (form?.status !== "published") {
     return null;
@@ -139,6 +282,13 @@ export default function JobApplicationFormDialog({
         }
       }
 
+      const resumeFields = buildResumeFields(
+        resumeChoice,
+        profileResumePath,
+        profileResumeFileName,
+        tailoredResumes
+      );
+
       const docData: any = {
         jobId: job.id,
         companyId: job.companyId,
@@ -146,11 +296,13 @@ export default function JobApplicationFormDialog({
         ...(boothId ? { boothId } : {}),
         responses,
         ...(Object.keys(fileUrls).length > 0 ? { fileUrls } : {}),
+        ...resumeFields,
         submittedAt: Date.now(),
       };
 
       await addDoc(collection(db, "jobApplications"), docData);
       setSuccess(true);
+      onClose();
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.error("Error submitting application:", err);
@@ -310,6 +462,8 @@ export default function JobApplicationFormDialog({
     }
   };
 
+  const hasAnyResume = !!profileResumePath || tailoredResumes.length > 0;
+
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{form.title}</DialogTitle>
@@ -331,6 +485,88 @@ export default function JobApplicationFormDialog({
             Application submitted successfully!
           </Alert>
         )}
+
+        {/* Resume attachment section */}
+        <Box
+          sx={{
+            mb: 2,
+            p: 1.5,
+            border: "1px solid rgba(56, 133, 96, 0.25)",
+            borderRadius: 1,
+            bgcolor: "rgba(56, 133, 96, 0.04)",
+          }}
+        >
+          <Typography
+            variant="body2"
+            fontWeight={600}
+            sx={{ mb: 0.75, display: "flex", alignItems: "center", gap: 0.5 }}
+          >
+            <AttachFileIcon fontSize="small" sx={{ color: "#388560" }} />
+            Resume
+          </Typography>
+
+          {resumesLoading && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <CircularProgress size={14} sx={{ color: "#388560" }} />
+              <Typography variant="caption" color="text.secondary">
+                Loading your resumes…
+              </Typography>
+            </Box>
+          )}
+          {!resumesLoading && !hasAnyResume && (
+            <Typography variant="body2" color="text.secondary">
+              No resume on file.{" "}
+              <Typography component="span" variant="body2" color="#388560" sx={{ fontStyle: "italic" }}>
+                Upload one from your profile, or create a tailored resume from a job invitation.
+              </Typography>
+            </Typography>
+          )}
+          {!resumesLoading && hasAnyResume && (
+            <RadioGroup
+              value={resumeChoice}
+              onChange={(e) => setResumeChoice(e.target.value)}
+            >
+              <FormControlLabel
+                value="none"
+                control={<Radio size="small" sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }} />}
+                label={<Typography variant="body2">Don't attach a resume</Typography>}
+              />
+              {profileResumePath && (
+                <FormControlLabel
+                  value="profile"
+                  control={<Radio size="small" sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }} />}
+                  label={
+                    <Typography variant="body2">
+                      My uploaded resume
+                      {profileResumeFileName && (
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>
+                          ({profileResumeFileName})
+                        </Typography>
+                      )}
+                    </Typography>
+                  }
+                />
+              )}
+              {tailoredResumes.map((tr) => (
+                <FormControlLabel
+                  key={tr.id}
+                  value={tr.id}
+                  control={<Radio size="small" sx={{ color: "#388560", "&.Mui-checked": { color: "#388560" } }} />}
+                  label={
+                    <Typography variant="body2">
+                      Tailored resume:{" "}
+                      <Typography component="span" variant="body2" color="text.secondary">
+                        {tr.label}
+                      </Typography>
+                    </Typography>
+                  }
+                />
+              ))}
+            </RadioGroup>
+          )}
+        </Box>
+
+        {form.fields.length > 0 && <Divider sx={{ mb: 2 }} />}
 
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {form.fields.map((field) => (
@@ -359,4 +595,3 @@ export default function JobApplicationFormDialog({
     </Dialog>
   );
 }
-

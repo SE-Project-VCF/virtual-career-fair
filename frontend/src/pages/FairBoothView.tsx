@@ -24,6 +24,8 @@ import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
 import BaseLayout from "../components/BaseLayout"
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { collection, getDocs, query, where } from "firebase/firestore"
@@ -54,6 +56,8 @@ interface Job {
   description: string | null
   majorsAssociated: string | null
   applicationLink: string | null
+  companyId?: string
+  applicationForm?: ApplicationForm | null
 }
 
 const INDUSTRY_LABELS: Record<string, string> = {
@@ -79,6 +83,8 @@ export default function FairBoothView() {
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
   const trackingBoothIdRef = useRef<string | null>(null)
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false)
+  const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
   const isMountedRef = useRef(true)
 
   const trackStudentBoothLeave = async () => {
@@ -249,7 +255,7 @@ export default function FairBoothView() {
           onClick={() => navigate(`/fair/${fairId}/booths`)}
           sx={{ mb: 3 }}
         >
-          Back to {fair?.name ?? "Fair"} Booths
+          Back to {`${fair?.name ?? "Fair"} Booths`}
         </Button>
 
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
@@ -332,10 +338,36 @@ export default function FairBoothView() {
                             {job.description && (
                               <Typography variant="body2" sx={{ mt: 1 }}>{job.description}</Typography>
                             )}
-                            {job.applicationLink && (
-                              <Link href={job.applicationLink} target="_blank" rel="noopener noreferrer" sx={{ mt: 1, display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-                                Apply <LaunchIcon fontSize="small" />
-                              </Link>
+                            {(job.applicationLink ||
+                              job.applicationForm?.status === "published") && (
+                              <Box sx={{ mt: 1 }}>
+                                {job.applicationForm?.status === "published" && (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    startIcon={<LaunchIcon />}
+                                    onClick={() => {
+                                      setSelectedJobForApply(job)
+                                      setApplyDialogOpen(true)
+                                    }}
+                                  >
+                                    Apply Now
+                                  </Button>
+                                )}
+                                {job.applicationForm?.status !== "published" && job.applicationLink && (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    startIcon={<LaunchIcon />}
+                                    component="a"
+                                    href={job.applicationLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Apply Now
+                                  </Button>
+                                )}
+                              </Box>
                             )}
                           </CardContent>
                         </Card>
@@ -402,6 +434,22 @@ export default function FairBoothView() {
           </Grid>
         )}
       </Container>
+
+      {selectedJobForApply && booth && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false)
+            setSelectedJobForApply(null)
+          }}
+          job={{
+            ...selectedJobForApply,
+            companyId: selectedJobForApply.companyId ?? booth.companyId,
+          }}
+          boothId={boothId}
+          studentId={user?.uid ?? null}
+        />
+      )}
     </BaseLayout>
   )
 }
