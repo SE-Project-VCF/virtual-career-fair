@@ -3,6 +3,9 @@ import {
   Alert,
   Box,
   Button,
+  Card,
+  CardActionArea,
+  CardContent,
   Checkbox,
   Dialog,
   DialogActions,
@@ -20,16 +23,23 @@ import {
   IconButton,
   Chip,
   Paper,
+  Tooltip,
 } from "@mui/material";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import BuildIcon from "@mui/icons-material/Build";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult, DroppableProvided, DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import { auth } from "../firebase";
 import { API_URL } from "../config";
+import { STANDARD_APPLICATION_TEMPLATE } from "../constants/applicationFormTemplate";
 import type { ApplicationForm, FormField, FormFieldType } from "../types/applicationForm";
+
+type CreationMode = "choosing" | "editing";
 
 interface ApplicationFormBuilderDialogProps {
   readonly open: boolean;
@@ -204,6 +214,7 @@ export default function ApplicationFormBuilderDialog({
   initialForm,
   onSaved,
 }: ApplicationFormBuilderDialogProps) {
+  const [creationMode, setCreationMode] = useState<CreationMode>("choosing");
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [fields, setFields] = useState<FormField[]>([]);
@@ -217,27 +228,46 @@ export default function ApplicationFormBuilderDialog({
   useEffect(() => {
     if (open) {
       if (initialForm) {
+        setCreationMode("editing");
         setFormTitle(initialForm.title);
         setFormDescription(initialForm.description ?? "");
         setFields(initialForm.fields ?? []);
         setFormStatus(initialForm.status ?? "draft");
       } else {
+        setCreationMode("choosing");
         setFormTitle(`Application for ${jobName}`);
         setFormDescription("");
-        setFields([
-          {
-            id: crypto.randomUUID(),
-            type: "shortText",
-            label: "",
-            required: true,
-          },
-        ]);
+        setFields([]);
         setFormStatus("draft");
       }
       setError("");
       setFieldErrors({});
     }
   }, [open, initialForm, jobName]);
+
+  const handleChooseCreationMode = (mode: "template" | "scratch") => {
+    if (mode === "template") {
+      const template = { ...STANDARD_APPLICATION_TEMPLATE };
+      template.title = `Application for ${jobName}`;
+      setFormTitle(template.title);
+      setFormDescription(template.description ?? "");
+      setFields([...template.fields]);
+      setFormStatus("draft");
+    } else {
+      setFormTitle(`Application for ${jobName}`);
+      setFormDescription("");
+      setFields([
+        {
+          id: crypto.randomUUID(),
+          type: "shortText",
+          label: "",
+          required: true,
+        },
+      ]);
+      setFormStatus("draft");
+    }
+    setCreationMode("editing");
+  };
 
   const handleAddField = () => {
     setFields((prev) => [
@@ -443,23 +473,75 @@ export default function ApplicationFormBuilderDialog({
       </DialogTitle>
 
       <DialogContent dividers>
-        <Box sx={{ mb: 2, display: "flex", alignItems: "flex-start", gap: 1.5 }}>
-          <InfoOutlinedIcon sx={{ color: "text.secondary", mt: 0.5 }} fontSize="small" />
-          <Typography variant="body2" color="text.secondary">
-            Define the questions candidates will answer when applying to this job during the virtual career fair.
-            {hasExistingForm
-              ? " You can edit, reorder, or remove existing fields at any time."
-              : " Start by customizing the title and your first question."}
-          </Typography>
-        </Box>
+        {creationMode === "choosing" && !hasExistingForm ? (
+          <Box sx={{ py: 2 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              How would you like to create your application form?
+            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <Card variant="outlined" sx={{ borderColor: "primary.main" }}>
+                <CardActionArea onClick={() => handleChooseCreationMode("template")}>
+                  <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <AssignmentIcon color="primary" />
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={600}>Use standard template</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Pre-filled with name, email, graduation year, skills, and more. Customize as needed.
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+              <Card variant="outlined">
+                <CardActionArea onClick={() => handleChooseCreationMode("scratch")}>
+                  <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <BuildIcon color="action" />
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={600}>Build from scratch</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Create a completely custom form with your own questions.
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Box>
+          </Box>
+        ) : (
+          <>
+            {creationMode === "editing" && !hasExistingForm && (
+              <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                <Tooltip title="Back to options">
+                  <IconButton
+                    onClick={() => setCreationMode("choosing")}
+                    size="small"
+                    sx={{ color: "text.secondary" }}
+                  >
+                    <ArrowBackIcon />
+                  </IconButton>
+                </Tooltip>
+                <Typography variant="body2" color="text.secondary">
+                  Back to options
+                </Typography>
+              </Box>
+            )}
+            <Box sx={{ mb: 2, display: "flex", alignItems: "flex-start", gap: 1.5 }}>
+              <InfoOutlinedIcon sx={{ color: "text.secondary", mt: 0.5 }} fontSize="small" />
+              <Typography variant="body2" color="text.secondary">
+                Define the questions candidates will answer when applying to this job during the virtual career fair.
+                {hasExistingForm
+                  ? " You can edit, reorder, or remove existing fields at any time."
+                  : " Start by customizing the title and your first question."}
+              </Typography>
+            </Box>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
-            {error}
-          </Alert>
-        )}
+            {error && (
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
+                {error}
+              </Alert>
+            )}
 
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 3 }}>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mb: 3 }}>
           <TextField
             fullWidth
             label="Form title"
@@ -577,6 +659,8 @@ export default function ApplicationFormBuilderDialog({
             {fields.length} field{fields.length === 1 ? "" : "s"} configured
           </Typography>
         </Box>
+          </>
+        )}
       </DialogContent>
 
       <DialogActions>
