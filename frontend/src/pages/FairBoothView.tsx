@@ -335,9 +335,9 @@ export default function FairBoothView() {
                               <Typography variant="body2" sx={{ mt: 1 }}>{job.description}</Typography>
                             )}
                             {(job.applicationLink ||
-                              (job.applicationForm && job.applicationForm.status === "published")) && (
+                              job.applicationForm?.status === "published") && (
                               <Box sx={{ mt: 1 }}>
-                                {job.applicationForm && job.applicationForm.status === "published" ? (
+                                {job.applicationForm?.status === "published" && (
                                   <Button
                                     variant="contained"
                                     size="small"
@@ -349,7 +349,8 @@ export default function FairBoothView() {
                                   >
                                     Apply Now
                                   </Button>
-                                ) : job.applicationLink ? (
+                                )}
+                                {job.applicationForm?.status !== "published" && job.applicationLink && (
                                   <Button
                                     variant="contained"
                                     size="small"
@@ -361,7 +362,7 @@ export default function FairBoothView() {
                                   >
                                     Apply Now
                                   </Button>
-                                ) : null}
+                                )}
                               </Box>
                             )}
                           </CardContent>

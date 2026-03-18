@@ -70,7 +70,7 @@ async function parseJsonOrThrow(res: Response, context: string): Promise<unknown
   const contentType = res.headers.get("content-type") ?? ""
   const text = await res.text()
   if (!contentType.includes("application/json")) {
-    const preview = text.slice(0, 80).replace(/\n/g, " ")
+    const preview = text.slice(0, 80).replaceAll(/\n/, " ")
     throw new Error(
       `Server returned non-JSON (${contentType}). ${context}. ` +
         `Check that VITE_API_URL points to your backend. Response preview: ${preview}`

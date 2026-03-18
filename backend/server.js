@@ -52,6 +52,47 @@ async function resolveBooth(boothId) {
   return null;
 }
 
+/**
+ * Resolves applicant resume path or URL from application data.
+ * Returns { type: "url"|"path", value } or { type: null } if not found.
+ */
+async function resolveApplicantResumePathOrUrl(appData, studentId) {
+  const pathOrUrl =
+    appData.attachedResumePath ||
+    appData.fileUrls?.resume ||
+    appData.fileUrls?.attach_resume ||
+    appData.fileUrls?.resume_upload;
+
+  if (pathOrUrl && typeof pathOrUrl === "string" && pathOrUrl.startsWith("http")) {
+    return { type: "url", value: pathOrUrl };
+  }
+  if (pathOrUrl && typeof pathOrUrl === "string") {
+    return { type: "path", value: pathOrUrl };
+  }
+  if (!studentId) return { type: null };
+
+  const userDoc = await db.collection("users").doc(studentId).get();
+  if (!userDoc.exists) return { type: null };
+
+  const userData = userDoc.data();
+  const p = userData.currentResumePath || userData.resumePath || userData.resumeUrl;
+  if (p && typeof p === "string" && !p.startsWith("http")) {
+    return { type: "path", value: p };
+  }
+  return { type: null };
+}
+
+/**
+ * Ensures the user can view company resumes. Returns error response args or null if authorized.
+ */
+async function requireCompanyResumeViewAccess(companyId, userId) {
+  const auth = await checkCompanyAuthorization(companyId, userId);
+  if (auth.authorized) return null;
+  const status = auth.error === "Invalid company ID" ? 404 : 403;
+  const message = status === 404 ? "Company not found" : "Not authorized to view this resume";
+  return { status, error: message };
+}
+
 // --------------------------
 // ENVIRONMENT VALIDATION
 // --------------------------
@@ -1076,42 +1117,23 @@ app.get("/api/applicant-resume-url/:applicationId", verifyFirebaseToken, async (
     }
 
     const appData = appDoc.data();
-    const { companyId, studentId, attachedResumePath } = appData;
+    const { companyId, studentId } = appData;
 
-    // Verify requester is the company's owner or rep
-    const companyDoc = await db.collection("companies").doc(companyId).get();
-    if (!companyDoc.exists) {
-      return res.status(404).json({ error: "Company not found" });
-    }
-    const companyData = companyDoc.data();
-    const reps = companyData.representativeIDs || [];
-    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-      return res.status(403).json({ error: "Not authorized to view this resume" });
+    const authError = await requireCompanyResumeViewAccess(companyId, req.user.uid);
+    if (authError) {
+      return res.status(authError.status).json({ error: authError.error });
     }
 
-    // If attachedResumePath is a full URL (legacy format), return it directly
-    const pathOrUrl = attachedResumePath || (appData.fileUrls && (appData.fileUrls.resume || appData.fileUrls.attach_resume || appData.fileUrls.resume_upload));
-    if (pathOrUrl && typeof pathOrUrl === "string" && pathOrUrl.startsWith("http")) {
-      return res.json({ url: pathOrUrl });
+    const resolved = await resolveApplicantResumePathOrUrl(appData, studentId);
+    if (resolved.type === "url") {
+      return res.json({ url: resolved.value });
     }
-
-    // Resolve storage path: use attachedResumePath, or fall back to student's profile resume
-    let storagePath = pathOrUrl;
-    if (!storagePath && studentId) {
-      const userDoc = await db.collection("users").doc(studentId).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        const p = userData.currentResumePath || userData.resumePath || userData.resumeUrl;
-        if (p && typeof p === "string" && !p.startsWith("http")) storagePath = p;
-      }
-    }
-
-    if (!storagePath) {
+    if (resolved.type !== "path") {
       return res.status(404).json({ error: "No resume attached to this application" });
     }
 
     const bucket = admin.storage().bucket();
-    const file = bucket.file(storagePath);
+    const file = bucket.file(resolved.value);
     const [exists] = await file.exists();
     if (!exists) {
       return res.status(404).json({ error: "Resume file not found in storage" });

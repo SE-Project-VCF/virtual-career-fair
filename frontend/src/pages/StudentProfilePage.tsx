@@ -67,7 +67,7 @@ export default function StudentProfilePage() {
         if (docSnap.exists()) {
           const data = docSnap.data()
           const validYears = ["2023","2024","2025","2026","2027","2028","2029","2030","2031","2032","2033","2034","2035"]
-          const rawYear = data.expectedGradYear != null ? String(data.expectedGradYear) : ""
+          const rawYear = data.expectedGradYear == null ? "" : String(data.expectedGradYear) 
           setMajor(data.major || "")
           setYear(validYears.includes(rawYear) ? rawYear : "")
           setSkills(data.skills || "")
@@ -300,7 +300,7 @@ export default function StudentProfilePage() {
               fullWidth
               required
               sx={{ mb: 3 }}
-              SelectProps={{ native: true, name: "expectedGradYear" }}
+              slotProps={{ select: { native: true, name: "expectedGradYear" } }}
             >
               <option value="">Select year...</option>
               {[2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035].map((y) => (
