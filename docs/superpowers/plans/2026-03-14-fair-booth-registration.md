@@ -1,3 +1,6 @@
+---
+render_with_liquid: false
+---
 # Fair Booth Registration Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
