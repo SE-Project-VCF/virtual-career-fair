@@ -51,6 +51,8 @@ describe("trackBoothView", () => {
       },
       { merge: true }
     )
+    // Only one write now - visitor record is handled by backend
+    expect(setDoc).toHaveBeenCalledTimes(1)
   })
 
   it("tracks booth view with minimal fields", async () => {
@@ -221,7 +223,7 @@ describe("trackBoothView", () => {
       "boothHistory",
       "booth-123"
     )
-    expect(setDoc).toHaveBeenCalledTimes(4)
+    expect(setDoc).toHaveBeenCalledTimes(2)
   })
 
   it("tracks different booths for same user separately", async () => {
@@ -251,7 +253,7 @@ describe("trackBoothView", () => {
       "boothHistory",
       "booth-2"
     )
-    expect(setDoc).toHaveBeenCalledTimes(4)
+    expect(setDoc).toHaveBeenCalledTimes(2)
   })
 
   it("preserves special characters in companyName", async () => {

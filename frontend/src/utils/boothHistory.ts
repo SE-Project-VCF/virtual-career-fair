@@ -23,7 +23,6 @@ export async function trackBoothView(uid: string, booth: BoothHistoryWrite) {
   // Use boothId as the doc ID, so each booth appears only once in history.
   // Viewing the same booth again simply updates lastViewedAt.
   const historyRef = doc(db, "users", uid, "boothHistory", booth.boothId);
-  const visitorRef = doc(db, "booths", booth.boothId, "visitors", uid);
 
   const historyPayload = {
     boothId: booth.boothId,
@@ -36,11 +35,14 @@ export async function trackBoothView(uid: string, booth: BoothHistoryWrite) {
     lastViewedAt: serverTimestamp(),
   };
 
-  // Dual-write: student's booth history + booth-level visitor record
-  // Promise.all runs both writes in parallel (not sequential) for efficiency.
-  // Both use {merge:true} to avoid overwriting unrelated fields.
-  await Promise.all([
-    setDoc(historyRef, historyPayload, { merge: true }),
-    setDoc(visitorRef, { uid, lastViewedAt: serverTimestamp() }, { merge: true }),
-  ]);
+  try {
+    // Write only to the user's booth history
+    // Visitor record is written by the backend API (/api/booth/:boothId/track-view)
+    // which has admin permissions and can write to any subcollection
+    await setDoc(historyRef, historyPayload, { merge: true });
+    console.log(`[BOOTH-HISTORY] Tracked booth view for ${booth.boothId}`);
+  } catch (err) {
+    console.error(`[BOOTH-HISTORY] Failed to write user history:`, err);
+    throw err;
+  }
 }
