@@ -469,13 +469,13 @@ function BoothReviewsSection({ boothId }: Readonly<{ boothId: string }>) {
                   {averageRating?.toFixed(1)}
                 </Typography>
                 <Typography color="text.secondary">
-                  ({totalRatings} review{totalRatings !== 1 ? "s" : ""})
+                  ({totalRatings} review{totalRatings === 1 ? "" : "s"})
                 </Typography>
               </Box>
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                {reviews.map((review, i) => (
-                  <Box key={i} sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 2 }}>
+                {reviews.map((review) => (
+                  <Box key={review.createdAt ?? `${review.rating}-${review.comment}`} sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 2 }}>
                     <Rating value={review.rating} readOnly size="small" />
                     {review.comment && (
                       <Typography variant="body2" sx={{ mt: 0.5 }}>{review.comment}</Typography>

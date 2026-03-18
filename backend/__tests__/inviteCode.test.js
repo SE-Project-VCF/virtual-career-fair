@@ -137,6 +137,7 @@ describe("POST /api/update-invite-code", () => {
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
+      where: jest.fn().mockReturnThis(),
       get: jest.fn().mockResolvedValue({ docs: [] }), // no duplicate codes
     }));
 
@@ -167,6 +168,7 @@ describe("POST /api/update-invite-code", () => {
           mockDocSnap({ ownerId: "user1" }, true)
         ),
       })),
+      where: jest.fn().mockReturnThis(),
       get: jest.fn().mockResolvedValue({ docs: [] }), // no duplicate codes
     }));
 

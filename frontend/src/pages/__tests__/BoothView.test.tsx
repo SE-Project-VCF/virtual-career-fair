@@ -30,6 +30,8 @@ vi.mock("firebase/firestore", () => ({
   where: vi.fn(),
   doc: vi.fn(),
   getDoc: vi.fn(),
+  setDoc: vi.fn(() => Promise.resolve()),
+  serverTimestamp: vi.fn(() => new Date()),
 }));
 
 vi.mock("../../firebase", () => ({
@@ -953,6 +955,9 @@ describe("BoothView", () => {
           ok: true,
           json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
         });
+      }
+      if (url.includes("/ratings/me") || url.includes("/track-view") || url.includes("/track-leave")) {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
       }
       return jobsPromise;
     });

@@ -816,7 +816,15 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
-      globalThis.fetch = vi.fn();
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
     });
 
     it("fetches and displays job invitation stats", async () => {
@@ -1223,19 +1231,19 @@ describe("Company", () => {
     it("shows error when form deletion API call fails", async () => {
       const user = userEvent.setup();
 
-      (globalThis.fetch as any)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ inviteCode: "INVITE123" }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
-        })
-        .mockResolvedValueOnce({
-          ok: false,
-          json: async () => ({ error: "Unauthorized to delete form" }),
-        });
+      (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
+        if (url.includes("/job-invitations/stats")) {
+          return Promise.resolve({ ok: true, json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }) });
+        }
+        if (url.includes("/ratings")) {
+          return Promise.resolve({ ok: true, json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }) });
+        }
+        // form deletion and any other calls
+        return Promise.resolve({ ok: false, json: async () => ({ error: "Unauthorized to delete form" }) });
+      });
 
       (getDocs as any).mockResolvedValue({
         forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
