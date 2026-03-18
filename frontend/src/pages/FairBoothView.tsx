@@ -130,11 +130,13 @@ export default function FairBoothView() {
     if (!user?.uid || user.role !== "student" || !boothId) return
     
     try {
-      // Use the original booth ID for tracking if available, otherwise use fair-specific ID
+      // Use the original booth ID for tracking (this is from the root /booths collection)
       const originalOrFairBoothId = boothData.originalBoothId || boothId;
       trackingBoothIdRef.current = originalOrFairBoothId;
       
-      // Track in local history
+      console.log(`[FAIR-BOOTH-VIEW] Tracking view - originalBoothId: ${boothData.originalBoothId}, fairBoothId: ${boothId}`)
+      
+      // Track in local history using the original root booth ID
       await trackBoothView(user.uid, {
         boothId: originalOrFairBoothId,
         companyName: boothData.companyName,
@@ -142,6 +144,8 @@ export default function FairBoothView() {
         location: boothData.location,
         logoUrl: boothData.logoUrl,
       })
+      
+      console.log(`[FAIR-BOOTH-VIEW] History tracked successfully`)
       
       // Track in backend for company analytics
       const token = await authUtils.getIdToken();
