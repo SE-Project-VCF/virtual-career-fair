@@ -497,9 +497,10 @@ export default function FairBoothView() {
                     {ratingError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setRatingError("")}>{ratingError}</Alert>}
                     {ratingSuccess && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setRatingSuccess("")}>{ratingSuccess}</Alert>}
 
-                    {!ratingBoothId ? (
+                    {!ratingBoothId && (
                       <Typography variant="body2" color="text.secondary">Rating not available for this booth.</Typography>
-                    ) : myRating ? (
+                    )}
+                    {ratingBoothId && myRating && (
                       <Box>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your review</Typography>
                         <Rating value={myRating.rating} readOnly size="small" />
@@ -520,7 +521,8 @@ export default function FairBoothView() {
                           Resubmit Review
                         </Button>
                       </Box>
-                    ) : (
+                    )}
+                    {ratingBoothId && !myRating && (
                       <Box>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your rating</Typography>
                         <Rating value={ratingValue} onChange={(_, v) => setRatingValue(v)} size="large" />

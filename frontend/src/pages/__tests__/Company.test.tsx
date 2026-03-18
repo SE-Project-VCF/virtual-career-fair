@@ -158,6 +158,36 @@ describe("Company", () => {
 
   const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
 
+  it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
+        return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+      }
+      if (url.includes('/api/booths/') && url.includes('/ratings')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            ratings: [
+              { rating: 5, comment: "Excellent booth!", createdAt: 1000000 },
+              { rating: 4, comment: null, createdAt: null },
+            ],
+            totalRatings: 2,
+            averageRating: 4.5,
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, json: async () => ({ error: "Not found" }) });
+    });
+
+    renderComp();
+
+    await waitFor(() => {
+      expect(screen.getByText("Booth Reviews")).toBeInTheDocument();
+      expect(screen.getByText("Excellent booth!")).toBeInTheDocument();
+      expect(screen.getByText(/2 reviews/)).toBeInTheDocument();
+    }, { timeout: 5000 });
+  });
+
   it("redirects unauthenticated users to login", () => {
     (authUtils.isAuthenticated as any).mockReturnValue(false);
     renderComp();
