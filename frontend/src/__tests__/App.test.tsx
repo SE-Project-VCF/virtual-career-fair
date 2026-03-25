@@ -29,6 +29,8 @@ vi.mock("../pages/TailorResumeSimplePage", () => ({ default: () => <div>TailorRe
 vi.mock("../pages/TailoredResumeViewPage", () => ({ default: () => <div>TailoredResumeViewPage</div> }))
 vi.mock("../pages/TailoredResumesPage", () => ({ default: () => <div>TailoredResumesPage</div> }))
 vi.mock("../pages/SubmissionsPage", () => ({ default: () => <div>SubmissionsPage</div> }))
+vi.mock("../pages/NetworkingLounge", () => ({ default: () => <div>NetworkingLounge</div> }))
+vi.mock("../pages/StudentProfilePage", () => ({ default: () => <div>StudentProfilePage</div> }))
 vi.mock("../contexts/FairContext", () => ({
   FairProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useFair: vi.fn(),

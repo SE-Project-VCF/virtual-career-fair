@@ -116,6 +116,11 @@ vi.mock("stream-chat", () => ({
       })),
     })),
   },
+  StateStore: vi.fn().mockImplementation(() => ({
+    getLatestValue: vi.fn(() => ({})),
+    subscribe: vi.fn(),
+    next: vi.fn(),
+  })),
 }))
 
 // Mock window.matchMedia
