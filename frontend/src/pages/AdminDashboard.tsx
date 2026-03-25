@@ -46,6 +46,7 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
   const [createError, setCreateError] = useState("")
   const [togglingFairId, setTogglingFairId] = useState<string | null>(null)
   const [toggleError, setToggleError] = useState("")
+  const [statusFilter, setStatusFilter] = useState<"All" | "Live" | "Upcoming" | "Ended">("All")
 
   useEffect(() => {
     loadFairs()
@@ -172,6 +173,22 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
 
         {toggleError && <Alert severity="error" sx={{ mb: 2 }}>{toggleError}</Alert>}
 
+        {!loadingFairs && fairs.length > 0 && (
+          <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+            {(["All", "Live", "Upcoming", "Ended"] as const).map((filter) => (
+              <Chip
+                key={filter}
+                label={filter}
+                size="small"
+                variant={statusFilter === filter ? "filled" : "outlined"}
+                color={filter === "Live" ? "success" : filter === "Upcoming" ? "primary" : filter === "Ended" ? "default" : "default"}
+                onClick={() => setStatusFilter(filter)}
+                sx={{ cursor: "pointer", ...(statusFilter === filter && filter === "All" ? { bgcolor: "#b03a6c", color: "#fff" } : {}) }}
+              />
+            ))}
+          </Box>
+        )}
+
         {loadingFairs && <CircularProgress size={24} />}
         {!loadingFairs && fairs.length === 0 && (
           <Typography color="text.secondary">No fairs created yet. Create your first fair above.</Typography>
@@ -190,7 +207,14 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
                 </TableRow>
               </TableHead>
               <TableBody>
-                {fairs.map((fair) => {
+                {fairs.filter((fair) => {
+                  if (statusFilter === "All") return true
+                  const now = Date.now()
+                  if (fair.isLive) return statusFilter === "Live"
+                  if (fair.startTime && now < fair.startTime) return statusFilter === "Upcoming"
+                  if (fair.endTime && now > fair.endTime) return statusFilter === "Ended"
+                  return statusFilter === "Upcoming"
+                }).map((fair) => {
                   const now = Date.now()
                   let statusLabel: string
                   if (fair.isLive) {
