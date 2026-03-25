@@ -94,7 +94,18 @@ export default function FairList() {
         const res = await fetch(`${API_URL}/api/fairs`)
         if (!res.ok) throw new Error("Failed to load fairs")
         const data = await res.json()
-        setFairs(data.fairs || [])
+        const fairsList: Fair[] = data.fairs || []
+        const now = Date.now()
+        fairsList.sort((a, b) => {
+          const rank = (f: Fair) => {
+            if (f.isLive) return 0
+            if (f.startTime && now < f.startTime) return 1
+            if (f.endTime && now > f.endTime) return 2
+            return 1 // "Scheduled" treated as upcoming
+          }
+          return rank(a) - rank(b)
+        })
+        setFairs(fairsList)
       } catch (err) {
         console.error(err)
         setError("Failed to load career fairs")
