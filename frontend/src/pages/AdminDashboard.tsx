@@ -64,7 +64,9 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
             if (f.endTime && now > f.endTime) return 3
             return 2 // Scheduled
           }
-          return getOrder(a) - getOrder(b)
+          const orderDiff = getOrder(a) - getOrder(b)
+          if (orderDiff !== 0) return orderDiff
+          return (a.startTime || 0) - (b.startTime || 0)
         })
         setFairs(sorted)
       }
@@ -94,7 +96,11 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
           if (f.endTime && now > f.endTime) return 3
           return 2
         }
-        return updated.sort((a, b) => getOrder(a) - getOrder(b))
+        return updated.sort((a, b) => {
+          const orderDiff = getOrder(a) - getOrder(b)
+          if (orderDiff !== 0) return orderDiff
+          return (a.startTime || 0) - (b.startTime || 0)
+        })
       })
     } catch (err: any) {
       setToggleError(err.message)
@@ -171,8 +177,8 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
           <Typography color="text.secondary">No fairs created yet. Create your first fair above.</Typography>
         )}
         {!loadingFairs && fairs.length > 0 && (
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small">
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400, overflow: "auto" }}>
+            <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell>Fair Name</TableCell>
