@@ -114,7 +114,7 @@ app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (r
 });
 
 // Mount fair routes (multi-fair support)
-app.use(fairsRouter);
+app.use("/api", fairsRouter);
 
 
 app.get("/api/debug/gemini-models", async (req, res) => {
