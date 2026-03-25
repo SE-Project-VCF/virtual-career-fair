@@ -103,7 +103,13 @@ export default function FairList() {
             if (f.endTime && now > f.endTime) return 2
             return 1 // "Scheduled" treated as upcoming
           }
-          return rank(a) - rank(b)
+          const rankDiff = rank(a) - rank(b)
+          if (rankDiff !== 0) return rankDiff
+          // Within same status group: Live/Upcoming sort by soonest start, Ended sort by most recent start
+          const aStart = a.startTime || 0
+          const bStart = b.startTime || 0
+          if (rank(a) === 2) return bStart - aStart // Ended: most recent first
+          return aStart - bStart // Live/Upcoming: soonest first
         })
         setFairs(fairsList)
       } catch (err) {
