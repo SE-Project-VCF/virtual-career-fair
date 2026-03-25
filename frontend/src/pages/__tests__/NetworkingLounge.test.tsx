@@ -2,7 +2,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { BrowserRouter } from "react-router-dom"
 
 const mockNavigate = vi.fn()
@@ -68,13 +68,21 @@ const mockStreamClient = {
   channel: vi.fn().mockReturnValue(mockChannel),
 }
 
+// Mutable ref that the mock module returns — lets tests swap between null and mockStreamClient
+const streamRef: { current: typeof mockStreamClient | null } = { current: null }
+
 vi.mock("../../utils/streamClient", () => ({
-  streamClient: null, // will be overridden per test
+  get streamClient() {
+    return streamRef.current
+  },
 }))
 
 import * as authUtils from "../../utils/auth"
 import { useFair } from "../../contexts/FairContext"
-import * as streamClientModule from "../../utils/streamClient"
+
+const setStreamClient = (client: typeof mockStreamClient | null) => {
+  streamRef.current = client
+}
 
 const renderNetworkingLounge = async () => {
   const NetworkingLounge = (await import("../NetworkingLounge")).default
@@ -90,6 +98,7 @@ describe("NetworkingLounge", () => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
     mockStreamClient.userID = null
+    setStreamClient(null)
     globalThis.fetch = vi.fn()
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
@@ -109,6 +118,10 @@ describe("NetworkingLounge", () => {
     })
   })
 
+  afterEach(() => {
+    setStreamClient(null)
+  })
+
   it("shows 'not available' message when streamClient is null", async () => {
     // streamClient mock returns null by default
     await renderNetworkingLounge()
@@ -125,11 +138,7 @@ describe("NetworkingLounge", () => {
   })
 
   it("shows loading spinner while client connects", async () => {
-    // Override streamClient to be non-null but never resolve
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     // fetch for stream-token never resolves
     globalThis.fetch = vi.fn().mockReturnValue(new Promise(() => {}))
@@ -137,19 +146,10 @@ describe("NetworkingLounge", () => {
     await renderNetworkingLounge()
 
     expect(screen.getByRole("progressbar")).toBeInTheDocument()
-
-    // Restore
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("shows error state when stream init fails", async () => {
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -163,20 +163,12 @@ describe("NetworkingLounge", () => {
 
     // Shows Back to Fair button
     expect(screen.getByRole("button", { name: /back to fair/i })).toBeInTheDocument()
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("navigates back to fair when Back to Fair is clicked in error state", async () => {
     const user = userEvent.setup()
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false })
 
@@ -189,20 +181,12 @@ describe("NetworkingLounge", () => {
     await user.click(screen.getByRole("button", { name: /back to fair/i }))
 
     expect(mockNavigate).toHaveBeenCalledWith("/fair/f1")
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("renders chat UI when connected and channel joined", async () => {
     mockStreamClient.userID = "user-1"
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     // First fetch: join lounge
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -219,20 +203,12 @@ describe("NetworkingLounge", () => {
     expect(screen.getByTestId("message-list")).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/chat with other students/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /back to booths/i })).toBeInTheDocument()
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("sends message on Enter key and clears input", async () => {
     mockStreamClient.userID = "user-1"
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -252,20 +228,12 @@ describe("NetworkingLounge", () => {
     await waitFor(() => {
       expect(mockChannel.sendMessage).toHaveBeenCalledWith({ text: "Hello!" })
     })
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("adds newline on Alt+Enter", async () => {
     mockStreamClient.userID = "user-1"
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -278,27 +246,19 @@ describe("NetworkingLounge", () => {
       expect(screen.getByPlaceholderText(/chat with other students/i)).toBeInTheDocument()
     })
 
-    const textarea = screen.getByPlaceholderText(/chat with other students/i) as HTMLTextAreaElement
+    const textarea = screen.getByPlaceholderText(/chat with other students/i)
     fireEvent.change(textarea, { target: { value: "line1" } })
     fireEvent.keyDown(textarea, { key: "Enter", altKey: true })
 
     // sendMessage should NOT have been called
     expect(mockChannel.sendMessage).not.toHaveBeenCalled()
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("navigates back to booths when Back to Booths is clicked", async () => {
     const user = userEvent.setup()
     mockStreamClient.userID = "user-1"
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -314,20 +274,12 @@ describe("NetworkingLounge", () => {
     await user.click(screen.getByRole("button", { name: /back to booths/i }))
 
     expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/booths")
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("shows fair name in page title when fair is loaded", async () => {
     mockStreamClient.userID = "user-1"
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -338,11 +290,6 @@ describe("NetworkingLounge", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Spring Fair Lounge")).toBeInTheDocument()
-    })
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
     })
   })
 
@@ -357,10 +304,7 @@ describe("NetworkingLounge", () => {
       fairId: "f1",
     })
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -372,20 +316,12 @@ describe("NetworkingLounge", () => {
     await waitFor(() => {
       expect(screen.getByText("Career Fair Lounge")).toBeInTheDocument()
     })
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("shows error when joining lounge fails", async () => {
     mockStreamClient.userID = "user-1"
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -397,20 +333,12 @@ describe("NetworkingLounge", () => {
     await waitFor(() => {
       expect(screen.getByText("Not authorized")).toBeInTheDocument()
     })
-
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
-    })
   })
 
   it("disconnects and reconnects when user changes", async () => {
     mockStreamClient.userID = "other-user"
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => mockStreamClient,
-      configurable: true,
-    })
+    setStreamClient(mockStreamClient)
 
     // Token fetch
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -423,10 +351,124 @@ describe("NetworkingLounge", () => {
     await waitFor(() => {
       expect(mockStreamClient.disconnectUser).toHaveBeenCalled()
     })
+  })
 
-    Object.defineProperty(streamClientModule, "streamClient", {
-      get: () => null,
-      configurable: true,
+  it("connects user when client has no userID", async () => {
+    mockStreamClient.userID = null
+
+    setStreamClient(mockStreamClient)
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: "stream-token-abc" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ channelId: "lounge-f1" }),
+      })
+
+    await renderNetworkingLounge()
+
+    await waitFor(() => {
+      expect(mockStreamClient.connectUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "user-1",
+          name: "John Doe",
+          email: "student@example.com",
+        }),
+        "stream-token-abc"
+      )
     })
+  })
+
+  it("does not send whitespace-only messages", async () => {
+    mockStreamClient.userID = "user-1"
+
+    setStreamClient(mockStreamClient)
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ channelId: "lounge-f1" }),
+    })
+
+    await renderNetworkingLounge()
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/chat with other students/i)).toBeInTheDocument()
+    })
+
+    const textarea = screen.getByPlaceholderText(/chat with other students/i)
+    fireEvent.change(textarea, { target: { value: "   " } })
+    fireEvent.keyDown(textarea, { key: "Enter", altKey: false })
+
+    // sendMessage should NOT have been called for whitespace-only
+    expect(mockChannel.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it("uses email as fallback name when firstName/lastName are empty", async () => {
+    mockStreamClient.userID = null
+
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "user-2",
+      email: "noname@example.com",
+      role: "student",
+      firstName: "",
+      lastName: "",
+    })
+
+    setStreamClient(mockStreamClient)
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: "stream-token-xyz" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ channelId: "lounge-f1" }),
+      })
+
+    await renderNetworkingLounge()
+
+    await waitFor(() => {
+      expect(mockStreamClient.connectUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "user-2",
+          name: "noname@example.com",
+        }),
+        "stream-token-xyz"
+      )
+    })
+  })
+
+  it("does not join lounge when fairId is missing", async () => {
+    mockStreamClient.userID = "user-1"
+
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: null,
+      isLive: false,
+      fairId: "",
+    })
+
+    setStreamClient(mockStreamClient)
+
+    // Token fetch succeeds but no lounge join should happen
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "t" }),
+    })
+
+    await renderNetworkingLounge()
+
+    // Should show loading since channel is never set
+    await waitFor(() => {
+      expect(screen.getByRole("progressbar")).toBeInTheDocument()
+    })
+
+    // channel() should not have been called (no lounge join)
+    expect(mockStreamClient.channel).not.toHaveBeenCalled()
   })
 })
