@@ -118,65 +118,7 @@ app.use("/api", fairsRouter);
 
 
 app.use("/api", require("./routes/debug"));
-
-/* ----------------------------------------------------
-   STREAM TOKEN ENDPOINT
----------------------------------------------------- */
-app.get("/api/stream-token", verifyFirebaseToken, (req, res) => {
-  try {
-    const token = streamServer.createToken(req.user.uid);
-    return res.json({ success: true, token });
-  } catch (err) {
-    console.error("Stream token error:", err);
-    return res.status(500).json({ error: "Unable to create token" });
-  }
-});
-
-/* ----------------------------------------------------
-   NEW: GET UNREAD COUNT FOR A USER (server-side)
----------------------------------------------------- */
-app.get("/api/stream-unread", verifyFirebaseToken, async (req, res) => {
-  const userId = req.user.uid;
-
-  try {
-    // 1) Get all channels the user is a member of
-    const channels = await streamServer.queryChannels(
-      {
-        type: "messaging",
-        members: { $in: [userId] }
-      },
-      { last_message_at: -1 },
-      { state: true }
-    );
-
-    let unread = 0;
-
-    // 2) Loop through channels and compute unread manually
-    for (const ch of channels) {
-      const state = ch.state;
-
-      if (!state) continue;
-
-      const lastRead = state.read[userId]?.last_read;
-      const messages = state.messages;
-
-      if (!lastRead || !messages) continue;
-
-      // Count messages after last_read that are NOT sent by the current user
-      const unreadInThisChannel = messages.filter(
-        m => m.created_at > lastRead && m.user?.id !== userId
-      ).length;
-
-      unread += unreadInThisChannel;
-    }
-
-    return res.json({ success: true, unread });
-
-  } catch (err) {
-    console.error("Unread calc error:", err);
-    return res.status(500).json({ error: "Failed to compute unread" });
-  }
-});
+app.use("/api", require("./routes/stream"));
 
 /* ----------------------------------------------------
    UPLOAD RESUME TO FIREBASE STORAGE (via backend)
@@ -472,45 +414,6 @@ app.get("/api/get-booth-logo-url/:companyId", verifyFirebaseToken, async (req, r
   }
 });
 
-/* ----------------------------------------------------
-   ENSURE SINGLE USER EXISTS IN STREAM
-   Called from frontend after login/registration
----------------------------------------------------- */
-app.options("/api/sync-stream-user", cors());
-app.post("/api/sync-stream-user", verifyFirebaseToken, async (req, res) => {
-  try {
-    const { uid, email, firstName, lastName } = req.body;
-
-    if (!uid || !email) {
-      return res.status(400).json({ error: "Missing uid or email" });
-    }
-
-    // Verify the authenticated user matches the uid being synced
-    if (req.user.uid !== uid) {
-      return res.status(403).json({ error: "Not authorized to sync this user" });
-    }
-
-    const username =
-      email?.includes("@")
-        ? email.split("@")[0]
-        : email || uid;
-
-    await streamServer.upsertUser({
-      id: uid,
-      name: `${firstName || ""} ${lastName || ""}`.trim() || email,
-      email,
-      username,
-      firstName: firstName || "",
-      lastName: lastName || "",
-      role: "user",
-    });
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("Stream single-user sync error:", err);
-    return res.status(500).json({ error: "Failed to sync user to Stream" });
-  }
-});
 
 
 /* ----------------------------------------------------
@@ -614,63 +517,6 @@ app.post("/api/register-user", async (req, res) => {
   }
 });
 
-/* ----------------------------------------------------
-   SYNC ALL FIRESTORE USERS TO STREAM
----------------------------------------------------- */
-app.post("/api/sync-stream-users", verifyFirebaseToken, async (req, res) => {
-  try {
-    // Verify the user is an administrator
-    const userDoc = await db.collection("users").doc(req.user.uid).get();
-    if (!userDoc.exists || userDoc.data().role !== "administrator") {
-      return res.status(403).json({ success: false, error: "Admin access required" });
-    }
-
-    console.log("Starting Stream user sync...");
-    const snapshot = await db.collection("users").get();
-    const users = snapshot.docs.map((d) => d.data());
-
-    if (!users.length) {
-      return res.json({
-        success: false,
-        message: "No users found in Firestore",
-      });
-    }
-
-    let count = 0;
-
-    for (const u of users) {
-      const username =
-        u.email?.includes("@")
-          ? u.email.split("@")[0]
-          : u.email || "";
-
-      await streamServer.upsertUser({
-        id: u.uid,
-        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
-        email: u.email,
-        username,
-        firstName: u.firstName || "",
-        lastName: u.lastName || "",
-        role: "user",
-      });
-
-      count++;
-    }
-
-    console.log(`Stream user sync complete: ${count} users.`);
-
-    return res.json({
-      success: true,
-      count,
-    });
-  } catch (err) {
-    console.error("Stream user sync failed:", err);
-    return res.status(500).json({
-      success: false,
-      error: err.message,
-    });
-  }
-});
 
 /* ----------------------------------------------------
    HELPER: Validate job input fields
@@ -2322,116 +2168,7 @@ app.post("/api/update-invite-code", async (req, res) => {
   }
 });
 
-/* ----------------------------------------------------
-   CREATE COMPANY (Auth required — company owners)
----------------------------------------------------- */
-app.post("/api/companies", verifyFirebaseToken, async (req, res) => {
-  try {
-    const { companyName } = req.body;
-    const ownerId = req.user.uid;
-
-    if (!companyName?.trim()) {
-      return res.status(400).json({ error: "Company name is required" });
-    }
-
-    const userDoc = await db.collection("users").doc(ownerId).get();
-    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
-    if (userDoc.data().role !== "companyOwner") {
-      return res.status(403).json({ error: "Only company owners can create companies" });
-    }
-
-    const rawCode = generateInviteCode();
-    const companyRef = db.collection("companies").doc();
-    const companyId = companyRef.id;
-
-    await companyRef.set(removeUndefined({
-      companyId,
-      companyName: companyName.trim(),
-      ownerId,
-      inviteCode: rawCode,
-      createdAt: admin.firestore.Timestamp.now(),
-    }));
-
-    // Update user doc with companyId (no invite code stored on user)
-    await db.collection("users").doc(ownerId).update({ companyId, companyName: companyName.trim() });
-
-    return res.status(201).json({ companyId, inviteCode: rawCode });
-  } catch (err) {
-    console.error("POST /api/companies error:", err);
-    return res.status(500).json({ error: "Failed to create company" });
-  }
-});
-
-/* ----------------------------------------------------
-   LINK REPRESENTATIVE TO COMPANY via invite code
----------------------------------------------------- */
-app.post("/api/link-company", verifyFirebaseToken, async (req, res) => {
-  try {
-    const { inviteCode } = req.body;
-    const userId = req.user.uid;
-
-    if (!inviteCode?.trim()) {
-      return res.status(400).json({ error: "Invite code is required" });
-    }
-
-    const companiesSnap = await db.collection("companies").where("inviteCode", "==", inviteCode.trim().toUpperCase()).get();
-    if (companiesSnap.empty) return res.status(400).json({ error: "Invalid invite code." });
-
-    const companyDoc = companiesSnap.docs[0];
-    const companyId = companyDoc.id;
-    const { companyName, representativeIDs = [] } = companyDoc.data();
-
-    const userDoc = await db.collection("users").doc(userId).get();
-    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
-    if (userDoc.data().companyId === companyId) {
-      return res.status(400).json({ error: "You are already linked to this company." });
-    }
-
-    await db.runTransaction(async (transaction) => {
-      transaction.update(db.collection("companies").doc(companyId), {
-        representativeIDs: [...new Set([...representativeIDs, userId])],
-      });
-      transaction.update(db.collection("users").doc(userId), { companyId, companyName });
-    });
-
-    return res.json({ companyId, companyName });
-  } catch (err) {
-    console.error("POST /api/link-company error:", err);
-    return res.status(500).json({ error: "Failed to link company" });
-  }
-});
-
-/* ----------------------------------------------------
-   GET COMPANY INVITE CODE (owner or admin only)
----------------------------------------------------- */
-app.get("/api/companies/:companyId/invite-code", verifyFirebaseToken, async (req, res) => {
-  try {
-    const { companyId } = req.params;
-    const requestingUid = req.user.uid;
-
-    const companyDoc = await db.collection("companies").doc(companyId).get();
-    if (!companyDoc.exists) return res.status(404).json({ error: "Company not found" });
-
-    const { ownerId, inviteCode } = companyDoc.data();
-
-    const userDoc = await db.collection("users").doc(requestingUid).get();
-    const isAdmin = userDoc.exists && userDoc.data().role === "administrator";
-    const isOwner = ownerId === requestingUid;
-
-    if (!isAdmin && !isOwner) {
-      return res.status(403).json({ error: "Only the company owner or an admin can view the invite code" });
-    }
-
-    if (!inviteCode) {
-      return res.status(404).json({ error: "No invite code found. Please generate one." });
-    }
-
-    return res.json({ inviteCode });
-  } catch (err) {
-    console.error("GET /api/companies/:companyId/invite-code error:", err);
-    return res.status(500).json({ error: "Failed to retrieve invite code" });
-  }
-});
+app.use("/api", require("./routes/companies"));
 
 /* ----------------------------------------------------
    CREATE ADMIN ACCOUNT (Protected - requires secret key)
