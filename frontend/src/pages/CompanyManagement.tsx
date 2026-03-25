@@ -20,13 +20,13 @@ import {
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { collection, query, where, getDocs } from "firebase/firestore"
-import { db } from "../firebase"
+import { db, auth } from "../firebase"
+import { API_URL } from "../config"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import BusinessIcon from "@mui/icons-material/Business"
 import AddIcon from "@mui/icons-material/Add"
 import PeopleIcon from "@mui/icons-material/People"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import DeleteIcon from "@mui/icons-material/Delete"
 import EditIcon from "@mui/icons-material/Edit"
 import RefreshIcon from "@mui/icons-material/Refresh"
@@ -36,7 +36,6 @@ import CancelIcon from "@mui/icons-material/Cancel"
 interface Company {
   id: string
   companyName: string
-  inviteCode: string
   representativeIDs: string[]
   boothId?: string
   ownerId: string
@@ -58,6 +57,7 @@ export default function CompanyManagement() {
   const [editingInviteCode, setEditingInviteCode] = useState<string | null>(null)
   const [editedInviteCode, setEditedInviteCode] = useState("")
   const [updatingInviteCode, setUpdatingInviteCode] = useState(false)
+  const [inviteCodes, setInviteCodes] = useState<Record<string, string>>({})
 
   // Memoize user ID and role to prevent unnecessary re-renders
   const userId = useMemo(() => user?.uid, [user?.uid])
@@ -83,13 +83,28 @@ export default function CompanyManagement() {
 
       const companiesList: Company[] = []
       querySnapshot.forEach((doc) => {
-        companiesList.push({
-          id: doc.id,
-          ...doc.data()
-        } as Company)
+        companiesList.push({ id: doc.id, ...doc.data() } as Company)
       })
 
       setCompanies(companiesList)
+
+      // Fetch decrypted invite codes from the backend for each company
+      const token = await auth.currentUser?.getIdToken()
+      const codeEntries = await Promise.all(
+        companiesList.map(async (c) => {
+          try {
+            const r = await fetch(`${API_URL}/api/companies/${c.id}/invite-code`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!r.ok) return [c.id, ""] as [string, string]
+            const d = await r.json()
+            return [c.id, d.inviteCode ?? ""] as [string, string]
+          } catch {
+            return [c.id, ""] as [string, string]
+          }
+        })
+      )
+      setInviteCodes(Object.fromEntries(codeEntries))
     } catch (err) {
       console.error("Error fetching companies:", err)
       setError("Failed to load companies")
@@ -149,6 +164,7 @@ export default function CompanyManagement() {
       setSuccess("Invite code copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
     } catch (err) {
+      console.error("Failed to copy to clipboard", err)
       setError("Failed to copy to clipboard")
     }
   }
@@ -194,8 +210,8 @@ export default function CompanyManagement() {
       const result = await authUtils.updateInviteCode(companyId, userId)
 
       if (result.success && result.inviteCode) {
+        setInviteCodes((prev) => ({ ...prev, [companyId]: result.inviteCode! }))
         setSuccess("Invite code regenerated successfully!")
-        fetchCompanies() // Refresh the list
         setTimeout(() => setSuccess(""), 3000)
       } else {
         setError(result.error || "Failed to regenerate invite code")
@@ -224,10 +240,10 @@ export default function CompanyManagement() {
       const result = await authUtils.updateInviteCode(companyId, userId, trimmedCode)
 
       if (result.success && result.inviteCode) {
+        setInviteCodes((prev) => ({ ...prev, [companyId]: result.inviteCode! }))
         setSuccess("Invite code updated successfully!")
         setEditingInviteCode(null)
         setEditedInviteCode("")
-        fetchCompanies() // Refresh the list
         setTimeout(() => setSuccess(""), 3000)
       } else {
         setError(result.error || "Failed to update invite code")
@@ -249,33 +265,7 @@ export default function CompanyManagement() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <IconButton onClick={() => navigate("/dashboard")} sx={{ color: "white" }}>
-                <ArrowBackIcon />
-              </IconButton>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-                Company Management
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle="Company Management">
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Box sx={{ mb: 3 }}>
           <Button
@@ -359,32 +349,7 @@ export default function CompanyManagement() {
                         <Typography variant="body2" color="text.secondary">
                           Invite Code
                         </Typography>
-                        {editingInviteCode !== company.id ? (
-                          <Box sx={{ display: "flex", gap: 0.5 }}>
-                            <Tooltip title="Regenerate invite code">
-                              <IconButton
-                                onClick={() => handleRegenerateInviteCode(company.id)}
-                                size="small"
-                                disabled={updatingInviteCode}
-                                sx={{ color: "#388560" }}
-                              >
-                                <RefreshIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Edit invite code">
-                              <IconButton
-                                onClick={() => {
-                                  setEditingInviteCode(company.id)
-                                  setEditedInviteCode(company.inviteCode)
-                                }}
-                                size="small"
-                                sx={{ color: "#388560" }}
-                              >
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        ) : (
+                        {editingInviteCode === company.id ? (
                           <Box sx={{ display: "flex", gap: 0.5 }}>
                             <Tooltip title="Save">
                               <IconButton
@@ -409,20 +374,43 @@ export default function CompanyManagement() {
                               </IconButton>
                             </Tooltip>
                           </Box>
+                        ) : (
+                          <Box sx={{ display: "flex", gap: 0.5 }}>
+                            <Tooltip title="Regenerate invite code">
+                              <IconButton
+                                onClick={() => handleRegenerateInviteCode(company.id)}
+                                size="small"
+                                disabled={updatingInviteCode}
+                                sx={{ color: "#388560" }}
+                              >
+                                <RefreshIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Edit invite code">
+                              <IconButton
+                                onClick={() => {
+                                  setEditingInviteCode(company.id)
+                                  setEditedInviteCode(inviteCodes[company.id] ?? "")
+                                }}
+                                size="small"
+                                sx={{ color: "#388560" }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         )}
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <TextField
                           fullWidth
-                          value={editingInviteCode === company.id ? editedInviteCode : company.inviteCode}
+                          value={editingInviteCode === company.id ? editedInviteCode : (inviteCodes[company.id] ?? "")}
                           onChange={(e) => {
                             if (editingInviteCode === company.id) {
-                              setEditedInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+                              setEditedInviteCode(e.target.value.toUpperCase().replaceAll(/[^A-Z0-9]/g, ""))
                             }
                           }}
-                          InputProps={{
-                            readOnly: editingInviteCode !== company.id,
-                          }}
+                          slotProps={{ input: { readOnly: editingInviteCode !== company.id } }}
                           disabled={updatingInviteCode}
                           sx={{
                             "& .MuiOutlinedInput-root": {
@@ -436,7 +424,7 @@ export default function CompanyManagement() {
                         {editingInviteCode !== company.id && (
                           <Tooltip title="Copy invite code">
                             <IconButton
-                              onClick={() => copyToClipboard(company.inviteCode)}
+                              onClick={() => copyToClipboard(inviteCodes[company.id] ?? "")}
                               sx={{ color: "#388560" }}
                             >
                               <ContentCopyIcon />
@@ -449,7 +437,7 @@ export default function CompanyManagement() {
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
                       <PeopleIcon sx={{ fontSize: 20, color: "#b03a6c" }} />
                       <Typography variant="body2" color="text.secondary">
-                        {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length !== 1 ? "s" : ""}
+                        {company.representativeIDs?.length || 0} Representative{company.representativeIDs?.length === 1 ? "" : "s"}
                       </Typography>
                     </Box>
 
@@ -572,7 +560,7 @@ export default function CompanyManagement() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   )
 }
 

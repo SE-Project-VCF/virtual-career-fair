@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 import { BrowserRouter, useNavigate } from "react-router-dom";
 import Booths from "../Booths";
 import * as authUtils from "../../utils/auth";
-import * as fairStatus from "../../utils/fairStatus";
 import { getDocs, getDoc } from "firebase/firestore";
 
 vi.mock("../../utils/auth", () => ({
@@ -14,8 +13,8 @@ vi.mock("../../utils/auth", () => ({
   },
 }));
 
-vi.mock("../../utils/fairStatus", () => ({
-  evaluateFairStatus: vi.fn(),
+vi.mock("../../config", () => ({
+  API_URL: "http://localhost:3000",
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -40,6 +39,28 @@ vi.mock("../../firebase", () => ({
   db: {},
 }));
 
+vi.mock("../ProfileMenu", () => ({
+  default: () => <div data-testid="profile-menu" />,
+}));
+
+vi.mock("../../components/NotificationBell", () => ({
+  default: () => <div data-testid="notification-bell" />,
+}));
+
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: any) => (
+    <div data-testid="base-layout">
+      <button aria-label="menu">Menu</button>
+      <span>Job Goblin</span>
+      <span>Virtual Career Fair</span>
+      {pageTitle && <h6>{pageTitle}</h6>}
+      <button data-testid="notification-bell" />
+      <button data-testid="profile-menu">Profile Menu</button>
+      {children}
+    </div>
+  ),
+}));
+
 const renderBooths = () => {
   return render(
     <BrowserRouter>
@@ -55,11 +76,11 @@ describe("Booths", () => {
     vi.clearAllMocks();
     (useNavigate as Mock).mockReturnValue(mockNavigate);
     (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue(null);
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: true,
-      scheduleName: "Spring Career Fair",
-      scheduleDescription: "2025 Spring technical recruiting event",
-    });
+    // Mock fetch for /api/fairs - default: fair is live
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [{ isLive: true, name: "Spring Career Fair", description: "2025 Spring technical recruiting event" }] }),
+    }) as any;
 
     // Default mock for getDocs and getDoc
     (getDocs as Mock).mockResolvedValue({
@@ -79,10 +100,9 @@ describe("Booths", () => {
     });
   });
 
-  it("displays header with title and profile menu", () => {
+  it("displays page layout wrapper", () => {
     renderBooths();
-    expect(screen.getByText(/job goblin - virtual career fair/i)).toBeInTheDocument();
-    expect(screen.getByText(/explore opportunities from top companies/i)).toBeInTheDocument();
+    expect(screen.getByTestId("base-layout")).toBeInTheDocument();
   });
 
   it("shows loading state initially", () => {
@@ -92,10 +112,9 @@ describe("Booths", () => {
   });
 
   it("displays fair name when career fair is live", async () => {
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: true,
-      scheduleName: "Test Fair",
-      scheduleDescription: "Test Description",
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: "Test Description" }] }),
     });
 
     renderBooths();
@@ -117,10 +136,9 @@ describe("Booths", () => {
   });
 
   it("shows no booths message when fair is not live and no booths available", async () => {
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: false,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
     });
 
     renderBooths();
@@ -130,8 +148,7 @@ describe("Booths", () => {
     });
   });
 
-  it("navigates to dashboard when dashboard button is clicked", async () => {
-    const user = userEvent.setup();
+  it("renders page content without navigation errors", async () => {
     (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
       uid: "user-1",
       role: "student",
@@ -139,10 +156,9 @@ describe("Booths", () => {
 
     renderBooths();
 
-    const dashboardButton = screen.queryByRole("button", { name: /dashboard/i });
-    if (dashboardButton) {
-      await user.click(dashboardButton);
-    }
+    await waitFor(() => {
+      expect(screen.getByTestId("base-layout")).toBeInTheDocument();
+    });
   });
 
   it("renders booth cards with company information", async () => {
@@ -174,10 +190,10 @@ describe("Booths", () => {
     });
   });
 
-  it("shows 'Career Fair' text in header", async () => {
+  it("shows event status card when loaded", async () => {
     renderBooths();
     await waitFor(() => {
-      expect(screen.getByText(/job goblin - virtual career fair/i)).toBeInTheDocument();
+      expect(screen.getByText(/event status/i)).toBeInTheDocument();
     });
   });
 
@@ -192,23 +208,22 @@ describe("Booths", () => {
   it("fetches booths from Firestore on mount", async () => {
     renderBooths();
     await waitFor(() => {
-      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
   it("handles error when fetching booths fails", async () => {
-    (fairStatus.evaluateFairStatus as Mock).mockRejectedValue(new Error("Fetch failed"));
+    (globalThis.fetch as Mock).mockRejectedValue(new Error("Fetch failed"));
     renderBooths();
     await waitFor(() => {
-      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
   it("displays different message when fair is offline", async () => {
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: false,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
     });
     renderBooths();
     await waitFor(() => {
@@ -224,7 +239,7 @@ describe("Booths", () => {
     });
     renderBooths();
     await waitFor(() => {
-      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
@@ -233,10 +248,9 @@ describe("Booths", () => {
       uid: "owner-1",
       role: "companyOwner",
     });
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: false,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
     });
     renderBooths();
     await waitFor(() => {
@@ -298,7 +312,7 @@ describe("Booths", () => {
   it("displays fair description correctly", async () => {
     renderBooths();
     await waitFor(() => {
-      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
@@ -310,17 +324,17 @@ describe("Booths", () => {
   });
 
   it("handles firestore query errors", async () => {
-    (fairStatus.evaluateFairStatus as Mock).mockRejectedValue(new Error("Database error"));
+    (globalThis.fetch as Mock).mockRejectedValue(new Error("Database error"));
     renderBooths();
     await waitFor(() => {
-      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
   it("displays empty state when no booths available", async () => {
     renderBooths();
     await waitFor(() => {
-      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
@@ -331,7 +345,7 @@ describe("Booths", () => {
     });
     renderBooths();
     await waitFor(() => {
-      expect(fairStatus.evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
@@ -500,10 +514,9 @@ describe("Booths", () => {
       uid: "owner1",
       role: "companyOwner",
     });
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: false,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
     });
 
     const mockCompanies = [{ id: "company1", ownerId: "owner1", boothId: "booth1" }];
@@ -564,10 +577,9 @@ describe("Booths", () => {
       role: "representative",
       companyId: "company1",
     });
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: false,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
     });
 
     const mockCompany = { id: "company1", boothId: "booth1" };
@@ -636,8 +648,7 @@ describe("Booths", () => {
     });
   });
 
-  it("navigates to dashboard when Dashboard button is clicked", async () => {
-    const user = userEvent.setup();
+  it("renders page with navigation controls for authenticated user", async () => {
     (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
       uid: "user1",
       role: "student",
@@ -649,10 +660,7 @@ describe("Booths", () => {
       expect(screen.getByText(/job goblin/i)).toBeInTheDocument();
     });
 
-    const dashboardButton = screen.getByRole("button", { name: /dashboard/i });
-    await user.click(dashboardButton);
-
-    expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+    expect(screen.getByTestId("base-layout")).toBeInTheDocument();
   });
 
   it("displays error message when fetching booths fails", async () => {
@@ -751,10 +759,9 @@ describe("Booths", () => {
       uid: "owner1",
       role: "companyOwner",
     });
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: false,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
     });
 
     const mockCompanies = [{ id: "company1", ownerId: "owner1", boothId: "booth1" }];
@@ -775,26 +782,19 @@ describe("Booths", () => {
     let getDocCallCount = 0;
     (getDoc as Mock).mockImplementation(() => {
       getDocCallCount++;
-      if (getDocCallCount === 1) {
-        // First call: get company to find boothId
-        return Promise.resolve({
-          exists: () => true,
-          data: () => mockCompanies[0],
-        });
-      } else if (getDocCallCount === 2) {
+      if (getDocCallCount === 2) {
         // Second call: get booth data
         return Promise.resolve({
           exists: () => true,
           id: "booth1",
           data: () => mockBooth,
         });
-      } else {
-        // Third call: lookup company by boothId
-        return Promise.resolve({
-          exists: () => true,
-          data: () => mockCompanies[0],
-        });
       }
+      // First and third calls: get company to find boothId / lookup company by boothId
+      return Promise.resolve({
+        exists: () => true,
+        data: () => mockCompanies[0],
+      });
     });
 
     renderBooths();
@@ -805,10 +805,9 @@ describe("Booths", () => {
   });
 
   it("shows Live Now when fair is live without schedule name", async () => {
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: true,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [{ isLive: true, name: null, description: null }] }),
     });
 
     renderBooths();
@@ -819,10 +818,9 @@ describe("Booths", () => {
   });
 
   it("displays Event Status when fair is not live without description", async () => {
-    (fairStatus.evaluateFairStatus as Mock).mockResolvedValue({
-      isLive: false,
-      scheduleName: null,
-      scheduleDescription: null,
+    (globalThis.fetch as Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
     });
 
     renderBooths();

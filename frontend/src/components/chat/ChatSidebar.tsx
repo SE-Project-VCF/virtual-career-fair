@@ -4,6 +4,7 @@ import {
   ChannelPreviewMessenger,
 } from "stream-chat-react";
 import type { StreamChat, Channel } from "stream-chat";
+import { useMemo } from "react";
 
 interface ChatSidebarProps {
   client: StreamChat;
@@ -15,7 +16,26 @@ export default function ChatSidebar({
   client,
   onSelectChannel,
   activeChannel,
-}: ChatSidebarProps) {
+}: Readonly<ChatSidebarProps>) {
+  // Create Preview component with bound props using useMemo
+  const CustomPreview = useMemo(() => {
+    return function PreviewComponent(props: any) {
+      return (
+        <ChannelPreviewMessenger
+          {...props}
+          onSelect={() => {
+            const channel = props.channel;
+            props.setActiveChannel?.(channel);
+            onSelectChannel(channel);
+          }}
+          channel={props.channel}
+          latestMessagePreview={props.latestMessagePreview}
+          Avatar={props.Avatar}
+          active={activeChannel?.cid === props.channel?.cid}
+        />
+      );
+    };
+  }, [onSelectChannel, activeChannel]);
   return (
     <Box
       sx={{
@@ -49,30 +69,7 @@ export default function ChatSidebar({
           }}
           sort={{ last_message_at: -1 as const }}
           options={{ state: true, watch: true, presence: true }}
-          Preview={(props: any) => {
-            // const unread =
-            //   typeof props.unread === "number"
-            //     ? props.unread
-            //     : typeof props.channel?.countUnread === "function"
-            //       ? props.channel.countUnread()
-            //       : 0;
-
-            return (
-              <ChannelPreviewMessenger
-                {...props}
-                onSelect={() => {
-                  const channel = props.channel;
-                  props.setActiveChannel?.(channel);
-                  onSelectChannel(channel);
-                }}
-                channel={props.channel}
-                latestMessagePreview={props.latestMessagePreview}
-                Avatar={props.Avatar}
-                active={activeChannel?.cid === props.channel?.cid}   // ✅ Highlights sidebar item
-              />
-
-            );
-          }}
+          Preview={CustomPreview}
         />
       </Box>
     </Box>

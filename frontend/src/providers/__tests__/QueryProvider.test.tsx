@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, renderHook, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { QueryProvider, queryClient } from "../QueryProvider";
 

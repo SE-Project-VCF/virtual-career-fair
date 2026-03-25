@@ -14,11 +14,12 @@ import {
   Chip,
   Divider,
   Link,
+  TextField,
+  Rating,
 } from "@mui/material"
 import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
-import { evaluateFairStatus } from "../utils/fairStatus"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -28,9 +29,12 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
-import NotificationBell from "../components/NotificationBell"
+import { INDUSTRY_LABELS, fetchMyBoothRating, submitBoothRating } from "../utils/boothConstants"
 
 interface Booth {
   id: string
@@ -58,19 +62,65 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  applicationForm?: ApplicationForm | null
 }
 
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
+async function checkBoothAccess(
+  user: ReturnType<typeof import("../utils/auth").authUtils.getCurrentUser>,
+  boothId: string,
+  fairIsLive: boolean
+): Promise<{ hasAccess: boolean; error?: string }> {
+  if (fairIsLive) {
+    return { hasAccess: true }
+  }
+
+  // Only company owners and representatives can view booths when not live
+  if (!user || (user.role !== "companyOwner" && user.role !== "representative")) {
+    return {
+      hasAccess: false,
+      error: "The career fair is not currently live. You can only view your own booth.",
+    }
+  }
+
+  const companiesRef = collection(db, "companies")
+
+  if (user.role === "companyOwner") {
+    const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
+    const ownerSnapshot = await getDocs(ownerQuery)
+    for (const companyDoc of ownerSnapshot.docs) {
+      if (companyDoc.data().boothId === boothId) {
+        return { hasAccess: true }
+      }
+    }
+  } else if (user.role === "representative" && user.companyId) {
+    const companyDoc = await getDoc(doc(db, "companies", user.companyId))
+    if (companyDoc.exists() && companyDoc.data().boothId === boothId) {
+      return { hasAccess: true }
+    }
+  }
+
+  return {
+    hasAccess: false,
+    error: "You don't have access to view this booth. The career fair is not currently live.",
+  }
 }
+
+async function findCompanyIdForBooth(boothId: string, boothData: Booth): Promise<string | undefined> {
+  if (boothData.companyId) {
+    return boothData.companyId
+  }
+
+  const companiesRef = collection(db, "companies")
+  const companiesSnapshot = await getDocs(companiesRef)
+  for (const companyDoc of companiesSnapshot.docs) {
+    if (companyDoc.data().boothId === boothId) {
+      return companyDoc.id
+    }
+  }
+
+  return undefined
+}
+
 
 export default function BoothView() {
   const navigate = useNavigate()
@@ -82,6 +132,19 @@ export default function BoothView() {
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [error, setError] = useState("")
   const [startingChat, setStartingChat] = useState(false)
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false)
+  const [selectedJobForApply, setSelectedJobForApply] = useState<Job | null>(null)
+
+  // Rating state
+  const [myRating, setMyRating] = useState<{ rating: number; comment: string | null; createdAt: number | null } | null | undefined>(undefined)
+  const [ratingValue, setRatingValue] = useState<number | null>(null)
+  const [ratingComment, setRatingComment] = useState("")
+  const [submittingRating, setSubmittingRating] = useState(false)
+  const [ratingError, setRatingError] = useState("")
+  const [ratingSuccess, setRatingSuccess] = useState("")
+  const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false)
+  const [resubmitValue, setResubmitValue] = useState<number | null>(null)
+  const [resubmitComment, setResubmitComment] = useState("")
 
   // Track if component is mounted to prevent setState after unmount
   const isMountedRef = useRef(true)
@@ -89,8 +152,10 @@ export default function BoothView() {
   useEffect(() => {
     return () => {
       isMountedRef.current = false
+      // Track when user leaves the booth
+      trackStudentBoothLeave()
     }
-  }, [])
+  }, [boothId, user?.uid])
 
   const handleStartChat = async () => {
     try {
@@ -133,6 +198,93 @@ export default function BoothView() {
     fetchBooth()
   }, [boothId, navigate])
 
+  const trackStudentBoothView = async (boothData: Booth) => {
+    try {
+      if (user?.uid && user.role === "student") {
+        // Track in local history
+        await trackBoothView(user.uid, {
+          boothId: boothData.id,
+          companyName: boothData.companyName,
+          industry: boothData.industry,
+          location: boothData.location,
+          logoUrl: boothData.logoUrl,
+        });
+
+        // Track in backend for company analytics
+        const token = await authUtils.getIdToken();
+
+        if (token) {
+          try {
+            const url = `${API_URL}/api/booth/${boothData.id}/track-view`;
+
+            await fetch(url, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+            // Tracking completed
+          } catch (err) {
+            console.warn("Backend booth tracking failed:", err);
+          }
+        } else {
+          console.log("[BOOTH-VIEW] No token available");
+        }
+      } else {
+        console.warn("User missing or not a student");
+      }
+    } catch (err) {
+      console.warn("History tracking failed:", err);
+    }
+  }
+
+  const trackStudentBoothLeave = async () => {
+    try {
+      if (user?.uid && user.role === "student" && boothId) {
+        const token = await authUtils.getIdToken();
+        if (token) {
+          await fetch(`${API_URL}/api/booth/${boothId}/track-leave`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Booth leave tracking failed:", err);
+    }
+  }
+
+  const loadBoothData = async (id: string, fairIsLive: boolean) => {
+    const boothDoc = await getDoc(doc(db, "booths", id))
+    if (!isMountedRef.current) return null
+
+    if (!boothDoc.exists()) {
+      setError("Booth not found")
+      setLoading(false)
+      return null
+    }
+
+    const boothData = {
+      id: boothDoc.id,
+      ...boothDoc.data(),
+    } as Booth
+
+    const { hasAccess, error: accessError } = await checkBoothAccess(user, boothId!, fairIsLive)
+    if (!hasAccess) {
+      if (isMountedRef.current) {
+        setError(accessError ?? "You don't have access to view this booth.")
+        setLoading(false)
+      }
+      return null
+    }
+
+    return boothData
+  }
+
   const fetchBooth = async () => {
     if (!boothId) return
 
@@ -141,105 +293,26 @@ export default function BoothView() {
       setLoading(true)
       setError("")
 
-      // Check if fair is live
-      const status = await evaluateFairStatus()
-      if (!isMountedRef.current) return
-      const fairIsLive = status.isLive
-
-      const boothDoc = await getDoc(doc(db, "booths", boothId))
-      if (!isMountedRef.current) return
-
-      if (!boothDoc.exists()) {
-        setError("Booth not found")
-        setLoading(false)
-        return
-      }
-
-      const boothData = {
-        id: boothDoc.id,
-        ...boothDoc.data(),
-      } as Booth
-
-      // If fair is not live, check if user has access
-      if (!fairIsLive) {
-        // Only company owners and representatives can view booths when not live
-        if (!user || (user.role !== "companyOwner" && user.role !== "representative")) {
-          setError("The career fair is not currently live. You can only view your own booth.")
-          setLoading(false)
-          return
-        }
-
-        // Check if this booth belongs to the user's company
-        let hasAccess = false
-        const companiesRef = collection(db, "companies")
-
-        if (user.role === "companyOwner") {
-          // Get all companies owned by this user
-          const ownerQuery = query(companiesRef, where("ownerId", "==", user.uid))
-          const ownerSnapshot = await getDocs(ownerQuery)
-          ownerSnapshot.forEach((doc) => {
-            const companyData = doc.data()
-            if (companyData.boothId === boothId) {
-              hasAccess = true
-            }
-          })
-        } else if (user.role === "representative" && user.companyId) {
-          // Check if the representative's company owns this booth
-          const companyDoc = await getDoc(doc(db, "companies", user.companyId))
-          if (companyDoc.exists()) {
-            const companyData = companyDoc.data()
-            if (companyData.boothId === boothId) {
-              hasAccess = true
-            }
-          }
-        }
-
-        if (!hasAccess) {
-          if (isMountedRef.current) {
-            setError("You don't have access to view this booth. The career fair is not currently live.")
-            setLoading(false)
-          }
-          return
-        }
-      }
-
-      if (!isMountedRef.current) return
-      setBooth(boothData)
-
-      // ✅ Track booth views for the student's History tab
-      // We only record history for authenticated students.
-      // (Company reps/owners viewing booths shouldn't clutter student history.)
+      let fairIsLive = false
       try {
-        if (user?.uid && user.role === "student") {
-          await trackBoothView(user.uid, {
-            boothId: boothData.id,
-            companyName: boothData.companyName,
-            industry: boothData.industry,
-            location: boothData.location,
-            logoUrl: boothData.logoUrl,
-          });
+        const fairsRes = await fetch(`${API_URL}/api/fairs`)
+        if (fairsRes.ok) {
+          const fairsData = await fairsRes.json()
+          fairIsLive = (fairsData.fairs || []).some((f: { isLive: boolean }) => f.isLive)
         }
       } catch (err) {
-        // If history fails, we don't want the whole Booth page to fail.
-        console.warn("History tracking failed:", err);
+        console.error("Error fetching fairs:", err)
       }
+      if (!isMountedRef.current) return
 
+      const boothData = await loadBoothData(boothId, fairIsLive)
+      if (!boothData || !isMountedRef.current) return
 
-      // Get companyId from booth or look it up from companies
-      let companyId = boothData.companyId
-      if (!companyId) {
-        // Try to find companyId by looking up companies with this boothId
-        const companiesRef = collection(db, "companies")
-        const companiesSnapshot = await getDocs(companiesRef)
-        companiesSnapshot.forEach((doc) => {
-          const companyData = doc.data()
-          if (companyData.boothId === boothId) {
-            companyId = doc.id
-          }
-        })
-      }
+      setBooth(boothData)
+      await trackStudentBoothView(boothData)
+      await fetchMyRating(boothId)
 
-      // Fetch jobs for this company if companyId is available
+      const companyId = await findCompanyIdForBooth(boothId, boothData)
       if (companyId) {
         fetchJobs(companyId)
       }
@@ -254,6 +327,17 @@ export default function BoothView() {
       }
     }
   }
+
+  const fetchMyRating = (id: string) =>
+    fetchMyBoothRating(id, user?.role, isMountedRef, setMyRating)
+
+  const submitRating = (value: number | null, comment: string, onSuccess: () => void) =>
+    submitBoothRating(boothId ?? null, value, comment, onSuccess, {
+      setSubmittingRating,
+      setRatingError,
+      setMyRating,
+      setRatingSuccess,
+    })
 
   const fetchJobs = async (companyId: string) => {
     try {
@@ -303,46 +387,11 @@ export default function BoothView() {
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Button
-                onClick={() => navigate("/booths")}
-                sx={{
-                  color: "white",
-                  minWidth: "auto",
-                  p: 1,
-                  "&:hover": {
-                    bgcolor: "rgba(255,255,255,0.1)",
-                  },
-                }}
-              >
-                <ArrowBackIcon />
-              </Button>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Typography variant="h4" sx={{ fontWeight: 700, color: "white" }}>
-                {booth.companyName}
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <NotificationBell />
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout pageTitle={booth.companyName}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/booths")} sx={{ mb: 3 }}>
+          Back to Booths
+        </Button>
         <Grid container spacing={3}>
           {/* Main Content */}
           <Grid size={{ xs: 12, md: 8 }}>
@@ -422,68 +471,92 @@ export default function BoothView() {
                 </Box>
 
                 {/* Job Postings */}
-                {loadingJobs ? (
+                {loadingJobs && (
                   <Box sx={{ mb: 4, display: "flex", justifyContent: "center", alignItems: "center", py: 4 }}>
                     <CircularProgress />
                   </Box>
-                ) : jobs.length > 0 ? (
+                )}
+                {!loadingJobs && jobs.length > 0 && (
                   <Box sx={{ mb: 4 }}>
                     <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
                       <WorkIcon sx={{ color: "#388560" }} />
                       Job Openings ({jobs.length})
                     </Typography>
                     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {jobs.map((job) => (
-                        <Card
-                          key={job.id}
-                          sx={{
-                            border: "1px solid rgba(56, 133, 96, 0.2)",
-                            borderRadius: 2,
-                            transition: "box-shadow 0.2s",
-                            "&:hover": {
-                              boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
-                            },
-                          }}
-                        >
-                          <CardContent sx={{ p: 3 }}>
-                            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
-                                {job.name}
+                      {jobs.map((job) => {
+                        const hasPublishedForm = job.applicationForm?.status === "published"
+                        const buttonSx = {
+                          background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                          "&:hover": {
+                            background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
+                          },
+                        }
+
+                        let applyButton = null
+                        if (hasPublishedForm) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              onClick={() => {
+                                setSelectedJobForApply(job)
+                                setApplyDialogOpen(true)
+                              }}
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        } else if (job.applicationLink) {
+                          applyButton = (
+                            <Button
+                              variant="contained"
+                              href={job.applicationLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              sx={buttonSx}
+                            >
+                              Apply Now
+                            </Button>
+                          )
+                        }
+
+                        return (
+                          <Card
+                            key={job.id}
+                            sx={{
+                              border: "1px solid rgba(56, 133, 96, 0.2)",
+                              borderRadius: 2,
+                              transition: "box-shadow 0.2s",
+                              "&:hover": {
+                                boxShadow: "0 4px 12px rgba(56, 133, 96, 0.15)",
+                              },
+                            }}
+                          >
+                            <CardContent sx={{ p: 3 }}>
+                              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "start", mb: 2 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 600, color: "#1a1a1a" }}>
+                                  {job.name}
+                                </Typography>
+                                {applyButton}
+                              </Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
+                                {job.description}
                               </Typography>
-                              {job.applicationLink && (
-                                <Button
-                                  variant="contained"
-                                  href={job.applicationLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  sx={{
-                                    background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                                    "&:hover": {
-                                      background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
-                                    },
-                                  }}
-                                >
-                                  Apply Now
-                                </Button>
-                              )}
-                            </Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
-                              {job.description}
-                            </Typography>
-                            <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
-                                Required Skills:
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {job.majorsAssociated}
-                              </Typography>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      ))}
+                              <Box>
+                                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
+                                  Required Skills:
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {job.majorsAssociated}
+                                </Typography>
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
                     </Box>
                   </Box>
-                ) : null}
+                )}
 
 
                 {/* Links */}
@@ -629,7 +702,7 @@ export default function BoothView() {
             </Card>
 
             {/* Open Positions Card */}
-            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+            <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)", mb: 3 }}>
               <CardContent sx={{ p: 3, textAlign: "center" }}>
                 <Box
                   sx={{
@@ -650,14 +723,105 @@ export default function BoothView() {
                   {jobs.length}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Open Position{jobs.length !== 1 ? "s" : ""}
+                  Open Position{jobs.length === 1 ? "" : "s"}
                 </Typography>
               </CardContent>
             </Card>
+
+            {/* Rating Card — students only */}
+            {user?.role === "student" && myRating !== undefined && (
+              <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a" }}>
+                    Rate This Booth
+                  </Typography>
+
+                  {ratingError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setRatingError("")}>{ratingError}</Alert>}
+                  {ratingSuccess && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setRatingSuccess("")}>{ratingSuccess}</Alert>}
+
+                  {myRating ? (
+                    // Show existing review
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your review</Typography>
+                      <Rating value={myRating.rating} readOnly size="small" />
+                      {myRating.comment && (
+                        <Typography variant="body2" sx={{ mt: 0.5, color: "#444" }}>{myRating.comment}</Typography>
+                      )}
+                      {myRating.createdAt && (
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                          {new Date(myRating.createdAt).toLocaleDateString()}
+                        </Typography>
+                      )}
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        sx={{ mt: 2, borderColor: "#388560", color: "#388560" }}
+                        onClick={() => { setResubmitValue(null); setResubmitComment(""); setResubmitDialogOpen(true) }}
+                      >
+                        Resubmit Review
+                      </Button>
+                    </Box>
+                  ) : (
+                    // Show submission form
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Your rating</Typography>
+                      <Rating
+                        value={ratingValue}
+                        onChange={(_, v) => setRatingValue(v)}
+                        size="large"
+                      />
+                      <TextField
+                        label="Comment (optional)"
+                        value={ratingComment}
+                        onChange={(e) => setRatingComment(e.target.value)}
+                        fullWidth
+                        multiline
+                        rows={2}
+                        size="small"
+                        sx={{ mt: 2, mb: 2 }}
+                      />
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        disabled={!ratingValue || submittingRating}
+                        onClick={() => submitRating(ratingValue, ratingComment, () => { setRatingValue(null); setRatingComment("") })}
+                        sx={{ background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)" }}
+                      >
+                        {submittingRating ? "Submitting..." : "Submit Review"}
+                      </Button>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </Grid>
         </Grid>
       </Container>
-    </Box>
+
+      <ResubmitReviewDialog
+        open={resubmitDialogOpen}
+        onClose={() => setResubmitDialogOpen(false)}
+        resubmitValue={resubmitValue}
+        setResubmitValue={setResubmitValue}
+        resubmitComment={resubmitComment}
+        setResubmitComment={setResubmitComment}
+        submittingRating={submittingRating}
+        onSubmit={submitRating}
+      />
+
+      {selectedJobForApply && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false)
+            setSelectedJobForApply(null)
+          }}
+          job={selectedJobForApply}
+          boothId={booth?.id}
+          studentId={user?.role === "student" ? user.uid : null}
+        />
+      )}
+    </BaseLayout>
   )
 }
 

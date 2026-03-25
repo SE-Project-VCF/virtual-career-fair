@@ -21,6 +21,7 @@ import NewChatDialog from "../components/chat/NewChatDialog";
 import { authUtils } from "../utils/auth";
 import { auth } from "../firebase";
 import { streamClient } from "../utils/streamClient";
+import "./ChatPage.css";
 
 export default function ChatPage() {
   const navigate = useNavigate();
@@ -60,8 +61,6 @@ export default function ChatPage() {
       }
       return;
     }
-
-    let updateUnread: (() => void) | null = null;
 
     const init = async () => {
       try {
@@ -106,7 +105,7 @@ export default function ChatPage() {
         setClientReady(true);
 
         // Unread count tracking
-        updateUnread = () => {
+        const updateUnread = () => {
           const count = (client.user as any)?.total_unread_count ?? 0;
           setUnreadCount(count);
         };
@@ -114,23 +113,17 @@ export default function ChatPage() {
         updateUnread();
         client.on("notification.message_new", updateUnread);
         client.on("notification.mark_read", updateUnread);
+
+        return () => {
+          client.off("notification.message_new", updateUnread);
+          client.off("notification.mark_read", updateUnread);
+        };
       } catch (err) {
-        console.error("STREAM INIT ERROR:", err);
-        // Set error state to prevent infinite loading
-        setClientReady(false);
-        // You could also set a specific error state here to show an error message to users
-        // setStreamError(err instanceof Error ? err.message : "Failed to connect to chat");
+        console.error("STREAM INIT ERROR", err);
       }
     };
 
     void init();
-
-    return () => {
-      if (updateUnread) {
-        client.off("notification.message_new", updateUnread);
-        client.off("notification.mark_read", updateUnread);
-      }
-    };
   }, [user, client]);
 
   /*
@@ -230,16 +223,9 @@ export default function ChatPage() {
   // If streamClient is missing entirely
   if (!client) {
     return (
-      <Box
-        sx={{
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Box sx={{ textAlign: "center" }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>
+      <Box className="chat-center-container">
+        <Box className="chat-center-content">
+          <Typography variant="h6" className="chat-not-available">
             Chat Not Available
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -253,29 +239,23 @@ export default function ChatPage() {
   // SAFE LOADING RETURN (NO HOOKS HERE)
   if (!clientReady || !client.userID) {
     return (
-      <Box
-        sx={{
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <Box className="chat-loading-container">
         <CircularProgress />
       </Box>
     );
   }
 
   // Main chat UI
+  const titleSuffix = unreadCount ? ` (${unreadCount})` : "";
   return (
-    <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <Box className="chat-page">
       <ChatHeader
-        title={`Messages${unreadCount ? ` (${unreadCount})` : ""}`}
+        title={`Messages${titleSuffix}`}
         onNewChat={() => setDialogOpen(true)}
         onBack={() => navigate("/dashboard")}
       />
 
-      <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <Box className="chat-main-wrapper">
         <Chat client={client} theme="messaging light">
           <ChatSidebar
             client={client}
@@ -283,61 +263,25 @@ export default function ChatPage() {
             activeChannel={activeChannel}
           />
 
-          <Box
-            sx={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              background: "#fff",
-              overflow: "hidden",
-            }}
-          >
+          <Box className="chat-messages-wrapper">
             {activeChannel ? (
               <Channel channel={activeChannel}>
                 <Window>
-                  <Box
-                    sx={{
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                    }}
-                  >
+                  <Box className="chat-messages-container">
                     {/* MESSAGE LIST */}
-                    <Box
-                      sx={{
-                        flex: 1,
-                        minHeight: 0,
-                        overflowY: "auto",
-                      }}
-                    >
+                    <Box className="chat-message-list">
                       <MessageList />
                     </Box>
 
                     {/* INPUT BAR */}
-                    <Box
-                      sx={{
-                        borderTop: "1px solid #ddd",
-                        background: "#fafafa",
-                        padding: "12px 16px",
-                        display: "flex",
-                        gap: "12px",
-                        alignItems: "flex-end",
-                      }}
-                    >
+                    <Box className="chat-input-bar">
                       {/* FILE UPLOAD */}
-                      <label
-                        style={{
-                          cursor: "pointer",
-                          fontSize: "22px",
-                          color: "#666",
-                          paddingBottom: "4px",
-                        }}
-                      >
-                        📎
+                      <label className="chat-file-upload-label">
+                        {"📎"}
                         <input
                           type="file"
                           multiple
-                          style={{ display: "none" }}
+                          className="chat-file-upload-input"
                           onChange={(e) => {
                             if (e.target.files) {
                               void sendFiles(e.target.files);
@@ -354,36 +298,14 @@ export default function ChatPage() {
                         onChange={(e) => setDraftMessage(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onInput={handleInput}
-                        style={{
-                          width: "100%",
-                          minHeight: "42px",
-                          maxHeight: "200px",
-                          padding: "12px",
-                          borderRadius: "10px",
-                          border: "1px solid #ccc",
-                          fontSize: "15px",
-                          resize: "none",
-                          overflow: "hidden",
-                          outline: "none",
-                          background: "#fff",
-                          flex: 1,
-                        }}
+                        className="chat-textarea"
                       />
                     </Box>
                   </Box>
                 </Window>
               </Channel>
             ) : (
-              <Box
-                sx={{
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#666",
-                  fontSize: "1.2rem",
-                }}
-              >
+              <Box className="chat-empty-state">
                 Select a chat or start a new one
               </Box>
             )}

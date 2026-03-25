@@ -102,6 +102,6 @@ Once your `.env` file is set up, you can create an admin account:
 
 ```bash
 cd backend
-node scripts/createAdmin.js admin@example.com SecurePass123 John Doe
+node scripts/createAdmin.mjs admin@example.com SecurePass123 John Doe
 ```
 

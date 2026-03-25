@@ -181,7 +181,7 @@ describe("POST /api/job-invitations/send", () => {
     db.collection.mockImplementation((name) => {
       if (name === "jobInvitations") {
         return {
-          doc: jest.fn(() => ({ id: "inv-" + Math.random() })),
+          doc: jest.fn(() => ({ id: "inv-" + Math.random() })), // NOSONAR - test ID generation
           where: jest.fn().mockReturnThis(),
           get: jest.fn().mockResolvedValue(mockQuerySnap([])),
         };
@@ -248,7 +248,7 @@ describe("POST /api/job-invitations/send", () => {
     db.collection.mockImplementation((name) => {
       if (name === "jobInvitations") {
         return {
-          doc: jest.fn(() => ({ id: "inv-" + Math.random() })),
+          doc: jest.fn(() => ({ id: "inv-" + Math.random() })), // NOSONAR - test ID generation
           where: jest.fn().mockReturnThis(),
           get: jest.fn().mockResolvedValue(mockQuerySnap([])),
         };

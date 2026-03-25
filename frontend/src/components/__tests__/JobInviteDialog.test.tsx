@@ -10,7 +10,7 @@ vi.mock("../../utils/auth", () => ({
   },
 }));
 
-global.fetch = vi.fn();
+globalThis.fetch = vi.fn();
 
 const mockStudents = [
   { id: "s1", firstName: "Alice", lastName: "Smith", email: "alice@example.com", major: "Computer Science" },
@@ -38,7 +38,7 @@ describe("JobInviteDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (authUtils.getCurrentUser as any).mockReturnValue(mockUser);
-    (global.fetch as any).mockResolvedValue({
+    (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ students: mockStudents }),
     });
@@ -50,7 +50,7 @@ describe("JobInviteDialog", () => {
 
   it("does not fetch when dialog is closed", () => {
     render(<JobInviteDialog {...defaultProps} open={false} />);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("renders dialog title and job title", async () => {
@@ -67,7 +67,7 @@ describe("JobInviteDialog", () => {
   });
 
   it("shows loading spinner while fetching students", () => {
-    (global.fetch as any).mockReturnValue(new Promise(() => {}));
+    (globalThis.fetch as any).mockReturnValue(new Promise(() => {}));
     render(<JobInviteDialog {...defaultProps} />);
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
@@ -82,7 +82,7 @@ describe("JobInviteDialog", () => {
   });
 
   it("shows 'No students found' when list is empty", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ students: [] }),
     });
@@ -97,7 +97,7 @@ describe("JobInviteDialog", () => {
   it("fetches students with userId param", async () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("userId=user-1"),
         expect.any(Object)
       )
@@ -107,7 +107,7 @@ describe("JobInviteDialog", () => {
   it("appends boothId param when provided", async () => {
     render(<JobInviteDialog {...defaultProps} boothId="booth-42" />);
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("boothId=booth-42"),
         expect.any(Object)
       )
@@ -133,11 +133,11 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     // Give time for any async effects to settle
     await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument());
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("shows error when fetch fails", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: false,
       json: async () => ({ error: "Server error" }),
     });
@@ -148,7 +148,7 @@ describe("JobInviteDialog", () => {
   it("resets state each time dialog opens", async () => {
     const { rerender } = render(<JobInviteDialog {...defaultProps} open={false} />);
     rerender(<JobInviteDialog {...defaultProps} open={true} />);
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
   });
 
   // -----------------------------------------------------------------------
@@ -269,7 +269,7 @@ describe("JobInviteDialog", () => {
   });
 
   it("Select All button is not visible when there are no students", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ students: [] }),
     });
@@ -295,7 +295,7 @@ describe("JobInviteDialog", () => {
     const onSuccess = vi.fn();
     const onClose = vi.fn();
 
-    (global.fetch as any)
+    (globalThis.fetch as any)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sent: 1 }) });
 
@@ -308,7 +308,7 @@ describe("JobInviteDialog", () => {
     await user.click(screen.getByRole("button", { name: /Send \(1\)/i }));
 
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         "http://localhost:5000/api/job-invitations/send",
         expect.objectContaining({
           method: "POST",
@@ -321,7 +321,7 @@ describe("JobInviteDialog", () => {
   it("shows success state after sending", async () => {
     const user = userEvent.setup();
 
-    (global.fetch as any)
+    (globalThis.fetch as any)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sent: 1 }) });
 
@@ -339,7 +339,7 @@ describe("JobInviteDialog", () => {
   it("shows plural in success message for multiple invitations", async () => {
     const user = userEvent.setup();
 
-    (global.fetch as any)
+    (globalThis.fetch as any)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sent: 3 }) });
 
@@ -357,7 +357,7 @@ describe("JobInviteDialog", () => {
   it("shows error when send request fails", async () => {
     const user = userEvent.setup();
 
-    (global.fetch as any)
+    (globalThis.fetch as any)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
       .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Invite failed" }) });
 
@@ -373,7 +373,7 @@ describe("JobInviteDialog", () => {
   it("includes optional message in send payload when provided", async () => {
     const user = userEvent.setup();
 
-    (global.fetch as any)
+    (globalThis.fetch as any)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sent: 1 }) });
 
@@ -385,7 +385,7 @@ describe("JobInviteDialog", () => {
     await user.click(screen.getByRole("button", { name: /Send \(1\)/i }));
 
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           body: expect.stringContaining('"message":"Hello there!"'),
@@ -397,7 +397,7 @@ describe("JobInviteDialog", () => {
   it("omits message field when message is blank", async () => {
     const user = userEvent.setup();
 
-    (global.fetch as any)
+    (globalThis.fetch as any)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sent: 1 }) });
 
@@ -408,7 +408,7 @@ describe("JobInviteDialog", () => {
     await user.click(screen.getByRole("button", { name: /Send \(1\)/i }));
 
     await waitFor(() => {
-      const sendCalls = (global.fetch as any).mock.calls.filter((c: any[]) =>
+      const sendCalls = (globalThis.fetch as any).mock.calls.filter((c: any[]) =>
         c[0].includes("job-invitations/send")
       );
       expect(sendCalls.length).toBeGreaterThan(0);
@@ -435,7 +435,7 @@ describe("JobInviteDialog", () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
 
-    (global.fetch as any)
+    (globalThis.fetch as any)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
       .mockReturnValueOnce(new Promise(() => {})); // send call never resolves
 
@@ -455,7 +455,7 @@ describe("JobInviteDialog", () => {
   // -----------------------------------------------------------------------
 
   it("dismisses error alert when close icon is clicked", async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (globalThis.fetch as any).mockResolvedValueOnce({
       ok: false,
       json: async () => ({ error: "Load failed" }),
     });

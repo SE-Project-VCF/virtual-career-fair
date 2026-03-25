@@ -12,12 +12,12 @@ Administrator accounts are **not** available through public registration for sec
 2. **Run the create admin script**:
    ```bash
    cd backend
-   node scripts/createAdmin.js <email> <password> [firstName] [lastName]
+   node scripts/createAdmin.mjs <email> <password> [firstName] [lastName]
    ```
 
    Example:
    ```bash
-   node scripts/createAdmin.js admin@example.com SecurePass123 John Doe
+   node scripts/createAdmin.mjs admin@example.com SecurePass123 John Doe
    ```
 
 3. **The script will**:

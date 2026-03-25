@@ -16,7 +16,13 @@ import {
 
 import { useState, useEffect } from "react";
 import { StreamChat } from "stream-chat";
+import type { UserResponse } from "stream-chat";
 import type { User } from "../../utils/auth";
+
+// Extend UserResponse to include custom fields used in this app
+interface AppUserResponse extends UserResponse {
+    email?: string;
+}
 
 interface NewChatDialogProps {
     open: boolean;
@@ -34,10 +40,10 @@ export default function NewChatDialog({
     currentUser,
     clientReady,
     onSelectChannel,
-}: NewChatDialogProps) {
+}: Readonly<NewChatDialogProps>) {
     const [searchQuery, setSearchQuery] = useState("");
-    const [results, setResults] = useState<any[]>([]);
-    const [selectedUser, setSelectedUser] = useState<any | null>(null);
+    const [results, setResults] = useState<AppUserResponse[]>([]);
+    const [selectedUser, setSelectedUser] = useState<AppUserResponse | null>(null);
     const [recipientEmail, setRecipientEmail] = useState("");
     const [searchLoading, setSearchLoading] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -80,7 +86,7 @@ export default function NewChatDialog({
 
             const res = await client.queryUsers(filter, { name: 1 }, { limit: 10 });
 
-            setResults(res.users || []);
+            setResults((res.users || []) as AppUserResponse[]);
         } catch (err) {
             console.error("Stream user search failed:", err);
             setResults([]);
@@ -109,7 +115,7 @@ export default function NewChatDialog({
 
         try {
             // Sorted IDs for stable DM channel name
-            const sorted = [currentUser.uid, selectedUser.id].sort();
+            const sorted = [currentUser.uid, selectedUser.id].sort((a, b) => a.localeCompare(b));
             const channelId = `dm-${sorted[0]}-${sorted[1]}`;
 
             // 1. Check if channel already exists
@@ -190,8 +196,8 @@ export default function NewChatDialog({
                             key={u.id}
                             onClick={() => {
                                 setSelectedUser(u);
-                                setRecipientEmail(u.email);
-                                setSearchQuery(u.name || u.email);
+                                setRecipientEmail(u.email || "");
+                                setSearchQuery(u.name || u.email || "");
                                 setResults([]);
                             }}
                         >

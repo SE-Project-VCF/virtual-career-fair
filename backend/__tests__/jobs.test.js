@@ -245,7 +245,7 @@ describe("POST /api/jobs", () => {
       .send({ companyId: "c1", name: "Dev", description: "desc", majorsAssociated: "CS" });
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toContain("DB error");
+    expect(res.body.error).toBe("DB error");
   });
 
   it("returns 400 when job name is only whitespace", async () => {
@@ -391,7 +391,6 @@ describe("PUT /api/jobs/:id", () => {
 
   it("returns 403 when user is not authorized", async () => {
     // Need two collection calls: jobs then companies
-    let callCount = 0;
     db.collection.mockImplementation((name) => {
       if (name === "jobs") {
         return {
