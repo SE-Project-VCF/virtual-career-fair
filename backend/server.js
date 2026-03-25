@@ -5,92 +5,11 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
-const { removeUndefined, generateInviteCode, validateJobInput, parseUTCToTimestamp, verifyAdmin, verifyFirebaseToken } = require("./helpers");
+const { removeUndefined, generateInviteCode, validateJobInput, parseUTCToTimestamp, verifyAdmin, verifyFirebaseToken, checkCompanyAuthorization, resolveBooth, resolveApplicantResumePathOrUrl, requireCompanyResumeViewAccess, verifyRepOrOwner } = require("./helpers");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
-
-// Helper to check if user is company owner or representative
-async function checkCompanyAuthorization(companyId, userId) {
-  const companyDoc = await db.collection("companies").doc(companyId).get();
-  if (!companyDoc.exists) {
-    return { authorized: false, error: "Invalid company ID" };
-  }
-  const companyData = companyDoc.data();
-  const reps = companyData.representativeIDs || [];
-  if (companyData.ownerId !== userId && !reps.includes(userId)) {
-    return { authorized: false, error: "Not authorized for this company" };
-  }
-  return { authorized: true, companyData };
-}
-
-// Helper to resolve booth reference - supports both global booths and fair-specific booths
-async function resolveBooth(boothId) {
-  // First, try to get booth from global booths collection
-  const globalBoothRef = db.collection("booths").doc(boothId);
-  const globalBoothDoc = await globalBoothRef.get();
-  
-  if (globalBoothDoc.exists) {
-    return { ref: globalBoothRef, data: globalBoothDoc.data() };
-  }
-
-  // If not found globally, search through all fairs for this booth
-  const fairsSnapshot = await db.collection("fairs").get();
-  
-  for (const fairDoc of fairsSnapshot.docs) {
-    const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
-    const fairBoothDoc = await fairBoothRef.get();
-    
-    if (fairBoothDoc.exists) {
-      return { ref: fairBoothRef, data: fairBoothDoc.data() };
-    }
-  }
-
-  // Booth not found
-  return null;
-}
-
-/**
- * Resolves applicant resume path or URL from application data.
- * Returns { type: "url"|"path", value } or { type: null } if not found.
- */
-async function resolveApplicantResumePathOrUrl(appData, studentId) {
-  const pathOrUrl =
-    appData.attachedResumePath ||
-    appData.fileUrls?.resume ||
-    appData.fileUrls?.attach_resume ||
-    appData.fileUrls?.resume_upload;
-
-  if (pathOrUrl && typeof pathOrUrl === "string" && pathOrUrl.startsWith("http")) {
-    return { type: "url", value: pathOrUrl };
-  }
-  if (pathOrUrl && typeof pathOrUrl === "string") {
-    return { type: "path", value: pathOrUrl };
-  }
-  if (!studentId) return { type: null };
-
-  const userDoc = await db.collection("users").doc(studentId).get();
-  if (!userDoc.exists) return { type: null };
-
-  const userData = userDoc.data();
-  const p = userData.currentResumePath || userData.resumePath || userData.resumeUrl;
-  if (p && typeof p === "string" && !p.startsWith("http")) {
-    return { type: "path", value: p };
-  }
-  return { type: null };
-}
-
-/**
- * Ensures the user can view company resumes. Returns error response args or null if authorized.
- */
-async function requireCompanyResumeViewAccess(companyId, userId) {
-  const auth = await checkCompanyAuthorization(companyId, userId);
-  if (auth.authorized) return null;
-  const status = auth.error === "Invalid company ID" ? 404 : 403;
-  const message = status === 404 ? "Company not found" : "Not authorized to view this resume";
-  return { status, error: message };
-}
 
 // --------------------------
 // ENVIRONMENT VALIDATION
@@ -1187,38 +1106,6 @@ app.get("/api/applicant-tailored-resume/:applicationId", verifyFirebaseToken, as
     return res.status(500).json({ error: err.message || "Failed to fetch tailored resume" });
   }
 });
-
-/* ----------------------------------------------------
-   HELPER: Verify user is representative or company owner
----------------------------------------------------- */
-async function verifyRepOrOwner(userId, companyId) {
-  if (!userId) {
-    return { error: "Missing userId", status: 400 };
-  }
-
-  const userDoc = await db.collection("users").doc(userId).get();
-  if (!userDoc.exists) {
-    return { error: "User not found", status: 404 };
-  }
-
-  const userData = userDoc.data();
-
-  // Allow administrators, company owners, and representatives
-  if (userData.role === "administrator") {
-    return null; // Admins can access everything
-  }
-
-  if (userData.role !== "representative" && userData.role !== "companyOwner") {
-    return { error: "Only representatives and company owners can send invitations", status: 403 };
-  }
-
-  // If companyId is provided, verify the user belongs to that company
-  if (companyId && userData.companyId !== companyId) {
-    return { error: "You can only send invitations for your own company", status: 403 };
-  }
-
-  return null;
-}
 
 /* ----------------------------------------------------
    SEND JOB INVITATION(S) TO STUDENT(S)
