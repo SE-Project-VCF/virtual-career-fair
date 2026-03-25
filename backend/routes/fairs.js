@@ -11,6 +11,7 @@ const {
   evaluateFairStatusForFair,
   verifyFirebaseToken,
 } = require("../helpers");
+const { streamServerClient } = require("../streamServerClient");
 
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
 const enrollmentLimiter = rateLimit({
@@ -1054,6 +1055,45 @@ router.get("/api/fairs/:fairId/company/:companyId/booth", verifyFirebaseToken, a
   } catch (err) {
     console.error("GET /api/fairs/:fairId/company/:companyId/booth error:", err);
     return res.status(500).json({ error: "Failed to load fair booth" });
+  }
+});
+
+/* =======================================================
+   NETWORKING LOUNGE
+======================================================= */
+
+/* POST /api/fairs/:fairId/lounge/join - student: join the fair's networking lounge */
+router.post("/api/fairs/:fairId/lounge/join", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const uid = req.user.uid;
+
+  try {
+    // Verify user is a student
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().role !== "student") {
+      return res.status(403).json({ error: "Only students can join the networking lounge" });
+    }
+
+    // Verify fair exists
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+
+    const fairName = fairDoc.data().name || "Career Fair";
+    const channelId = `lounge-${fairId}`;
+
+    // Get or create the lounge channel and add the student as a member
+    const channel = streamServerClient.channel("messaging", channelId, {
+      name: `${fairName} Networking Lounge`,
+      created_by_id: "system",
+    });
+    await channel.create();
+    await channel.addMembers([uid]);
+
+    return res.json({ success: true, channelId });
+  } catch (err) {
+    console.error("POST /api/fairs/:fairId/lounge/join error:", err);
+    return res.status(500).json({ error: "Failed to join networking lounge" });
   }
 });
 
