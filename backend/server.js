@@ -3,7 +3,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
-const multer = require("multer");
 const { db, auth } = require("./firebase");
 const admin = require("firebase-admin");
 const { removeUndefined, generateInviteCode, validateJobInput, parseUTCToTimestamp, verifyAdmin, verifyFirebaseToken } = require("./helpers");
@@ -159,24 +158,7 @@ if (process.env.NODE_ENV !== "test") {
   }));
 }
 
-// --------------------------
-// MULTER CONFIGURATION FOR FILE UPLOADS
-// --------------------------
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: process.env.NODE_ENV === "test" ? 10 * 1024 * 1024 : 5 * 1024 * 1024 }, // 5MB limit (10MB in test so explicit size check runs)
-  fileFilter: (req, file, cb) => {
-    // Only allow PDFs for resume uploads
-    if (req.path === "/api/upload-resume" && file.mimetype !== "application/pdf") {
-      return cb(new Error("Only PDF files are allowed"));
-    }
-    // Allow images for booth logos
-    if (req.path === "/api/upload-booth-logo" && !file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only image files are allowed"));
-    }
-    cb(null, true);
-  }
-});
+const upload = require("./middleware/upload");
 
 // Test endpoint directly on app
 app.post("/test-endpoint", (req, res) => {
