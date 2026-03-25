@@ -56,7 +56,17 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
       const res = await fetch(`${API_URL}/api/fairs`)
       if (res.ok) {
         const data = await res.json()
-        setFairs(data.fairs || [])
+        const sorted = (data.fairs || []).sort((a: any, b: any) => {
+          const now = Date.now()
+          const getOrder = (f: any) => {
+            if (f.isLive) return 0
+            if (f.startTime && now < f.startTime) return 1
+            if (f.endTime && now > f.endTime) return 3
+            return 2 // Scheduled
+          }
+          return getOrder(a) - getOrder(b)
+        })
+        setFairs(sorted)
       }
     } finally {
       setLoadingFairs(false)
@@ -75,7 +85,17 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to toggle")
-      setFairs((prev) => prev.map((f) => f.id === fairId ? { ...f, isLive: data.isLive } : f))
+      setFairs((prev) => {
+        const updated = prev.map((f) => f.id === fairId ? { ...f, isLive: data.isLive } : f)
+        const now = Date.now()
+        const getOrder = (f: any) => {
+          if (f.isLive) return 0
+          if (f.startTime && now < f.startTime) return 1
+          if (f.endTime && now > f.endTime) return 3
+          return 2
+        }
+        return updated.sort((a, b) => getOrder(a) - getOrder(b))
+      })
     } catch (err: any) {
       setToggleError(err.message)
     } finally {
