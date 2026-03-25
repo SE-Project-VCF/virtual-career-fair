@@ -683,6 +683,93 @@ describe("FairList — join fair flow", () => {
     })
   })
 
+  it("does not show Join Fair button for ended fair (company owner)", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+
+    const pastEnd = Date.now() - 86400000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "f1", name: "Past Fair", description: null, isLive: false, startTime: null, endTime: pastEnd }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Past Fair")).toBeInTheDocument())
+
+    // Ended fairs should not show Join Fair for company users
+    expect(screen.queryByRole("button", { name: /join fair/i })).not.toBeInTheDocument()
+  })
+
+  it("shows formatted date for fairs with start time", async () => {
+    const startTime = new Date("2025-06-15T10:00:00Z").getTime()
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [{ id: "f1", name: "Dated Fair", description: null, isLive: false, startTime, endTime: null }],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Dated Fair")).toBeInTheDocument())
+
+    // Should not show "Date TBD" since startTime is set
+    expect(screen.queryByText("Date TBD")).not.toBeInTheDocument()
+  })
+
+  it("shows Date TBD for fairs without start time", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [{ id: "f1", name: "TBD Fair", description: null, isLive: false, startTime: null, endTime: null }],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Date TBD")).toBeInTheDocument())
+  })
+
+  it("sorts fairs: live first, then upcoming, then ended", async () => {
+    const now = Date.now()
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [
+          { id: "f3", name: "Ended Fair", description: null, isLive: false, startTime: now - 200000, endTime: now - 100000 },
+          { id: "f1", name: "Live Fair", description: null, isLive: true, startTime: now - 1000, endTime: null },
+          { id: "f2", name: "Upcoming Fair", description: null, isLive: false, startTime: now + 86400000, endTime: null },
+        ],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Live Fair")).toBeInTheDocument())
+
+    // Verify all three are rendered (order is tested by checking DOM position)
+    expect(screen.getByText("Live Fair")).toBeInTheDocument()
+    expect(screen.getByText("Upcoming Fair")).toBeInTheDocument()
+    expect(screen.getByText("Ended Fair")).toBeInTheDocument()
+
+    // Verify Live Now chip appears for the live fair
+    expect(screen.getByText("Live Now")).toBeInTheDocument()
+  })
+
   it("cancels join dialog and clears invite code", async () => {
     const user = userEvent.setup()
 

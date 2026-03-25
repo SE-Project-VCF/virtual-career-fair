@@ -123,4 +123,46 @@ describe("App", () => {
     render(<App />)
     expect(screen.getByText("TailoredResumeViewPage")).toBeInTheDocument()
   })
+
+  it("renders NetworkingLoungeWrapper at /fair/:fairId/lounge", () => {
+    globalThis.history.pushState({}, "", "/fair/test-fair-id/lounge")
+    render(<App />)
+    expect(screen.getByText("NetworkingLounge")).toBeInTheDocument()
+  })
+
+  it("renders StudentProfilePage at /profile", () => {
+    globalThis.history.pushState({}, "", "/profile")
+    render(<App />)
+    expect(screen.getByText("StudentProfilePage")).toBeInTheDocument()
+  })
+
+  it("renders Register at /register", () => {
+    globalThis.history.pushState({}, "", "/register")
+    render(<App />)
+    expect(screen.getByText("Register")).toBeInTheDocument()
+  })
+
+  it("renders Login at /login", () => {
+    globalThis.history.pushState({}, "", "/login")
+    render(<App />)
+    expect(screen.getByText("Login")).toBeInTheDocument()
+  })
+
+  it("renders Dashboard at /dashboard", () => {
+    globalThis.history.pushState({}, "", "/dashboard")
+    render(<App />)
+    expect(screen.getByText("Dashboard")).toBeInTheDocument()
+  })
+
+  it("renders AdminDashboard at /admin", () => {
+    globalThis.history.pushState({}, "", "/admin")
+    render(<App />)
+    expect(screen.getByText("AdminDashboard")).toBeInTheDocument()
+  })
+
+  it("renders ChatPage at /dashboard/chat", () => {
+    globalThis.history.pushState({}, "", "/dashboard/chat")
+    render(<App />)
+    expect(screen.getByText("ChatPage")).toBeInTheDocument()
+  })
 })
