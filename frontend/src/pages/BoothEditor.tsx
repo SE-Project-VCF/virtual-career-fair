@@ -17,6 +17,8 @@ import {
   InputLabel,
   Divider,
   Grid,
+  FormControlLabel,
+  Checkbox,
 } from "@mui/material"
 
 import { authUtils } from "../utils/auth"
@@ -46,6 +48,9 @@ interface BoothData {
   industry: string
   companySize: string
   location: string
+  locationIsRemote: boolean
+  locationCity: string
+  locationState: string
   description: string
   logoUrl?: string
   website?: string
@@ -106,6 +111,9 @@ export default function BoothEditor() {
     industry: "",
     companySize: "",
     location: "",
+    locationIsRemote: false,
+    locationCity: "",
+    locationState: "",
     description: "",
     website: "",
     careersPage: "",
@@ -274,6 +282,9 @@ export default function BoothEditor() {
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
         location: boothData.location || "",
+        locationIsRemote: boothData.locationIsRemote === true,
+        locationCity: boothData.locationCity ?? "",
+        locationState: boothData.locationState ?? "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -335,6 +346,9 @@ export default function BoothEditor() {
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
         location: boothData.location || "",
+        locationIsRemote: boothData.locationIsRemote === true,
+        locationCity: boothData.locationCity ?? "",
+        locationState: boothData.locationState ?? "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -458,6 +472,15 @@ export default function BoothEditor() {
       setError("")
       setSuccess("")
 
+      if (!formData.locationIsRemote) {
+        if (!formData.locationCity.trim() || !formData.locationState.trim()) {
+          setError("City and state are required unless you mark the booth as Remote.")
+          scrollToTop()
+          setSaving(false)
+          return
+        }
+      }
+
       // Validate contact rep is a real Firestore user
       const normalizedEmail = formData.contactEmail.trim().toLowerCase()
       const usersRef = collection(db, "users")
@@ -502,13 +525,23 @@ export default function BoothEditor() {
         }
       }
 
+      const isRemote = formData.locationIsRemote
+      const city = formData.locationCity.trim()
+      const state = formData.locationState.trim()
+      const locLine = formData.location.trim()
+      const composedLocation =
+        locLine || (isRemote ? "" : [city, state].filter(Boolean).join(", "))
+
       // Booth document payload
       const boothData = {
         companyId: company.id,
         companyName: formData.companyName,
         industry: formData.industry,
         companySize: formData.companySize,
-        location: formData.location,
+        location: isRemote ? null : (composedLocation || null),
+        locationIsRemote: isRemote,
+        locationCity: isRemote ? null : (city || null),
+        locationState: isRemote ? null : (state || null),
         description: formData.description,
         logoUrl: logoUrlToSave,
         website: formData.website || null,
@@ -520,9 +553,8 @@ export default function BoothEditor() {
         updatedAt: new Date().toISOString(),
       }
 
-      // Remove undefined/null fields (keeps your existing behavior)
       const cleanedData = Object.fromEntries(
-        Object.entries(boothData).filter(([_, value]) => value !== undefined && value !== null)
+        Object.entries(boothData).filter(([_, value]) => value !== undefined),
       )
 
       // Fair-scoped booth: save via API
@@ -585,6 +617,9 @@ export default function BoothEditor() {
       industry: "",
       companySize: "",
       location: "",
+      locationIsRemote: false,
+      locationCity: "",
+      locationState: "",
       description: "",
       website: "",
       careersPage: "",
@@ -822,17 +857,60 @@ export default function BoothEditor() {
                 </Grid>
 
                 <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    id="company-location"
-                    name="location"
-                    label="Location"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="City, State/Country"
-                    required
+                  <FormControlLabel
+                    control={(
+                      <Checkbox
+                        checked={formData.locationIsRemote}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          locationIsRemote: e.target.checked,
+                          ...(e.target.checked
+                            ? { locationCity: "", locationState: "", location: "" }
+                            : {}),
+                        })}
+                      />
+                    )}
+                    label="Remote employer (nationwide — not tied to a city)"
                   />
                 </Grid>
+
+                {!formData.locationIsRemote && (
+                  <>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        id="booth-location-city"
+                        name="locationCity"
+                        label="City"
+                        value={formData.locationCity}
+                        onChange={(e) => setFormData({ ...formData, locationCity: e.target.value })}
+                        required
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        id="booth-location-state"
+                        name="locationState"
+                        label="State / region"
+                        value={formData.locationState}
+                        onChange={(e) => setFormData({ ...formData, locationState: e.target.value })}
+                        required
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12 }}>
+                      <TextField
+                        fullWidth
+                        id="company-location"
+                        name="location"
+                        label="Location details (optional)"
+                        value={formData.location}
+                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                        placeholder="e.g. HQ neighborhood or metro area"
+                      />
+                    </Grid>
+                  </>
+                )}
 
                 <Grid size={{ xs: 12 }}>
                   <TextField

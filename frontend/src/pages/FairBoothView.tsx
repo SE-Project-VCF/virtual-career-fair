@@ -43,6 +43,9 @@ interface Booth {
   industry: string | null
   companySize: string | null
   location: string | null
+  locationIsRemote?: boolean
+  locationCity?: string | null
+  locationState?: string | null
   description: string | null
   logoUrl?: string | null
   hiringFor?: string | null
@@ -152,7 +155,9 @@ export default function FairBoothView() {
         boothId: originalOrFairBoothId,
         companyName: boothData.companyName,
         industry: boothData.industry,
-        location: boothData.location,
+        location: boothData.locationIsRemote
+          ? "Remote"
+          : ([boothData.locationCity, boothData.locationState].filter(Boolean).join(", ") || boothData.location),
         logoUrl: boothData.logoUrl,
       })
       
@@ -317,11 +322,18 @@ export default function FairBoothView() {
                         </Box>
                       </Grid>
                     )}
-                    {booth.location && (
+                    {(booth.locationIsRemote || booth.location || booth.locationCity || booth.locationState) && (
                       <Grid size={{ xs: 12, sm: 6 }}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary" }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary", flexWrap: "wrap" }}>
                           <LocationOnIcon fontSize="small" />
-                          <Typography variant="body2">{booth.location}</Typography>
+                          {booth.locationIsRemote ? (
+                            <Chip label="Remote" color="primary" size="small" variant="outlined" />
+                          ) : (
+                            <Typography variant="body2">
+                              {[booth.locationCity, booth.locationState].filter(Boolean).join(", ")
+                                || booth.location}
+                            </Typography>
+                          )}
                         </Box>
                       </Grid>
                     )}

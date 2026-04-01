@@ -24,6 +24,7 @@ import {
   Paper,
   IconButton,
   Chip,
+  Grid,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -41,7 +42,15 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
   const [fairs, setFairs] = useState<any[]>([])
   const [loadingFairs, setLoadingFairs] = useState(true)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [createForm, setCreateForm] = useState({ name: "", description: "", startTime: "", endTime: "" })
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    description: "",
+    startTime: "",
+    endTime: "",
+    venueCity: "",
+    venueState: "",
+    venueZip: "",
+  })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState("")
   const [togglingFairId, setTogglingFairId] = useState<string | null>(null)
@@ -89,6 +98,11 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
     setCreateError("")
     try {
       const token = await auth.currentUser?.getIdToken()
+      const vc = createForm.venueCity.trim()
+      const vs = createForm.venueState.trim()
+      const vz = createForm.venueZip.trim()
+      const hub =
+        vc || vs || vz ? { venueCity: vc, venueState: vs, venueZip: vz } : {}
       const res = await fetch(`${API_URL}/api/fairs`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -98,12 +112,21 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
           description: createForm.description,
           startTime: createForm.startTime ? new Date(createForm.startTime).toISOString() : null,
           endTime: createForm.endTime ? new Date(createForm.endTime).toISOString() : null,
+          ...hub,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to create fair")
       setCreateDialogOpen(false)
-      setCreateForm({ name: "", description: "", startTime: "", endTime: "" })
+      setCreateForm({
+        name: "",
+        description: "",
+        startTime: "",
+        endTime: "",
+        venueCity: "",
+        venueState: "",
+        venueZip: "",
+      })
       loadFairs()
     } catch (err: any) {
       setCreateError(err.message)
@@ -241,6 +264,38 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
           <TextField label="End Time" type="datetime-local" value={createForm.endTime}
             onChange={(e) => setCreateForm({ ...createForm, endTime: e.target.value })}
             fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+            Virtual fair hub (optional)
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            City and state are used for geographic search. ZIP is optional.
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="City"
+                value={createForm.venueCity}
+                onChange={(e) => setCreateForm({ ...createForm, venueCity: e.target.value })}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="State / region"
+                value={createForm.venueState}
+                onChange={(e) => setCreateForm({ ...createForm, venueState: e.target.value })}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="ZIP / postal code"
+                value={createForm.venueZip}
+                onChange={(e) => setCreateForm({ ...createForm, venueZip: e.target.value })}
+                fullWidth
+              />
+            </Grid>
+          </Grid>
           {createError && <Alert severity="error" sx={{ mt: 2 }}>{createError}</Alert>}
         </DialogContent>
         <DialogActions>

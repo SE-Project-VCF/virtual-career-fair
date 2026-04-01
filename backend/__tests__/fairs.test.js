@@ -5,13 +5,37 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
+  function GeoPoint(lat, lng) {
+    this.latitude = lat;
+    this.longitude = lng;
+  }
+  const FieldValue = {
+    delete: jest.fn(() => ({ __fv: "delete" })),
+  };
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, GeoPoint, FieldValue }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
   };
 });
+
+const defaultGeocodeResult = {
+  lat: 35.2,
+  lng: -80.8,
+  placeName: "Charlotte, NC, USA",
+  city: "Charlotte",
+  state: "NC",
+  country: "US",
+  mapboxId: "mock-id",
+};
+
+jest.mock("../services/mapboxGeocode", () => ({
+  forwardGeocode: jest.fn(async (address) => {
+    if (!address || !String(address).trim()) return null;
+    return defaultGeocodeResult;
+  }),
+}));
 
 jest.mock("stream-chat", () => ({
   StreamChat: {
@@ -233,6 +257,53 @@ describe("GET /api/fairs", () => {
     expect(res.status).toBe(200);
     expect(res.body.fairs).toHaveLength(1);
     expect(res.body.fairs[0].name).toBe("Spring Fair");
+  });
+
+  it("returns 400 when radius is set but neither coordinates nor address are provided", async () => {
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => FAIR_DATA }],
+    });
+    const res = await request(app).get("/api/fairs").query({ radiusMiles: "25" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when radiusMiles is zero or invalid", async () => {
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => FAIR_DATA }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ radiusMiles: "0", lat: "35", lng: "-80" });
+    expect(res.status).toBe(400);
+  });
+
+  it("filters by distance and includes distanceMiles when lat lng and radius are provided", async () => {
+    const nearFair = {
+      ...FAIR_DATA,
+      venueGeo: { latitude: 35.2271, longitude: -80.8431 },
+      venueCity: "Charlotte",
+      venueState: "NC",
+    };
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => nearFair }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "500" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs).toHaveLength(1);
+    expect(res.body.fairs[0].distanceMiles).toBeDefined();
+    expect(res.body.fairs[0].venueCity).toBe("Charlotte");
+  });
+
+  it("returns 400 when address cannot be geocoded for radius search", async () => {
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockResolvedValueOnce(null);
+    setupFairsDbMock({ fairDocs: [] });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ radiusMiles: "50", address: "___nonexistent_place_xyz___" });
+    expect(res.status).toBe(400);
   });
 });
 

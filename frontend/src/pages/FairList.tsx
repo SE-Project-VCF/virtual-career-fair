@@ -17,10 +17,16 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
+import LocationOnIcon from "@mui/icons-material/LocationOn"
+import MyLocationIcon from "@mui/icons-material/MyLocation"
 import BaseLayout from "../components/BaseLayout"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
@@ -47,6 +53,10 @@ interface Fair {
   isLive: boolean
   startTime: number | null
   endTime: number | null
+  venueCity?: string | null
+  venueState?: string | null
+  venueZip?: string | null
+  distanceMiles?: number
 }
 
 function getFairStatus(fair: Fair): { label: string; color: "success" | "primary" | "warning" | "default" } {
@@ -88,22 +98,95 @@ export default function FairList() {
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState("")
 
+  const [geoFilterActive, setGeoFilterActive] = useState(false)
+  const [searchAddress, setSearchAddress] = useState("")
+  const [radiusMiles, setRadiusMiles] = useState("50")
+  const [browserCoords, setBrowserCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [geoHint, setGeoHint] = useState("")
+
+  const loadFairsFromUrl = async (url: string, options?: { geo?: boolean }) => {
+    const res = await fetch(url)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || "Failed to load fairs")
+    setFairs(data.fairs || [])
+    if (options?.geo === true) setGeoFilterActive(true)
+    else setGeoFilterActive(false)
+    if (!options?.geo) setBrowserCoords(null)
+  }
+
   useEffect(() => {
     async function loadFairs() {
       try {
-        const res = await fetch(`${API_URL}/api/fairs`)
-        if (!res.ok) throw new Error("Failed to load fairs")
-        const data = await res.json()
-        setFairs(data.fairs || [])
-      } catch (err) {
+        setError("")
+        await loadFairsFromUrl(`${API_URL}/api/fairs`)
+      } catch (err: any) {
         console.error(err)
-        setError("Failed to load career fairs")
+        setError(err?.message || "Failed to load career fairs")
       } finally {
         setLoading(false)
       }
     }
     loadFairs()
   }, [])
+
+  const handleUseMyLocation = () => {
+    setGeoHint("")
+    if (!navigator.geolocation) {
+      setGeoHint("Location is not available in this browser.")
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setBrowserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setSearchAddress("")
+        setGeoHint("Using your current location for the next search.")
+      },
+      () => setGeoHint("Could not read your location. Check browser permissions."),
+      { enableHighAccuracy: false, timeout: 15000 },
+    )
+  }
+
+  const handleSearchByDistance = async () => {
+    const r = Number.parseFloat(radiusMiles)
+    if (!Number.isFinite(r) || r <= 0) {
+      setGeoHint("Choose a valid radius.")
+      return
+    }
+    let qs = `radiusMiles=${encodeURIComponent(String(r))}`
+    if (browserCoords) {
+      qs += `&lat=${encodeURIComponent(String(browserCoords.lat))}&lng=${encodeURIComponent(String(browserCoords.lng))}`
+    } else if (searchAddress.trim()) {
+      qs += `&address=${encodeURIComponent(searchAddress.trim())}`
+    } else {
+      setGeoHint("Enter a location or use your current location.")
+      return
+    }
+    setLoading(true)
+    setError("")
+    setGeoHint("")
+    try {
+      await loadFairsFromUrl(`${API_URL}/api/fairs?${qs}`, { geo: true })
+    } catch (err: any) {
+      setError(err?.message || "Search failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClearGeoFilter = async () => {
+    setSearchAddress("")
+    setBrowserCoords(null)
+    setGeoHint("")
+    setLoading(true)
+    setError("")
+    try {
+      await loadFairsFromUrl(`${API_URL}/api/fairs`)
+    } catch (err: any) {
+      setError(err?.message || "Failed to load career fairs")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Load enrollment status for company users
   useEffect(() => {
@@ -221,7 +304,91 @@ export default function FairList() {
 
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-        {!loading && !error && fairs.length === 0 && (
+        <Card variant="outlined" sx={{ mb: 3, p: 2 }}>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Find fairs by distance
+          </Typography>
+          <Grid container spacing={2} alignItems="flex-end">
+            <Grid size={{ xs: 12, md: 5 }}>
+              <TextField
+                label="City, address, or ZIP"
+                value={searchAddress}
+                onChange={(e) => {
+                  setSearchAddress(e.target.value)
+                  setBrowserCoords(null)
+                  setGeoHint("")
+                }}
+                fullWidth
+                size="small"
+                disabled={!!browserCoords}
+                placeholder={browserCoords ? "Using your location" : ""}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="fair-radius-label">Radius</InputLabel>
+                <Select
+                  labelId="fair-radius-label"
+                  label="Radius"
+                  value={radiusMiles}
+                  onChange={(e) => setRadiusMiles(e.target.value)}
+                >
+                  <MenuItem value="10">10 miles</MenuItem>
+                  <MenuItem value="25">25 miles</MenuItem>
+                  <MenuItem value="50">50 miles</MenuItem>
+                  <MenuItem value="100">100 miles</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<LocationOnIcon />}
+                  onClick={handleSearchByDistance}
+                  disabled={loading}
+                >
+                  Search
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<MyLocationIcon />}
+                  onClick={handleUseMyLocation}
+                  disabled={loading}
+                >
+                  My location
+                </Button>
+                {geoFilterActive && (
+                  <Button variant="text" onClick={handleClearGeoFilter} disabled={loading}>
+                    Show all fairs
+                  </Button>
+                )}
+              </Box>
+            </Grid>
+          </Grid>
+          {geoHint && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+              {geoHint}
+            </Typography>
+          )}
+        </Card>
+
+        {!loading && !error && fairs.length === 0 && geoFilterActive && (
+          <Box sx={{ textAlign: "center", py: 8 }}>
+            <LocationOnIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
+            <Typography variant="h6" color="text.secondary">
+              No fairs found within this distance.
+            </Typography>
+            <Typography color="text.secondary" mt={1}>
+              Try a larger radius, a different location, or show all fairs.
+            </Typography>
+            <Button sx={{ mt: 2 }} variant="outlined" onClick={handleClearGeoFilter}>
+              Show all fairs
+            </Button>
+          </Box>
+        )}
+
+        {!loading && !error && fairs.length === 0 && !geoFilterActive && (
           <Box sx={{ textAlign: "center", py: 8 }}>
             <EventIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
             <Typography variant="h6" color="text.secondary">
@@ -234,7 +401,7 @@ export default function FairList() {
         )}
 
         <Grid container spacing={3}>
-          {fairs.map((fair) => {
+          {fairs.length > 0 && fairs.map((fair) => {
             const status = getFairStatus(fair)
             const isEnded = fair.endTime !== null && Date.now() > fair.endTime
             const isEnrolled = fair.id in enrolledMap
@@ -291,6 +458,20 @@ export default function FairList() {
                         {fair.endTime ? ` – ${formatDate(fair.endTime)}` : ""}
                       </Typography>
                     </Box>
+
+                    {(fair.venueCity || fair.venueState || fair.venueZip || fair.distanceMiles !== undefined) && (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary", mt: 1 }}>
+                        <LocationOnIcon fontSize="small" />
+                        <Typography variant="body2">
+                          {[
+                            [fair.venueCity, fair.venueState].filter(Boolean).join(", "),
+                            fair.venueZip,
+                          ].filter(Boolean).join(" ")
+                            || "Location set"}
+                          {fair.distanceMiles === undefined ? "" : ` · ${fair.distanceMiles} mi away`}
+                        </Typography>
+                      </Box>
+                    )}
                   </CardContent>
 
                   <CardActions sx={{ p: 2, pt: 0, flexWrap: "wrap", gap: 1 }}>

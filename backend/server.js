@@ -1949,7 +1949,16 @@ app.get("/api/job-invitations/:invitationId", verifyFirebaseToken, async (req, r
 ---------------------------------------------------- */
 app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
   try {
-    const { companyId, boothName, location, description, representatives } =
+    const {
+      companyId,
+      boothName,
+      location,
+      description,
+      representatives,
+      locationIsRemote,
+      locationCity,
+      locationState,
+    } =
       req.body;
 
     if (!companyId || !boothName) {
@@ -1977,6 +1986,24 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
         .send({ success: false, error: "Description must be 2000 characters or less" });
     }
 
+    const isRemote = locationIsRemote === true;
+    let sanitizedCity = locationCity != null ? String(locationCity).trim().replaceAll("\0", "") : "";
+    let sanitizedState = locationState != null ? String(locationState).trim().replaceAll("\0", "") : "";
+    if (isRemote) {
+      sanitizedCity = null;
+      sanitizedState = null;
+    } else {
+      if (sanitizedCity.length > 100) {
+        return res
+          .status(400)
+          .send({ success: false, error: "City must be 100 characters or less" });
+      }
+      if (sanitizedState.length > 100) {
+        return res
+          .status(400)
+          .send({ success: false, error: "State must be 100 characters or less" });
+      }
+    }
 
     const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
     if (!authResult.authorized) {
@@ -1996,6 +2023,9 @@ app.post("/api/booths", verifyFirebaseToken, async (req, res) => {
         location: sanitizedLocation,
         description: sanitizedDescription,
         representatives,
+        locationIsRemote: isRemote,
+        locationCity: sanitizedCity || null,
+        locationState: sanitizedState || null,
         createdAt: admin.firestore.Timestamp.now(),
       })
     );

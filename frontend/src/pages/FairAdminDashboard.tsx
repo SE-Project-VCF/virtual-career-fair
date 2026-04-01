@@ -57,7 +57,15 @@ export default function FairAdminDashboard() {
 
   // Edit fair dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [editForm, setEditForm] = useState({ name: "", description: "", startTime: "", endTime: "" })
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    startTime: "",
+    endTime: "",
+    venueCity: "",
+    venueState: "",
+    venueZip: "",
+  })
   const [saving, setSaving] = useState(false)
 
   const [codeCopied, setCodeCopied] = useState(false)
@@ -81,6 +89,9 @@ export default function FairAdminDashboard() {
         description: fair.description || "",
         startTime: fair.startTime ? toLocalDatetime(fair.startTime) : "",
         endTime: fair.endTime ? toLocalDatetime(fair.endTime) : "",
+        venueCity: fair.venueCity ?? "",
+        venueState: fair.venueState ?? "",
+        venueZip: fair.venueZip ?? "",
       })
     }
   }, [fair])
@@ -143,6 +154,9 @@ export default function FairAdminDashboard() {
           description: editForm.description,
           startTime: editForm.startTime ? new Date(editForm.startTime).toISOString() : null,
           endTime: editForm.endTime ? new Date(editForm.endTime).toISOString() : null,
+          venueCity: editForm.venueCity.trim(),
+          venueState: editForm.venueState.trim(),
+          venueZip: editForm.venueZip.trim(),
         }),
       })
       if (!res.ok) {
@@ -477,7 +491,40 @@ export default function FairAdminDashboard() {
             onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })}
             fullWidth
             slotProps={{ inputLabel: { shrink: true } }}
+            sx={{ mb: 2 }}
           />
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+            Virtual fair hub
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+            City and state are required for search. Clear all three and save to remove the fair from distance search.
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="City"
+                value={editForm.venueCity}
+                onChange={(e) => setEditForm({ ...editForm, venueCity: e.target.value })}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="State / region"
+                value={editForm.venueState}
+                onChange={(e) => setEditForm({ ...editForm, venueState: e.target.value })}
+                fullWidth
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="ZIP / postal code"
+                value={editForm.venueZip}
+                onChange={(e) => setEditForm({ ...editForm, venueZip: e.target.value })}
+                fullWidth
+              />
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>

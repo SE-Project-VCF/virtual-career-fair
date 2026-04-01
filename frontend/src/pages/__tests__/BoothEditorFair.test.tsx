@@ -113,6 +113,9 @@ const fairBoothPayload = {
   industry: "software",
   companySize: "51-200",
   location: "San Francisco",
+  locationIsRemote: false,
+  locationCity: "San Francisco",
+  locationState: "CA",
   description: "Fair booth description",
   contactName: "Jane Doe",
   contactEmail: "owner@company.com",
@@ -341,7 +344,8 @@ describe("BoothEditor – fair-scoped", () => {
       )
       await user.click(screen.getByRole("option", { name: /51-200 employees/i }))
 
-      await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco")
+      await user.type(screen.getByRole("textbox", { name: /^city$/i }), "San Francisco")
+      await user.type(screen.getByRole("textbox", { name: /state.*region/i }), "CA")
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test")
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe")
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com")
