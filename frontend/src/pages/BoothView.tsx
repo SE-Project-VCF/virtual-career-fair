@@ -29,6 +29,7 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
+import VideocamIcon from "@mui/icons-material/Videocam"
 import BaseLayout from "../components/BaseLayout"
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
 import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
@@ -52,6 +53,15 @@ interface Booth {
   contactEmail: string
   contactPhone?: string
   companyId?: string
+  qaSession?: {
+    title: string
+    description?: string
+    scheduledTime: number | string
+    duration: number
+    jitsiRoom?: string
+    streamChatChannelId?: string
+    status?: string
+  }
 }
 
 interface Job {
@@ -308,6 +318,34 @@ export default function BoothView() {
       const boothData = await loadBoothData(boothId, fairIsLive)
       if (!boothData || !isMountedRef.current) return
 
+      // Fetch Q&A sessions for this booth
+      try {
+        const token = await authUtils.getIdToken()
+        const qaRes = await fetch(`${API_URL}/api/booth/${boothId}/qa-session`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (qaRes.ok) {
+          const qaData = await qaRes.json() as any
+          console.log("Q&A Sessions data:", qaData)
+          // Support new array format (qaSessions) and backwards compatibility (qaSession)
+          if (qaData.qaSessions && qaData.qaSessions.length > 0) {
+            (boothData as any).qaSessions = qaData.qaSessions
+            boothData.qaSession = qaData.qaSessions[0] // For backwards compatibility
+            console.log(`Sessions attached to booth: ${qaData.qaSessions.length} sessions, first:`, boothData.qaSession)
+          } else if (qaData.qaSession) {
+            boothData.qaSession = qaData.qaSession as any
+            (boothData as any).qaSessions = [qaData.qaSession]
+            console.log("Session attached to booth:", boothData.qaSession)
+          } else {
+            console.log("No sessions in response for booth:", boothId)
+          }
+        } else {
+          console.warn("Failed to fetch Q&A sessions - status:", qaRes.status)
+        }
+      } catch (err) {
+        console.warn("Failed to fetch Q&A sessions:", err)
+      }
+
       setBooth(boothData)
       await trackStudentBoothView(boothData)
       await fetchMyRating(boothId)
@@ -459,6 +497,102 @@ export default function BoothView() {
                 </Box>
 
                 <Divider sx={{ my: 3 }} />
+
+                {/* Q&A Session */}
+                {booth.qaSession && (
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
+                      <VideocamIcon sx={{ color: "#388560" }} />
+                      📹 Q&A Session
+                    </Typography>
+                    <Card sx={{ bgcolor: "rgba(56, 133, 96, 0.05)", border: "2px solid rgba(56, 133, 96, 0.2)", p: 2 }}>
+                      <CardContent sx={{ p: 0 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                          {booth.qaSession.title}
+                        </Typography>
+                        {booth.qaSession.description && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            {booth.qaSession.description}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: "flex", gap: 3, mb: 2, fontSize: "0.95rem", color: "text.secondary" }}>
+                          {/* Scheduled Time */}
+                          <Box>
+                            <strong>Scheduled:</strong> {(() => {
+                              const sessionTime = typeof booth.qaSession.scheduledTime === 'number' 
+                                ? new Date(booth.qaSession.scheduledTime)
+                                : new Date(booth.qaSession.scheduledTime);
+                              if (isNaN(sessionTime.getTime())) return "Invalid date";
+                              return sessionTime.toLocaleString();
+                            })()}
+                          </Box>
+                          {/* Duration */}
+                          <Box>
+                            <strong>Duration:</strong> {booth.qaSession.duration} min
+                          </Box>
+                        </Box>
+
+                        {/* Time countdown and join button */}
+                        {(() => {
+                          const sessionTime = typeof booth.qaSession.scheduledTime === 'number' 
+                            ? new Date(booth.qaSession.scheduledTime)
+                            : new Date(booth.qaSession.scheduledTime);
+                          const now = new Date();
+                          const timeUntilStart = sessionTime.getTime() - now.getTime();
+                          const minutesUntilStart = Math.floor(timeUntilStart / (1000 * 60));
+                          
+                          // Calculate end time
+                          const endTime = new Date(sessionTime.getTime() + booth.qaSession.duration * 60 * 1000);
+                          const timeUntilEnd = endTime.getTime() - now.getTime();
+                          const minutesUntilEnd = Math.floor(timeUntilEnd / (1000 * 60));
+                          
+                          // Check session states
+                          const isUpcoming = timeUntilStart > 0;
+                          const isActive = timeUntilStart <= 0 && timeUntilEnd > 0;
+                          const isPast = timeUntilEnd <= 0;
+                          
+                          // Can join: from 15 mins before start through entire duration
+                          const canJoin = minutesUntilStart <= 15 && timeUntilEnd > 0;
+
+                          return (
+                            <>
+                              {isUpcoming && (
+                                <Typography variant="body2" sx={{ mb: 2, color: "#f57c00", fontWeight: 600 }}>
+                                  Starts in {minutesUntilStart > 60 ? Math.floor(minutesUntilStart / 60) + "h " : ""}{minutesUntilStart % 60}m
+                                </Typography>
+                              )}
+                              {isActive && (
+                                <Typography variant="body2" sx={{ mb: 2, color: "#d32f2f", fontWeight: 600 }}>
+                                  🔴 Call in Progress - Ends in {Math.max(0, minutesUntilEnd)}m
+                                </Typography>
+                              )}
+                              {isPast && (
+                                <Typography variant="body2" sx={{ mb: 2, color: "#9e9e9e" }}>
+                                  Session has ended
+                                </Typography>
+                              )}
+                              <Button
+                                variant="contained"
+                                startIcon={<VideocamIcon />}
+                                onClick={() => navigate(`/qa-session/${booth.id}`)}
+                                disabled={!canJoin}
+                                sx={{
+                                  background: isActive
+                                    ? "linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)" 
+                                    : "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {isActive ? "Join Now" : isUpcoming && canJoin ? "Join Session" : isUpcoming ? `Available in ${Math.max(0, minutesUntilStart)}m` : "Join Session"}
+                              </Button>
+                            </>
+                          );
+                        })()}
+                      </CardContent>
+                    </Card>
+                    <Divider sx={{ my: 3 }} />
+                  </Box>
+                )}
 
                 {/* Company Description */}
                 <Box sx={{ mb: 4 }}>

@@ -16,6 +16,7 @@ import ChatPage from "./pages/ChatPage"
 import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage"
 import JobInvitations from "./pages/JobInvitations"
+import CallInvitationsPage from "./pages/CallInvitationsPage"
 import FairBoothsPage from "./pages/FairBoothsPage"
 import StudentFairBoothsPage from "./pages/StudentFairBoothsPage"
 import TailorResumeSimplePage from "./pages/TailorResumeSimplePage"
@@ -27,7 +28,14 @@ import FairLanding from "./pages/FairLanding"
 import FairBooths from "./pages/FairBooths"
 import FairBoothView from "./pages/FairBoothView"
 import FairAdminDashboard from "./pages/FairAdminDashboard"
+import ShortlistPage from "./pages/ShortlistPage"
+import QASessionsPage from "./pages/QASessionsPage"
+import QASessionPage from "./pages/QASessionPage"
 import { FairProvider } from "./contexts/FairContext"
+import { setupConsoleErrorFilter } from "./utils/consoleErrorFilter"
+
+// Setup console error filter to suppress benign TensorFlow warnings
+setupConsoleErrorFilter()
 
 // Wrapper components to inject fairId from URL params into FairProvider
 function FairLandingWrapper() {
@@ -64,6 +72,9 @@ function App() {
         <Route path="/dashboard/chat" element={<ChatPage />} />
         <Route path="/dashboard/booth-history" element={<BoothHistoryPage />} />
         <Route path="/dashboard/job-invitations" element={<JobInvitations />} />
+        <Route path="/dashboard/call-invitations" element={<CallInvitationsPage />} />
+        <Route path="/dashboard/shortlist" element={<ShortlistPage />} />
+        <Route path="/dashboard/qa-sessions" element={<QASessionsPage />} />
         <Route path="/dashboard/tailored-resumes" element={<TailoredResumesPage />} />
         <Route path="/dashboard/tailored-resume/:tailoredResumeId" element={<TailoredResumeViewPage />} />
         <Route path="/invitations/:invitationId/tailor-simple" element={<TailorResumeSimplePage />} />
@@ -78,6 +89,7 @@ function App() {
         <Route path="/fairs/:fairId/booths" element={<StudentFairBoothsPage />} />
         <Route path="/booth/:boothId" element={<BoothView />} />
         <Route path="/booth/:boothId/visitors" element={<BoothVisitorsPage />} />
+        <Route path="/qa-session/:boothId" element={<QASessionPage />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/profile" element={<StudentProfilePage />} />

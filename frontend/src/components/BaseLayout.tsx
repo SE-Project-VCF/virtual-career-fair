@@ -21,6 +21,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard"
 import EventIcon from "@mui/icons-material/Event"
 import PersonIcon from "@mui/icons-material/Person"
 import MailIcon from "@mui/icons-material/Mail"
+import VideoCallIcon from "@mui/icons-material/VideoCall"
 import DescriptionIcon from "@mui/icons-material/Description"
 import HistoryIcon from "@mui/icons-material/History"
 import BusinessIcon from "@mui/icons-material/Business"
@@ -50,6 +51,7 @@ function getNavItems(user: User | null): NavItem[] {
 
   const studentItems: NavItem[] = [
     { label: "Job Invitations", path: "/dashboard/job-invitations", icon: <MailIcon /> },
+    { label: "Call Invitations", path: "/dashboard/call-invitations", icon: <VideoCallIcon /> },
     { label: "Tailored Resumes", path: "/dashboard/tailored-resumes", icon: <DescriptionIcon /> },
     { label: "Booth History", path: "/dashboard/booth-history", icon: <HistoryIcon /> },
   ]

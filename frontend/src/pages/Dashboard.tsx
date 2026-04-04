@@ -12,6 +12,8 @@ import ShareIcon from "@mui/icons-material/Share"
 import PeopleIcon from "@mui/icons-material/People"
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"
 import MailIcon from "@mui/icons-material/Mail"
+import VideoCallIcon from "@mui/icons-material/VideoCall"
+import GroupsIcon from "@mui/icons-material/Groups"
 import EventList from "../components/EventList"
 import BaseLayout from "../components/BaseLayout"
 
@@ -260,6 +262,40 @@ function BrowseBoothsCard({ navigate, isLive, showHistory }: Readonly<{
   );
 }
 
+// Component for Employer Video Chat section (Shortlist, Q&A Sessions)
+function EmployerVideoChatSection({ navigate }: Readonly<{
+  navigate: ReturnType<typeof useNavigate>
+}>) {
+  return (
+    <Box sx={{ mb: 6 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+        📹 Recruitment & Video Chat
+      </Typography>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <DashboardCard
+            icon={<VideoCallIcon sx={{ fontSize: 32, color: "#388560" }} />}
+            title="Candidate Shortlist"
+            description="Build and manage your candidate shortlist. Schedule 1v1 video calls with interested students."
+            buttonLabel="Manage Shortlist"
+            buttonOnClick={() => navigate("/dashboard/shortlist")}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <DashboardCard
+            icon={<GroupsIcon sx={{ fontSize: 32, color: "#b03a6c" }} />}
+            title="Q&A Sessions"
+            description="Host live group Q&A sessions. Present to multiple students and answer their questions in real-time."
+            buttonLabel="Manage Sessions"
+            buttonOnClick={() => navigate("/dashboard/qa-sessions")}
+            colorTheme="pink"
+          />
+        </Grid>
+      </Grid>
+    </Box>
+  )
+}
+
 // Component for Representative section
 function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
@@ -268,10 +304,11 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
   setInviteCodeDialogOpen: (open: boolean) => void
 }>) {
   return (
-    <Box sx={{ mb: 6 }}>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        💼 Company Management
-      </Typography>
+    <>
+      <Box sx={{ mb: 6 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+          💼 Company Management
+        </Typography>
       <Grid container spacing={3}>
         {!user.companyId && (
           <Grid size={{ xs: 12 }}>
@@ -345,6 +382,8 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
         <BrowseBoothsCard navigate={navigate} isLive={isLive} />
       </Grid>
     </Box>
+    <EmployerVideoChatSection navigate={navigate} />
+    </>
   )
 }
 
@@ -497,10 +536,11 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledF
   enrolledFairCount: number
 }>) {
   return (
-    <Box sx={{ mb: 6 }}>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        💼 Company Management
-      </Typography>
+    <>
+      <Box sx={{ mb: 6 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
+          💼 Company Management
+        </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, sm: 6, md: 6 }}>
           <DashboardCard
@@ -535,6 +575,8 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledF
         <BrowseBoothsCard navigate={navigate} isLive={isLive} showHistory />
       </Grid>
     </Box>
+    <EmployerVideoChatSection navigate={navigate} />
+    </>
   )
 }
 
