@@ -29,6 +29,8 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import ShareIcon from "@mui/icons-material/Share"
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import ApartmentIcon from "@mui/icons-material/Apartment"
+import PresentationIcon from "@mui/icons-material/Slideshow"
+import PeopleIcon from "@mui/icons-material/People"
 import NotificationBell from "./NotificationBell"
 import ProfileMenu from "../pages/ProfileMenu"
 import { authUtils, type User } from "../utils/auth"
@@ -60,6 +62,9 @@ function getNavItems(user: User | null): NavItem[] {
   const companyOwnerItems: NavItem[] = [
     { label: "Manage Companies", path: "/companies", icon: <ShareIcon /> },
     { label: "Browse Booths", path: "/booths", icon: <BusinessIcon /> },
+    { label: "Candidate Shortlist", path: "/dashboard/shortlist", icon: <PeopleIcon /> },
+    { label: "Q&A Sessions", path: "/dashboard/qa-sessions", icon: <PresentationIcon /> },
+    { label: "My 1x1 Calls", path: "/dashboard/my-calls", icon: <VideoCallIcon /> },
   ]
 
   // representative links are dynamic — depend on their assigned companyId
@@ -68,6 +73,9 @@ function getNavItems(user: User | null): NavItem[] {
         { label: "Manage Booth", path: `/company/${user.companyId}/booth`, icon: <BusinessIcon /> },
         { label: "Submissions", path: `/company/${user.companyId}/submissions`, icon: <AssignmentIcon /> },
         { label: "Browse Booths", path: "/booths", icon: <EventIcon /> },
+        { label: "Candidate Shortlist", path: "/dashboard/shortlist", icon: <PeopleIcon /> },
+        { label: "Q&A Sessions", path: "/dashboard/qa-sessions", icon: <PresentationIcon /> },
+        { label: "My 1x1 Calls", path: "/dashboard/my-calls", icon: <VideoCallIcon /> },
       ]
     : [
         { label: "Browse Booths", path: "/booths", icon: <BusinessIcon /> },

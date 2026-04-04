@@ -33,13 +33,15 @@ interface JobInvitation {
 }
 
 interface VideoCallInvitation {
-  inviteId: string;
-  callId: string;
-  empName: string;
-  empEmail: string;
-  companyName: string;
+  id: string;
+  employerId: string;
+  employerName: string;
+  employerCompanyName: string;
+  studentId: string;
   status: 'pending' | 'accepted' | 'declined';
   createdAt: number;
+  scheduledTime: number;
+  jitsiRoom: string;
 }
 
 export default function NotificationBell() {
@@ -87,7 +89,7 @@ export default function NotificationBell() {
       if (!token) return;
 
       const response = await fetch(
-        `${API_URL}/api/calls/my-invitations`,
+        `${API_URL}/api/call-invitations/incoming`,
         {
           method: "GET",
           headers: {
@@ -99,10 +101,16 @@ export default function NotificationBell() {
 
       if (response.ok) {
         const data = await response.json();
-        const pendingInvites = (data.invitations || []).filter(
+        const invitations = data.invitations || [];
+        const pendingInvites = invitations.filter(
           (inv: VideoCallInvitation) => inv.status === 'pending'
         );
-        setVideoCallInvitations(pendingInvites.slice(0, 5));
+        // Convert timestamp to milliseconds if needed
+        const invitesWithTime = pendingInvites.map((inv: VideoCallInvitation) => ({
+          ...inv,
+          createdAt: typeof inv.createdAt === 'object' ? (inv.createdAt as any).toMillis?.() || Date.now() : inv.createdAt || Date.now(),
+        }));
+        setVideoCallInvitations(invitesWithTime.slice(0, 5));
         setUnreadVideoCount(pendingInvites.length);
       }
     } catch (err) {
@@ -320,7 +328,7 @@ export default function NotificationBell() {
             [
               videoCallInvitations.map((invitation) => (
                 <MenuItem
-                  key={invitation.inviteId}
+                  key={invitation.id}
                   onClick={handleVideoCallClick}
                   sx={{
                     py: 1.5,
@@ -335,13 +343,13 @@ export default function NotificationBell() {
                   <ListItemText
                     primary={
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {invitation.empName || "Employer"}
+                        {invitation.employerName || "Employer"}
                       </Typography>
                     }
                     secondary={
                       <Box>
                         <Typography variant="caption" color="text.secondary" component="div">
-                          {invitation.companyName || "Company"}
+                          {invitation.employerCompanyName || "Company"}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {formatTime(invitation.createdAt)}

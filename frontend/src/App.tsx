@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom"
+import { Box, Container } from "@mui/material"
 import StudentProfilePage from "./pages/StudentProfilePage"
 import RoleSelection from "./pages/RoleSelection"
 import Register from "./pages/Register"
@@ -31,6 +32,10 @@ import FairAdminDashboard from "./pages/FairAdminDashboard"
 import ShortlistPage from "./pages/ShortlistPage"
 import QASessionsPage from "./pages/QASessionsPage"
 import QASessionPage from "./pages/QASessionPage"
+import { StudentCallInvitations } from "./pages/StudentCallInvitations"
+import { EmployerMyCalls } from "./pages/EmployerMyCalls"
+import { Call1x1Room } from "./components/videoChat/Call1x1Room"
+import BaseLayout from "./components/BaseLayout"
 import { FairProvider } from "./contexts/FairContext"
 import { setupConsoleErrorFilter } from "./utils/consoleErrorFilter"
 
@@ -59,6 +64,20 @@ function FairBoothEditorWrapper() {
   return <FairProvider fairId={fairId || ""}><BoothEditor /></FairProvider>
 }
 
+function Call1x1RoomWrapper() {
+  const { invitationId } = useParams<{ invitationId: string }>()
+  
+  return (
+    <BaseLayout pageTitle="1x1 Call">
+      <Box sx={{ bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+        <Container maxWidth="lg" sx={{ py: 2, height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}>
+          <Call1x1Room invitationId={invitationId || ""} />
+        </Container>
+      </Box>
+    </BaseLayout>
+  )
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -73,6 +92,9 @@ function App() {
         <Route path="/dashboard/booth-history" element={<BoothHistoryPage />} />
         <Route path="/dashboard/job-invitations" element={<JobInvitations />} />
         <Route path="/dashboard/call-invitations" element={<CallInvitationsPage />} />
+        <Route path="/dashboard/1x1-calls" element={<StudentCallInvitations />} />
+        <Route path="/dashboard/my-calls" element={<EmployerMyCalls />} />
+        <Route path="/dashboard/1x1-call/:invitationId" element={<Call1x1RoomWrapper />} />
         <Route path="/dashboard/shortlist" element={<ShortlistPage />} />
         <Route path="/dashboard/qa-sessions" element={<QASessionsPage />} />
         <Route path="/dashboard/tailored-resumes" element={<TailoredResumesPage />} />

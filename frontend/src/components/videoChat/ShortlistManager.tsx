@@ -24,6 +24,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import { authUtils } from '../../utils/auth';
+import { UserSearchSelector, type UserSearchResult } from './UserSearchSelector';
 
 interface ShortlistEntry {
   studentId: string;
@@ -45,7 +46,7 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
-  const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<UserSearchResult | null>(null);
   const [newNotes, setNewNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -57,6 +58,10 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
         setError(null);
 
         const token = await authUtils.getIdToken();
+        if (!token) {
+          throw new Error('Not authenticated. Please log in again.');
+        }
+
         const response = await fetch('/api/shortlist/list', {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -64,7 +69,10 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch shortlist');
+          if (response.status === 401) {
+            throw new Error('Authentication failed. Please log in again.');
+          }
+          throw new Error(`Failed to fetch shortlist (${response.status})`);
         }
 
         const data = await response.json();
@@ -85,6 +93,11 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
   const handleRemove = async (studentId: string) => {
     try {
       const token = await authUtils.getIdToken();
+      if (!token) {
+        setError('Not authenticated. Please log in again.');
+        return;
+      }
+
       const response = await fetch(`/api/shortlist/${studentId}`, {
         method: 'DELETE',
         headers: {
@@ -108,8 +121,8 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
 
   // Add to shortlist
   const handleAddToShortlist = async () => {
-    if (!newStudentEmail.trim()) {
-      setError('Please enter student email');
+    if (!selectedStudent) {
+      setError('Please select a student');
       return;
     }
 
@@ -117,9 +130,13 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
       setIsSubmitting(true);
       setError(null);
 
-      // TODO: You'll need to implement an endpoint to look up student by email
-      // For now, we'll assume the email is the studentId
       const token = await authUtils.getIdToken();
+      if (!token) {
+        setError('Not authenticated. Please log in again.');
+        setIsSubmitting(false);
+        return;
+      }
+
       const response = await fetch('/api/shortlist/add', {
         method: 'POST',
         headers: {
@@ -127,7 +144,7 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          studentId: newStudentEmail,
+          studentId: selectedStudent.id,
           notes: newNotes,
         }),
       });
@@ -150,7 +167,7 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
       }
 
       setOpenDialog(false);
-      setNewStudentEmail('');
+      setSelectedStudent(null);
       setNewNotes('');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -233,14 +250,17 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
                       </Stack>
                     }
                     secondary={
-                      <Box component="div">
-                        <div>{entry.studentEmail}</div>
+                      <>
+                        {entry.studentEmail}
                         {entry.notes && (
-                          <div style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}>
-                            Notes: {entry.notes}
-                          </div>
+                          <>
+                            <br />
+                            <span style={{ fontSize: '0.85em', color: '#666' }}>
+                              Notes: {entry.notes}
+                            </span>
+                          </>
                         )}
-                      </Box>
+                      </>
                     }
                   />
                 </ListItemButton>
@@ -255,14 +275,12 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
         <DialogTitle>Add Student to Shortlist</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          <TextField
-            fullWidth
-            label="Student Email or ID"
-            placeholder="student@example.com"
-            value={newStudentEmail}
-            onChange={(e) => setNewStudentEmail(e.target.value)}
-            sx={{ mb: 2 }}
+          <UserSearchSelector
+            value={selectedStudent}
+            onChange={setSelectedStudent}
             disabled={isSubmitting}
+            label="Search Student *"
+            placeholder="Search by name or email"
           />
           <TextField
             fullWidth
@@ -273,6 +291,7 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
             multiline
             rows={3}
             disabled={isSubmitting}
+            sx={{ mt: 2 }}
           />
         </DialogContent>
         <DialogActions>
@@ -282,7 +301,7 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
           <Button
             onClick={handleAddToShortlist}
             variant="contained"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !selectedStudent}
           >
             {isSubmitting ? 'Adding...' : 'Add'}
           </Button>

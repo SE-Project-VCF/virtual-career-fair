@@ -1,6 +1,5 @@
 export { VideoRoom } from './VideoRoom';
 export { useJitsiControl } from './useJitsiControl';
-export { CallRoom } from './CallRoom';
 export { QASessionRoom } from './QASessionRoom';
 export { ShortlistManager } from './ShortlistManager';
 export { ScheduleCallDialog } from './ScheduleCallDialog';

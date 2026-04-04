@@ -669,7 +669,12 @@ export default function Dashboard() {
         console.log("✅ Resume parsing completed successfully");
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : String(e);
-        console.error("❌ Resume parsing failed:", errorMessage);
+        // Only log as error if not a login/auth issue - these are expected during app initialization
+        if (errorMessage.includes("Not logged in") || errorMessage.includes("No resumePath")) {
+          console.debug("⏭️  Resume parsing skipped:", errorMessage);
+        } else {
+          console.error("❌ Resume parsing failed:", errorMessage);
+        }
       }
     })();
   }, []);
