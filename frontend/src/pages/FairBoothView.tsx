@@ -37,6 +37,12 @@ import { trackBoothView } from "../utils/boothHistory"
 import { API_URL } from "../config"
 import { INDUSTRY_LABELS, fetchMyBoothRating, submitBoothRating } from "../utils/boothConstants"
 import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
+import { fetchQaSessionsAndMergeIntoBooth } from "../utils/qaSessionBooth"
+import {
+  formatQaSessionScheduledDisplay,
+  formatStartsInCountdown,
+  getQaSessionJoinUiState,
+} from "../utils/qaSessionUi"
 
 interface Booth {
   id: string
@@ -73,7 +79,6 @@ interface Job {
   companyId?: string
   applicationForm?: ApplicationForm | null
 }
-
 
 export default function FairBoothView() {
   const navigate = useNavigate()
@@ -155,7 +160,7 @@ export default function FairBoothView() {
       const originalOrFairBoothId = boothData.originalBoothId || boothId;
       trackingBoothIdRef.current = originalOrFairBoothId;
       
-      console.log(`[FAIR-BOOTH-VIEW] Tracking view - originalBoothId: ${boothData.originalBoothId}, fairBoothId: ${boothId}`)
+      console.log("[FAIR-BOOTH-VIEW] Tracking view")
       
       // Track in local history using the original root booth ID
       await trackBoothView(user.uid, {
@@ -223,28 +228,7 @@ export default function FairBoothView() {
       const boothData = await boothRes.json()
       if (!isMountedRef.current) return
       
-      // Fetch Q&A sessions for this booth
-      try {
-        const token = await authUtils.getIdToken()
-        const qaRes = await fetch(`${API_URL}/api/booth/${boothId}/qa-session`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (qaRes.ok) {
-          const qaData = await qaRes.json()
-          if (isMountedRef.current) {
-            // Support new array format (qaSessions) and backwards compatibility (qaSession)
-            if (qaData.qaSessions && qaData.qaSessions.length > 0) {
-              boothData.qaSessions = qaData.qaSessions
-              boothData.qaSession = qaData.qaSessions[0] // For backwards compatibility
-            } else if (qaData.qaSession) {
-              boothData.qaSession = qaData.qaSession
-              boothData.qaSessions = [qaData.qaSession]
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Failed to fetch Q&A sessions:", err)
-      }
+      await fetchQaSessionsAndMergeIntoBooth(boothId, boothData, () => isMountedRef.current)
 
       setBooth({ id: boothId, ...boothData })
       await trackStudentBoothView(boothData)
@@ -396,44 +380,24 @@ export default function FairBoothView() {
                           )}
                           <Box sx={{ display: "flex", gap: 3, mb: 2, fontSize: "0.95rem", color: "text.secondary" }}>
                             <Box>
-                              <strong>Scheduled:</strong> {(() => {
-                                const sessionTime = typeof booth.qaSession.scheduledTime === 'number' 
-                                  ? new Date(booth.qaSession.scheduledTime)
-                                  : new Date(booth.qaSession.scheduledTime);
-                                if (isNaN(sessionTime.getTime())) return "Invalid date";
-                                return sessionTime.toLocaleString();
-                              })()}
+                              <strong>Scheduled:</strong>{" "}
+                              {formatQaSessionScheduledDisplay(booth.qaSession.scheduledTime)}
                             </Box>
                             <Box>
                               <strong>Duration:</strong> {booth.qaSession.duration} min
                             </Box>
                           </Box>
                           {(() => {
-                            const sessionTime = typeof booth.qaSession.scheduledTime === 'number' 
-                              ? new Date(booth.qaSession.scheduledTime)
-                              : new Date(booth.qaSession.scheduledTime);
-                            const now = new Date();
-                            const timeUntilStart = sessionTime.getTime() - now.getTime();
-                            const minutesUntilStart = Math.floor(timeUntilStart / (1000 * 60));
-                            
-                            // Calculate end time
-                            const endTime = new Date(sessionTime.getTime() + booth.qaSession.duration * 60 * 1000);
-                            const timeUntilEnd = endTime.getTime() - now.getTime();
-                            const minutesUntilEnd = Math.floor(timeUntilEnd / (1000 * 60));
-                            
-                            // Check session states
-                            const isUpcoming = timeUntilStart > 0;
-                            const isActive = timeUntilStart <= 0 && timeUntilEnd > 0;
-                            const isPast = timeUntilEnd <= 0;
-                            
-                            // Can join: from 15 mins before start through entire duration
-                            const canJoin = minutesUntilStart <= 15 && timeUntilEnd > 0;
-
+                            const join = getQaSessionJoinUiState(
+                              booth.qaSession.scheduledTime,
+                              booth.qaSession.duration
+                            );
+                            const { isUpcoming, isActive, isPast, canJoin, joinButtonLabel, minutesUntilEnd } = join;
                             return (
                               <>
                                 {isUpcoming && (
                                   <Typography variant="body2" sx={{ mb: 2, color: "#f57c00", fontWeight: 600 }}>
-                                    Starts in {minutesUntilStart > 60 ? Math.floor(minutesUntilStart / 60) + "h " : ""}{minutesUntilStart % 60}m
+                                    Starts in {formatStartsInCountdown(join.minutesUntilStart)}
                                   </Typography>
                                 )}
                                 {isActive && (
@@ -458,7 +422,7 @@ export default function FairBoothView() {
                                     fontWeight: 600,
                                   }}
                                 >
-                                  {isActive ? "Join Now" : isUpcoming && canJoin ? "Join Session" : isUpcoming ? `Available in ${Math.max(0, minutesUntilStart)}m` : "Join Session"}
+                                  {joinButtonLabel}
                                 </Button>
                               </>
                             );

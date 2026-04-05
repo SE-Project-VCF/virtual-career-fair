@@ -223,7 +223,7 @@ export default function NotificationBell() {
           </Typography>
           {totalUnread > 0 && (
             <Typography variant="caption" color="text.secondary">
-              {totalUnread} new notification{totalUnread !== 1 ? 's' : ''}
+              {totalUnread} new notification{totalUnread === 1 ? '' : 's'}
             </Typography>
           )}
         </Box>

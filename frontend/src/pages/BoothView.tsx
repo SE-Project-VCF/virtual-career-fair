@@ -36,6 +36,12 @@ import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
 import { INDUSTRY_LABELS, fetchMyBoothRating, submitBoothRating } from "../utils/boothConstants"
+import { fetchQaSessionsAndMergeIntoBooth } from "../utils/qaSessionBooth"
+import {
+  formatQaSessionScheduledDisplay,
+  formatStartsInCountdown,
+  getQaSessionJoinUiState,
+} from "../utils/qaSessionUi"
 
 interface Booth {
   id: string
@@ -318,33 +324,11 @@ export default function BoothView() {
       const boothData = await loadBoothData(boothId, fairIsLive)
       if (!boothData || !isMountedRef.current) return
 
-      // Fetch Q&A sessions for this booth
-      try {
-        const token = await authUtils.getIdToken()
-        const qaRes = await fetch(`${API_URL}/api/booth/${boothId}/qa-session`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (qaRes.ok) {
-          const qaData = await qaRes.json() as any
-          console.log("Q&A Sessions data:", qaData)
-          // Support new array format (qaSessions) and backwards compatibility (qaSession)
-          if (qaData.qaSessions && qaData.qaSessions.length > 0) {
-            (boothData as any).qaSessions = qaData.qaSessions
-            boothData.qaSession = qaData.qaSessions[0] // For backwards compatibility
-            console.log(`Sessions attached to booth: ${qaData.qaSessions.length} sessions, first:`, boothData.qaSession)
-          } else if (qaData.qaSession) {
-            boothData.qaSession = qaData.qaSession as any
-            (boothData as any).qaSessions = [qaData.qaSession]
-            console.log("Session attached to booth:", boothData.qaSession)
-          } else {
-            console.log("No sessions in response for booth:", boothId)
-          }
-        } else {
-          console.warn("Failed to fetch Q&A sessions - status:", qaRes.status)
-        }
-      } catch (err) {
-        console.warn("Failed to fetch Q&A sessions:", err)
-      }
+      await fetchQaSessionsAndMergeIntoBooth(
+        boothId,
+        boothData as unknown as Record<string, unknown>,
+        () => isMountedRef.current
+      )
 
       setBooth(boothData)
       await trackStudentBoothView(boothData)
@@ -518,13 +502,8 @@ export default function BoothView() {
                         <Box sx={{ display: "flex", gap: 3, mb: 2, fontSize: "0.95rem", color: "text.secondary" }}>
                           {/* Scheduled Time */}
                           <Box>
-                            <strong>Scheduled:</strong> {(() => {
-                              const sessionTime = typeof booth.qaSession.scheduledTime === 'number' 
-                                ? new Date(booth.qaSession.scheduledTime)
-                                : new Date(booth.qaSession.scheduledTime);
-                              if (isNaN(sessionTime.getTime())) return "Invalid date";
-                              return sessionTime.toLocaleString();
-                            })()}
+                            <strong>Scheduled:</strong>{" "}
+                            {formatQaSessionScheduledDisplay(booth.qaSession.scheduledTime)}
                           </Box>
                           {/* Duration */}
                           <Box>
@@ -534,31 +513,16 @@ export default function BoothView() {
 
                         {/* Time countdown and join button */}
                         {(() => {
-                          const sessionTime = typeof booth.qaSession.scheduledTime === 'number' 
-                            ? new Date(booth.qaSession.scheduledTime)
-                            : new Date(booth.qaSession.scheduledTime);
-                          const now = new Date();
-                          const timeUntilStart = sessionTime.getTime() - now.getTime();
-                          const minutesUntilStart = Math.floor(timeUntilStart / (1000 * 60));
-                          
-                          // Calculate end time
-                          const endTime = new Date(sessionTime.getTime() + booth.qaSession.duration * 60 * 1000);
-                          const timeUntilEnd = endTime.getTime() - now.getTime();
-                          const minutesUntilEnd = Math.floor(timeUntilEnd / (1000 * 60));
-                          
-                          // Check session states
-                          const isUpcoming = timeUntilStart > 0;
-                          const isActive = timeUntilStart <= 0 && timeUntilEnd > 0;
-                          const isPast = timeUntilEnd <= 0;
-                          
-                          // Can join: from 15 mins before start through entire duration
-                          const canJoin = minutesUntilStart <= 15 && timeUntilEnd > 0;
-
+                          const join = getQaSessionJoinUiState(
+                            booth.qaSession.scheduledTime,
+                            booth.qaSession.duration
+                          );
+                          const { isUpcoming, isActive, isPast, canJoin, joinButtonLabel, minutesUntilEnd } = join;
                           return (
                             <>
                               {isUpcoming && (
                                 <Typography variant="body2" sx={{ mb: 2, color: "#f57c00", fontWeight: 600 }}>
-                                  Starts in {minutesUntilStart > 60 ? Math.floor(minutesUntilStart / 60) + "h " : ""}{minutesUntilStart % 60}m
+                                  Starts in {formatStartsInCountdown(join.minutesUntilStart)}
                                 </Typography>
                               )}
                               {isActive && (
@@ -583,7 +547,7 @@ export default function BoothView() {
                                   fontWeight: 600,
                                 }}
                               >
-                                {isActive ? "Join Now" : isUpcoming && canJoin ? "Join Session" : isUpcoming ? `Available in ${Math.max(0, minutesUntilStart)}m` : "Join Session"}
+                                {joinButtonLabel}
                               </Button>
                             </>
                           );

@@ -45,7 +45,7 @@ interface BrowseQASessionsProps {
 export function BrowseQASessionsPage({
   fairId,
   onJoinSession,
-}: BrowseQASessionsProps) {
+}: Readonly<BrowseQASessionsProps>) {
   const [sessions, setSessions] = useState<QASession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

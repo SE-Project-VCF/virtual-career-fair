@@ -20,6 +20,9 @@ import {
   serverTimestamp,
   Timestamp,
   getDocs,
+  type QueryDocumentSnapshot,
+  type DocumentData,
+  type QuerySnapshot,
 } from 'firebase/firestore';
 import { authUtils } from '../../utils/auth';
 
@@ -39,6 +42,26 @@ interface FirebaseQAChatProps {
   onError?: (error: Error) => void;
 }
 
+function messageFromDoc(doc: QueryDocumentSnapshot<DocumentData>): QAChatMessage {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    userId: data.userId,
+    userName: data.userName,
+    text: data.text,
+    timestamp: data.timestamp,
+    role: data.role,
+  };
+}
+
+function messagesFromSnapshot(snapshot: QuerySnapshot<DocumentData>): QAChatMessage[] {
+  const allMessages: QAChatMessage[] = [];
+  snapshot.forEach((doc) => {
+    allMessages.push(messageFromDoc(doc));
+  });
+  return allMessages;
+}
+
 /**
  * FirebaseQAChat - Firebase Firestore-based chat for Q&A sessions
  * Replaces Stream Chat to avoid rate limiting and reduce costs
@@ -48,7 +71,7 @@ export function FirebaseQAChat({
   isEmployer,
   isPresentationMode = false,
   onError,
-}: FirebaseQAChatProps) {
+}: Readonly<FirebaseQAChatProps>) {
   const [messages, setMessages] = useState<QAChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,18 +96,17 @@ export function FirebaseQAChat({
       try {
         const messagesRef = collection(db, 'qa_sessions', sessionId, 'messages');
         
-        console.log(`[Firebase QA Chat] Starting setup for session: ${sessionId}`);
-        console.log(`[Firebase QA Chat] User UID: ${user?.uid}`);
-        console.log(`[Firebase QA Chat] User authenticated: ${!!user}`);
+        console.log('[Firebase QA Chat] Starting setup');
+        console.log('[Firebase QA Chat] User authenticated:', Boolean(user));
 
         // First, load existing messages
-        console.log(`[Firebase QA Chat] Fetching existing messages...`);
+        console.log('[Firebase QA Chat] Fetching existing messages...');
         let existingSnapshot;
         try {
           existingSnapshot = await getDocs(
             query(messagesRef, orderBy('timestamp', 'asc'))
           );
-          console.log(`[Firebase QA Chat] ✅ Successfully fetched ${existingSnapshot.size} existing messages`);
+          console.log('[Firebase QA Chat] Successfully fetched existing messages');
         } catch (docsErr) {
           const errObj = docsErr as any;
           console.error(`[Firebase QA Chat] ❌ getDocs() failed:`, docsErr);
@@ -100,20 +122,7 @@ export function FirebaseQAChat({
           }
         }
 
-        const existingMessages: QAChatMessage[] = [];
-        existingSnapshot.forEach((doc: any) => {
-          const data = doc.data();
-          existingMessages.push({
-            id: doc.id,
-            userId: data.userId,
-            userName: data.userName,
-            text: data.text,
-            timestamp: data.timestamp,
-            role: data.role,
-          });
-        });
-
-        setMessages(existingMessages);
+        setMessages(messagesFromSnapshot(existingSnapshot as QuerySnapshot<DocumentData>));
         setLoading(false);
 
         // Set up real-time listener for new messages
@@ -122,20 +131,8 @@ export function FirebaseQAChat({
         const unsubscribe = onSnapshot(
           q,
           (snapshot) => {
-            console.log(`[Firebase QA Chat] ✅ Real-time update: ${snapshot.size} messages`);
-            const allMessages: QAChatMessage[] = [];
-            snapshot.forEach((doc) => {
-              const data = doc.data();
-              allMessages.push({
-                id: doc.id,
-                userId: data.userId,
-                userName: data.userName,
-                text: data.text,
-                timestamp: data.timestamp,
-                role: data.role,
-              });
-            });
-            setMessages(allMessages);
+            console.log('[Firebase QA Chat] Real-time update received');
+            setMessages(messagesFromSnapshot(snapshot));
           },
           (err) => {
             console.error('[Firebase QA Chat] ❌ Real-time listener error:', err);
@@ -262,17 +259,19 @@ export function FirebaseQAChat({
             <Typography variant="body2">No messages yet</Typography>
           </Box>
         ) : (
-          messages.map((msg) => (
+          messages.map((msg) => {
+            let paperBg = '#f5f5f5';
+            if (msg.userId === user?.uid) {
+              paperBg = '#e3f2fd';
+            } else if (msg.role === 'employer') {
+              paperBg = '#fff3e0';
+            }
+            return (
             <Paper
               key={msg.id}
               sx={{
                 p: 1.5,
-                backgroundColor:
-                  msg.userId === user?.uid
-                    ? '#e3f2fd'
-                    : msg.role === 'employer'
-                    ? '#fff3e0'
-                    : '#f5f5f5',
+                backgroundColor: paperBg,
                 borderLeft:
                   msg.role === 'employer' ? '4px solid #ff9800' : 'none',
               }}
@@ -324,7 +323,8 @@ export function FirebaseQAChat({
                 </Typography>
               </Stack>
             </Paper>
-          ))
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </Box>

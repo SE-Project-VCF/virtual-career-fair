@@ -4849,7 +4849,6 @@ app.get("/api/calls/:callId/join", verifyFirebaseToken, async (req, res) => {
 
     // Find the call (could be in employer or student collection)
     let callData = null;
-    let callRef = null;
 
     // Try employer collection
     const employerCallsSnapshot = await db
@@ -4859,7 +4858,6 @@ app.get("/api/calls/:callId/join", verifyFirebaseToken, async (req, res) => {
       .get();
 
     if (!employerCallsSnapshot.empty) {
-      callRef = employerCallsSnapshot.docs[0].ref;
       callData = employerCallsSnapshot.docs[0].data();
     }
 
@@ -5323,6 +5321,51 @@ app.get("/api/employer/booths", verifyFirebaseToken, async (req, res) => {
   }
 });
 
+function employerCanAccessBooth(boothData, employerId, companyId) {
+  return (
+    boothData.employerId === employerId ||
+    boothData.companyId === employerId ||
+    boothData.companyId === companyId
+  );
+}
+
+function pushEmployerQaSessionsFromBooth(boothDoc, boothData, fairName, sessions) {
+  const boothName = boothData.name || "Unnamed Booth";
+  if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
+    for (const qaSession of boothData.qaSessions) {
+      sessions.push({
+        sessionId: qaSession.id,
+        boothId: boothDoc.id,
+        boothName,
+        fairName,
+        title: qaSession.title || "Q&A Session",
+        description: qaSession.description,
+        scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime || null,
+        duration: qaSession.duration || 60,
+        createdAt: qaSession.createdAt?.toMillis?.() || qaSession.createdAt || null,
+        status: qaSession.status || "scheduled",
+      });
+    }
+    return;
+  }
+  if (!boothData.qaSession) {
+    return;
+  }
+  const qaSession = boothData.qaSession;
+  sessions.push({
+    sessionId: boothDoc.id,
+    boothId: boothDoc.id,
+    boothName,
+    fairName,
+    title: qaSession.title || "Q&A Session",
+    description: qaSession.description,
+    scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime || null,
+    duration: qaSession.duration || 60,
+    createdAt: qaSession.createdAt?.toMillis?.() || qaSession.createdAt || null,
+    status: qaSession.status || "scheduled",
+  });
+}
+
 /**
  * Get all Q&A sessions for employer's company
  * GET /api/employer/qa-sessions
@@ -5331,7 +5374,6 @@ app.get("/api/employer/qa-sessions", verifyFirebaseToken, async (req, res) => {
   try {
     const employerId = req.user.uid;
 
-    // First, find which company this employer belongs to
     const userDoc = await db.collection("users").doc(employerId).get();
     if (!userDoc.exists) {
       return res.status(404).json({ error: "User not found" });
@@ -5345,72 +5387,27 @@ app.get("/api/employer/qa-sessions", verifyFirebaseToken, async (req, res) => {
     }
 
     const sessions = [];
-
-    // Get all fairs
     const fairsSnapshot = await db.collection("fairs").get();
 
-    // Search through all fairs and their booths for Q&A sessions
     for (const fairDoc of fairsSnapshot.docs) {
       const fairId = fairDoc.id;
       const fairData = fairDoc.data();
       const fairName = fairData.name || "Unknown Fair";
 
-      // Get booths in this fair
-      const boothsSnapshot = await db
-        .collection("fairs")
-        .doc(fairId)
-        .collection("booths")
-        .get();
+      const boothsSnapshot = await db.collection("fairs").doc(fairId).collection("booths").get();
 
       for (const boothDoc of boothsSnapshot.docs) {
         const boothData = boothDoc.data();
-
-        // Check if this booth belongs to the employer's company
-        if (
-          (boothData.employerId === employerId || boothData.companyId === employerId) ||
-          (boothData.companyId === companyId)
-        ) {
-          // Check if booth has qaSessions array
-          if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
-            for (const qaSession of boothData.qaSessions) {
-              sessions.push({
-                sessionId: qaSession.id,
-                boothId: boothDoc.id,
-                boothName: boothData.name || "Unnamed Booth",
-                fairName,
-                title: qaSession.title || "Q&A Session",
-                description: qaSession.description,
-                scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime || null,
-                duration: qaSession.duration || 60,
-                createdAt: qaSession.createdAt?.toMillis?.() || qaSession.createdAt || null,
-                status: qaSession.status || "scheduled",
-              });
-            }
-          }
-          // Also check for legacy single qaSession for backwards compatibility
-          else if (boothData.qaSession) {
-            const qaSession = boothData.qaSession;
-            sessions.push({
-              sessionId: boothDoc.id,
-              boothId: boothDoc.id,
-              boothName: boothData.name || "Unnamed Booth",
-              fairName,
-              title: qaSession.title || "Q&A Session",
-              description: qaSession.description,
-              scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime || null,
-              duration: qaSession.duration || 60,
-              createdAt: qaSession.createdAt?.toMillis?.() || qaSession.createdAt || null,
-              status: qaSession.status || "scheduled",
-            });
-          }
+        if (!employerCanAccessBooth(boothData, employerId, companyId)) {
+          continue;
         }
+        pushEmployerQaSessionsFromBooth(boothDoc, boothData, fairName, sessions);
       }
     }
 
-    // Sort by scheduled time descending
     sessions.sort((a, b) => {
-      const timeA = (typeof a.scheduledTime === 'number') ? a.scheduledTime : new Date(a.scheduledTime).getTime();
-      const timeB = (typeof b.scheduledTime === 'number') ? b.scheduledTime : new Date(b.scheduledTime).getTime();
+      const timeA = typeof a.scheduledTime === "number" ? a.scheduledTime : new Date(a.scheduledTime).getTime();
+      const timeB = typeof b.scheduledTime === "number" ? b.scheduledTime : new Date(b.scheduledTime).getTime();
       return timeB - timeA;
     });
 
@@ -5509,7 +5506,7 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
       title,
       description: description || "",
       scheduledTime: admin.firestore.Timestamp.fromDate(sessionTime),
-      duration: parseInt(duration, 10),
+      duration: Number.parseInt(String(duration), 10),
       jitsiRoom,
       streamChatChannelId: channelId,
       createdAt: admin.firestore.Timestamp.now(),
@@ -5518,19 +5515,14 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
       raisedHands: [],
     };
 
-    console.log(`[Q&A Schedule] Adding session for booth ${boothId} in fair ${fairId}. Session:`, {
-      id: sessionId,
-      title: qaSessionData.title,
-      scheduledTime: qaSessionData.scheduledTime,
-      duration: qaSessionData.duration,
-    });
+    console.log("[Q&A Schedule] Adding Q&A session to booth");
 
     // Append to qaSessions array instead of replacing
     await boothRef.update({
       qaSessions: admin.firestore.FieldValue.arrayUnion(qaSessionData),
     });
 
-    console.log(`[Q&A Schedule] Session added successfully for booth ${boothId}`);
+    console.log("[Q&A Schedule] Session added successfully");
 
     return res.json({
       success: true,
@@ -5544,6 +5536,128 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
 });
 
 /**
+ * Helpers for GET /api/booth/:boothId/qa-session (keeps route cognitive complexity low)
+ */
+function qaSessionScheduledTimeMs(s) {
+  if (typeof s.scheduledTime === "object" && s.scheduledTime && s.scheduledTime.toMillis) {
+    return s.scheduledTime.toMillis();
+  }
+  if (typeof s.scheduledTime === "number") {
+    return s.scheduledTime;
+  }
+  return new Date(s.scheduledTime).getTime();
+}
+
+async function ensureQaSessionDocExists(db, admin, session, boothId) {
+  const qaSessionRef = db.collection("qa_sessions").doc(session.id);
+  try {
+    const qaSessionDoc = await qaSessionRef.get();
+    if (qaSessionDoc.exists) {
+      console.log("[Q&A Session] Q&A session document already exists");
+      return;
+    }
+    console.log("[Q&A Session] Creating Firestore document for Q&A session");
+    await qaSessionRef.set({
+      sessionId: session.id,
+      boothId: boothId,
+      title: session.title,
+      description: session.description,
+      scheduledTime: admin.firestore.Timestamp.fromMillis(session.scheduledTime),
+      duration: session.duration,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log("[Q&A Session] Q&A session document created");
+  } catch (docErr) {
+    console.error("[Q&A Session] Error ensuring Q&A session document:", docErr.message);
+  }
+}
+
+function mapUpcomingQaSessionsForBooth(boothData, now) {
+  return boothData.qaSessions
+    .map((s) => ({
+      ...s,
+      scheduledTimeMs: qaSessionScheduledTimeMs(s),
+    }))
+    .filter((s) => s.scheduledTimeMs + s.duration * 60 * 1000 > now - 15 * 60 * 1000)
+    .sort((a, b) => a.scheduledTimeMs - b.scheduledTimeMs)
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      scheduledTime: s.scheduledTimeMs,
+      duration: s.duration,
+      jitsiRoom: s.jitsiRoom,
+      streamChatChannelId: s.streamChatChannelId,
+      status: s.status,
+    }));
+}
+
+async function buildQaSessionsArrayPayload(db, admin, boothData, boothId, now) {
+  const upcomingSessions = mapUpcomingQaSessionsForBooth(boothData, now);
+  console.log("[Q&A Session] Prepared upcoming Q&A sessions for response");
+  for (const session of upcomingSessions) {
+    await ensureQaSessionDocExists(db, admin, session, boothId);
+  }
+  return {
+    success: true,
+    qaSessions: upcomingSessions,
+    qaSession: upcomingSessions.length > 0 ? upcomingSessions[0] : null,
+  };
+}
+
+async function buildLegacyQaSessionPayload(db, admin, boothData, boothId) {
+  const qaSession = boothData.qaSession;
+  const sessionId = qaSession.id || boothId;
+  console.log("[Q&A Session] Returning legacy Q&A session format");
+  const qaSessionRef = db.collection("qa_sessions").doc(sessionId);
+  const qaSessionDoc = await qaSessionRef.get();
+  if (!qaSessionDoc.exists) {
+    console.log("[Q&A Session] Creating Firestore document for legacy Q&A session");
+    try {
+      await qaSessionRef.set(
+        {
+          sessionId: sessionId,
+          boothId: boothId,
+          title: qaSession.title,
+          description: qaSession.description,
+          scheduledTime: qaSession.scheduledTime
+            ? admin.firestore.Timestamp.fromDate(new Date(qaSession.scheduledTime))
+            : admin.firestore.FieldValue.serverTimestamp(),
+          duration: qaSession.duration || 60,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn("[Q&A Session] Failed to create Firestore document for legacy session:", err.message);
+    }
+  }
+  const row = {
+    id: sessionId,
+    title: qaSession.title,
+    description: qaSession.description,
+    scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime,
+    duration: qaSession.duration,
+    jitsiRoom: qaSession.jitsiRoom,
+    streamChatChannelId: qaSession.streamChatChannelId,
+    status: qaSession.status,
+  };
+  return {
+    success: true,
+    qaSessions: [row],
+    qaSession: {
+      title: qaSession.title,
+      description: qaSession.description,
+      scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime,
+      duration: qaSession.duration,
+      jitsiRoom: qaSession.jitsiRoom,
+      streamChatChannelId: qaSession.streamChatChannelId,
+      status: qaSession.status,
+    },
+  };
+}
+
+/**
  * Get booth's Q&A sessions (all upcoming sessions)
  * GET /api/booth/:boothId/qa-session
  * Returns all upcoming Q&A sessions for a booth (not just the first one)
@@ -5551,146 +5665,64 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
 app.get("/api/booth/:boothId/qa-session", async (req, res) => {
   try {
     const { boothId } = req.params;
-    console.log(`[Q&A Session] Fetching sessions for booth: ${boothId}`);
+    console.log("[Q&A Session] Fetching sessions for booth");
 
-    // Search through all fairs for the booth with Q&A sessions
     const fairsSnapshot = await db.collection("fairs").get();
+    const now = Date.now();
 
     for (const fairDoc of fairsSnapshot.docs) {
-      const fairBoothRef = db
-        .collection("fairs")
-        .doc(fairDoc.id)
-        .collection("booths")
-        .doc(boothId);
+      const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
       const fairBoothDoc = await fairBoothRef.get();
 
-      if (fairBoothDoc.exists) {
-        const boothData = fairBoothDoc.data();
-        console.log(`[Q&A Session] Found booth in fair ${fairDoc.id}. Has qaSessions:`, !!boothData.qaSessions);
-        
-        // Return ALL upcoming/active sessions (not just the first one)
-        if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
-          // Filter to show only non-expired sessions
-          const now = new Date().getTime();
-          const upcomingSessions = boothData.qaSessions
-            .map(s => ({
-              ...s,
-              scheduledTimeMs: typeof s.scheduledTime === 'object' && s.scheduledTime.toMillis 
-                ? s.scheduledTime.toMillis() 
-                : typeof s.scheduledTime === 'number' 
-                ? s.scheduledTime 
-                : new Date(s.scheduledTime).getTime()
-            }))
-            .filter(s => s.scheduledTimeMs + (s.duration * 60 * 1000) > now - (15 * 60 * 1000)) // Show if not 15+ mins past end
-            .sort((a, b) => a.scheduledTimeMs - b.scheduledTimeMs)
-            .map(s => ({
-              id: s.id,
-              title: s.title,
-              description: s.description,
-              scheduledTime: s.scheduledTimeMs,
-              duration: s.duration,
-              jitsiRoom: s.jitsiRoom,
-              streamChatChannelId: s.streamChatChannelId,
-              status: s.status,
-            }));
-          
-          console.log(`[Q&A Session] Returning ${upcomingSessions.length} upcoming sessions`);
-          
-          // Ensure Firestore qa_sessions documents exist for each session
-          for (const session of upcomingSessions) {
-            const qaSessionRef = db.collection("qa_sessions").doc(session.id);
-            try {
-              const qaSessionDoc = await qaSessionRef.get();
-              
-              if (!qaSessionDoc.exists) {
-                console.log(`[Q&A Session] Creating new Firestore document for session: ${session.id}`);
-                await qaSessionRef.set({
-                  sessionId: session.id,
-                  boothId: boothId,
-                  title: session.title,
-                  description: session.description,
-                  scheduledTime: admin.firestore.Timestamp.fromMillis(session.scheduledTime),
-                  duration: session.duration,
-                  createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
-                console.log(`[Q&A Session] ✅ Document created successfully for session: ${session.id}`);
-              } else {
-                console.log(`[Q&A Session] Document already exists for session: ${session.id}`);
-              }
-            } catch (docErr) {
-              console.error(`[Q&A Session] ❌ ERROR creating document for session ${session.id}:`, docErr.message);
-              // Don't fail - continue with response even if document creation fails
-            }
-          }
-          
-          return res.json({
-            success: true,
-            qaSessions: upcomingSessions,
-            // For backwards compatibility, also include qaSession (first session)
-            qaSession: upcomingSessions.length > 0 ? upcomingSessions[0] : null,
-          });
-        }
-        // Fallback to legacy single qaSession
-        else if (boothData.qaSession) {
-          const qaSession = boothData.qaSession;
-          const sessionId = qaSession.id || boothId;
-          console.log(`[Q&A Session] Returning legacy session: ${qaSession.title}`);
-          
-          // Ensure Firestore qa_sessions document exists for legacy session
-          const qaSessionRef = db.collection("qa_sessions").doc(sessionId);
-          const qaSessionDoc = await qaSessionRef.get();
-          
-          if (!qaSessionDoc.exists) {
-            console.log(`[Q&A Session] Creating Firestore document for legacy session: ${sessionId}`);
-            try {
-              await qaSessionRef.set({
-                sessionId: sessionId,
-                boothId: boothId,
-                title: qaSession.title,
-                description: qaSession.description,
-                scheduledTime: qaSession.scheduledTime ? admin.firestore.Timestamp.fromDate(new Date(qaSession.scheduledTime)) : admin.firestore.FieldValue.serverTimestamp(),
-                duration: qaSession.duration || 60,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-              }, { merge: true });
-            } catch (err) {
-              console.warn(`[Q&A Session] Failed to create Firestore document for legacy session ${sessionId}:`, err.message);
-            }
-          }
-          
-          return res.json({
-            success: true,
-            qaSessions: [{
-              id: sessionId,
-              title: qaSession.title,
-              description: qaSession.description,
-              scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime,
-              duration: qaSession.duration,
-              jitsiRoom: qaSession.jitsiRoom,
-              streamChatChannelId: qaSession.streamChatChannelId,
-              status: qaSession.status,
-            }],
-            qaSession: {
-              title: qaSession.title,
-              description: qaSession.description,
-              scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime,
-              duration: qaSession.duration,
-              jitsiRoom: qaSession.jitsiRoom,
-              streamChatChannelId: qaSession.streamChatChannelId,
-              status: qaSession.status,
-            },
-          });
-        }
+      if (!fairBoothDoc.exists) {
+        continue;
+      }
+
+      const boothData = fairBoothDoc.data();
+      console.log("[Q&A Session] Found booth in fair. Has qaSessions:", !!boothData.qaSessions);
+
+      if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
+        const payload = await buildQaSessionsArrayPayload(db, admin, boothData, boothId, now);
+        return res.json(payload);
+      }
+
+      if (boothData.qaSession) {
+        const payload = await buildLegacyQaSessionPayload(db, admin, boothData, boothId);
+        return res.json(payload);
       }
     }
 
-    // No Q&A sessions found for this booth
-    console.log(`[Q&A Session] No sessions found for booth ${boothId}`);
+    console.log("[Q&A Session] No sessions found for booth");
     return res.json({ success: true, qaSessions: [], qaSession: null });
   } catch (err) {
     console.error("GET /api/booth/:boothId/qa-session error:", err);
     return res.status(500).json({ error: "Failed to fetch booth sessions" });
   }
 });
+
+function employerAuthorizedForQaBooth(boothData, employerCompanyId, employerId) {
+  return boothData.companyId === employerCompanyId || boothData.employerId === employerId;
+}
+
+async function deleteQaSessionAtBooth(fairBoothRef, boothData, boothId, sessionId) {
+  if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
+    const sessionToDelete = boothData.qaSessions.find((s) => s.id === sessionId);
+    if (sessionToDelete) {
+      await fairBoothRef.update({
+        qaSessions: admin.firestore.FieldValue.arrayRemove(sessionToDelete),
+      });
+      return "deleted";
+    }
+    return "missing_in_array";
+  }
+  if (boothData.qaSession && boothId === sessionId) {
+    await fairBoothRef.update({
+      qaSession: admin.firestore.FieldValue.delete(),
+    });
+    return "deleted";
+  }
+  return "not_found";
+}
 
 /**
  * Cancel/Delete Q&A session for a booth
@@ -5701,7 +5733,6 @@ app.delete("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, asy
     const { boothId, sessionId } = req.params;
     const employerId = req.user.uid;
 
-    // Get employer's company ID
     const userDoc = await db.collection("users").doc(employerId).get();
     if (!userDoc.exists) {
       return res.status(404).json({ error: "User not found" });
@@ -5709,54 +5740,30 @@ app.delete("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, asy
     const userData = userDoc.data();
     const employerCompanyId = userData.companyId;
 
-    // Search through all fairs to find and delete the Q&A session
     const fairsSnapshot = await db.collection("fairs").get();
 
     for (const fairDoc of fairsSnapshot.docs) {
-      const fairBoothRef = db
-        .collection("fairs")
-        .doc(fairDoc.id)
-        .collection("booths")
-        .doc(boothId);
+      const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
       const fairBoothDoc = await fairBoothRef.get();
 
-      if (fairBoothDoc.exists) {
-        const boothData = fairBoothDoc.data();
+      if (!fairBoothDoc.exists) {
+        continue;
+      }
 
-        // Verify authorization
-        if (
-          boothData.companyId !== employerCompanyId &&
-          boothData.employerId !== employerId
-        ) {
-          return res.status(403).json({ error: "Not authorized to manage this booth" });
-        }
+      const boothData = fairBoothDoc.data();
 
-        // Delete specific session from qaSessions array
-        if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
-          const sessionToDelete = boothData.qaSessions.find(s => s.id === sessionId);
-          if (sessionToDelete) {
-            await fairBoothRef.update({
-              qaSessions: admin.firestore.FieldValue.arrayRemove(sessionToDelete),
-            });
+      if (!employerAuthorizedForQaBooth(boothData, employerCompanyId, employerId)) {
+        return res.status(403).json({ error: "Not authorized to manage this booth" });
+      }
 
-            return res.json({
-              success: true,
-              message: "Q&A session deleted successfully",
-            });
-          }
-        }
-        // Fallback: delete legacy single qaSession if it matches
-        else if (boothData.qaSession && boothId === sessionId) {
-          await fairBoothRef.update({
-            qaSession: admin.firestore.FieldValue.delete(),
-          });
-
-          return res.json({
-            success: true,
-            message: "Q&A session deleted successfully",
-          });
-        }
-
+      const outcome = await deleteQaSessionAtBooth(fairBoothRef, boothData, boothId, sessionId);
+      if (outcome === "deleted") {
+        return res.json({
+          success: true,
+          message: "Q&A session deleted successfully",
+        });
+      }
+      if (outcome === "missing_in_array" || outcome === "not_found") {
         return res.status(404).json({ error: "No Q&A session found with that ID" });
       }
     }
@@ -5833,7 +5840,10 @@ app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async 
               title: title !== undefined ? title : boothData.qaSessions[sessionIndex].title,
               description: description !== undefined ? description : boothData.qaSessions[sessionIndex].description,
               scheduledTime: scheduledTime ? admin.firestore.Timestamp.fromDate(new Date(scheduledTime)) : boothData.qaSessions[sessionIndex].scheduledTime,
-              duration: duration !== undefined ? parseInt(duration, 10) : boothData.qaSessions[sessionIndex].duration,
+              duration:
+                duration !== undefined
+                  ? Number.parseInt(String(duration), 10)
+                  : boothData.qaSessions[sessionIndex].duration,
               updatedAt: admin.firestore.Timestamp.now(),
             };
 
@@ -5849,7 +5859,7 @@ app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async 
               qaSessions: newSessions,
             });
 
-            console.log(`[Q&A Edit] Session ${sessionId} updated for booth ${boothId}`);
+            console.log("[Q&A Edit] Q&A session updated");
 
             return res.json({
               success: true,
@@ -5978,7 +5988,7 @@ app.post("/api/call-invitations/create", verifyFirebaseToken, async (req, res) =
       outgoingCallInvitations: admin.firestore.FieldValue.arrayUnion(invitationRef.id),
     });
 
-    console.log(`[1x1 Calls] Created invitation ${invitationRef.id} for student ${studentId}`);
+    console.log("[1x1 Calls] Call invitation created");
 
     return res.status(201).json({
       success: true,
@@ -6087,7 +6097,7 @@ app.post("/api/call-invitations/:invitationId/accept", verifyFirebaseToken, asyn
       respondedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    console.log(`[1x1 Calls] Student ${userId} accepted invitation ${invitationId}`);
+    console.log("[1x1 Calls] Call invitation accepted");
 
     return res.json({
       success: true,
@@ -6131,7 +6141,7 @@ app.post("/api/call-invitations/:invitationId/decline", verifyFirebaseToken, asy
       respondedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    console.log(`[1x1 Calls] Student ${userId} declined invitation ${invitationId}`);
+    console.log("[1x1 Calls] Call invitation declined");
 
     return res.json({
       success: true,
@@ -6175,7 +6185,7 @@ app.post("/api/call-invitations/:invitationId/cancel", verifyFirebaseToken, asyn
       status: "cancelled",
     });
 
-    console.log(`[1x1 Calls] Employer ${userId} cancelled invitation ${invitationId}`);
+    console.log("[1x1 Calls] Call invitation cancelled");
 
     return res.json({
       success: true,

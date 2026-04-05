@@ -2,10 +2,8 @@ import { Box } from '@mui/material';
 import { VideoRoom } from './VideoRoom';
 
 interface QASessionRoomProps {
-  sessionId: string;
   jitsiRoom: string;
   userName: string;
-  isEmployer: boolean;
   onError?: (error: Error) => void;
 }
 
@@ -17,7 +15,7 @@ export function QASessionRoom({
   jitsiRoom,
   userName,
   onError,
-}: QASessionRoomProps) {
+}: Readonly<QASessionRoomProps>) {
   const handleVideoError = (err: Error) => {
     console.error('[QA Session] Video error:', err);
     onError?.(err);

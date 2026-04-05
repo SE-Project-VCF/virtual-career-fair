@@ -111,7 +111,10 @@ export function StudentSelector({
       options={options}
       loading={loading}
       disabled={disabled}
-      getOptionLabel={(option) => `${option.firstName} ${option.lastName}${option.email ? ` (${option.email})` : ''}`}
+      getOptionLabel={(option) => {
+        const name = `${option.firstName} ${option.lastName}`;
+        return option.email ? `${name} (${option.email})` : name;
+      }}
       isOptionEqualToValue={(option, compareValue) => option.id === compareValue?.id}
       renderOption={(props, option) => (
         <Box

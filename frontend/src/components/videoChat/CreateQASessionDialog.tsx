@@ -35,7 +35,7 @@ export function CreateQASessionDialog({
   fairName,
   onClose,
   onCreateSession,
-}: CreateQASessionDialogProps) {
+}: Readonly<CreateQASessionDialogProps>) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
@@ -62,8 +62,8 @@ export function CreateQASessionDialog({
         return;
       }
 
-      const durationNum = parseInt(maxDuration, 10);
-      if (isNaN(durationNum) || durationNum <= 0) {
+      const durationNum = Number.parseInt(maxDuration, 10);
+      if (Number.isNaN(durationNum) || durationNum <= 0) {
         setError('Duration must be a positive number');
         return;
       }

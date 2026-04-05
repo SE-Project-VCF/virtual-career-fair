@@ -5,6 +5,7 @@ import BaseLayout from '../components/BaseLayout';
 import { QASessionRoom } from '../components/videoChat/QASessionRoom';
 import { authUtils } from '../utils/auth';
 import { API_URL } from '../config';
+import { coerceQaSessionScheduledTime } from '../utils/qaSessionUi';
 
 export default function QASessionPage() {
   const { boothId } = useParams<{ boothId: string }>();
@@ -109,11 +110,7 @@ export default function QASessionPage() {
       // Verify sessions are available (within 15 mins before start through entire duration)
       const now = new Date();
       const activeSessions = availableSessions.filter((s: any) => {
-        const sessionTime = typeof s.scheduledTime === 'object' && s.scheduledTime._seconds
-          ? new Date(s.scheduledTime._seconds * 1000)
-          : typeof s.scheduledTime === 'number'
-          ? new Date(s.scheduledTime)
-          : new Date(s.scheduledTime);
+        const sessionTime = coerceQaSessionScheduledTime(s.scheduledTime);
 
         const endTime = new Date(sessionTime.getTime() + s.duration * 60 * 1000);
         const timeUntilStart = sessionTime.getTime() - now.getTime();
@@ -228,7 +225,7 @@ export default function QASessionPage() {
 
                 <RadioGroup
                   value={selectedSessionIndex.toString()}
-                  onChange={(e) => setSelectedSessionIndex(parseInt(e.target.value, 10))}
+                  onChange={(e) => setSelectedSessionIndex(Number.parseInt(e.target.value, 10))}
                   sx={{ mb: 3 }}
                 >
                   {sessions.map((s, idx) => {
@@ -292,11 +289,8 @@ export default function QASessionPage() {
       <Box sx={{ bgcolor: '#f5f5f5', minHeight: '100vh' }}>
         <Container maxWidth="lg" sx={{ py: 2 }}>
           <QASessionRoom
-            sessionId={session.id || boothId}
             jitsiRoom={session.jitsiRoom || `qa-session-${boothId}-${selectedSessionIndex}`}
-
             userName={user?.displayName || user?.email || 'Guest'}
-            isEmployer={user?.role === 'representative' || user?.role === 'companyOwner'}
             onError={(error) => setError(error.message)}
           />
         </Container>

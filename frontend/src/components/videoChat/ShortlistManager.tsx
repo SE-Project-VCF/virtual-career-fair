@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Box,
   Card,
@@ -41,7 +41,7 @@ interface ShortlistManagerProps {
 /**
  * ShortlistManager Component - Manage employer's candidate shortlist
  */
-export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
+export function ShortlistManager({ onScheduleCall }: Readonly<ShortlistManagerProps>) {
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -178,6 +178,79 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
     }
   };
 
+  let shortlistMainContent: ReactNode;
+  if (isLoading) {
+    shortlistMainContent = (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  } else if (shortlist.length === 0) {
+    shortlistMainContent = (
+      <Alert severity="info">
+        No candidates in shortlist yet. Add students to start scheduling calls!
+      </Alert>
+    );
+  } else {
+    shortlistMainContent = (
+      <List disablePadding>
+        {shortlist.map((entry) => (
+          <ListItem
+            key={entry.studentId}
+            disablePadding
+            divider
+            secondaryAction={
+              <Stack direction="row" spacing={0.5}>
+                <IconButton
+                  edge="end"
+                  size="small"
+                  title="Schedule call"
+                  onClick={() =>
+                    onScheduleCall?.(entry.studentId, entry.studentName)
+                  }
+                >
+                  <EventAvailableIcon />
+                </IconButton>
+                <IconButton
+                  edge="end"
+                  size="small"
+                  color="error"
+                  onClick={() => handleRemove(entry.studentId)}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Stack>
+            }
+          >
+            <ListItemButton>
+              <ListItemText
+                primary={
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <span>{entry.studentName}</span>
+                    <Chip label="Shortlisted" size="small" />
+                  </Stack>
+                }
+                secondary={
+                  <>
+                    {entry.studentEmail}
+                    {entry.notes && (
+                      <>
+                        <br />
+                        <span style={{ fontSize: '0.85em', color: '#666' }}>
+                          Notes: {entry.notes}
+                        </span>
+                      </>
+                    )}
+                  </>
+                }
+              />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+    );
+  }
+
   return (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', boxShadow: 2 }}>
       <CardHeader
@@ -203,71 +276,7 @@ export function ShortlistManager({ onScheduleCall }: ShortlistManagerProps) {
       <CardContent sx={{ flex: 1, overflow: 'auto' }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : shortlist.length === 0 ? (
-          <Alert severity="info">
-            No candidates in shortlist yet. Add students to start scheduling calls!
-          </Alert>
-        ) : (
-          <List disablePadding>
-            {shortlist.map((entry) => (
-              <ListItem
-                key={entry.studentId}
-                disablePadding
-                divider
-                secondaryAction={
-                  <Stack direction="row" spacing={0.5}>
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      title="Schedule call"
-                      onClick={() =>
-                        onScheduleCall?.(entry.studentId, entry.studentName)
-                      }
-                    >
-                      <EventAvailableIcon />
-                    </IconButton>
-                    <IconButton
-                      edge="end"
-                      size="small"
-                      color="error"
-                      onClick={() => handleRemove(entry.studentId)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Stack>
-                }
-              >
-                <ListItemButton>
-                  <ListItemText
-                    primary={
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <span>{entry.studentName}</span>
-                        <Chip label="Shortlisted" size="small" />
-                      </Stack>
-                    }
-                    secondary={
-                      <>
-                        {entry.studentEmail}
-                        {entry.notes && (
-                          <>
-                            <br />
-                            <span style={{ fontSize: '0.85em', color: '#666' }}>
-                              Notes: {entry.notes}
-                            </span>
-                          </>
-                        )}
-                      </>
-                    }
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        )}
+        {shortlistMainContent}
       </CardContent>
 
       {/* Add to Shortlist Dialog */}

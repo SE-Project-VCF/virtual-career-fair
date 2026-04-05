@@ -23,7 +23,7 @@ interface TabPanelProps {
   value: number;
 }
 
-function TabPanel(props: TabPanelProps) {
+function TabPanel(props: Readonly<TabPanelProps>) {
   const { children, value, index, ...other } = props;
 
   return (

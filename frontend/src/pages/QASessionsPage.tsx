@@ -231,9 +231,7 @@ export default function QASessionsPage() {
   const handleOpenEditDialog = (session: QASession) => {
     setSessionToEdit(session);
     // Parse the scheduledTime into a format suitable for datetime-local input
-    const date = typeof session.scheduledTime === 'number' 
-      ? new Date(session.scheduledTime)
-      : new Date(session.scheduledTime);
+    const date = new Date(session.scheduledTime);
     const isoString = date.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
     setEditForm({
       title: session.title,
@@ -308,7 +306,7 @@ export default function QASessionsPage() {
     if (!dateValue) return "Invalid date";
     try {
       const date = typeof dateValue === 'number' ? new Date(dateValue) : new Date(dateValue);
-      if (isNaN(date.getTime())) return "Invalid date";
+      if (Number.isNaN(date.getTime())) return "Invalid date";
       return date.toLocaleString();
     } catch {
       return "Invalid date";
@@ -407,11 +405,9 @@ export default function QASessionsPage() {
                 <Grid container spacing={2}>
                   {sessions.map((session) => {
                     // Convert scheduledTime to proper Date object
-                    const scheduledDate = typeof session.scheduledTime === 'number' 
-                      ? new Date(session.scheduledTime)
-                      : new Date(session.scheduledTime);
-                    
-                    const isValidDate = !isNaN(scheduledDate.getTime());
+                    const scheduledDate = new Date(session.scheduledTime);
+
+                    const isValidDate = !Number.isNaN(scheduledDate.getTime());
                     const now = new Date();
                     let isUpcoming = false;
                     let isActive = false;
@@ -434,6 +430,23 @@ export default function QASessionsPage() {
                       canJoin = minutesUntilStart <= 15 && timeUntilEnd > 0;
                     }
 
+                    let sessionStatusLabel = 'Ended';
+                    let sessionStatusColor: 'error' | 'warning' | 'default' = 'default';
+                    if (isActive) {
+                      sessionStatusLabel = '🔴 LIVE';
+                      sessionStatusColor = 'error';
+                    } else if (isUpcoming) {
+                      sessionStatusLabel = 'Upcoming';
+                      sessionStatusColor = 'warning';
+                    }
+
+                    const joinButtonLabel = (() => {
+                      if (isActive) return 'Join Now';
+                      if (isUpcoming && canJoin) return 'Join Session';
+                      if (isUpcoming) return `Available in ${Math.max(0, minutesUntilStart)}m`;
+                      return 'Session Ended';
+                    })();
+
                     return (
                       <Grid size={{ xs: 12 }} key={session.sessionId}>
                         <Card sx={{ boxShadow: 1 }}>
@@ -454,8 +467,8 @@ export default function QASessionsPage() {
                               </Box>
                               <Stack direction="row" gap={1}>
                                 <Chip
-                                  label={isActive ? '🔴 LIVE' : isUpcoming ? 'Upcoming' : 'Ended'}
-                                  color={isActive ? 'error' : isUpcoming ? 'warning' : 'default'}
+                                  label={sessionStatusLabel}
+                                  color={sessionStatusColor}
                                   size="small"
                                 />
                                 <IconButton
@@ -503,7 +516,7 @@ export default function QASessionsPage() {
                             <Button
                               variant="outlined"
                               endIcon={<LaunchIcon />}
-                              onClick={() => window.open(`/qa-session/${session.boothId}`, '_blank')}
+                              onClick={() => globalThis.open(`/qa-session/${session.boothId}`, '_blank')}
                               disabled={!canJoin}
                               size="small"
                               sx={{ 
@@ -511,7 +524,7 @@ export default function QASessionsPage() {
                                 borderColor: isActive ? '#d32f2f' : '#388560' 
                               }}
                             >
-                              {isActive ? "Join Now" : isUpcoming && canJoin ? `Join Session` : isUpcoming ? `Available in ${Math.max(0, minutesUntilStart)}m` : "Session Ended"}
+                              {joinButtonLabel}
                             </Button>
                           </CardContent>
                         </Card>
@@ -560,7 +573,7 @@ export default function QASessionsPage() {
                 label="Duration (minutes)"
                 type="number"
                 value={sessionForm.duration}
-                onChange={(e) => setSessionForm({ ...sessionForm, duration: parseInt(e.target.value, 10) || 60 })}
+                onChange={(e) => setSessionForm({ ...sessionForm, duration: Number.parseInt(e.target.value, 10) || 60 })}
                 inputProps={{ min: 5, max: 480 }}
               />
             </Stack>
@@ -637,7 +650,7 @@ export default function QASessionsPage() {
                 label="Duration (minutes)"
                 type="number"
                 value={editForm.duration}
-                onChange={(e) => setEditForm({ ...editForm, duration: parseInt(e.target.value, 10) || 60 })}
+                onChange={(e) => setEditForm({ ...editForm, duration: Number.parseInt(e.target.value, 10) || 60 })}
                 inputProps={{ min: 5, max: 480 }}
               />
             </Stack>

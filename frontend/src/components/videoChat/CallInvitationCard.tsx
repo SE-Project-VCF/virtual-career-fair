@@ -22,7 +22,7 @@ export function CallInvitationCard({
   onCancel,
   onJoin,
   loading = false,
-}: CallInvitationCardProps) {
+}: Readonly<CallInvitationCardProps>) {
   const scheduledDate = new Date(invitation.scheduledTime);
   const now = new Date();
   const timeUntilStart = scheduledDate.getTime() - now.getTime();
@@ -54,6 +54,15 @@ export function CallInvitationCard({
     if (invitation.status === 'cancelled') return 'Cancelled';
     return invitation.status;
   };
+
+  let joinButtonLabel = 'Join Call';
+  if (isActive) {
+    joinButtonLabel = 'Join Now';
+  } else if (isUpcoming && canJoin) {
+    joinButtonLabel = 'Join Call';
+  } else if (isUpcoming) {
+    joinButtonLabel = `Available in ${Math.max(0, minutesUntilStart)}m`;
+  }
 
   return (
     <Card sx={{ mb: 2, boxShadow: 1 }}>
@@ -138,7 +147,7 @@ export function CallInvitationCard({
             }}
             size="small"
           >
-            {isActive ? 'Join Now' : isUpcoming && canJoin ? 'Join Call' : isUpcoming ? `Available in ${Math.max(0, minutesUntilStart)}m` : 'Join Call'}
+            {joinButtonLabel}
           </Button>
         )}
 

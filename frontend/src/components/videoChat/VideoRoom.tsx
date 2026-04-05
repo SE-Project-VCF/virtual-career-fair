@@ -22,8 +22,8 @@ function loadJitsiScript(): Promise<any> {
 
   jitsiScriptPromise = new Promise((resolve, reject) => {
     // Check if script is already loaded
-    if ((window as any).JitsiMeetExternalAPI) {
-      resolve((window as any).JitsiMeetExternalAPI);
+    if ((globalThis as any).JitsiMeetExternalAPI) {
+      resolve((globalThis as any).JitsiMeetExternalAPI);
       return;
     }
 
@@ -32,8 +32,8 @@ function loadJitsiScript(): Promise<any> {
     if (document.querySelector(`script[src="${scriptUrl}"]`)) {
       let attempts = 0;
       const checkLoaded = () => {
-        if ((window as any).JitsiMeetExternalAPI) {
-          resolve((window as any).JitsiMeetExternalAPI);
+        if ((globalThis as any).JitsiMeetExternalAPI) {
+          resolve((globalThis as any).JitsiMeetExternalAPI);
         } else if (attempts < 50) {
           attempts++;
           setTimeout(checkLoaded, 100);
@@ -52,13 +52,13 @@ function loadJitsiScript(): Promise<any> {
     script.onload = () => {
       let attemptsLoad = 0;
       const checkLoadedAfterScript = () => {
-        if ((window as any).JitsiMeetExternalAPI) {
-          resolve((window as any).JitsiMeetExternalAPI);
+        if ((globalThis as any).JitsiMeetExternalAPI) {
+          resolve((globalThis as any).JitsiMeetExternalAPI);
         } else if (attemptsLoad < 50) {
           attemptsLoad++;
           setTimeout(checkLoadedAfterScript, 100);
         } else {
-          reject(new Error('Jitsi API not available in window after script load'));
+          reject(new Error('Jitsi API not available after script load'));
         }
       };
       checkLoadedAfterScript();

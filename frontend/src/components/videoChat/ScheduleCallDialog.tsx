@@ -32,7 +32,7 @@ export function ScheduleCallDialog({
   studentName,
   onClose,
   onSuccess,
-}: ScheduleCallDialogProps) {
+}: Readonly<ScheduleCallDialogProps>) {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(
     preSelectedStudentId
       ? {

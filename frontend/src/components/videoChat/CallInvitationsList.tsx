@@ -44,10 +44,18 @@ interface CallInvitationsListProps {
   onJoinCall?: (callId: string, jitsiRoom: string, channelId: string) => void;
 }
 
+function invitationStatusChipColor(
+  status: CallInvitation['status']
+): 'success' | 'error' | 'warning' {
+  if (status === 'accepted') return 'success';
+  if (status === 'declined') return 'error';
+  return 'warning';
+}
+
 /**
  * CallInvitationsList Component - Shows student's call invitations
  */
-export function CallInvitationsList({ onJoinCall }: CallInvitationsListProps) {
+export function CallInvitationsList({ onJoinCall }: Readonly<CallInvitationsListProps>) {
   const [invitations, setInvitations] = useState<CallInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -193,13 +201,7 @@ export function CallInvitationsList({ onJoinCall }: CallInvitationsListProps) {
                       <Chip
                         label={invite.status}
                         size="small"
-                        color={
-                          invite.status === 'accepted'
-                            ? 'success'
-                            : invite.status === 'declined'
-                            ? 'error'
-                            : 'warning'
-                        }
+                        color={invitationStatusChipColor(invite.status)}
                       />
                     </Stack>
                   }
@@ -207,7 +209,7 @@ export function CallInvitationsList({ onJoinCall }: CallInvitationsListProps) {
                     <Box component="div" sx={{ mt: 1 }}>
                       <Typography variant="body2" color="textSecondary">
                         {invite.proposedTimes.length} proposed time slot
-                        {invite.proposedTimes.length !== 1 ? 's' : ''}:
+                        {invite.proposedTimes.length === 1 ? '' : 's'}:
                       </Typography>
                       {invite.proposedTimes.map((time, idx) => (
                         <div key={idx} style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}>
