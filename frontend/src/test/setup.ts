@@ -118,6 +118,9 @@ vi.mock("stream-chat", () => ({
   },
 }))
 
+// jsdom does not implement scrollTo (used by BoothEditor and others)
+window.scrollTo = vi.fn()
+
 // Mock window.matchMedia
 Object.defineProperty(globalThis, "matchMedia", {
   writable: true,

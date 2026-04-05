@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
@@ -960,38 +960,48 @@ describe("Company", () => {
     it("closes JobInviteStatsDialog when Close is clicked", async () => {
       const user = userEvent.setup();
 
-      (globalThis.fetch as any).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          totalSent: 5,
-          totalViewed: 3,
-          totalClicked: 1,
-          viewRate: "60.0",
-          clickRate: "20.0",
-        }),
+      (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        if (url.includes("/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 5,
+              totalViewed: 3,
+              totalClicked: 1,
+              viewRate: "60.0",
+              clickRate: "20.0",
+            }),
+          });
+        }
+        if (url.includes("/job-invitations/details/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ invitations: [] }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
       });
 
       renderComp();
       await screen.findByRole('heading', { name: /Tech Corp/i });
 
-      await waitFor(async () => {
-        const viewDetailsButton = screen.queryByRole("button", { name: /view details/i });
-        if (viewDetailsButton) {
-          await user.click(viewDetailsButton);
+      const viewDetailsButton = await screen.findByRole("button", { name: /view details/i }, { timeout: 8000 });
+      await user.click(viewDetailsButton);
 
-          await waitFor(async () => {
-            const dialogTitle = screen.queryByText("Invitation Details");
-            if (dialogTitle) {
-              const closeButton = screen.getByRole("button", { name: /close/i });
-              await user.click(closeButton);
+      const dialog = await screen.findByRole("dialog", {}, { timeout: 5000 });
+      expect(within(dialog).getByText("Invitation Details")).toBeInTheDocument();
 
-              await waitFor(() => {
-                expect(screen.queryByText("Invitation Details")).not.toBeInTheDocument();
-              });
-            }
-          });
-        }
-      }, { timeout: 5000 });
+      await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
     });
 
     it("does not display View Details button when no invitations", async () => {

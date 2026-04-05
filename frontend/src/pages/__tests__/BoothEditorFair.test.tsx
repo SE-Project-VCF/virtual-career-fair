@@ -317,7 +317,7 @@ describe("BoothEditor – fair-scoped", () => {
     })
 
     it("shows error when fairBoothId is null (404 load) and user tries to save", async () => {
-      const user = userEvent.setup()
+      const user = userEvent.setup({ delay: null })
       // Override: 404 so fairBoothId never gets set
       globalThis.fetch = vi.fn().mockResolvedValue({ status: 404, ok: false })
 

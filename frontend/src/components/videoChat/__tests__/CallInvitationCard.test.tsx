@@ -210,7 +210,7 @@ describe('CallInvitationCard Component', () => {
   it('should handle completed status invitations', () => {
     const completedInvitation = { ...mockInvitation, status: 'completed' as any };
     render(<CallInvitationCard invitation={completedInvitation} />);
-    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.getByText(/^completed$/i)).toBeInTheDocument();
   });
 
   it('should display different text for student and employer views', () => {
@@ -248,7 +248,8 @@ describe('CallInvitationCard Component', () => {
     const invitationWithTime = { ...mockInvitation, scheduledTime: futureTime };
 
     render(<CallInvitationCard invitation={invitationWithTime} />);
-    expect(screen.getByText(/[0-9]/)).toBeInTheDocument();
+    expect(screen.getByText(/Date:/)).toBeInTheDocument();
+    expect(screen.getByText(/Duration:/)).toBeInTheDocument();
   });
 
   it('should not break when callbacks are not provided', () => {

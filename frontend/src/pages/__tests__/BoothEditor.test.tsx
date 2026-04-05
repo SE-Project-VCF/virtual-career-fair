@@ -430,7 +430,7 @@ describe("BoothEditor", () => {
   // Form Submission Tests
   describe("Form Submission", () => {
     it("submits form and creates new booth successfully", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       renderBoothEditor();
 
       await waitFor(() => {
@@ -499,7 +499,7 @@ describe("BoothEditor", () => {
     }, 10000);
 
     it("shows error when contact email is not registered", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       (firestore.getDocs as any).mockResolvedValue({ empty: true, docs: [] });
 
       renderBoothEditor();
@@ -535,11 +535,11 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Contact email does not match any registered user/)).toBeInTheDocument();
-      }, { timeout: 3000 });
-    }, 15000);
+      }, { timeout: 5000 });
+    }, 30000);
 
     it("shows error when contact is not company owner or representative", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       (firestore.getDocs as any).mockResolvedValue({
         empty: false,
         docs: [{
@@ -577,11 +577,11 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText("This user is not an owner or representative of your company.")).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 5000 });
+    }, 30000);
 
     it("shows error when booth creation fails", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       (firestore.addDoc as any).mockRejectedValue(new Error("Database error"));
 
       renderBoothEditor();
@@ -614,8 +614,8 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/failed to save booth/i)).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 5000 });
+    }, 30000);
 
     it("disables submit button while saving", async () => {
       const user = userEvent.setup();

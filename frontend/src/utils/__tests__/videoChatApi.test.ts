@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { addToShortlist, removeFromShortlist } from '../videoChatApi';
+import {
+  addToShortlist,
+  removeFromShortlist,
+  getShortlist,
+  respondToCall,
+  getMyCallInvitations,
+  cancelCall,
+} from '../videoChatApi';
 import { getAuth } from 'firebase/auth';
 
 // Mock Firebase Auth
@@ -104,9 +111,9 @@ describe('videoChatApi Utilities', () => {
       const result = await removeFromShortlist('student-123');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/shortlist/remove',
+        '/api/shortlist/student-123',
         expect.objectContaining({
-          method: 'POST',
+          method: 'DELETE',
         })
       );
       expect(result).toEqual({ success: true, message: 'Removed from shortlist' });
@@ -119,6 +126,82 @@ describe('videoChatApi Utilities', () => {
       });
 
       await expect(removeFromShortlist('student-456')).rejects.toThrow('Student not in shortlist');
+    });
+  });
+
+  describe('getShortlist', () => {
+    it('should fetch shortlist', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ students: [] }),
+      });
+
+      const result = await getShortlist();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/shortlist/list',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${mockToken}` }),
+        })
+      );
+      expect(result).toEqual({ students: [] });
+    });
+  });
+
+  describe('getMyCallInvitations', () => {
+    it('should fetch invitations', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ invitations: [] }),
+      });
+
+      await getMyCallInvitations();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/calls/my-invitations',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${mockToken}` }),
+        })
+      );
+    });
+  });
+
+  describe('respondToCall', () => {
+    it('should PATCH respond endpoint with body', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      });
+
+      await respondToCall('call-1', 'accepted', 0, 'inv-1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/calls/call-1/respond',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({
+            response: 'accepted',
+            acceptedTimeIndex: 0,
+            inviteId: 'inv-1',
+          }),
+        })
+      );
+    });
+  });
+
+  describe('cancelCall', () => {
+    it('should PATCH cancel endpoint', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+      });
+
+      await cancelCall('call-2');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/calls/call-2/cancel',
+        expect.objectContaining({ method: 'PATCH' })
+      );
     });
   });
 });

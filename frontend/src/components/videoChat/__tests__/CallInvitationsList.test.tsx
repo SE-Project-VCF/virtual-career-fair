@@ -63,7 +63,7 @@ describe('CallInvitationsList', () => {
     render(<CallInvitationsList />);
 
     await waitFor(() => {
-      expect(screen.getByText(/No invitations/i)).toBeInTheDocument();
+      expect(screen.getByText(/No call invitations yet/i)).toBeInTheDocument();
     });
   });
 
@@ -76,15 +76,20 @@ describe('CallInvitationsList', () => {
     render(<CallInvitationsList />);
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText(/Failed to fetch invitations/i)).toBeInTheDocument();
     });
   });
 
-  it('should call onJoinCall when join button clicked', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ invitations: [mockInvitation] }),
-    });
+  it('should call onJoinCall when invitation is accepted', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ invitations: [mockInvitation] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+      });
 
     const user = userEvent.setup();
     render(<CallInvitationsList onJoinCall={mockOnJoinCall} />);
@@ -93,10 +98,17 @@ describe('CallInvitationsList', () => {
       expect(screen.getByText(/Jane Smith/)).toBeInTheDocument();
     });
 
-    const joinButton = screen.getByRole('button', { name: /Join/i });
-    await user.click(joinButton);
+    await user.click(screen.getByText('Jane Smith'));
 
-    expect(mockOnJoinCall).toHaveBeenCalledWith('call-1', 'room-123', 'channel-123');
+    const timeSlotButtons = screen.getAllByRole('button', { name: / - / });
+    await user.click(timeSlotButtons[0]);
+
+    const acceptButton = screen.getByRole('button', { name: /^Accept$/i });
+    await user.click(acceptButton);
+
+    await waitFor(() => {
+      expect(mockOnJoinCall).toHaveBeenCalledWith('call-1', 'room-123', 'channel-123');
+    });
   });
 
   it('should display company name', async () => {
