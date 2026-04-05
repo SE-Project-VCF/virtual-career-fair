@@ -4,9 +4,14 @@ jest.mock("firebase-admin", () => {
   const Timestamp = {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
+    fromDate: jest.fn((date) => ({ toMillis: () => date.getTime() })),
+  };
+  const FieldValue = {
+    serverTimestamp: jest.fn(() => "server-timestamp"),
+    arrayUnion: jest.fn((...values) => ({ _type: "arrayUnion", values })),
   };
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, FieldValue }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
@@ -46,7 +51,7 @@ function setupDbMock(configs) {
       set: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
       delete: jest.fn().mockResolvedValue(undefined),
-      id: cfg.docId || "mock-id",
+      id: cfg.newDocId || cfg.docId || "mock-id",
       collection: jest.fn().mockReturnThis(),
     };
     return {
@@ -246,6 +251,23 @@ describe("Call Invitations API", () => {
       setupDbMock({
         call_invitations: {
           newDocId: "new-inv-id",
+          docs: [],
+        },
+        users: {
+          docData: {
+            displayName: "Employer Name",
+            email: "employer@test.com",
+            companyId: "company-1",
+          },
+          docExists: true,
+          docId: "employer-1",
+        },
+        companies: {
+          docData: {
+            name: "Tech Corp",
+          },
+          docExists: true,
+          docId: "company-1",
         },
       });
 
@@ -256,8 +278,9 @@ describe("Call Invitations API", () => {
         .set("Authorization", authHeader())
         .send({
           studentId: "student-1",
-          scheduledTime: 2000000,
-          jitsiRoom: "test-room",
+          scheduledTime: Date.now() + 86400000, // Tomorrow
+          duration: 30,
+          description: "Test call",
         });
 
       expect(res.status).toBe(201);

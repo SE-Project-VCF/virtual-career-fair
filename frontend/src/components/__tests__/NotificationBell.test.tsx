@@ -132,14 +132,14 @@ describe("NotificationBell", () => {
       const user = userEvent.setup()
       renderBell()
       await user.click(screen.getByRole("button"))
-      expect(screen.getByText("Job Invitations")).toBeInTheDocument()
+      expect(screen.getByText(/Notifications/i)).toBeInTheDocument()
     })
 
     it("closes the menu when backdrop is clicked (handleClose)", async () => {
       const user = userEvent.setup()
       renderBell()
       await user.click(screen.getByRole("button"))
-      expect(screen.getByText("Job Invitations")).toBeInTheDocument()
+      expect(screen.getByText(/Notifications/i)).toBeInTheDocument()
 
       // Press Escape to close
       await user.keyboard("{Escape}")
@@ -154,7 +154,7 @@ describe("NotificationBell", () => {
       const user = userEvent.setup()
       renderBell()
       await user.click(screen.getByRole("button"))
-      expect(screen.getByText("No new invitations")).toBeInTheDocument()
+      expect(screen.getByText(/No new job invitations/i)).toBeInTheDocument()
     })
   })
 
@@ -208,7 +208,7 @@ describe("NotificationBell", () => {
       renderBell()
       await user.click(screen.getByRole("button"))
       await waitFor(() => {
-        expect(screen.getByText(/1 new invitation$/)).toBeInTheDocument()
+        expect(screen.getByText(/1 new notification/i)).toBeInTheDocument()
       })
     })
 
@@ -221,7 +221,7 @@ describe("NotificationBell", () => {
       renderBell()
       await user.click(screen.getByRole("button"))
       await waitFor(() => {
-        expect(screen.getByText(/2 new invitations/)).toBeInTheDocument()
+        expect(screen.getByText(/2 new notifications/i)).toBeInTheDocument()
       })
     })
   })
@@ -242,7 +242,7 @@ describe("NotificationBell", () => {
       await user.click(screen.getByText("Software Engineer"))
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard/job-invitations")
       await waitFor(() => {
-        expect(screen.queryByText("Job Invitations")).not.toBeInTheDocument()
+        expect(screen.queryByText(/Notifications/i)).not.toBeInTheDocument()
       })
     })
 
@@ -250,11 +250,11 @@ describe("NotificationBell", () => {
       const user = userEvent.setup()
       renderBell()
       await user.click(screen.getByRole("button"))
-      await waitFor(() => expect(screen.getByText("View All Invitations")).toBeInTheDocument())
-      await user.click(screen.getByText("View All Invitations"))
+      await waitFor(() => expect(screen.getByText(/View All Job Invitations/i)).toBeInTheDocument())
+      await user.click(screen.getByText(/View All Job Invitations/i))
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard/job-invitations")
       await waitFor(() => {
-        expect(screen.queryByText("Job Invitations")).not.toBeInTheDocument()
+        expect(screen.queryByText(/Notifications/i)).not.toBeInTheDocument()
       })
     })
   })

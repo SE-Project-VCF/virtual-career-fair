@@ -5980,7 +5980,7 @@ app.post("/api/call-invitations/create", verifyFirebaseToken, async (req, res) =
 
     console.log(`[1x1 Calls] Created invitation ${invitationRef.id} for student ${studentId}`);
 
-    return res.json({
+    return res.status(201).json({
       success: true,
       invitationId: invitationRef.id,
       message: "Call invitation sent successfully",
