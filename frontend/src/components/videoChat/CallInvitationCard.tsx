@@ -58,9 +58,7 @@ export function CallInvitationCard({
   let joinButtonLabel = 'Join Call';
   if (isActive) {
     joinButtonLabel = 'Join Now';
-  } else if (isUpcoming && canJoin) {
-    joinButtonLabel = 'Join Call';
-  } else if (isUpcoming) {
+  } else if (isUpcoming && !canJoin) {
     joinButtonLabel = `Available in ${Math.max(0, minutesUntilStart)}m`;
   }
 

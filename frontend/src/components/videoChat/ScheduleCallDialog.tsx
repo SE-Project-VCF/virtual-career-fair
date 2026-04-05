@@ -64,7 +64,7 @@ export function ScheduleCallDialog({
         return;
       }
 
-      const durationNum = parseInt(duration, 10);
+      const durationNum = Number.parseInt(duration, 10);
       if (!durationNum || durationNum <= 0 || durationNum > 480) {
         setError('Duration must be between 1 and 480 minutes');
         return;

@@ -84,7 +84,7 @@ export function VideoRoom({
   userName,
   onError,
   startWithAudioMuted = true,
-}: VideoRoomProps) {
+}: Readonly<VideoRoomProps>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const jitsiApiRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -223,10 +223,11 @@ export function VideoRoom({
           console.log('[Jitsi] Ready to close');
         };
 
-        const onConferenceFailed = (error: any) => {
+        const onConferenceFailed = (error: unknown) => {
           console.error('[Jitsi] Conference failed:', error);
-          // Handle members-only/lobby error
-          if (error && error.toLowerCase?.().includes('membersonly')) {
+          const errorText =
+            typeof error === 'string' ? error : String(error ?? '');
+          if (errorText.toLowerCase().includes('membersonly')) {
             console.error('[Jitsi] ❌ Room requires moderator approval (membersOnly mode)');
             if (mountedRef.current && !disposed) {
               initializingRef.current = false;

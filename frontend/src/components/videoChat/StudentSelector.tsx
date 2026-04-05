@@ -70,7 +70,7 @@ export function StudentSelector({
   label = 'Select Student',
   error = false,
   helperText = '',
-}: StudentSelectorProps) {
+}: Readonly<StudentSelectorProps>) {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);

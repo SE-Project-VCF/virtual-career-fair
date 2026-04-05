@@ -305,7 +305,7 @@ export default function QASessionsPage() {
   const formatDate = (dateValue: string | number | null | undefined) => {
     if (!dateValue) return "Invalid date";
     try {
-      const date = typeof dateValue === 'number' ? new Date(dateValue) : new Date(dateValue);
+      const date = new Date(dateValue);
       if (Number.isNaN(date.getTime())) return "Invalid date";
       return date.toLocaleString();
     } catch {

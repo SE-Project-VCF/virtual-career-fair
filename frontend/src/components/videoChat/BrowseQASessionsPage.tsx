@@ -130,6 +130,15 @@ export function BrowseQASessionsPage({
     return new Date(timestamp).toLocaleString();
   };
 
+  let joinDialogPrimaryLabel = 'Not Live Yet';
+  if (selectedSession) {
+    if (isJoining) {
+      joinDialogPrimaryLabel = 'Joining...';
+    } else if (selectedSession.isLive) {
+      joinDialogPrimaryLabel = 'Join Now';
+    }
+  }
+
   if (isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -286,11 +295,7 @@ export function BrowseQASessionsPage({
                 disabled={isJoining || !selectedSession.isLive}
                 startIcon={<PlayArrowIcon />}
               >
-                {isJoining
-                  ? 'Joining...'
-                  : selectedSession.isLive
-                  ? 'Join Now'
-                  : 'Not Live Yet'}
+                {joinDialogPrimaryLabel}
               </Button>
             </DialogActions>
           </>

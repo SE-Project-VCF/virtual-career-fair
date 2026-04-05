@@ -6,6 +6,21 @@ import { QASessionRoom } from '../components/videoChat/QASessionRoom';
 import { authUtils } from '../utils/auth';
 import { API_URL } from '../config';
 import { coerceQaSessionScheduledTime } from '../utils/qaSessionUi';
+import {
+  fetchIdTokenWithRetries,
+  availableSessionsFromQaApiPayload,
+  filterJoinableQaSessions,
+} from '../utils/qaSessionPageFetch';
+
+function qaSessionRadioKey(session: Record<string, unknown>, index: number): string {
+  const id = session.sessionId ?? session.id;
+  if (typeof id === 'string' && id.length > 0) {
+    return id;
+  }
+  const t = coerceQaSessionScheduledTime(session.scheduledTime).getTime();
+  const title = typeof session.title === 'string' ? session.title : 'session';
+  return `${title}-${t}-${index}`;
+}
 
 export default function QASessionPage() {
   const { boothId } = useParams<{ boothId: string }>();
@@ -13,11 +28,10 @@ export default function QASessionPage() {
   const [user, setUser] = useState(authUtils.getCurrentUser());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<any[]>([]); // Array of sessions
+  const [sessions, setSessions] = useState<any[]>([]);
   const [selectedSessionIndex, setSelectedSessionIndex] = useState(0);
-  const [hasJoined, setHasJoined] = useState(false); // Track if user has clicked join
+  const [hasJoined, setHasJoined] = useState(false);
 
-  // Monitor auth state changes
   useEffect(() => {
     const checkAuthState = () => {
       const currentUser = authUtils.getCurrentUser();
@@ -37,44 +51,23 @@ export default function QASessionPage() {
         throw new Error('Booth ID is required');
       }
 
-      // Get current user and token
       const currentUser = authUtils.getCurrentUser();
       if (!currentUser?.uid) {
         console.error('[QA Session] User not authenticated');
         throw new Error('Not authenticated. Please log in.');
       }
 
-      // Get token with retry logic (helps with new tab/refresh scenarios)
-      let idToken: string | null = null;
-      let attempts = 0;
-      const maxAttempts = 5;
-
-      while (!idToken && attempts < maxAttempts) {
-        try {
-          const token = await authUtils.getIdToken();
-          if (token) {
-            idToken = token;
-          } else {
-            console.warn(`[QA Session] Token is null (attempt ${attempts + 1}/${maxAttempts})`);
-          }
-        } catch (tokenErr) {
-          console.warn(`[QA Session] Failed to get ID token (attempt ${attempts + 1}/${maxAttempts}):`, tokenErr);
-        }
-
-        if (!idToken) {
-          attempts++;
-          if (attempts < maxAttempts) {
-            console.log(`[QA Session] Retrying token fetch (${attempts}/${maxAttempts})...`);
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-      }
+      const idToken = await fetchIdTokenWithRetries(
+        () => authUtils.getIdToken(),
+        5,
+        500
+      );
 
       if (!idToken) {
         throw new Error('Failed to obtain authentication token - please log in again');
       }
 
-      console.log(`[Q&A Session] Fetching sessions for booth: ${boothId}`);
+      console.log('[Q&A Session] Fetching sessions for booth');
 
       const response = await fetch(`${API_URL}/api/booth/${boothId}/qa-session`, {
         headers: {
@@ -92,34 +85,26 @@ export default function QASessionPage() {
         throw new Error(errorData.error || 'Failed to fetch sessions');
       }
 
-      const data = await response.json();
-      console.log('[Q&A Session] Received sessions data:', data);
+      const data = (await response.json()) as Record<string, unknown>;
+      console.log('[Q&A Session] Received sessions payload');
 
-      // Support new array format (qaSessions) and backwards compatibility (qaSession)
-      let availableSessions = [];
-      if (data.qaSessions && Array.isArray(data.qaSessions) && data.qaSessions.length > 0) {
-        availableSessions = data.qaSessions;
-        console.log(`[Q&A Session] Found ${availableSessions.length} available session(s)`);
-      } else if (data.qaSession) {
-        availableSessions = [data.qaSession];
-        console.log('[Q&A Session] Found 1 session (legacy format)');
-      } else {
+      const availableSessions = availableSessionsFromQaApiPayload(data);
+      if (availableSessions.length === 0) {
         throw new Error('No active sessions for this booth');
       }
+      if (data.qaSessions && Array.isArray(data.qaSessions) && data.qaSessions.length > 0) {
+        console.log(`[Q&A Session] Found ${availableSessions.length} available session(s)`);
+      } else {
+        console.log('[Q&A Session] Found 1 session (legacy format)');
+      }
 
-      // Verify sessions are available (within 15 mins before start through entire duration)
       const now = new Date();
-      const activeSessions = availableSessions.filter((s: any) => {
-        const sessionTime = coerceQaSessionScheduledTime(s.scheduledTime);
-
-        const endTime = new Date(sessionTime.getTime() + s.duration * 60 * 1000);
-        const timeUntilStart = sessionTime.getTime() - now.getTime();
-        const canJoin = timeUntilStart <= 15 * 60 * 1000 && now <= endTime;
-        return canJoin;
-      });
+      const activeSessions = filterJoinableQaSessions(availableSessions, now);
 
       if (activeSessions.length === 0) {
-        throw new Error('No available sessions. Sessions are available from 15 minutes before start time through the entire call duration.');
+        throw new Error(
+          'No available sessions. Sessions are available from 15 minutes before start time through the entire call duration.'
+        );
       }
 
       setSessions(activeSessions.map((s: any) => ({ ...s, boothId })));
@@ -133,7 +118,6 @@ export default function QASessionPage() {
     }
   }, [boothId]);
 
-  // Fetch sessions when user is authenticated and boothId is available
   useEffect(() => {
     if (!boothId) {
       setError('Booth ID is required');
@@ -142,7 +126,6 @@ export default function QASessionPage() {
     }
 
     if (!user?.uid) {
-      // User not authenticated yet - wait a bit and try again
       console.log('[Q&A Session] Waiting for authentication...');
       const timer = setTimeout(() => {
         const currentUser = authUtils.getCurrentUser();
@@ -157,7 +140,6 @@ export default function QASessionPage() {
       return () => clearTimeout(timer);
     }
 
-    // User is authenticated, fetch session data
     fetchSessionData();
   }, [boothId, user?.uid, fetchSessionData]);
 
@@ -178,7 +160,7 @@ export default function QASessionPage() {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Alert severity="error">{error}</Alert>
             <Box>
-              <button onClick={() => navigate(-1)}>← Go Back</button>
+              <button type="button" onClick={() => navigate(-1)}>← Go Back</button>
             </Box>
           </Box>
         </Container>
@@ -208,7 +190,6 @@ export default function QASessionPage() {
 
   const session = sessions[selectedSessionIndex];
 
-  // Show session selector if multiple sessions are available and user hasn't joined yet
   if (sessions.length > 1 && !hasJoined) {
     return (
       <BaseLayout pageTitle="Select Q&A Session">
@@ -220,7 +201,7 @@ export default function QASessionPage() {
                   Multiple Q&A Sessions Available
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 3, color: '#666' }}>
-                  Please select which session you'd like to join:
+                  Please select which session you&apos;d like to join:
                 </Typography>
 
                 <RadioGroup
@@ -229,15 +210,12 @@ export default function QASessionPage() {
                   sx={{ mb: 3 }}
                 >
                   {sessions.map((s, idx) => {
-                    const sessionTime = typeof s.scheduledTime === 'object' && s.scheduledTime._seconds
-                      ? new Date(s.scheduledTime._seconds * 1000)
-                      : typeof s.scheduledTime === 'number'
-                      ? new Date(s.scheduledTime)
-                      : new Date(s.scheduledTime);
+                    const sessionTime = coerceQaSessionScheduledTime(s.scheduledTime);
+                    const row = s as Record<string, unknown>;
 
                     return (
                       <FormControlLabel
-                        key={idx}
+                        key={qaSessionRadioKey(row, idx)}
                         value={idx.toString()}
                         control={<Radio />}
                         label={
@@ -263,7 +241,6 @@ export default function QASessionPage() {
                   <Button
                     variant="contained"
                     onClick={() => {
-                      // Navigate to session view - just set hasJoined flag
                       setHasJoined(true);
                     }}
                   >
@@ -291,7 +268,7 @@ export default function QASessionPage() {
           <QASessionRoom
             jitsiRoom={session.jitsiRoom || `qa-session-${boothId}-${selectedSessionIndex}`}
             userName={user?.displayName || user?.email || 'Guest'}
-            onError={(error) => setError(error.message)}
+            onError={(err) => setError(err.message)}
           />
         </Container>
       </Box>

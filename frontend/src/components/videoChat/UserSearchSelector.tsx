@@ -75,7 +75,7 @@ export function UserSearchSelector({
   error = false,
   helperText = '',
   placeholder = 'Search by name or email (min 1 char)',
-}: UserSearchSelectorProps) {
+}: Readonly<UserSearchSelectorProps>) {
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<UserSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -109,7 +109,10 @@ export function UserSearchSelector({
       return option;
     }
     const name = `${option.firstName} ${option.lastName}`.trim();
-    return `${name}${option.email ? ` (${option.email})` : ''}`;
+    if (option.email) {
+      return `${name} (${option.email})`;
+    }
+    return name;
   };
 
   return (

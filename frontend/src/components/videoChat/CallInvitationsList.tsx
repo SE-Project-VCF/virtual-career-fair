@@ -211,8 +211,11 @@ export function CallInvitationsList({ onJoinCall }: Readonly<CallInvitationsList
                         {invite.proposedTimes.length} proposed time slot
                         {invite.proposedTimes.length === 1 ? '' : 's'}:
                       </Typography>
-                      {invite.proposedTimes.map((time, idx) => (
-                        <div key={idx} style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}>
+                      {invite.proposedTimes.map((time) => (
+                        <div
+                          key={`${invite.inviteId}-${time.startTime}-${time.endTime}`}
+                          style={{ fontSize: '0.85em', color: '#666', marginTop: '4px' }}
+                        >
                           {formatTime(time.startTime)} - {formatTime(time.endTime)}
                         </div>
                       ))}
@@ -241,12 +244,7 @@ export function CallInvitationsList({ onJoinCall }: Readonly<CallInvitationsList
               Call from {selectedInvite.empName} ({selectedInvite.companyName})
             </DialogTitle>
             <DialogContent sx={{ pt: 2 }}>
-              {selectedInvite.status !== 'pending' ? (
-                <Alert severity="info">
-                  You have{' '}
-                  <strong>{selectedInvite.status}</strong> this call invitation.
-                </Alert>
-              ) : (
+              {selectedInvite.status === 'pending' ? (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 2 }}>
                     Select a time slot:
@@ -254,7 +252,7 @@ export function CallInvitationsList({ onJoinCall }: Readonly<CallInvitationsList
                   <Stack spacing={1}>
                     {selectedInvite.proposedTimes.map((time, idx) => (
                       <Button
-                        key={idx}
+                        key={`${selectedInvite.inviteId}-${time.startTime}-${time.endTime}`}
                         variant={selectedTimeIndex === idx ? 'contained' : 'outlined'}
                         onClick={() => setSelectedTimeIndex(idx)}
                         disabled={isSubmitting}
@@ -264,6 +262,11 @@ export function CallInvitationsList({ onJoinCall }: Readonly<CallInvitationsList
                     ))}
                   </Stack>
                 </Box>
+              ) : (
+                <Alert severity="info">
+                  You have{' '}
+                  <strong>{selectedInvite.status}</strong> this call invitation.
+                </Alert>
               )}
             </DialogContent>
             <DialogActions>

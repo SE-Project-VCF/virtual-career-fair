@@ -265,7 +265,6 @@ app.post("/api/stream-channel/:channelId/add-member", verifyFirebaseToken, async
   try {
     const { channelId } = req.params;
     const userId = req.user.uid;
-    const { userName = userId } = req.body;
 
     if (!channelId) {
       return res.status(400).json({ error: "Channel ID is required" });
@@ -276,7 +275,7 @@ app.post("/api/stream-channel/:channelId/add-member", verifyFirebaseToken, async
     // Add user to channel with required permissions
     await channel.addMembers([userId]);
 
-    console.log(`[StreamChat] Added user ${userId} to channel ${channelId}`);
+    console.log("[StreamChat] User added to channel (add-member)");
 
     return res.json({ success: true, message: "User added to channel" });
   } catch (err) {
@@ -307,14 +306,14 @@ app.post("/api/stream-channel/:channelId/ensure-member", verifyFirebaseToken, as
     try {
       // Try to add user to channel
       await channel.addMembers([userId]);
-      console.log(`[StreamChat] Added user ${userId} to channel ${channelId}`);
+      console.log("[StreamChat] User added to channel (ensure-member)");
     } catch (addErr) {
       // If user is already a member, that's fine - just ignore
       const errorMsg = addErr?.message || "";
       if (!errorMsg.includes("already a member")) {
         throw addErr;
       }
-      console.log(`[StreamChat] User ${userId} already a member of channel ${channelId}`);
+      console.log("[StreamChat] User already a member of channel (ensure-member)");
     }
 
     return res.json({ success: true, message: "User is member of channel" });
@@ -5444,7 +5443,6 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
 
     // Find the booth (could be in any fair)
     let boothRef = null;
-    let fairId = null;
     let boothData = null;
 
     const fairsSnapshot = await db.collection("fairs").get();
@@ -5458,7 +5456,6 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
 
       if (fairBoothDoc.exists) {
         boothRef = fairBoothRef;
-        fairId = fairDoc.id;
         boothData = fairBoothDoc.data();
         break;
       }
@@ -5539,13 +5536,14 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
  * Helpers for GET /api/booth/:boothId/qa-session (keeps route cognitive complexity low)
  */
 function qaSessionScheduledTimeMs(s) {
-  if (typeof s.scheduledTime === "object" && s.scheduledTime && s.scheduledTime.toMillis) {
-    return s.scheduledTime.toMillis();
+  const st = s?.scheduledTime;
+  if (st && typeof st === "object" && typeof st.toMillis === "function") {
+    return st.toMillis();
   }
-  if (typeof s.scheduledTime === "number") {
-    return s.scheduledTime;
+  if (typeof st === "number") {
+    return st;
   }
-  return new Date(s.scheduledTime).getTime();
+  return new Date(st).getTime();
 }
 
 async function ensureQaSessionDocExists(db, admin, session, boothId) {
@@ -5724,6 +5722,60 @@ async function deleteQaSessionAtBooth(fairBoothRef, boothData, boothId, sessionI
   return "not_found";
 }
 
+function applyQaSessionArrayItemUpdates(existingSession, body, admin) {
+  const { title, description, scheduledTime, duration } = body;
+  return {
+    ...existingSession,
+    title: title !== undefined ? title : existingSession.title,
+    description: description !== undefined ? description : existingSession.description,
+    scheduledTime: scheduledTime
+      ? admin.firestore.Timestamp.fromDate(new Date(scheduledTime))
+      : existingSession.scheduledTime,
+    duration:
+      duration !== undefined
+        ? Number.parseInt(String(duration), 10)
+        : existingSession.duration,
+    updatedAt: admin.firestore.Timestamp.now(),
+  };
+}
+
+async function tryPutQaSessionAtFairBooth(
+  fairBoothRef,
+  fairBoothDoc,
+  sessionId,
+  employerCompanyId,
+  employerId,
+  body,
+  admin
+) {
+  if (!fairBoothDoc.exists) {
+    return { code: "skip" };
+  }
+  const boothData = fairBoothDoc.data();
+  if (!employerAuthorizedForQaBooth(boothData, employerCompanyId, employerId)) {
+    return { code: "forbidden" };
+  }
+  if (!boothData.qaSessions || !Array.isArray(boothData.qaSessions)) {
+    return { code: "session_not_found" };
+  }
+  const sessionIndex = boothData.qaSessions.findIndex((s) => s.id === sessionId);
+  if (sessionIndex === -1) {
+    return { code: "session_not_found" };
+  }
+  const updatedSession = applyQaSessionArrayItemUpdates(
+    boothData.qaSessions[sessionIndex],
+    body,
+    admin
+  );
+  const newSessions = [
+    ...boothData.qaSessions.slice(0, sessionIndex),
+    updatedSession,
+    ...boothData.qaSessions.slice(sessionIndex + 1),
+  ];
+  await fairBoothRef.update({ qaSessions: newSessions });
+  return { code: "updated", session: updatedSession };
+}
+
 /**
  * Cancel/Delete Q&A session for a booth
  * DELETE /api/booth/:boothId/qa-session/:sessionId
@@ -5789,7 +5841,6 @@ app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async 
       return res.status(400).json({ error: "No fields to update" });
     }
 
-    // Validate future time if updating
     if (scheduledTime) {
       const sessionTime = new Date(scheduledTime);
       if (sessionTime <= new Date()) {
@@ -5801,17 +5852,13 @@ app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async 
       return res.status(400).json({ error: "Duration must be between 1 and 480 minutes" });
     }
 
-    // Get employer's company ID
     const userDoc = await db.collection("users").doc(employerId).get();
     if (!userDoc.exists) {
       return res.status(404).json({ error: "User not found" });
     }
-    const userData = userDoc.data();
-    const employerCompanyId = userData.companyId;
+    const employerCompanyId = userDoc.data().companyId;
 
-    // Search through all fairs to find and update the Q&A session
     const fairsSnapshot = await db.collection("fairs").get();
-
     for (const fairDoc of fairsSnapshot.docs) {
       const fairBoothRef = db
         .collection("fairs")
@@ -5820,57 +5867,31 @@ app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async 
         .doc(boothId);
       const fairBoothDoc = await fairBoothRef.get();
 
-      if (fairBoothDoc.exists) {
-        const boothData = fairBoothDoc.data();
+      const outcome = await tryPutQaSessionAtFairBooth(
+        fairBoothRef,
+        fairBoothDoc,
+        sessionId,
+        employerCompanyId,
+        employerId,
+        req.body,
+        admin
+      );
 
-        // Verify authorization
-        if (
-          boothData.companyId !== employerCompanyId &&
-          boothData.employerId !== employerId
-        ) {
-          return res.status(403).json({ error: "Not authorized to manage this booth" });
-        }
-
-        // Find and update session in qaSessions array
-        if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
-          const sessionIndex = boothData.qaSessions.findIndex(s => s.id === sessionId);
-          if (sessionIndex !== -1) {
-            const updatedSession = {
-              ...boothData.qaSessions[sessionIndex],
-              title: title !== undefined ? title : boothData.qaSessions[sessionIndex].title,
-              description: description !== undefined ? description : boothData.qaSessions[sessionIndex].description,
-              scheduledTime: scheduledTime ? admin.firestore.Timestamp.fromDate(new Date(scheduledTime)) : boothData.qaSessions[sessionIndex].scheduledTime,
-              duration:
-                duration !== undefined
-                  ? Number.parseInt(String(duration), 10)
-                  : boothData.qaSessions[sessionIndex].duration,
-              updatedAt: admin.firestore.Timestamp.now(),
-            };
-
-            const oldSession = boothData.qaSessions[sessionIndex];
-            const newSessions = [
-              ...boothData.qaSessions.slice(0, sessionIndex),
-              updatedSession,
-              ...boothData.qaSessions.slice(sessionIndex + 1),
-            ];
-
-            // Update the array directly
-            await fairBoothRef.update({
-              qaSessions: newSessions,
-            });
-
-            console.log("[Q&A Edit] Q&A session updated");
-
-            return res.json({
-              success: true,
-              message: "Q&A session updated successfully",
-              session: updatedSession,
-            });
-          }
-        }
-
-        return res.status(404).json({ error: "No Q&A session found with that ID" });
+      if (outcome.code === "skip") {
+        continue;
       }
+      if (outcome.code === "forbidden") {
+        return res.status(403).json({ error: "Not authorized to manage this booth" });
+      }
+      if (outcome.code === "updated") {
+        console.log("[Q&A Edit] Q&A session updated");
+        return res.json({
+          success: true,
+          message: "Q&A session updated successfully",
+          session: outcome.session,
+        });
+      }
+      return res.status(404).json({ error: "No Q&A session found with that ID" });
     }
 
     return res.status(404).json({ error: "Booth not found" });

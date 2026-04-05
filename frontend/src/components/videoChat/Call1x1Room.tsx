@@ -13,7 +13,7 @@ interface Call1x1RoomProps {
  * Fetches call details and displays Jitsi video room
  * Uses Jitsi's built-in features (including chat)
  */
-export function Call1x1Room({ invitationId, onError }: Call1x1RoomProps) {
+export function Call1x1Room({ invitationId, onError }: Readonly<Call1x1RoomProps>) {
   const [jitsiRoom, setJitsiRoom] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
   const [loading, setLoading] = useState(true);
