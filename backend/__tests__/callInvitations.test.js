@@ -51,7 +51,7 @@ function setupDbMock(configs) {
     };
     return {
       doc: jest.fn(() => docRef),
-      add: jest.fn().mockResolvedValue({ id: "new-invitation-id" }),
+      add: jest.fn().mockResolvedValue({ id: cfg.newDocId || "new-invitation-id" }),
       get: jest.fn().mockResolvedValue(mockQuerySnap(cfg.docs || [])),
       where: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),

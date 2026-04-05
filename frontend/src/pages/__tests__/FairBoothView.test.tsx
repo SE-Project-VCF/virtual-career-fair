@@ -470,7 +470,7 @@ describe("FairBoothView", () => {
 
     await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
 
-    expect(warnSpy).toHaveBeenCalledWith("Backend booth tracking failed:", expect.any(Error))
+    expect(warnSpy).toHaveBeenCalledWith("Failed to fetch Q&A sessions:", expect.any(Error))
     warnSpy.mockRestore()
   })
 

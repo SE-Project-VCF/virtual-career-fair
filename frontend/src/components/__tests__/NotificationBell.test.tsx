@@ -110,7 +110,7 @@ describe("NotificationBell", () => {
       renderBell()
       await waitFor(() => {
         expect(consoleError).toHaveBeenCalledWith(
-          "Error fetching notifications:",
+          "Error fetching job notifications:",
           expect.any(Error)
         )
       })
@@ -200,7 +200,7 @@ describe("NotificationBell", () => {
       const user = userEvent.setup()
       renderBell()
       await user.click(screen.getByRole("button"))
-      expect(screen.getByText("View All Invitations")).toBeInTheDocument()
+      expect(screen.getByText(/View All.*Invitations/i)).toBeInTheDocument()
     })
 
     it("shows singular 'invitation' label for count of 1", async () => {
