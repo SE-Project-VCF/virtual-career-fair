@@ -200,4 +200,94 @@ describe('CallInvitationCard Component', () => {
     // Component should render without error even with description
     expect(screen.getByText('John Employer')).toBeInTheDocument();
   });
+
+  it('should handle cancelled status invitations', () => {
+    const cancelledInvitation = { ...mockInvitation, status: 'cancelled' as any };
+    render(<CallInvitationCard invitation={cancelledInvitation} />);
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+  });
+
+  it('should handle completed status invitations', () => {
+    const completedInvitation = { ...mockInvitation, status: 'completed' as any };
+    render(<CallInvitationCard invitation={completedInvitation} />);
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+  });
+
+  it('should display different text for student and employer views', () => {
+    const { rerender } = render(
+      <CallInvitationCard invitation={mockInvitation} isEmployer={false} />
+    );
+
+    expect(screen.getByText('John Employer')).toBeInTheDocument();
+
+    rerender(<CallInvitationCard invitation={mockInvitation} isEmployer={true} />);
+
+    expect(screen.getByText('Jane Student')).toBeInTheDocument();
+  });
+
+  it('should handle invitations with optional fields missing', () => {
+    const minimalInvitation: CallInvitation = {
+      id: 'inv-2',
+      employerId: 'emp-2',
+      employerName: 'Employer Name',
+      studentId: 'stu-2',
+      studentName: 'Student Name',
+      scheduledTime: Date.now(),
+      duration: 30,
+      jitsiRoom: 'room-456',
+      status: 'pending',
+      createdAt: Date.now(),
+    };
+
+    render(<CallInvitationCard invitation={minimalInvitation} />);
+    expect(screen.getByText('Employer Name')).toBeInTheDocument();
+  });
+
+  it('should display time information when available', () => {
+    const futureTime = Date.now() + 86400000; // Tomorrow
+    const invitationWithTime = { ...mockInvitation, scheduledTime: futureTime };
+
+    render(<CallInvitationCard invitation={invitationWithTime} />);
+    expect(screen.getByText(/[0-9]/)).toBeInTheDocument();
+  });
+
+  it('should not break when callbacks are not provided', () => {
+    render(
+      <CallInvitationCard
+        invitation={mockInvitation}
+        isEmployer={false}
+        // No callbacks provided
+      />
+    );
+
+    expect(screen.getByText('John Employer')).toBeInTheDocument();
+  });
+
+  it('should handle invitations with respondedAt timestamp', () => {
+    const respondedInvitation = {
+      ...mockInvitation,
+      respondedAt: Date.now() - 3600000,
+    };
+
+    render(<CallInvitationCard invitation={respondedInvitation} />);
+    expect(screen.getByText('John Employer')).toBeInTheDocument();
+  });
+
+  it('should render with employer company name when available', () => {
+    render(<CallInvitationCard invitation={mockInvitation} isEmployer={false} />);
+    expect(screen.getByText('Tech Corp')).toBeInTheDocument();
+  });
+
+  it('should handle rapid mount/unmount cycles', () => {
+    const { unmount, rerender } = render(
+      <CallInvitationCard invitation={mockInvitation} />
+    );
+
+    rerender(<CallInvitationCard invitation={mockInvitation} />);
+    unmount();
+
+    render(<CallInvitationCard invitation={mockInvitation} />);
+    expect(screen.getByText('John Employer')).toBeInTheDocument();
+  });
 });
+
