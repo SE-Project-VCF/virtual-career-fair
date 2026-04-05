@@ -8,7 +8,7 @@ describe('consoleErrorFilter', () => {
   beforeEach(() => {
     originalConsoleError = console.error;
     errorSpy = vi.fn();
-    console.error = errorSpy;
+    console.error = errorSpy as typeof console.error;
   });
 
   afterEach(() => {
