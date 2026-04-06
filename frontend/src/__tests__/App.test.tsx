@@ -29,6 +29,19 @@ vi.mock("../pages/TailorResumeSimplePage", () => ({ default: () => <div>TailorRe
 vi.mock("../pages/TailoredResumeViewPage", () => ({ default: () => <div>TailoredResumeViewPage</div> }))
 vi.mock("../pages/TailoredResumesPage", () => ({ default: () => <div>TailoredResumesPage</div> }))
 vi.mock("../pages/SubmissionsPage", () => ({ default: () => <div>SubmissionsPage</div> }))
+vi.mock("../pages/CallInvitationsPage", () => ({ default: () => <div>CallInvitationsPage</div> }))
+vi.mock("../pages/StudentCallInvitations", () => ({
+  StudentCallInvitations: () => <div>StudentCallInvitations</div>,
+}))
+vi.mock("../pages/EmployerMyCalls", () => ({
+  EmployerMyCalls: () => <div>EmployerMyCalls</div>,
+}))
+vi.mock("../pages/ShortlistPage", () => ({ default: () => <div>ShortlistPage</div> }))
+vi.mock("../pages/QASessionsPage", () => ({ default: () => <div>QASessionsPage</div> }))
+vi.mock("../pages/QASessionPage", () => ({ default: () => <div>QASessionPage</div> }))
+vi.mock("../components/videoChat/Call1x1Room", () => ({
+  Call1x1Room: () => <div>Call1x1Room</div>,
+}))
 vi.mock("../contexts/FairContext", () => ({
   FairProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useFair: vi.fn(),
@@ -120,5 +133,47 @@ describe("App", () => {
     globalThis.history.pushState({}, "", "/dashboard/tailored-resume/res-123")
     render(<App />)
     expect(screen.getByText("TailoredResumeViewPage")).toBeInTheDocument()
+  })
+
+  it("renders CallInvitationsPage at /dashboard/call-invitations", () => {
+    globalThis.history.pushState({}, "", "/dashboard/call-invitations")
+    render(<App />)
+    expect(screen.getByText("CallInvitationsPage")).toBeInTheDocument()
+  })
+
+  it("renders StudentCallInvitations at /dashboard/1x1-calls", () => {
+    globalThis.history.pushState({}, "", "/dashboard/1x1-calls")
+    render(<App />)
+    expect(screen.getByText("StudentCallInvitations")).toBeInTheDocument()
+  })
+
+  it("renders EmployerMyCalls at /dashboard/my-calls", () => {
+    globalThis.history.pushState({}, "", "/dashboard/my-calls")
+    render(<App />)
+    expect(screen.getByText("EmployerMyCalls")).toBeInTheDocument()
+  })
+
+  it("renders Call1x1Room wrapper at /dashboard/1x1-call/:invitationId", () => {
+    globalThis.history.pushState({}, "", "/dashboard/1x1-call/inv-99")
+    render(<App />)
+    expect(screen.getByText("Call1x1Room")).toBeInTheDocument()
+  })
+
+  it("renders ShortlistPage at /dashboard/shortlist", () => {
+    globalThis.history.pushState({}, "", "/dashboard/shortlist")
+    render(<App />)
+    expect(screen.getByText("ShortlistPage")).toBeInTheDocument()
+  })
+
+  it("renders QASessionsPage at /dashboard/qa-sessions", () => {
+    globalThis.history.pushState({}, "", "/dashboard/qa-sessions")
+    render(<App />)
+    expect(screen.getByText("QASessionsPage")).toBeInTheDocument()
+  })
+
+  it("renders QASessionPage at /qa-session/:boothId", () => {
+    globalThis.history.pushState({}, "", "/qa-session/booth-xyz")
+    render(<App />)
+    expect(screen.getByText("QASessionPage")).toBeInTheDocument()
   })
 })

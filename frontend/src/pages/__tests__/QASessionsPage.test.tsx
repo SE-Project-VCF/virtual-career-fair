@@ -196,4 +196,103 @@ describe("QASessionsPage", () => {
     await user.click(screen.getByRole("button", { name: /join now/i }));
     expect(mockOpen).toHaveBeenCalledWith("/qa-session/booth-x", "_blank");
   });
+
+  it("handles failed sessions fetch (catch path) without blocking booths UI", async () => {
+    mockFetchSequence([
+      { ok: true, json: async () => ({ booths: [{ id: "b1", name: "B", fairId: "f", fairName: "F" }] }) },
+      { ok: false, json: async () => ({ error: "sessions down" }) },
+    ]);
+
+    render(<QASessionsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Your Booths")).toBeInTheDocument();
+    });
+    expect(screen.getByText("B")).toBeInTheDocument();
+  });
+
+  it("shows create error when schedule API returns not ok", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-01T12:00:00.000Z"));
+
+    try {
+      mockFetchSequence([
+        { ok: true, json: async () => ({ booths: [{ id: "b1", name: "B", fairId: "f", fairName: "F" }] }) },
+        { ok: true, json: async () => ({ sessions: [] }) },
+        { ok: false, json: async () => ({ error: "Slot unavailable" }) },
+      ]);
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<QASessionsPage />);
+
+      await waitFor(() => expect(screen.getByRole("button", { name: /schedule session/i })).toBeInTheDocument());
+      await user.click(screen.getByRole("button", { name: /schedule session/i }));
+
+      await user.type(screen.getByLabelText(/session title/i), "My Session");
+      const dt = screen.getByLabelText(/scheduled date/i);
+      await user.clear(dt);
+      await user.type(dt, "2026-06-15T14:00");
+
+      await user.click(screen.getByRole("button", { name: /create session/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Slot unavailable/i)).toBeInTheDocument();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("updates a session from the edit dialog", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-01T12:00:00.000Z"));
+
+    const scheduledTime = new Date("2099-03-10T16:00:00.000Z").toISOString();
+
+    try {
+      mockFetchSequence([
+        { ok: true, json: async () => ({ booths: [{ id: "b1", name: "Booth", fairId: "f", fairName: "Fair" }] }) },
+        {
+          ok: true,
+          json: async () => ({
+            sessions: [
+              {
+                sessionId: "s-edit",
+                boothId: "b1",
+                boothName: "Booth",
+                fairName: "Fair",
+                title: "Original",
+                scheduledTime,
+                duration: 60,
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          }),
+        },
+        { ok: true, json: async () => ({}) },
+        { ok: true, json: async () => ({ sessions: [] }) },
+      ]);
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<QASessionsPage />);
+
+      await waitFor(() => expect(screen.getByText("Original")).toBeInTheDocument());
+      await user.click(screen.getByTitle(/edit session/i));
+
+      const titleInputs = screen.getAllByLabelText(/session title/i);
+      await user.clear(titleInputs[titleInputs.length - 1]);
+      await user.type(titleInputs[titleInputs.length - 1], "Renamed Session");
+
+      await user.click(screen.getByRole("button", { name: /update session/i }));
+
+      await waitFor(() => {
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          expect.stringContaining("/api/booth/b1/qa-session/s-edit"),
+          expect.objectContaining({ method: "PUT" })
+        );
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

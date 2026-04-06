@@ -288,4 +288,46 @@ describe("VideoRoom", () => {
     });
     expect(container.contains(lastConstructorArgs?.options?.parentNode as Node)).toBe(true);
   });
+
+  it("uses existing global JitsiMeetExternalAPI without appending a script tag", async () => {
+    vi.resetModules();
+    const api = createMockJitsiApi();
+    const Ctor = vi.fn(function JitsiMeetExternalAPI(this: unknown) {
+      return api;
+    });
+    (globalThis as unknown as { JitsiMeetExternalAPI: unknown }).JitsiMeetExternalAPI = Ctor;
+    ({ VideoRoom } = await import("../VideoRoom"));
+
+    const before = document.querySelectorAll("script").length;
+    render(<VideoRoom roomName="global-api-room" userName="U" />);
+
+    await waitFor(() => {
+      expect(Ctor).toHaveBeenCalled();
+    });
+    expect(document.querySelectorAll("script").length).toBe(before);
+
+    delete (globalThis as unknown as { JitsiMeetExternalAPI?: unknown }).JitsiMeetExternalAPI;
+  });
+
+  it("logs when dispose throws during unmount cleanup", async () => {
+    const api = createMockJitsiApi();
+    api.dispose.mockImplementation(() => {
+      throw new Error("dispose boom");
+    });
+    setupJitsiConstructor(api);
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = render(<VideoRoom roomName="r-dispose-throw" userName="U" />);
+
+    await waitFor(() => {
+      expect(api.addEventListener).toHaveBeenCalled();
+    });
+
+    unmount();
+
+    expect(consoleError).toHaveBeenCalledWith("[Jitsi] Error disposing Jitsi API:", expect.any(Error));
+
+    consoleError.mockRestore();
+  });
 });
