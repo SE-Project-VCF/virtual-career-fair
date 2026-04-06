@@ -35,6 +35,10 @@ jest.mock("../services/mapboxGeocode", () => ({
     if (!address || !String(address).trim()) return null;
     return defaultGeocodeResult;
   }),
+  suggestPlaces: jest.fn(async (q) => {
+    if (!q || String(q).trim().length < 2) return [];
+    return [{ id: "mock.place", label: "Cleveland, Ohio, United States", lat: 41.5, lng: -81.69 }];
+  }),
 }));
 
 jest.mock("stream-chat", () => ({
@@ -241,6 +245,28 @@ const FAIR_DATA = {
   createdAt: { toMillis: () => 100 },
   updatedAt: { toMillis: () => 200 },
 };
+
+/* =======================================================
+   GET /api/geocode/suggest
+======================================================= */
+describe("GET /api/geocode/suggest", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("returns empty suggestions when query is too short", async () => {
+    const res = await request(app).get("/api/geocode/suggest").query({ q: "a" });
+    expect(res.status).toBe(200);
+    expect(res.body.suggestions).toEqual([]);
+  });
+
+  it("returns suggestions from Mapbox helper for multi-character query", async () => {
+    const res = await request(app).get("/api/geocode/suggest").query({ q: "Cle" });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.suggestions)).toBe(true);
+    expect(res.body.suggestions.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.suggestions[0].label).toMatch(/Cleveland/i);
+    expect(res.body.suggestions[0]).toMatchObject({ lat: expect.any(Number), lng: expect.any(Number) });
+  });
+});
 
 /* =======================================================
    GET /api/fairs

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Container,
@@ -17,11 +17,13 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Autocomplete,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
 } from "@mui/material"
+import { alpha } from "@mui/material/styles"
 import EventIcon from "@mui/icons-material/Event"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
@@ -46,6 +48,13 @@ function waitForFirebaseUser(): Promise<typeof auth.currentUser> {
   })
 }
 
+interface LocationSuggestOption {
+  id: string
+  label: string
+  lat: number
+  lng: number
+}
+
 interface Fair {
   id: string
   name: string
@@ -59,10 +68,10 @@ interface Fair {
   distanceMiles?: number
 }
 
-function getFairStatus(fair: Fair): { label: string; color: "success" | "primary" | "warning" | "default" } {
+function getFairStatus(fair: Fair): { label: string; color: "success" | "secondary" | "warning" | "default" } {
   const now = Date.now()
   if (fair.isLive) return { label: "Live Now", color: "success" }
-  if (fair.startTime && now < fair.startTime) return { label: "Upcoming", color: "primary" }
+  if (fair.startTime && now < fair.startTime) return { label: "Upcoming", color: "secondary" }
   if (fair.endTime && now > fair.endTime) return { label: "Ended", color: "default" }
   return { label: "Scheduled", color: "warning" }
 }
@@ -99,10 +108,22 @@ export default function FairList() {
   const [leaveError, setLeaveError] = useState("")
 
   const [geoFilterActive, setGeoFilterActive] = useState(false)
+  const [geoSearchSummary, setGeoSearchSummary] = useState<{
+    locationLabel: string
+    radiusMiles: number
+  } | null>(null)
   const [searchAddress, setSearchAddress] = useState("")
   const [radiusMiles, setRadiusMiles] = useState("50")
   const [browserCoords, setBrowserCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [geoHint, setGeoHint] = useState("")
+  const [locationOptions, setLocationOptions] = useState<LocationSuggestOption[]>([])
+  const [locationSuggestLoading, setLocationSuggestLoading] = useState(false)
+  const [selectedPlace, setSelectedPlace] = useState<{
+    placeName: string
+    lat: number
+    lng: number
+  } | null>(null)
+  const suggestAbortRef = useRef<AbortController | null>(null)
 
   const loadFairsFromUrl = async (url: string, options?: { geo?: boolean }) => {
     const res = await fetch(url)
@@ -111,7 +132,11 @@ export default function FairList() {
     setFairs(data.fairs || [])
     if (options?.geo === true) setGeoFilterActive(true)
     else setGeoFilterActive(false)
-    if (!options?.geo) setBrowserCoords(null)
+    if (!options?.geo) {
+      setBrowserCoords(null)
+      setSelectedPlace(null)
+      setGeoSearchSummary(null)
+    }
   }
 
   useEffect(() => {
@@ -129,6 +154,72 @@ export default function FairList() {
     loadFairs()
   }, [])
 
+  useEffect(() => {
+    if (browserCoords) {
+      setLocationOptions([])
+      return
+    }
+    const q = searchAddress.trim()
+    if (q.length < 2) {
+      setLocationOptions([])
+      setLocationSuggestLoading(false)
+      return
+    }
+    const timer = globalThis.setTimeout(() => {
+      suggestAbortRef.current?.abort()
+      const ac = new AbortController()
+      suggestAbortRef.current = ac
+      setLocationSuggestLoading(true)
+      void fetch(`${API_URL}/api/geocode/suggest?q=${encodeURIComponent(q)}`, { signal: ac.signal })
+        .then((res) => res.json())
+        .then((data: { suggestions?: LocationSuggestOption[] }) => {
+          if (!ac.signal.aborted) {
+            setLocationOptions(Array.isArray(data.suggestions) ? data.suggestions : [])
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.name !== "AbortError" && !ac.signal.aborted) {
+            setLocationOptions([])
+          }
+        })
+        .finally(() => {
+          if (!ac.signal.aborted) setLocationSuggestLoading(false)
+        })
+    }, 350)
+    return () => {
+      globalThis.clearTimeout(timer)
+      suggestAbortRef.current?.abort()
+    }
+  }, [searchAddress, browserCoords])
+
+  const executeGeoSearch = async (
+    location: { kind: "coords"; lat: number; lng: number } | { kind: "address"; address: string },
+    locationLabelForBanner: string,
+  ) => {
+    const r = Number.parseFloat(radiusMiles)
+    if (!Number.isFinite(r) || r <= 0) {
+      setGeoHint("Choose a valid radius.")
+      return
+    }
+    let qs = `radiusMiles=${encodeURIComponent(String(r))}`
+    if (location.kind === "coords") {
+      qs += `&lat=${encodeURIComponent(String(location.lat))}&lng=${encodeURIComponent(String(location.lng))}`
+    } else {
+      qs += `&address=${encodeURIComponent(location.address.trim())}`
+    }
+    setLoading(true)
+    setError("")
+    setGeoHint("")
+    try {
+      await loadFairsFromUrl(`${API_URL}/api/fairs?${qs}`, { geo: true })
+      setGeoSearchSummary({ locationLabel: locationLabelForBanner, radiusMiles: r })
+    } catch (err: any) {
+      setError(err?.message || "Search failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleUseMyLocation = () => {
     setGeoHint("")
     if (!navigator.geolocation) {
@@ -137,45 +228,50 @@ export default function FairList() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setBrowserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        setBrowserCoords({ lat, lng })
         setSearchAddress("")
-        setGeoHint("Using your current location for the next search.")
+        void executeGeoSearch({ kind: "coords", lat, lng }, "Your current location")
       },
       () => setGeoHint("Could not read your location. Check browser permissions."),
       { enableHighAccuracy: false, timeout: 15000 },
     )
   }
 
-  const handleSearchByDistance = async () => {
-    const r = Number.parseFloat(radiusMiles)
-    if (!Number.isFinite(r) || r <= 0) {
-      setGeoHint("Choose a valid radius.")
-      return
-    }
-    let qs = `radiusMiles=${encodeURIComponent(String(r))}`
+  const handleSearchByDistance = () => {
     if (browserCoords) {
-      qs += `&lat=${encodeURIComponent(String(browserCoords.lat))}&lng=${encodeURIComponent(String(browserCoords.lng))}`
+      void executeGeoSearch(
+        { kind: "coords", lat: browserCoords.lat, lng: browserCoords.lng },
+        "Your current location",
+      )
+    } else if (
+      searchAddress.trim() === selectedPlace?.placeName?.trim() &&
+      selectedPlace
+    ) {
+      void executeGeoSearch(
+        {
+          kind: "coords",
+          lat: selectedPlace.lat,
+          lng: selectedPlace.lng,
+        },
+        selectedPlace.placeName,
+      )
     } else if (searchAddress.trim()) {
-      qs += `&address=${encodeURIComponent(searchAddress.trim())}`
+      void executeGeoSearch(
+        { kind: "address", address: searchAddress.trim() },
+        searchAddress.trim(),
+      )
     } else {
       setGeoHint("Enter a location or use your current location.")
-      return
-    }
-    setLoading(true)
-    setError("")
-    setGeoHint("")
-    try {
-      await loadFairsFromUrl(`${API_URL}/api/fairs?${qs}`, { geo: true })
-    } catch (err: any) {
-      setError(err?.message || "Search failed")
-    } finally {
-      setLoading(false)
     }
   }
 
   const handleClearGeoFilter = async () => {
     setSearchAddress("")
     setBrowserCoords(null)
+    setSelectedPlace(null)
+    setLocationOptions([])
     setGeoHint("")
     setLoading(true)
     setError("")
@@ -291,87 +387,208 @@ export default function FairList() {
 
   return (
     <BaseLayout pageTitle="Career Fairs">
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Typography color="text.secondary" sx={{ mb: 4 }}>
-          Browse and join available virtual career fairs
-        </Typography>
+      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
+        <Box
+          sx={{
+            mb: 3,
+            pb: 3,
+            borderBottom: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Typography
+            variant="h5"
+            component="p"
+            sx={{
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
+              color: "text.primary",
+              mb: 1,
+            }}
+          >
+            Discover virtual career fairs
+          </Typography>
+          <Typography color="text.secondary" sx={{ maxWidth: 540, lineHeight: 1.65 }}>
+            Browse events, search by distance from an address or your location, and join with an invite code from the organizer.
+          </Typography>
+        </Box>
 
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
+            <CircularProgress color="primary" />
           </Box>
         )}
 
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-        <Card variant="outlined" sx={{ mb: 3, p: 2 }}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Find fairs by distance
-          </Typography>
-          <Grid container spacing={2} alignItems="flex-end">
-            <Grid size={{ xs: 12, md: 5 }}>
-              <TextField
-                label="City, address, or ZIP"
-                value={searchAddress}
-                onChange={(e) => {
-                  setSearchAddress(e.target.value)
-                  setBrowserCoords(null)
-                  setGeoHint("")
-                }}
-                fullWidth
-                size="small"
-                disabled={!!browserCoords}
-                placeholder={browserCoords ? "Using your location" : ""}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel id="fair-radius-label">Radius</InputLabel>
-                <Select
-                  labelId="fair-radius-label"
-                  label="Radius"
-                  value={radiusMiles}
-                  onChange={(e) => setRadiusMiles(e.target.value)}
-                >
-                  <MenuItem value="10">10 miles</MenuItem>
-                  <MenuItem value="25">25 miles</MenuItem>
-                  <MenuItem value="50">50 miles</MenuItem>
-                  <MenuItem value="100">100 miles</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<LocationOnIcon />}
-                  onClick={handleSearchByDistance}
-                  disabled={loading}
-                >
-                  Search
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<MyLocationIcon />}
-                  onClick={handleUseMyLocation}
-                  disabled={loading}
-                >
-                  My location
-                </Button>
-                {geoFilterActive && (
-                  <Button variant="text" onClick={handleClearGeoFilter} disabled={loading}>
-                    Show all fairs
-                  </Button>
-                )}
-              </Box>
-            </Grid>
-          </Grid>
-          {geoHint && (
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-              {geoHint}
+        <Card
+          elevation={0}
+          sx={{
+            mb: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 2,
+            overflow: "hidden",
+            background: (theme) =>
+              `linear-gradient(145deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.secondary.main, 0.07)} 100%)`,
+          }}
+        >
+          <Box
+            sx={{
+              px: 2.5,
+              py: 1.75,
+              borderBottom: "1px solid",
+              borderColor: "divider",
+              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06),
+            }}
+          >
+            <Typography variant="subtitle1" fontWeight={700}>
+              Find fairs by distance
             </Typography>
-          )}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+              Choose a suggestion to search immediately, or type an address and press Search. My location also searches right away (uses the radius below).
+            </Typography>
+          </Box>
+          <CardContent sx={{ pt: 2.5 }}>
+            <Grid container spacing={2} alignItems="flex-end">
+              <Grid size={{ xs: 12, md: 5 }}>
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  options={locationOptions}
+                  loading={locationSuggestLoading}
+                  filterOptions={(opts) => opts}
+                  getOptionLabel={(option) =>
+                    typeof option === "string" ? option : option.label
+                  }
+                  isOptionEqualToValue={(a, b) =>
+                    typeof a === "object" &&
+                    typeof b === "object" &&
+                    Boolean(a.id && b.id && a.id === b.id)
+                  }
+                  inputValue={searchAddress}
+                  onInputChange={(_, newInputValue, reason) => {
+                    if (reason === "reset") {
+                      setSearchAddress(newInputValue)
+                      return
+                    }
+                    setSearchAddress(newInputValue)
+                    setBrowserCoords(null)
+                    setGeoHint("")
+                    if (reason === "input" || reason === "clear") {
+                      setSelectedPlace(null)
+                    }
+                  }}
+                  onChange={(_, newValue) => {
+                    if (newValue && typeof newValue === "object" && "lat" in newValue) {
+                      setSelectedPlace({
+                        placeName: newValue.label,
+                        lat: newValue.lat,
+                        lng: newValue.lng,
+                      })
+                      setSearchAddress(newValue.label)
+                      void executeGeoSearch(
+                        {
+                          kind: "coords",
+                          lat: newValue.lat,
+                          lng: newValue.lng,
+                        },
+                        newValue.label,
+                      )
+                    }
+                  }}
+                  disabled={!!browserCoords}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="City, address, or ZIP"
+                      placeholder={
+                        browserCoords ? "Using your location" : "Start typing for suggestions"
+                      }
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="fair-radius-label">Radius</InputLabel>
+                  <Select
+                    labelId="fair-radius-label"
+                    label="Radius"
+                    value={radiusMiles}
+                    onChange={(e) => setRadiusMiles(e.target.value)}
+                  >
+                    <MenuItem value="10">10 miles</MenuItem>
+                    <MenuItem value="25">25 miles</MenuItem>
+                    <MenuItem value="50">50 miles</MenuItem>
+                    <MenuItem value="100">100 miles</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<LocationOnIcon />}
+                    onClick={handleSearchByDistance}
+                    disabled={loading}
+                  >
+                    Search
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<MyLocationIcon />}
+                    onClick={handleUseMyLocation}
+                    disabled={loading}
+                  >
+                    My location
+                  </Button>
+                  {geoFilterActive && (
+                    <Button variant="text" color="inherit" onClick={handleClearGeoFilter} disabled={loading}>
+                      Clear filters
+                    </Button>
+                  )}
+                </Box>
+              </Grid>
+            </Grid>
+            {geoHint && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                {geoHint}
+              </Typography>
+            )}
+          </CardContent>
         </Card>
+
+        {geoFilterActive && geoSearchSummary && (
+          <Box
+            sx={(theme) => ({
+              mb: 3,
+              px: 2,
+              py: 1.5,
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              bgcolor: alpha(theme.palette.secondary.main, 0.08),
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 1.25,
+            })}
+          >
+            <LocationOnIcon sx={{ color: "secondary.main", mt: 0.15 }} fontSize="small" />
+            <Typography variant="body2" color="text.primary" sx={{ lineHeight: 1.5 }}>
+              Showing results for{" "}
+              <Box component="span" fontWeight={700}>
+                {geoSearchSummary.locationLabel}
+              </Box>
+              {" "}
+              within{" "}
+              <Box component="span" fontWeight={700}>
+                {geoSearchSummary.radiusMiles}
+              </Box>{" "}
+              {geoSearchSummary.radiusMiles === 1 ? "mile" : "miles"}.
+            </Typography>
+          </Box>
+        )}
 
         {!loading && !error && fairs.length === 0 && geoFilterActive && (
           <Box sx={{ textAlign: "center", py: 8 }}>
@@ -380,10 +597,10 @@ export default function FairList() {
               No fairs found within this distance.
             </Typography>
             <Typography color="text.secondary" mt={1}>
-              Try a larger radius, a different location, or show all fairs.
+              Try a larger radius, a different location, or clear filters.
             </Typography>
             <Button sx={{ mt: 2 }} variant="outlined" onClick={handleClearGeoFilter}>
-              Show all fairs
+              Clear filters
             </Button>
           </Box>
         )}
@@ -409,35 +626,42 @@ export default function FairList() {
 
             return (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={fair.id}>
-                <Card sx={{
+                <Card sx={(theme) => ({
                   height: "100%",
                   display: "flex",
                   flexDirection: "column",
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: isEnrolled ? theme.palette.secondary.main : theme.palette.divider,
+                  boxShadow: "none",
+                  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                  "&:hover": {
+                    borderColor: isEnrolled ? theme.palette.secondary.dark : alpha(theme.palette.primary.main, 0.45),
+                    boxShadow: `0 10px 28px ${alpha(theme.palette.common.black, 0.07)}`,
+                  },
                   ...(isEnrolled && {
-                    border: "2px solid",
-                    borderColor: "success.main",
-                    bgcolor: "rgba(46, 125, 50, 0.04)",
+                    bgcolor: alpha(theme.palette.secondary.main, 0.06),
                   }),
-                }}>
+                })}>
                   {isEnrolled && (
-                    <Box sx={{
-                      bgcolor: "success.main",
-                      color: "white",
+                    <Box sx={(theme) => ({
+                      background: `linear-gradient(90deg, ${theme.palette.secondary.dark} 0%, ${theme.palette.secondary.main} 100%)`,
+                      color: theme.palette.secondary.contrastText,
                       px: 2,
                       py: 0.75,
                       display: "flex",
                       alignItems: "center",
                       gap: 1,
-                    }}>
+                    })}>
                       <CheckCircleIcon sx={{ fontSize: 16 }} />
                       <Typography variant="caption" fontWeight="bold" sx={{ letterSpacing: 0.5 }}>
                         {user?.companyName ? `${user.companyName} is enrolled` : "Your company is enrolled"}
                       </Typography>
                     </Box>
                   )}
-                  <CardContent sx={{ flexGrow: 1 }}>
+                  <CardContent sx={{ flexGrow: 1, pt: 2 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1, gap: 1 }}>
-                      <Typography variant="h6" fontWeight="bold">
+                      <Typography variant="h6" fontWeight={800} sx={{ letterSpacing: "-0.02em", lineHeight: 1.25 }}>
                         {fair.name}
                       </Typography>
                       <Box sx={{ display: "flex", gap: 0.5, flexShrink: 0 }}>
@@ -490,7 +714,7 @@ export default function FairList() {
                         <>
                           <Button
                             variant="contained"
-                            color="success"
+                            color="secondary"
                             onClick={() =>
                               navigate(
                                 boothId && user?.companyId
@@ -514,6 +738,7 @@ export default function FairList() {
                       ) : (
                         <Button
                           variant="outlined"
+                          color="primary"
                           onClick={() => handleOpenJoinDialog(fair.id)}
                           sx={{ flexGrow: 1 }}
                         >

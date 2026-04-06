@@ -11,7 +11,7 @@ const {
   evaluateFairStatusForFair,
   verifyFirebaseToken,
 } = require("../helpers");
-const { forwardGeocode } = require("../services/mapboxGeocode");
+const { forwardGeocode, suggestPlaces } = require("../services/mapboxGeocode");
 const { haversineMiles, venueFieldsFromDoc } = require("../services/geo");
 
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
@@ -50,7 +50,7 @@ function trimVenuePart(v) {
   return v == null ? "" : String(v).trim();
 }
 
-/** Mapbox query for a virtual fair hub (city + state + optional ZIP). */
+/** Mapbox query for a fair location (city + state + optional ZIP). */
 function virtualFairGeocodeQuery(city, state, zip) {
   const c = trimVenuePart(city);
   const s = trimVenuePart(state);
@@ -280,6 +280,21 @@ async function resolveSearchOriginFromQuery(query) {
    FAIR CRUD
 ======================================================= */
 
+/* GET /api/geocode/suggest - public: Mapbox-backed place hints (token stays server-side) */
+router.get("/api/geocode/suggest", async (req, res) => {
+  try {
+    const q = req.query.q != null ? String(req.query.q).trim() : "";
+    if (q.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+    const suggestions = await suggestPlaces(q);
+    return res.json({ suggestions });
+  } catch (err) {
+    console.error("GET /api/geocode/suggest error:", err);
+    return res.status(500).json({ error: "Failed to suggest locations", suggestions: [] });
+  }
+});
+
 /* GET /api/fairs - public: list fairs; optional geo filter: lat,lng,radiusMiles or address,radiusMiles */
 router.get("/api/fairs", async (req, res) => {
   try {
@@ -426,7 +441,7 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
     if (hasAnyHubPart) {
       if (!city || !state) {
         return res.status(400).json({
-          error: "City and state are required when setting a virtual fair hub for geographic search.",
+          error: "City and state are required when setting a fair location for geographic search.",
         });
       }
       if (zip.length > 20) {
@@ -518,7 +533,7 @@ router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
       } else {
         if (!city || !state) {
           return res.status(400).json({
-            error: "City and state are required when setting a virtual fair hub for geographic search.",
+            error: "City and state are required when setting a fair location for geographic search.",
           });
         }
         if (zip.length > 20) {

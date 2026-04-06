@@ -137,6 +137,36 @@ describe("FairAdminDashboard", () => {
     })
   })
 
+  it("shows fair location in fair details when location is set", async () => {
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        isLive: false,
+        startTime: null,
+        endTime: null,
+        inviteCode: "ABC123",
+        venueCity: "Charlotte",
+        venueState: "NC",
+        venueZip: "28202",
+        venueCountry: "United States",
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+
+    renderFairAdminDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByText("Fair Location")).toBeInTheDocument()
+      expect(screen.getByText("Charlotte, NC 28202")).toBeInTheDocument()
+      expect(screen.getByText("United States")).toBeInTheDocument()
+    })
+  })
+
   it("shows Live chip when fair is live", async () => {
     vi.mocked(useFair).mockReturnValue({
       setFair: vi.fn(),

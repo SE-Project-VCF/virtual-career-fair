@@ -67,6 +67,7 @@ export default function FairAdminDashboard() {
     venueZip: "",
   })
   const [saving, setSaving] = useState(false)
+  const [hubDirty, setHubDirty] = useState(false)
 
   const [codeCopied, setCodeCopied] = useState(false)
   const [refreshingInviteCode, setRefreshingInviteCode] = useState(false)
@@ -100,6 +101,22 @@ export default function FairAdminDashboard() {
     const d = new Date(ms)
     const pad = (n: number) => String(n).padStart(2, "0")
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  const openEditDialog = () => {
+    if (fair) {
+      setEditForm({
+        name: fair.name || "",
+        description: fair.description || "",
+        startTime: fair.startTime ? toLocalDatetime(fair.startTime) : "",
+        endTime: fair.endTime ? toLocalDatetime(fair.endTime) : "",
+        venueCity: fair.venueCity ?? "",
+        venueState: fair.venueState ?? "",
+        venueZip: fair.venueZip ?? "",
+      })
+    }
+    setHubDirty(false)
+    setEditDialogOpen(true)
   }
 
   const getToken = () => auth.currentUser?.getIdToken()
@@ -145,27 +162,43 @@ export default function FairAdminDashboard() {
     setError("")
     try {
       const token = await getToken()
+      const payload: Record<string, unknown> = {
+        userId: user?.uid,
+        name: editForm.name,
+        description: editForm.description,
+        startTime: editForm.startTime ? new Date(editForm.startTime).toISOString() : null,
+        endTime: editForm.endTime ? new Date(editForm.endTime).toISOString() : null,
+      }
+      if (hubDirty) {
+        payload.venueCity = editForm.venueCity.trim()
+        payload.venueState = editForm.venueState.trim()
+        payload.venueZip = editForm.venueZip.trim()
+      }
       const res = await fetch(`${API_URL}/api/fairs/${fairId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          userId: user?.uid,
-          name: editForm.name,
-          description: editForm.description,
-          startTime: editForm.startTime ? new Date(editForm.startTime).toISOString() : null,
-          endTime: editForm.endTime ? new Date(editForm.endTime).toISOString() : null,
-          venueCity: editForm.venueCity.trim(),
-          venueState: editForm.venueState.trim(),
-          venueZip: editForm.venueZip.trim(),
-        }),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to update fair")
+        let message = "Failed to update fair"
+        try {
+          const data = (await res.json()) as { error?: string }
+          if (typeof data?.error === "string") message = data.error
+        } catch {
+          message = `API error: ${res.status}`
+        }
+        throw new Error(message)
+      }
+      const refreshToken = await getToken()
+      const fairRes = await fetch(`${API_URL}/api/fairs/${fairId}`, {
+        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+      })
+      if (fairRes.ok) {
+        const fairData = await fairRes.json()
+        setFair(fairData)
       }
       setSuccess("Fair updated successfully")
       setEditDialogOpen(false)
-      globalThis.location.reload()
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -360,7 +393,7 @@ export default function FairAdminDashboard() {
               <CardContent>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
                   <Typography variant="h6">Fair Details</Typography>
-                  <Button variant="outlined" onClick={() => setEditDialogOpen(true)}>Edit</Button>
+                  <Button variant="outlined" onClick={openEditDialog}>Edit</Button>
                 </Box>
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, sm: 6 }}>
@@ -383,6 +416,22 @@ export default function FairAdminDashboard() {
                     <Grid size={{ xs: 12, sm: 6 }}>
                       <Typography variant="body2" color="text.secondary">End</Typography>
                       <Typography>{new Date(fair.endTime).toLocaleString()}</Typography>
+                    </Grid>
+                  )}
+                  {(fair.venueCity || fair.venueState || fair.venueZip || fair.venueCountry) && (
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Typography variant="body2" color="text.secondary">Fair Location</Typography>
+                      <Typography fontWeight="medium">
+                        {`${[fair.venueCity, fair.venueState].filter(Boolean).join(", ")}${fair.venueZip ? ` ${fair.venueZip}` : ""}`.trim() ||
+                          fair.venueCountry ||
+                          "—"}
+                      </Typography>
+                      {fair.venueCountry &&
+                        (fair.venueCity || fair.venueState || fair.venueZip) && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {fair.venueCountry}
+                          </Typography>
+                        )}
                     </Grid>
                   )}
                 </Grid>
@@ -458,80 +507,96 @@ export default function FairAdminDashboard() {
       {/* Edit Fair Dialog */}
       <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Fair Details</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Fair Name"
-            value={editForm.name}
-            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-            fullWidth
-            sx={{ mt: 1, mb: 2 }}
-          />
-          <TextField
-            label="Description"
-            value={editForm.description}
-            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-            fullWidth
-            multiline
-            rows={3}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            label="Start Time"
-            type="datetime-local"
-            value={editForm.startTime}
-            onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            label="End Time"
-            type="datetime-local"
-            value={editForm.endTime}
-            onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })}
-            fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={{ mb: 2 }}
-          />
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-            Virtual fair hub
-          </Typography>
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-            City and state are required for search. Clear all three and save to remove the fair from distance search.
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                label="City"
-                value={editForm.venueCity}
-                onChange={(e) => setEditForm({ ...editForm, venueCity: e.target.value })}
-                fullWidth
-              />
+        <form
+          onSubmit={e => {
+            e.preventDefault()
+            void handleSaveFair()
+          }}
+        >
+          <DialogContent>
+            <TextField
+              label="Fair Name"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              fullWidth
+              sx={{ mt: 1, mb: 2 }}
+            />
+            <TextField
+              label="Description"
+              value={editForm.description}
+              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              fullWidth
+              multiline
+              rows={3}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              label="Start Time"
+              type="datetime-local"
+              value={editForm.startTime}
+              onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
+              fullWidth
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              label="End Time"
+              type="datetime-local"
+              value={editForm.endTime}
+              onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })}
+              fullWidth
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ mb: 2 }}
+            />
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+              Fair Location
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+              City and state are required for search. Clear all three and save to remove the fair from distance search.
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="City"
+                  value={editForm.venueCity}
+                  onChange={(e) => {
+                    setHubDirty(true)
+                    setEditForm(prev => ({ ...prev, venueCity: e.target.value }))
+                  }}
+                  fullWidth
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="State / region"
+                  value={editForm.venueState}
+                  onChange={(e) => {
+                    setHubDirty(true)
+                    setEditForm(prev => ({ ...prev, venueState: e.target.value }))
+                  }}
+                  fullWidth
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="ZIP / postal code"
+                  value={editForm.venueZip}
+                  onChange={(e) => {
+                    setHubDirty(true)
+                    setEditForm(prev => ({ ...prev, venueZip: e.target.value }))
+                  }}
+                  fullWidth
+                />
+              </Grid>
             </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                label="State / region"
-                value={editForm.venueState}
-                onChange={(e) => setEditForm({ ...editForm, venueState: e.target.value })}
-                fullWidth
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                label="ZIP / postal code"
-                value={editForm.venueZip}
-                onChange={(e) => setEditForm({ ...editForm, venueZip: e.target.value })}
-                fullWidth
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaveFair} disabled={saving || !editForm.name.trim()}>
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </DialogActions>
+          </DialogContent>
+          <DialogActions>
+            <Button type="button" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={saving || !editForm.name.trim()}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
 
       {/* Add Company Dialog */}

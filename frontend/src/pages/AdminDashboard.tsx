@@ -265,7 +265,7 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
             onChange={(e) => setCreateForm({ ...createForm, endTime: e.target.value })}
             fullWidth slotProps={{ inputLabel: { shrink: true } }} />
           <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
-            Virtual fair hub (optional)
+            Fair Location (optional)
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
             City and state are used for geographic search. ZIP is optional.

@@ -37,6 +37,7 @@ jest.mock("../services/mapboxGeocode", () => ({
       mapboxId: "mock-id",
     };
   }),
+  suggestPlaces: jest.fn(async () => []),
 }));
 
 jest.mock("stream-chat", () => ({
