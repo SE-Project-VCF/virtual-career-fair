@@ -67,6 +67,18 @@ async function searchUsers(searchTerm: string): Promise<UserSearchResult[]> {
   }
 }
 
+/** Label for Autocomplete; exported for unit tests. */
+export function getUserSearchOptionLabel(option: UserSearchResult | string): string {
+  if (typeof option === 'string') {
+    return option;
+  }
+  const name = `${option.firstName} ${option.lastName}`.trim();
+  if (option.email) {
+    return `${name} (${option.email})`;
+  }
+  return name;
+}
+
 export function UserSearchSelector({
   value,
   onChange,
@@ -104,17 +116,6 @@ export function UserSearchSelector({
     return () => clearTimeout(debounceTimer);
   }, [searchText, handleSearch]);
 
-  const getOptionLabel = (option: UserSearchResult | string) => {
-    if (typeof option === 'string') {
-      return option;
-    }
-    const name = `${option.firstName} ${option.lastName}`.trim();
-    if (option.email) {
-      return `${name} (${option.email})`;
-    }
-    return name;
-  };
-
   return (
     <Autocomplete
       open={open}
@@ -127,7 +128,7 @@ export function UserSearchSelector({
       options={options}
       loading={loading}
       disabled={disabled}
-      getOptionLabel={getOptionLabel}
+      getOptionLabel={getUserSearchOptionLabel}
       isOptionEqualToValue={(option, compareValue) => option.id === compareValue?.id}
       renderOption={(props, option) => (
         <Box
