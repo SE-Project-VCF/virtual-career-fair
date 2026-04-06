@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import ApplicationFormBuilderDialog from "../ApplicationFormBuilderDialog"
 import type { ApplicationForm } from "../../types/applicationForm"
@@ -346,12 +346,15 @@ describe("ApplicationFormBuilderDialog", () => {
       render(<ApplicationFormBuilderDialog {...defaultProps} initialForm={formWithSelect} />)
 
       const optionsInput = screen.getByLabelText(/options \(comma-separated\)/i)
-      await user.clear(optionsInput)
-      await user.type(optionsInput, "  X  ,  Y  ,  Z  ")
+      fireEvent.change(optionsInput, { target: { value: "  X  ,  Y  ,  Z  " } })
       await user.click(screen.getByRole("button", { name: /save/i }))
 
       await waitFor(() => {
-        const body = JSON.parse((global.fetch as any).mock.calls[0][1].body)
+        const putCalls = (global.fetch as any).mock.calls.filter(
+          (c: unknown[]) => String(c[0]).includes("/api/jobs/job-1/form")
+        )
+        expect(putCalls.length).toBeGreaterThan(0)
+        const body = JSON.parse(putCalls[putCalls.length - 1][1].body)
         expect(body.fields[0].options).toEqual(["X", "Y", "Z"])
       })
     })

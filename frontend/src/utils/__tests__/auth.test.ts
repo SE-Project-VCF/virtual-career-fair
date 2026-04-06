@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { authUtils } from "../auth"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { authUtils, parseMyResume, tailorMyResume } from "../auth"
+import { auth } from "../../firebase"
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -1024,5 +1025,78 @@ describe("authUtils.linkRepresentativeToCompany", () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toBe("Network error")
+  })
+})
+
+describe("parseMyResume / tailorMyResume", () => {
+  const originalCurrentUser = auth.currentUser
+
+  afterEach(() => {
+    Object.defineProperty(auth, "currentUser", {
+      value: originalCurrentUser,
+      configurable: true,
+      writable: true,
+    })
+  })
+
+  it("parseMyResume posts to parse endpoint and returns JSON on success", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ sections: [{ id: "s1" }] }),
+    })
+
+    const data = await parseMyResume()
+
+    expect(data).toEqual({ sections: [{ id: "s1" }] })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/resume/parse"),
+      expect.objectContaining({ method: "POST" })
+    )
+  })
+
+  it("parseMyResume throws when API returns not ok", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Parse failed" }),
+    })
+
+    await expect(parseMyResume()).rejects.toThrow("Parse failed")
+  })
+
+  it("parseMyResume throws when not logged in (no token)", async () => {
+    Object.defineProperty(auth, "currentUser", { value: null, configurable: true })
+
+    await expect(parseMyResume()).rejects.toThrow("Not logged in")
+  })
+
+  it("tailorMyResume sends jobDescription and optional boothId/roleTitle", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ tailored: "html" }),
+    })
+
+    const data = await tailorMyResume("Build features", "booth-9", "Engineer")
+
+    expect(data).toEqual({ tailored: "html" })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/resume/tailor"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          jobDescription: "Build features",
+          boothId: "booth-9",
+          roleTitle: "Engineer",
+        }),
+      })
+    )
+  })
+
+  it("tailorMyResume throws when API returns not ok", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Tailor failed" }),
+    })
+
+    await expect(tailorMyResume("jd")).rejects.toThrow("Tailor failed")
   })
 })

@@ -75,6 +75,8 @@ vi.mock("firebase/firestore", () => ({
   setDoc: vi.fn(),
   getDoc: vi.fn(),
   getDocs: vi.fn(),
+  onSnapshot: vi.fn(),
+  serverTimestamp: vi.fn(() => ({ type: "serverTimestamp" })),
   deleteDoc: vi.fn(),
   updateDoc: vi.fn(),
   addDoc: vi.fn(),
@@ -117,6 +119,17 @@ vi.mock("stream-chat", () => ({
     })),
   },
 }))
+
+// jsdom does not implement scrollTo (used by BoothEditor and others)
+window.scrollTo = vi.fn()
+
+// jsdom: ensure scrollIntoView exists (FirebaseQAChat and other components)
+if (typeof HTMLElement !== "undefined") {
+  HTMLElement.prototype.scrollIntoView = vi.fn()
+}
+
+// jsdom does not implement alert (e.g. StudentProfilePage); avoid throwing during tests
+window.alert = vi.fn()
 
 // Mock window.matchMedia
 Object.defineProperty(globalThis, "matchMedia", {

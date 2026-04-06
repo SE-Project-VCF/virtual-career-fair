@@ -11,6 +11,14 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
+const shortlistRouter = require("./routes/shortlist");
+const {
+  tryPutQaSessionAtFairBooth,
+  validatePutQaSessionRequestBody,
+  sendPutQaSessionOutcomeResponse,
+  tryDeleteQaSessionAtFairBooth,
+  sendDeleteQaSessionOutcomeResponse,
+} = require("./lib/qaSessionMutations");
 
 // Helper to check if user is company owner or representative
 async function checkCompanyAuthorization(companyId, userId) {
@@ -213,6 +221,7 @@ app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (r
 
 // Mount fair routes (multi-fair support)
 app.use(fairsRouter);
+app.use(shortlistRouter);
 
 
 app.get("/api/debug/gemini-models", async (req, res) => {
@@ -257,6 +266,69 @@ app.get("/api/stream-token", verifyFirebaseToken, (req, res) => {
   } catch (err) {
     console.error("Stream token error:", err);
     return res.status(500).json({ error: "Unable to create token" });
+  }
+});
+
+/* NEW: Add user to StreamChat channel */
+app.post("/api/stream-channel/:channelId/add-member", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.uid;
+
+    if (!channelId) {
+      return res.status(400).json({ error: "Channel ID is required" });
+    }
+
+    const channel = streamServer.channel("messaging", channelId);
+
+    // Add user to channel with required permissions
+    await channel.addMembers([userId]);
+
+    console.log("[StreamChat] User added to channel (add-member)");
+
+    return res.json({ success: true, message: "User added to channel" });
+  } catch (err) {
+    console.error("Error adding user to StreamChat channel:", err);
+    return res.status(500).json({ error: "Failed to add user to channel" });
+  }
+});
+
+/* NEW: Ensure user is in StreamChat channel */
+app.post("/api/stream-channel/:channelId/ensure-member", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.uid;
+    const { userName = userId } = req.body;
+
+    if (!channelId) {
+      return res.status(400).json({ error: "Channel ID is required" });
+    }
+
+    // First, upsert user to ensure they exist in Stream
+    await streamServer.upsertUser({
+      id: userId,
+      name: userName,
+    });
+
+    const channel = streamServer.channel("messaging", channelId);
+
+    try {
+      // Try to add user to channel
+      await channel.addMembers([userId]);
+      console.log("[StreamChat] User added to channel (ensure-member)");
+    } catch (addErr) {
+      // If user is already a member, that's fine - just ignore
+      const errorMsg = addErr?.message || "";
+      if (!errorMsg.includes("already a member")) {
+        throw addErr;
+      }
+      console.log("[StreamChat] User already a member of channel (ensure-member)");
+    }
+
+    return res.json({ success: true, message: "User is member of channel" });
+  } catch (err) {
+    console.error("Error ensuring user in StreamChat channel:", err);
+    return res.status(500).json({ error: "Failed to ensure user in channel" });
   }
 });
 
@@ -4439,6 +4511,1432 @@ app.get("/api/debug/patch-cache", verifyFirebaseToken, async (req, res) => {
   res.json({ ok: true, stats });
 });
 
+/* ============================================================
+   VIDEO CHAT FEATURES: SHORTLIST MANAGEMENT
+============================================================ */
+
+/* Shortlist routes: ./routes/shortlist.js (mounted via app.use(shortlistRouter)) */
+
+/* ============================================================
+   VIDEO CHAT FEATURES: 1v1 CALL MANAGEMENT
+============================================================ */
+
+/**
+ * Employer schedules 1v1 call with student
+ * POST /api/calls/schedule-1v1
+ */
+app.post("/api/calls/schedule-1v1", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { studentId, proposedTimes, notes } = req.body;
+    const employerId = req.user.uid;
+
+    if (!studentId || !proposedTimes || proposedTimes.length === 0) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Verify student exists
+    const studentDoc = await db.collection("users").doc(studentId).get();
+    if (!studentDoc.exists) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    // Get employer info
+    const employerDoc = await db.collection("users").doc(employerId).get();
+    const employerData = employerDoc.data();
+
+    // Generate unique room name and channel ID
+    const callId = `call_${employerId}_${studentId}_${Date.now()}`;
+    const jitsiRoom = `call_1v1_${callId}`;
+    const channelId = `call_1v1_${callId}`;
+
+    // Create StreamChat channel
+    try {
+      const channel = streamServer.channel("messaging", channelId, {
+        members: [employerId, studentId],
+        created_by_id: employerId,
+      });
+      await channel.create();
+    } catch (channelErr) {
+      console.error("StreamChat channel creation error:", channelErr);
+      // Don't fail the request if channel creation fails
+    }
+
+    // Create call record
+    const callRef = db
+      .collection("employers")
+      .doc(employerId)
+      .collection("scheduled_calls")
+      .doc();
+
+    const callData = {
+      callId: callRef.id,
+      studentId,
+      studentName: studentDoc.data().name || studentDoc.data().firstName || "",
+      studentEmail: studentDoc.data().email || "",
+      employerId,
+      employerName: employerData.name || employerData.firstName || "",
+      employerEmail: employerData.email || "",
+      proposedTimes: proposedTimes.map((time) => ({
+        startTime: admin.firestore.Timestamp.fromDate(new Date(time.startTime)),
+        endTime: admin.firestore.Timestamp.fromDate(new Date(time.endTime)),
+        status: "proposed",
+      })),
+      status: "pending",
+      jitsiRoom,
+      streamChatChannelId: channelId,
+      notes: notes || "",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await callRef.set(callData);
+
+    // Create mirror record in student's invitations
+    const inviteRef = db
+      .collection("students")
+      .doc(studentId)
+      .collection("call_invitations")
+      .doc();
+
+    await inviteRef.set({
+      inviteId: inviteRef.id,
+      callId: callRef.id,
+      empId: employerId,
+      empName: employerData.name || employerData.firstName || "",
+      empEmail: employerData.email || "",
+      companyName: employerData.companyName || "",
+      proposedTimes: callData.proposedTimes,
+      status: "pending",
+      jitsiRoom,
+      streamChatChannelId: channelId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return res.json({
+      success: true,
+      callId: callRef.id,
+      message: "Call invitation sent to student",
+    });
+  } catch (err) {
+    console.error("POST /api/calls/schedule-1v1 error:", err);
+    return res.status(500).json({ error: "Failed to schedule call" });
+  }
+});
+
+/**
+ * Get employer's scheduled 1v1 calls
+ * GET /api/calls/my-scheduled
+ */
+app.get("/api/calls/my-scheduled", verifyFirebaseToken, async (req, res) => {
+  try {
+    const employerId = req.user.uid;
+
+    const callsSnapshot = await db
+      .collection("employers")
+      .doc(employerId)
+      .collection("scheduled_calls")
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const calls = callsSnapshot.docs.map((doc) => ({
+      callId: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toMillis() || null,
+      updatedAt: doc.data().updatedAt?.toMillis() || null,
+      proposedTimes: doc.data().proposedTimes.map((time) => ({
+        startTime: time.startTime?.toMillis() || null,
+        endTime: time.endTime?.toMillis() || null,
+        status: time.status,
+      })),
+    }));
+
+    return res.json({ success: true, calls });
+  } catch (err) {
+    console.error("GET /api/calls/my-scheduled error:", err);
+    return res.status(500).json({ error: "Failed to fetch scheduled calls" });
+  }
+});
+
+/**
+ * Get student's call invitations
+ * GET /api/calls/my-invitations
+ */
+app.get("/api/calls/my-invitations", verifyFirebaseToken, async (req, res) => {
+  try {
+    const studentId = req.user.uid;
+
+    const invitesSnapshot = await db
+      .collection("students")
+      .doc(studentId)
+      .collection("call_invitations")
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const invitations = invitesSnapshot.docs.map((doc) => ({
+      inviteId: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toMillis() || null,
+      respondedAt: doc.data().respondedAt?.toMillis() || null,
+      proposedTimes: doc.data().proposedTimes.map((time) => ({
+        startTime: time.startTime?.toMillis() || null,
+        endTime: time.endTime?.toMillis() || null,
+        status: time.status,
+      })),
+    }));
+
+    return res.json({ success: true, invitations });
+  } catch (err) {
+    console.error("GET /api/calls/my-invitations error:", err);
+    return res.status(500).json({ error: "Failed to fetch invitations" });
+  }
+});
+
+/**
+ * Student responds to call invitation (accept/decline)
+ * PATCH /api/calls/{callId}/respond
+ */
+app.patch("/api/calls/:callId/respond", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const { response, acceptedTimeIndex, inviteId } = req.body;
+    const studentId = req.user.uid;
+
+    if (!response || !["accepted", "declined"].includes(response)) {
+      return res.status(400).json({ error: "Invalid response" });
+    }
+
+    if (response === "accepted" && acceptedTimeIndex === undefined) {
+      return res.status(400).json({ error: "Accepted time index required" });
+    }
+
+    // Update student's invitation
+    if (inviteId) {
+      await db
+        .collection("students")
+        .doc(studentId)
+        .collection("call_invitations")
+        .doc(inviteId)
+        .update({
+          status: response,
+          respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+          ...(response === "accepted" && {
+            finalTime: admin.firestore.FieldValue
+              .serverTimestamp(),
+            acceptedTimeIndex,
+          }),
+        });
+    }
+
+    // Find and update employer's call record
+    const callsSnapshot = await db
+      .collection("employers")
+      .collectionGroup("scheduled_calls")
+      .where("callId", "==", callId)
+      .limit(1)
+      .get();
+
+    if (callsSnapshot.empty) {
+      return res.status(404).json({ error: "Call not found" });
+    }
+
+    const callDoc = callsSnapshot.docs[0];
+    await callDoc.ref.update({
+      status: response,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(response === "accepted" && {
+        finalTime: callDoc.data().proposedTimes[acceptedTimeIndex].startTime,
+      }),
+    });
+
+    return res.json({ success: true, message: `Call ${response}` });
+  } catch (err) {
+    console.error("PATCH /api/calls/:callId/respond error:", err);
+    return res.status(500).json({ error: "Failed to respond to invitation" });
+  }
+});
+
+/**
+ * Get call details and join link
+ * GET /api/calls/{callId}/join
+ */
+app.get("/api/calls/:callId/join", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const userId = req.user.uid;
+
+    // Find the call (could be in employer or student collection)
+    let callData = null;
+
+    // Try employer collection
+    const employerCallsSnapshot = await db
+      .collectionGroup("scheduled_calls")
+      .where("callId", "==", callId)
+      .limit(1)
+      .get();
+
+    if (!employerCallsSnapshot.empty) {
+      callData = employerCallsSnapshot.docs[0].data();
+    }
+
+    if (!callData) {
+      return res.status(404).json({ error: "Call not found" });
+    }
+
+    // Verify user is part of this call
+    if (userId !== callData.employerId && userId !== callData.studentId) {
+      return res.status(403).json({ error: "Not authorized to join this call" });
+    }
+
+    // Get user info
+    const userDoc = await db.collection("users").doc(userId).get();
+    const userName = userDoc.data().name || userDoc.data().firstName || "";
+
+    return res.json({
+      success: true,
+      callId,
+      jitsiRoom: callData.jitsiRoom,
+      streamChatChannelId: callData.streamChatChannelId,
+      userName,
+      callData: {
+        studentName: callData.studentName,
+        employerName: callData.employerName,
+        status: callData.status,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/calls/:callId/join error:", err);
+    return res.status(500).json({ error: "Failed to get call details" });
+  }
+});
+
+/**
+ * Cancel a call
+ * PATCH /api/calls/{callId}/cancel
+ */
+app.patch("/api/calls/:callId/cancel", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const userId = req.user.uid;
+
+    // Find the call
+    const callsSnapshot = await db
+      .collectionGroup("scheduled_calls")
+      .where("callId", "==", callId)
+      .limit(1)
+      .get();
+
+    if (callsSnapshot.empty) {
+      return res.status(404).json({ error: "Call not found" });
+    }
+
+    const callDoc = callsSnapshot.docs[0];
+    const callData = callDoc.data();
+
+    // Verify authorization (employer or student can cancel)
+    if (userId !== callData.employerId && userId !== callData.studentId) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    await callDoc.ref.update({
+      status: "cancelled",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return res.json({ success: true, message: "Call cancelled" });
+  } catch (err) {
+    console.error("PATCH /api/calls/:callId/cancel error:", err);
+    return res.status(500).json({ error: "Failed to cancel call" });
+  }
+});
+
+/* ============================================================
+   VIDEO CHAT FEATURES: Q&A SESSIONS (GROUP)
+============================================================ */
+
+/**
+ * Employer creates Q&A session
+ * POST /api/sessions/create-qa
+ */
+app.post("/api/sessions/create-qa", verifyFirebaseToken, async (req, res) => {
+  try {
+    const {
+      fairId,
+      title,
+      description,
+      scheduledTime,
+      maxDuration,
+    } = req.body;
+    const employerId = req.user.uid;
+
+    if (!fairId || !title || !scheduledTime) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Get employer info
+    const employerDoc = await db.collection("users").doc(employerId).get();
+    const employerData = employerDoc.data();
+
+    // Generate session ID and Jitsi room
+    const sessionRef = db.collection("video_sessions").doc();
+    const sessionId = sessionRef.id;
+    const jitsiRoom = `qna_session_${sessionId}`;
+    const channelId = `qna_session_${sessionId}`;
+
+    // Create StreamChat channel
+    try {
+      const channel = streamServer.channel("messaging", channelId, {
+        created_by_id: employerId,
+      });
+      await channel.create();
+    } catch (channelErr) {
+      console.error("StreamChat channel creation error:", channelErr);
+    }
+
+    const sessionData = {
+      sessionId,
+      fairId,
+      employerId,
+      employerName: employerData.name || employerData.firstName || "",
+      employerEmail: employerData.email || "",
+      title,
+      description: description || "",
+      scheduledTime: admin.firestore.Timestamp.fromDate(
+        new Date(scheduledTime)
+      ),
+      maxDuration: maxDuration || 60,
+      isLive: false,
+      attendees: {},
+      jitsiRoom,
+      streamChatChannelId: channelId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      startedAt: null,
+      endedAt: null,
+    };
+
+    await sessionRef.set(sessionData);
+
+    return res.json({
+      success: true,
+      sessionId,
+      message: "Q&A session created",
+    });
+  } catch (err) {
+    console.error("POST /api/sessions/create-qa error:", err);
+    return res.status(500).json({ error: "Failed to create Q&A session" });
+  }
+});
+
+/**
+ * Get active Q&A sessions for a fair
+ * GET /api/sessions/active/{fairId}
+ */
+app.get("/api/sessions/active/:fairId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { fairId } = req.params;
+
+    const sessionsSnapshot = await db
+      .collection("video_sessions")
+      .where("fairId", "==", fairId)
+      .where("isLive", "==", true)
+      .orderBy("scheduledTime", "desc")
+      .get();
+
+    const sessions = sessionsSnapshot.docs.map((doc) => ({
+      sessionId: doc.id,
+      ...doc.data(),
+      scheduledTime: doc.data().scheduledTime?.toMillis() || null,
+      createdAt: doc.data().createdAt?.toMillis() || null,
+      startedAt: doc.data().startedAt?.toMillis() || null,
+      endedAt: doc.data().endedAt?.toMillis() || null,
+    }));
+
+    return res.json({ success: true, sessions });
+  } catch (err) {
+    console.error("GET /api/sessions/active/:fairId error:", err);
+    return res.status(500).json({ error: "Failed to fetch sessions" });
+  }
+});
+
+/**
+ * Join Q&A session
+ * POST /api/sessions/{sessionId}/join
+ */
+app.post("/api/sessions/:sessionId/join", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user.uid;
+
+    // Get session
+    const sessionDoc = await db
+      .collection("video_sessions")
+      .doc(sessionId)
+      .get();
+
+    if (!sessionDoc.exists) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    const sessionData = sessionDoc.data();
+    const userDoc = await db.collection("users").doc(userId).get();
+    const userName = userDoc.data().name || userDoc.data().firstName || "";
+
+    // Add user to attendees
+    await db
+      .collection("video_sessions")
+      .doc(sessionId)
+      .update({
+        [`attendees.${userId}`]: {
+          joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+          role: userId === sessionData.employerId ? "employer" : "student",
+          isMuted: true,
+          isVideoOn: true,
+        },
+      });
+
+    // Add user to StreamChat channel
+    try {
+      const channel = streamServer.channel(
+        "messaging",
+        sessionData.streamChatChannelId
+      );
+      await channel.addMembers([userId]);
+    } catch (err) {
+      console.error("StreamChat add member error:", err);
+    }
+
+    return res.json({
+      success: true,
+      sessionId,
+      jitsiRoom: sessionData.jitsiRoom,
+      streamChatChannelId: sessionData.streamChatChannelId,
+      userName,
+    });
+  } catch (err) {
+    console.error("POST /api/sessions/:sessionId/join error:", err);
+    return res.status(500).json({ error: "Failed to join session" });
+  }
+});
+
+
+
+
+/* ============================================================
+   VIDEO CHAT FEATURES: Q&A SESSIONS (BOOTH-LINKED)
+============================================================ */
+
+/**
+ * Get employer's booths with fair information
+ * GET /api/employer/booths
+ */
+app.get("/api/employer/booths", verifyFirebaseToken, async (req, res) => {
+  try {
+    const employerId = req.user.uid;
+
+    // Get employer's user record to find their company
+    const userDoc = await db.collection("users").doc(employerId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+    const employerCompanyId = userData.companyId;
+
+    if (!employerCompanyId) {
+      return res.json({ success: true, booths: [] });
+    }
+
+    // Get all fairs
+    const fairsSnapshot = await db.collection("fairs").get();
+    const booths = [];
+
+    // Search through all fairs for booths owned by this employer's company
+    for (const fairDoc of fairsSnapshot.docs) {
+      const fairId = fairDoc.id;
+      const fairData = fairDoc.data();
+      const fairName = fairData.name || "Unknown Fair";
+
+      // Get booths in this fair
+      const boothsSnapshot = await db
+        .collection("fairs")
+        .doc(fairId)
+        .collection("booths")
+        .get();
+
+      for (const boothDoc of boothsSnapshot.docs) {
+        const boothData = boothDoc.data();
+        // Check if this booth belongs to the employer's company or the employer directly
+        if (boothData.companyId === employerCompanyId || boothData.employerId === employerId) {
+          booths.push({
+            id: boothDoc.id,
+            name: boothData.name || "Unnamed Booth",
+            fairId,
+            fairName,
+            companyId: boothData.companyId,
+            employerId: boothData.employerId,
+          });
+        }
+      }
+    }
+
+    return res.json({ success: true, booths });
+  } catch (err) {
+    console.error("GET /api/employer/booths error:", err);
+    return res.status(500).json({ error: "Failed to fetch booths" });
+  }
+});
+
+function employerCanAccessBooth(boothData, employerId, companyId) {
+  return (
+    boothData.employerId === employerId ||
+    boothData.companyId === employerId ||
+    boothData.companyId === companyId
+  );
+}
+
+function pushEmployerQaSessionsFromBooth(boothDoc, boothData, fairName, sessions) {
+  const boothName = boothData.name || "Unnamed Booth";
+  if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
+    for (const qaSession of boothData.qaSessions) {
+      sessions.push({
+        sessionId: qaSession.id,
+        boothId: boothDoc.id,
+        boothName,
+        fairName,
+        title: qaSession.title || "Q&A Session",
+        description: qaSession.description,
+        scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime || null,
+        duration: qaSession.duration || 60,
+        createdAt: qaSession.createdAt?.toMillis?.() || qaSession.createdAt || null,
+        status: qaSession.status || "scheduled",
+      });
+    }
+    return;
+  }
+  if (!boothData.qaSession) {
+    return;
+  }
+  const qaSession = boothData.qaSession;
+  sessions.push({
+    sessionId: boothDoc.id,
+    boothId: boothDoc.id,
+    boothName,
+    fairName,
+    title: qaSession.title || "Q&A Session",
+    description: qaSession.description,
+    scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime || null,
+    duration: qaSession.duration || 60,
+    createdAt: qaSession.createdAt?.toMillis?.() || qaSession.createdAt || null,
+    status: qaSession.status || "scheduled",
+  });
+}
+
+/**
+ * Get all Q&A sessions for employer's company
+ * GET /api/employer/qa-sessions
+ */
+app.get("/api/employer/qa-sessions", verifyFirebaseToken, async (req, res) => {
+  try {
+    const employerId = req.user.uid;
+
+    const userDoc = await db.collection("users").doc(employerId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userData = userDoc.data();
+    const companyId = userData.companyId;
+
+    if (!companyId) {
+      return res.json({ success: true, sessions: [] });
+    }
+
+    const sessions = [];
+    const fairsSnapshot = await db.collection("fairs").get();
+
+    for (const fairDoc of fairsSnapshot.docs) {
+      const fairId = fairDoc.id;
+      const fairData = fairDoc.data();
+      const fairName = fairData.name || "Unknown Fair";
+
+      const boothsSnapshot = await db.collection("fairs").doc(fairId).collection("booths").get();
+
+      for (const boothDoc of boothsSnapshot.docs) {
+        const boothData = boothDoc.data();
+        if (!employerCanAccessBooth(boothData, employerId, companyId)) {
+          continue;
+        }
+        pushEmployerQaSessionsFromBooth(boothDoc, boothData, fairName, sessions);
+      }
+    }
+
+    sessions.sort((a, b) => {
+      const timeA = typeof a.scheduledTime === "number" ? a.scheduledTime : new Date(a.scheduledTime).getTime();
+      const timeB = typeof b.scheduledTime === "number" ? b.scheduledTime : new Date(b.scheduledTime).getTime();
+      return timeB - timeA;
+    });
+
+    return res.json({ success: true, sessions });
+  } catch (err) {
+    console.error("GET /api/employer/qa-sessions error:", err);
+    return res.status(500).json({ error: "Failed to fetch sessions" });
+  }
+});
+
+/**
+ * Schedule Q&A session for a specific booth
+ * POST /api/booth/:boothId/schedule-qa-session
+ */
+app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    const { title, description, scheduledTime, duration } = req.body;
+    const employerId = req.user.uid;
+
+    if (!title || !scheduledTime || !duration) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Validate future time
+    const sessionTime = new Date(scheduledTime);
+    if (sessionTime <= new Date()) {
+      return res.status(400).json({ error: "Scheduled time must be in the future" });
+    }
+
+    if (duration <= 0 || duration > 480) {
+      return res.status(400).json({ error: "Duration must be between 1 and 480 minutes" });
+    }
+
+    // Find the booth (could be in any fair)
+    let boothRef = null;
+    let boothData = null;
+
+    const fairsSnapshot = await db.collection("fairs").get();
+    for (const fairDoc of fairsSnapshot.docs) {
+      const fairBoothRef = db
+        .collection("fairs")
+        .doc(fairDoc.id)
+        .collection("booths")
+        .doc(boothId);
+      const fairBoothDoc = await fairBoothRef.get();
+
+      if (fairBoothDoc.exists) {
+        boothRef = fairBoothRef;
+        boothData = fairBoothDoc.data();
+        break;
+      }
+    }
+
+    if (!boothRef || !boothData) {
+      return res.status(404).json({ error: "Booth not found" });
+    }
+
+    // Verify employer owns this booth - get employer's company ID
+    const userDoc = await db.collection("users").doc(employerId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const userData = userDoc.data();
+    const employerCompanyId = userData.companyId;
+
+    // Check if booth belongs to this employer's company or is directly assigned to employer
+    if (
+      boothData.companyId !== employerCompanyId &&
+      boothData.employerId !== employerId
+    ) {
+      return res.status(403).json({ error: "Not authorized to manage this booth" });
+    }
+
+    // Generate Jitsi room name
+    const jitsiRoom = `qa-session-${boothId}-${Date.now()}`;
+
+    // Create StreamChat channel
+    const channelId = `qa-session-${boothId}-${Date.now()}`;
+    try {
+      const channel = streamServer.channel("messaging", channelId, {
+        created_by_id: employerId,
+      });
+      await channel.create();
+    } catch (channelErr) {
+      console.error("StreamChat channel creation error:", channelErr);
+      // Don't fail the request if channel creation fails
+    }
+
+    // Update booth with Q&A session info
+    const sessionId = `session-${Date.now()}`;
+    const qaSessionData = {
+      id: sessionId,
+      title,
+      description: description || "",
+      scheduledTime: admin.firestore.Timestamp.fromDate(sessionTime),
+      duration: Number.parseInt(String(duration), 10),
+      jitsiRoom,
+      streamChatChannelId: channelId,
+      createdAt: admin.firestore.Timestamp.now(),
+      createdBy: employerId,
+      status: "scheduled",
+    };
+
+    console.log("[Q&A Schedule] Adding Q&A session to booth");
+
+    // Append to qaSessions array instead of replacing
+    await boothRef.update({
+      qaSessions: admin.firestore.FieldValue.arrayUnion(qaSessionData),
+    });
+
+    console.log("[Q&A Schedule] Session added successfully");
+
+    return res.json({
+      success: true,
+      sessionId: sessionId,
+      message: "Q&A session scheduled successfully",
+    });
+  } catch (err) {
+    console.error("POST /api/booth/:boothId/schedule-qa-session error:", err);
+    return res.status(500).json({ error: "Failed to schedule session" });
+  }
+});
+
+/**
+ * Helpers for GET /api/booth/:boothId/qa-session (keeps route cognitive complexity low)
+ */
+function qaSessionScheduledTimeMs(s) {
+  const st = s?.scheduledTime;
+  if (st && typeof st === "object" && typeof st.toMillis === "function") {
+    return st.toMillis();
+  }
+  if (typeof st === "number") {
+    return st;
+  }
+  return new Date(st).getTime();
+}
+
+async function ensureQaSessionDocExists(db, admin, session, boothId) {
+  const qaSessionRef = db.collection("qa_sessions").doc(session.id);
+  try {
+    const qaSessionDoc = await qaSessionRef.get();
+    if (qaSessionDoc.exists) {
+      console.log("[Q&A Session] Q&A session document already exists");
+      return;
+    }
+    console.log("[Q&A Session] Creating Firestore document for Q&A session");
+    await qaSessionRef.set({
+      sessionId: session.id,
+      boothId: boothId,
+      title: session.title,
+      description: session.description,
+      scheduledTime: admin.firestore.Timestamp.fromMillis(session.scheduledTime),
+      duration: session.duration,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log("[Q&A Session] Q&A session document created");
+  } catch (docErr) {
+    console.error("[Q&A Session] Error ensuring Q&A session document:", docErr.message);
+  }
+}
+
+function mapUpcomingQaSessionsForBooth(boothData, now) {
+  return boothData.qaSessions
+    .map((s) => ({
+      ...s,
+      scheduledTimeMs: qaSessionScheduledTimeMs(s),
+    }))
+    .filter((s) => s.scheduledTimeMs + s.duration * 60 * 1000 > now - 15 * 60 * 1000)
+    .sort((a, b) => a.scheduledTimeMs - b.scheduledTimeMs)
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      scheduledTime: s.scheduledTimeMs,
+      duration: s.duration,
+      jitsiRoom: s.jitsiRoom,
+      streamChatChannelId: s.streamChatChannelId,
+      status: s.status,
+    }));
+}
+
+async function buildQaSessionsArrayPayload(db, admin, boothData, boothId, now) {
+  const upcomingSessions = mapUpcomingQaSessionsForBooth(boothData, now);
+  console.log("[Q&A Session] Prepared upcoming Q&A sessions for response");
+  for (const session of upcomingSessions) {
+    await ensureQaSessionDocExists(db, admin, session, boothId);
+  }
+  return {
+    success: true,
+    qaSessions: upcomingSessions,
+    qaSession: upcomingSessions.length > 0 ? upcomingSessions[0] : null,
+  };
+}
+
+async function buildLegacyQaSessionPayload(db, admin, boothData, boothId) {
+  const qaSession = boothData.qaSession;
+  const sessionId = qaSession.id || boothId;
+  console.log("[Q&A Session] Returning legacy Q&A session format");
+  const qaSessionRef = db.collection("qa_sessions").doc(sessionId);
+  const qaSessionDoc = await qaSessionRef.get();
+  if (!qaSessionDoc.exists) {
+    console.log("[Q&A Session] Creating Firestore document for legacy Q&A session");
+    try {
+      await qaSessionRef.set(
+        {
+          sessionId: sessionId,
+          boothId: boothId,
+          title: qaSession.title,
+          description: qaSession.description,
+          scheduledTime: qaSession.scheduledTime
+            ? admin.firestore.Timestamp.fromDate(new Date(qaSession.scheduledTime))
+            : admin.firestore.FieldValue.serverTimestamp(),
+          duration: qaSession.duration || 60,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn("[Q&A Session] Failed to create Firestore document for legacy session:", err.message);
+    }
+  }
+  const row = {
+    id: sessionId,
+    title: qaSession.title,
+    description: qaSession.description,
+    scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime,
+    duration: qaSession.duration,
+    jitsiRoom: qaSession.jitsiRoom,
+    streamChatChannelId: qaSession.streamChatChannelId,
+    status: qaSession.status,
+  };
+  return {
+    success: true,
+    qaSessions: [row],
+    qaSession: {
+      title: qaSession.title,
+      description: qaSession.description,
+      scheduledTime: qaSession.scheduledTime?.toMillis?.() || qaSession.scheduledTime,
+      duration: qaSession.duration,
+      jitsiRoom: qaSession.jitsiRoom,
+      streamChatChannelId: qaSession.streamChatChannelId,
+      status: qaSession.status,
+    },
+  };
+}
+
+/**
+ * Get booth's Q&A sessions (all upcoming sessions)
+ * GET /api/booth/:boothId/qa-session
+ * Returns all upcoming Q&A sessions for a booth (not just the first one)
+ */
+app.get("/api/booth/:boothId/qa-session", async (req, res) => {
+  try {
+    const { boothId } = req.params;
+    console.log("[Q&A Session] Fetching sessions for booth");
+
+    const fairsSnapshot = await db.collection("fairs").get();
+    const now = Date.now();
+
+    for (const fairDoc of fairsSnapshot.docs) {
+      const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
+      const fairBoothDoc = await fairBoothRef.get();
+
+      if (!fairBoothDoc.exists) {
+        continue;
+      }
+
+      const boothData = fairBoothDoc.data();
+      console.log("[Q&A Session] Found booth in fair. Has qaSessions:", !!boothData.qaSessions);
+
+      if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
+        const payload = await buildQaSessionsArrayPayload(db, admin, boothData, boothId, now);
+        return res.json(payload);
+      }
+
+      if (boothData.qaSession) {
+        const payload = await buildLegacyQaSessionPayload(db, admin, boothData, boothId);
+        return res.json(payload);
+      }
+    }
+
+    console.log("[Q&A Session] No sessions found for booth");
+    return res.json({ success: true, qaSessions: [], qaSession: null });
+  } catch (err) {
+    console.error("GET /api/booth/:boothId/qa-session error:", err);
+    return res.status(500).json({ error: "Failed to fetch booth sessions" });
+  }
+});
+
+/**
+ * Cancel/Delete Q&A session for a booth
+ * DELETE /api/booth/:boothId/qa-session/:sessionId
+ */
+app.delete("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { boothId, sessionId } = req.params;
+    const employerId = req.user.uid;
+
+    const userDoc = await db.collection("users").doc(employerId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const userData = userDoc.data();
+    const employerCompanyId = userData.companyId;
+
+    const fairsSnapshot = await db.collection("fairs").get();
+
+    for (const fairDoc of fairsSnapshot.docs) {
+      const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
+      const fairBoothDoc = await fairBoothRef.get();
+
+      const outcome = await tryDeleteQaSessionAtFairBooth(
+        fairBoothRef,
+        fairBoothDoc,
+        boothId,
+        sessionId,
+        employerCompanyId,
+        employerId,
+        admin
+      );
+      if (sendDeleteQaSessionOutcomeResponse(res, outcome)) {
+        return;
+      }
+    }
+
+    return res.status(404).json({ error: "Booth not found" });
+  } catch (err) {
+    console.error("DELETE /api/booth/:boothId/qa-session/:sessionId error:", err);
+    return res.status(500).json({ error: "Failed to delete session" });
+  }
+});
+
+/**
+ * Edit Q&A session for a booth
+ * PUT /api/booth/:boothId/qa-session/:sessionId
+ */
+app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async (req, res) => {
+  try {
+    const validation = validatePutQaSessionRequestBody(req.body);
+    if (!validation.ok) {
+      return res.status(validation.status).json({ error: validation.error });
+    }
+
+    const { boothId, sessionId } = req.params;
+    const employerId = req.user.uid;
+
+    const userDoc = await db.collection("users").doc(employerId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const employerCompanyId = userDoc.data().companyId;
+
+    const fairsSnapshot = await db.collection("fairs").get();
+    for (const fairDoc of fairsSnapshot.docs) {
+      const fairBoothRef = db
+        .collection("fairs")
+        .doc(fairDoc.id)
+        .collection("booths")
+        .doc(boothId);
+      const fairBoothDoc = await fairBoothRef.get();
+
+      const outcome = await tryPutQaSessionAtFairBooth(
+        fairBoothRef,
+        fairBoothDoc,
+        sessionId,
+        employerCompanyId,
+        employerId,
+        req.body,
+        admin
+      );
+
+      if (sendPutQaSessionOutcomeResponse(res, outcome)) {
+        return;
+      }
+    }
+
+    return res.status(404).json({ error: "Booth not found" });
+  } catch (err) {
+    console.error("PUT /api/booth/:boothId/qa-session/:sessionId error:", err);
+    return res.status(500).json({ error: "Failed to update session" });
+  }
+});
+
+/**
+ * =====================================================
+ * 1x1 CALL INVITATIONS ENDPOINTS
+ * =====================================================
+ */
+
+/**
+ * Create 1x1 call invitation
+ * POST /api/call-invitations/create
+ */
+app.post("/api/call-invitations/create", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { studentId, scheduledTime, duration, description } = req.body;
+    const employerId = req.user.uid;
+
+    // Validation
+    if (!studentId || !scheduledTime || !duration) {
+      return res.status(400).json({ error: "Missing required fields: studentId, scheduledTime, duration" });
+    }
+
+    if (duration <= 0 || duration > 480) {
+      return res.status(400).json({ error: "Duration must be between 1 and 480 minutes" });
+    }
+
+    const inviteTime = new Date(scheduledTime);
+    if (inviteTime <= new Date()) {
+      return res.status(400).json({ error: "Scheduled time must be in the future" });
+    }
+
+    // Get employer details
+    const employerDoc = await db.collection("users").doc(employerId).get();
+    if (!employerDoc.exists) {
+      return res.status(404).json({ error: "Employer not found" });
+    }
+    const employerData = employerDoc.data();
+
+    // Get employer company info
+    let employerCompanyId = employerData.companyId;
+    let employerCompanyName = "Company";
+    if (employerCompanyId) {
+      const companyDoc = await db.collection("companies").doc(employerCompanyId).get();
+      if (companyDoc.exists) {
+        employerCompanyName = companyDoc.data().name || "Company";
+      }
+    }
+
+    // Get student details
+    const studentDoc = await db.collection("users").doc(studentId).get();
+    if (!studentDoc.exists) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+    const studentData = studentDoc.data();
+
+    // Check for overlapping invitations
+    const overlappingQuery = await db
+      .collection("call_invitations")
+      .where("studentId", "==", studentId)
+      .where("status", "in", ["pending", "accepted"])
+      .get();
+
+    const endTime = new Date(inviteTime.getTime() + duration * 60 * 1000);
+    for (const doc of overlappingQuery.docs) {
+      const invite = doc.data();
+      const existingStart = new Date(invite.scheduledTime);
+      const existingEnd = new Date(existingStart.getTime() + invite.duration * 60 * 1000);
+
+      // Check for overlap
+      if (inviteTime < existingEnd && endTime > existingStart) {
+        return res.status(409).json({ error: "Student has overlapping call at that time" });
+      }
+    }
+
+    // Generate Jitsi room name
+    const jitsiRoom = `call-${employerId}-${studentId}-${Date.now()}`;
+
+    // Create invitation
+    const invitationRef = db.collection("call_invitations").doc();
+    const invitationData = {
+      id: invitationRef.id,
+      employerId,
+      employerName: employerData.displayName || employerData.email || "Employer",
+      employerCompanyId,
+      employerCompanyName,
+      studentId,
+      studentName: studentData.displayName || studentData.email || "Student",
+      scheduledTime: admin.firestore.Timestamp.fromDate(inviteTime),
+      duration,
+      description: description || "",
+      jitsiRoom,
+      status: "pending", // pending, accepted, declined, completed
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      respondedAt: null,
+      startedAt: null,
+      endedAt: null,
+    };
+
+    await invitationRef.set(invitationData);
+
+    // Add to student's call invitations array
+    await db.collection("users").doc(studentId).update({
+      callInvitations: admin.firestore.FieldValue.arrayUnion(invitationRef.id),
+    });
+
+    // Add to employer's outgoing invitations array
+    await db.collection("users").doc(employerId).update({
+      outgoingCallInvitations: admin.firestore.FieldValue.arrayUnion(invitationRef.id),
+    });
+
+    console.log("[1x1 Calls] Call invitation created");
+
+    return res.status(201).json({
+      success: true,
+      invitationId: invitationRef.id,
+      message: "Call invitation sent successfully",
+    });
+  } catch (err) {
+    console.error("POST /api/call-invitations/create error:", err);
+    return res.status(500).json({ error: "Failed to create call invitation" });
+  }
+});
+
+/**
+ * Get incoming call invitations (student view)
+ * GET /api/call-invitations/incoming
+ */
+app.get("/api/call-invitations/incoming", verifyFirebaseToken, async (req, res) => {
+  try {
+    const userId = req.user.uid;
+
+    const invitationsSnapshot = await db
+      .collection("call_invitations")
+      .where("studentId", "==", userId)
+      .get();
+
+    const invitations = invitationsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      scheduledTime: doc.data().scheduledTime?.toMillis() || null,
+      createdAt: doc.data().createdAt?.toMillis() || null,
+      respondedAt: doc.data().respondedAt?.toMillis() || null,
+      startedAt: doc.data().startedAt?.toMillis() || null,
+      endedAt: doc.data().endedAt?.toMillis() || null,
+    }))
+    // Sort by scheduledTime descending on the server side
+    .sort((a, b) => (b.scheduledTime || 0) - (a.scheduledTime || 0));
+
+    return res.json({ success: true, invitations });
+  } catch (err) {
+    console.error("GET /api/call-invitations/incoming error:", err);
+    return res.status(500).json({ error: "Failed to fetch invitations" });
+  }
+});
+
+/**
+ * Get outgoing call invitations (employer view)
+ * GET /api/call-invitations/outgoing
+ */
+app.get("/api/call-invitations/outgoing", verifyFirebaseToken, async (req, res) => {
+  try {
+    const userId = req.user.uid;
+
+    const invitationsSnapshot = await db
+      .collection("call_invitations")
+      .where("employerId", "==", userId)
+      .get();
+
+    const invitations = invitationsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      scheduledTime: doc.data().scheduledTime?.toMillis() || null,
+      createdAt: doc.data().createdAt?.toMillis() || null,
+      respondedAt: doc.data().respondedAt?.toMillis() || null,
+      startedAt: doc.data().startedAt?.toMillis() || null,
+      endedAt: doc.data().endedAt?.toMillis() || null,
+    }))
+    // Sort by scheduledTime descending on the server side
+    .sort((a, b) => (b.scheduledTime || 0) - (a.scheduledTime || 0));
+
+    return res.json({ success: true, invitations });
+  } catch (err) {
+    console.error("GET /api/call-invitations/outgoing error:", err);
+    return res.status(500).json({ error: "Failed to fetch invitations" });
+  }
+});
+
+/**
+ * Accept call invitation (student only)
+ * POST /api/call-invitations/:invitationId/accept
+ */
+app.post("/api/call-invitations/:invitationId/accept", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { invitationId } = req.params;
+    const userId = req.user.uid;
+
+    const invitationDoc = await db.collection("call_invitations").doc(invitationId).get();
+    if (!invitationDoc.exists) {
+      return res.status(404).json({ error: "Invitation not found" });
+    }
+
+    const invitation = invitationDoc.data();
+
+    // Verify student is the recipient
+    if (invitation.studentId !== userId) {
+      return res.status(403).json({ error: "Not authorized to accept this invitation" });
+    }
+
+    // Check if already responded
+    if (invitation.status !== "pending") {
+      return res.status(409).json({ error: "Invitation has already been responded to" });
+    }
+
+    // Update invitation status
+    await db.collection("call_invitations").doc(invitationId).update({
+      status: "accepted",
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log("[1x1 Calls] Call invitation accepted");
+
+    return res.json({
+      success: true,
+      message: "Call invitation accepted",
+    });
+  } catch (err) {
+    console.error("POST /api/call-invitations/:invitationId/accept error:", err);
+    return res.status(500).json({ error: "Failed to accept invitation" });
+  }
+});
+
+/**
+ * Decline call invitation (student only)
+ * POST /api/call-invitations/:invitationId/decline
+ */
+app.post("/api/call-invitations/:invitationId/decline", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { invitationId } = req.params;
+    const userId = req.user.uid;
+
+    const invitationDoc = await db.collection("call_invitations").doc(invitationId).get();
+    if (!invitationDoc.exists) {
+      return res.status(404).json({ error: "Invitation not found" });
+    }
+
+    const invitation = invitationDoc.data();
+
+    // Verify student is the recipient
+    if (invitation.studentId !== userId) {
+      return res.status(403).json({ error: "Not authorized to decline this invitation" });
+    }
+
+    // Check if already responded
+    if (invitation.status !== "pending") {
+      return res.status(409).json({ error: "Invitation has already been responded to" });
+    }
+
+    // Update invitation status
+    await db.collection("call_invitations").doc(invitationId).update({
+      status: "declined",
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log("[1x1 Calls] Call invitation declined");
+
+    return res.json({
+      success: true,
+      message: "Call invitation declined",
+    });
+  } catch (err) {
+    console.error("POST /api/call-invitations/:invitationId/decline error:", err);
+    return res.status(500).json({ error: "Failed to decline invitation" });
+  }
+});
+
+/**
+ * Cancel call invitation (employer only, before call starts)
+ * POST /api/call-invitations/:invitationId/cancel
+ */
+app.post("/api/call-invitations/:invitationId/cancel", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { invitationId } = req.params;
+    const userId = req.user.uid;
+
+    const invitationDoc = await db.collection("call_invitations").doc(invitationId).get();
+    if (!invitationDoc.exists) {
+      return res.status(404).json({ error: "Invitation not found" });
+    }
+
+    const invitation = invitationDoc.data();
+
+    // Verify employer owns the invitation
+    if (invitation.employerId !== userId) {
+      return res.status(403).json({ error: "Not authorized to cancel this invitation" });
+    }
+
+    // Check if call hasn't started yet
+    const scheduledTime = new Date(invitation.scheduledTime);
+    if (scheduledTime <= new Date()) {
+      return res.status(409).json({ error: "Cannot cancel a call that has already started" });
+    }
+
+    // Update invitation status
+    await db.collection("call_invitations").doc(invitationId).update({
+      status: "cancelled",
+    });
+
+    console.log("[1x1 Calls] Call invitation cancelled");
+
+    return res.json({
+      success: true,
+      message: "Call invitation cancelled",
+    });
+  } catch (err) {
+    console.error("POST /api/call-invitations/:invitationId/cancel error:", err);
+    return res.status(500).json({ error: "Failed to cancel invitation" });
+  }
+});
+
+/**
+ * Join 1x1 call (get join details)
+ * POST /api/call-invitations/:invitationId/join
+ */
+app.post("/api/call-invitations/:invitationId/join", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { invitationId } = req.params;
+    const userId = req.user.uid;
+
+    const invitationDoc = await db.collection("call_invitations").doc(invitationId).get();
+    if (!invitationDoc.exists) {
+      return res.status(404).json({ error: "Invitation not found" });
+    }
+
+    const invitation = invitationDoc.data();
+
+    // Verify user is either employer or student
+    if (invitation.employerId !== userId && invitation.studentId !== userId) {
+      return res.status(403).json({ error: "Not authorized to join this call" });
+    }
+
+    // Check if invitation is accepted
+    if (invitation.status !== "accepted") {
+      return res.status(409).json({ error: "Call invitation must be accepted to join" });
+    }
+
+    // Check if within join window (15 mins before through entire duration)
+    const scheduledTime = new Date(invitation.scheduledTime);
+    const endTime = new Date(scheduledTime.getTime() + invitation.duration * 60 * 1000);
+    const now = new Date();
+    const timeUntilStart = scheduledTime.getTime() - now.getTime();
+
+    if (timeUntilStart > 15 * 60 * 1000) {
+      return res.status(400).json({ error: "Call not yet available. Join window opens 15 minutes before start time." });
+    }
+
+    if (now > endTime) {
+      return res.status(400).json({ error: "Call has ended" });
+    }
+
+    // Get user name
+    const userDoc = await db.collection("users").doc(userId).get();
+    const userName = userDoc.data().displayName || userDoc.data().email || "User";
+
+    // Mark as started if first person joining
+    if (!invitation.startedAt) {
+      await db.collection("call_invitations").doc(invitationId).update({
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    return res.json({
+      success: true,
+      jitsiRoom: invitation.jitsiRoom,
+      userName,
+      employerName: invitation.employerName,
+      studentName: invitation.studentName,
+      description: invitation.description,
+    });
+  } catch (err) {
+    console.error("POST /api/call-invitations/:invitationId/join error:", err);
+    return res.status(500).json({ error: "Failed to join call" });
+  }
+});
 
 if (require.main === module) {
   app.listen(PORT, () => {

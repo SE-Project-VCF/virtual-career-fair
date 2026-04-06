@@ -29,12 +29,19 @@ import EmailIcon from "@mui/icons-material/Email"
 import PhoneIcon from "@mui/icons-material/Phone"
 import LanguageIcon from "@mui/icons-material/Language"
 import LaunchIcon from "@mui/icons-material/Launch"
+import VideocamIcon from "@mui/icons-material/Videocam"
 import BaseLayout from "../components/BaseLayout"
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
 import ResubmitReviewDialog from "../components/ResubmitReviewDialog"
 import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
 import { INDUSTRY_LABELS, fetchMyBoothRating, submitBoothRating } from "../utils/boothConstants"
+import { fetchQaSessionsAndMergeIntoBooth } from "../utils/qaSessionBooth"
+import {
+  formatQaSessionScheduledDisplay,
+  formatStartsInCountdown,
+  getQaSessionJoinUiState,
+} from "../utils/qaSessionUi"
 
 interface Booth {
   id: string
@@ -52,6 +59,15 @@ interface Booth {
   contactEmail: string
   contactPhone?: string
   companyId?: string
+  qaSession?: {
+    title: string
+    description?: string
+    scheduledTime: number | string
+    duration: number
+    jitsiRoom?: string
+    streamChatChannelId?: string
+    status?: string
+  }
 }
 
 interface Job {
@@ -308,6 +324,12 @@ export default function BoothView() {
       const boothData = await loadBoothData(boothId, fairIsLive)
       if (!boothData || !isMountedRef.current) return
 
+      await fetchQaSessionsAndMergeIntoBooth(
+        boothId,
+        boothData as unknown as Record<string, unknown>,
+        () => isMountedRef.current
+      )
+
       setBooth(boothData)
       await trackStudentBoothView(boothData)
       await fetchMyRating(boothId)
@@ -459,6 +481,82 @@ export default function BoothView() {
                 </Box>
 
                 <Divider sx={{ my: 3 }} />
+
+                {/* Q&A Session */}
+                {booth.qaSession && (
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: "#1a1a1a", display: "flex", alignItems: "center", gap: 1 }}>
+                      <VideocamIcon sx={{ color: "#388560" }} />
+                      📹 Q&A Session
+                    </Typography>
+                    <Card sx={{ bgcolor: "rgba(56, 133, 96, 0.05)", border: "2px solid rgba(56, 133, 96, 0.2)", p: 2 }}>
+                      <CardContent sx={{ p: 0 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                          {booth.qaSession.title}
+                        </Typography>
+                        {booth.qaSession.description && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            {booth.qaSession.description}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: "flex", gap: 3, mb: 2, fontSize: "0.95rem", color: "text.secondary" }}>
+                          {/* Scheduled Time */}
+                          <Box>
+                            <strong>Scheduled:</strong>{" "}
+                            {formatQaSessionScheduledDisplay(booth.qaSession.scheduledTime)}
+                          </Box>
+                          {/* Duration */}
+                          <Box>
+                            <strong>Duration:</strong> {booth.qaSession.duration} min
+                          </Box>
+                        </Box>
+
+                        {/* Time countdown and join button */}
+                        {(() => {
+                          const join = getQaSessionJoinUiState(
+                            booth.qaSession.scheduledTime,
+                            booth.qaSession.duration
+                          );
+                          const { isUpcoming, isActive, isPast, canJoin, joinButtonLabel, minutesUntilEnd } = join;
+                          return (
+                            <>
+                              {isUpcoming && (
+                                <Typography variant="body2" sx={{ mb: 2, color: "#f57c00", fontWeight: 600 }}>
+                                  Starts in {formatStartsInCountdown(join.minutesUntilStart)}
+                                </Typography>
+                              )}
+                              {isActive && (
+                                <Typography variant="body2" sx={{ mb: 2, color: "#d32f2f", fontWeight: 600 }}>
+                                  🔴 Call in Progress - Ends in {Math.max(0, minutesUntilEnd)}m
+                                </Typography>
+                              )}
+                              {isPast && (
+                                <Typography variant="body2" sx={{ mb: 2, color: "#9e9e9e" }}>
+                                  Session has ended
+                                </Typography>
+                              )}
+                              <Button
+                                variant="contained"
+                                startIcon={<VideocamIcon />}
+                                onClick={() => navigate(`/qa-session/${booth.id}`)}
+                                disabled={!canJoin}
+                                sx={{
+                                  background: isActive
+                                    ? "linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)" 
+                                    : "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {joinButtonLabel}
+                              </Button>
+                            </>
+                          );
+                        })()}
+                      </CardContent>
+                    </Card>
+                    <Divider sx={{ my: 3 }} />
+                  </Box>
+                )}
 
                 {/* Company Description */}
                 <Box sx={{ mb: 4 }}>
