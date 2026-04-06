@@ -57,7 +57,7 @@ vi.mock("../../firebase", () => ({
   storage: {},
 }));
 
-global.fetch = vi.fn();
+globalThis.fetch = vi.fn();
 
 // Import after mocking
 import { authUtils } from "../../utils/auth";
@@ -86,7 +86,7 @@ describe("StudentProfilePage", () => {
     (authUtils.isAuthenticated as any).mockReturnValue(true);
     (authUtils.getIdToken as any).mockResolvedValue("mock-token");
     (firestore.getDoc as any).mockResolvedValue({ exists: () => false });
-    (global.fetch as any).mockImplementation((url: string) => {
+    (globalThis.fetch as any).mockImplementation((url: string) => {
       if (url.includes("/api/resume/tailored")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ resumes: [] }) });
       }
@@ -158,6 +158,13 @@ describe("StudentProfilePage", () => {
     renderStudentProfile();
     await waitFor(() => {
       expect(screen.getByLabelText(/Skills/)).toBeInTheDocument();
+    });
+  });
+
+  it("displays LinkedIn URL input field", async () => {
+    renderStudentProfile();
+    await waitFor(() => {
+      expect(screen.getByLabelText(/LinkedIn URL/i)).toBeInTheDocument();
     });
   });
 
@@ -256,7 +263,7 @@ describe("StudentProfilePage", () => {
     // cannot be set through the UI. The validation exists in handleSave but is unreachable.
     const user = userEvent.setup();
     // Mock window.alert so save success doesn't throw in jsdom
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const alertSpy = vi.spyOn(globalThis, "alert").mockImplementation(() => {});
 
     renderStudentProfile();
 
@@ -403,7 +410,6 @@ describe("StudentProfilePage", () => {
   // useEffect Dependency Optimization Tests
   describe("useEffect Hook Management", () => {
     it("uses user?.uid as dependency to prevent unnecessary re-fetches", async () => {
-      const user = userEvent.setup();
       const getDocCall = vi.fn();
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         getDocCall();
@@ -510,8 +516,6 @@ describe("StudentProfilePage", () => {
       await waitFor(() => {
         expect(getDocCall).toHaveBeenCalled();
       });
-
-      const callCountAfterMount = getDocCall.mock.calls.length;
 
       // Clear and re-mock to track new calls
       getDocCall.mockClear();

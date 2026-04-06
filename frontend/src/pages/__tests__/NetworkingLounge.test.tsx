@@ -471,4 +471,187 @@ describe("NetworkingLounge", () => {
     // channel() should not have been called (no lounge join)
     expect(mockStreamClient.channel).not.toHaveBeenCalled()
   })
+
+  describe("Attendees tab", () => {
+    const setupConnected = () => {
+      mockStreamClient.userID = "user-1"
+      setStreamClient(mockStreamClient)
+    }
+
+    it("renders Group Chat and Attendees tabs when connected", async () => {
+      setupConnected()
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ channelId: "lounge-f1" }),
+      })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => {
+        expect(screen.getByRole("tab", { name: /group chat/i })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument()
+      })
+    })
+
+    it("shows attendee list when Attendees tab is clicked", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            attendees: [
+              {
+                uid: "student-2",
+                firstName: "Jane",
+                lastName: "Smith",
+                email: "jane@example.com",
+                major: "Computer Science",
+                expectedGradYear: 2025,
+                skills: "React, Python",
+                linkedinUrl: "https://linkedin.com/in/jane",
+              },
+            ],
+          }),
+        })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => {
+        expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText("Jane Smith")).toBeInTheDocument()
+        expect(screen.getByText("Computer Science")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: /linkedin/i })).toBeInTheDocument()
+      })
+    })
+
+    it("shows Message button for other students but not for self", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            attendees: [
+              { uid: "student-2", firstName: "Jane", lastName: "Smith", email: "jane@example.com", major: "CS", expectedGradYear: 2025, skills: "", linkedinUrl: null },
+              { uid: "user-1", firstName: "John", lastName: "Doe", email: "student@example.com", major: "CS", expectedGradYear: 2025, skills: "", linkedinUrl: null },
+            ],
+          }),
+        })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText("Jane Smith")).toBeInTheDocument()
+      })
+
+      // One Message button (for Jane), not two
+      expect(screen.getAllByRole("button", { name: /message/i })).toHaveLength(1)
+    })
+
+    it("shows 'No other students' when attendees list is empty", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ attendees: [] }),
+        })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/no other students in the lounge yet/i)).toBeInTheDocument()
+      })
+    })
+
+    it("does not show LinkedIn button when attendee has no LinkedIn URL", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            attendees: [
+              { uid: "student-2", firstName: "Jane", lastName: "Smith", email: "jane@example.com", major: "CS", expectedGradYear: null, skills: "", linkedinUrl: null },
+            ],
+          }),
+        })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => expect(screen.getByText("Jane Smith")).toBeInTheDocument())
+
+      expect(screen.queryByRole("link", { name: /linkedin/i })).not.toBeInTheDocument()
+    })
+
+    it("fetches attendees only once when tab is clicked multiple times", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValue({
+          ok: true,
+          json: async () => ({ attendees: [] }),
+        })
+
+      globalThis.fetch = fetchMock
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+      await waitFor(() => expect(screen.getByText(/no other students/i)).toBeInTheDocument())
+
+      // Switch back to chat and then back to attendees
+      await user.click(screen.getByRole("tab", { name: /group chat/i }))
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      // Attendees fetch should only have been called once (join + one attendees fetch)
+      const attendeesFetches = fetchMock.mock.calls.filter((call) =>
+        call[0].includes("/lounge/attendees")
+      )
+      expect(attendeesFetches).toHaveLength(1)
+    })
+  })
 })
