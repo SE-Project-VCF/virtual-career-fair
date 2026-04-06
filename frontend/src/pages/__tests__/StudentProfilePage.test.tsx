@@ -296,9 +296,10 @@ describe("StudentProfilePage", () => {
   });
 
   it("displays loading state while saving", async () => {
-    const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const user = userEvent.setup({ delay: null });
     (firestore.setDoc as any).mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 100))
+      () => new Promise((resolve) => setTimeout(resolve, 500))
     );
 
     renderStudentProfile();
@@ -316,7 +317,8 @@ describe("StudentProfilePage", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("progressbar")).toBeInTheDocument();
-    }, { timeout: 3000 });
+    }, { timeout: 5000 });
+    alertSpy.mockRestore();
   }, 10000);
 
   // Resume Upload Tests

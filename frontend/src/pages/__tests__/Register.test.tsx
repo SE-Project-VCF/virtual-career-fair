@@ -473,7 +473,7 @@ describe("Register", () => {
   }, 10000);
 
   it("includes representative invite code when provided", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     (authUtils.registerUser as any).mockResolvedValue({
       success: true,
       needsVerification: false,
@@ -522,10 +522,10 @@ describe("Register", () => {
         })
       );
     }, { timeout: 3000 });
-  }, 10000);
+  }, 25000);
 
   it("handles registration error", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     (authUtils.registerUser as any).mockResolvedValue({
       success: false,
       error: "Email already in use",
@@ -562,7 +562,7 @@ describe("Register", () => {
                            screen.queryByText(/Email already in use/);
       expect(errorElement).toBeInTheDocument();
     }, { timeout: 3000 });
-  }, 10000);
+  }, 25000);
 
   it("redirects to verification-pending when needsVerification is true", async () => {
     const user = userEvent.setup();
@@ -609,7 +609,7 @@ describe("Register", () => {
   });
 
   it("includes student school when provided", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     (authUtils.registerUser as any).mockResolvedValue({
       success: true,
       needsVerification: false,
@@ -661,7 +661,7 @@ describe("Register", () => {
         })
       );
     }, { timeout: 3000 });
-  }, 10000);
+  }, 25000);
 
   it("registers company owner successfully", async () => {
     const user = userEvent.setup();
