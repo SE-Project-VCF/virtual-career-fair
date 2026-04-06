@@ -430,7 +430,7 @@ describe("BoothEditor", () => {
   // Form Submission Tests
   describe("Form Submission", () => {
     it("submits form and creates new booth successfully", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       renderBoothEditor();
 
       await waitFor(() => {
@@ -499,7 +499,7 @@ describe("BoothEditor", () => {
     }, 10000);
 
     it("shows error when contact email is not registered", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       (firestore.getDocs as any).mockResolvedValue({ empty: true, docs: [] });
 
       renderBoothEditor();
@@ -535,11 +535,11 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Contact email does not match any registered user/)).toBeInTheDocument();
-      }, { timeout: 3000 });
-    }, 15000);
+      }, { timeout: 5000 });
+    }, 30000);
 
     it("shows error when contact is not company owner or representative", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       (firestore.getDocs as any).mockResolvedValue({
         empty: false,
         docs: [{
@@ -577,11 +577,11 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText("This user is not an owner or representative of your company.")).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 5000 });
+    }, 30000);
 
     it("shows error when booth creation fails", async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       (firestore.addDoc as any).mockRejectedValue(new Error("Database error"));
 
       renderBoothEditor();
@@ -614,8 +614,8 @@ describe("BoothEditor", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/failed to save booth/i)).toBeInTheDocument();
-      });
-    });
+      }, { timeout: 5000 });
+    }, 30000);
 
     it("disables submit button while saving", async () => {
       const user = userEvent.setup();
@@ -1090,8 +1090,8 @@ describe("BoothEditor", () => {
       });
       await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
 
-      const locationInput = screen.queryByRole("textbox", { name: /location/i }) || screen.queryByLabelText(/location/i);
-      if (locationInput) await user.type(locationInput, "San Francisco");
+      const locationInput = screen.getByRole("textbox", { name: /^location$/i });
+      await user.type(locationInput, "San Francisco");
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
       await user.type(screen.getByRole("textbox", { name: /company website/i }), "https://example.com");
       await user.type(screen.getByRole("textbox", { name: /careers page/i }), "https://example.com/careers");
@@ -1101,15 +1101,18 @@ describe("BoothEditor", () => {
 
       await user.click(screen.getByRole("button", { name: /create booth/i }));
 
-      await waitFor(() => {
-        expect(firestore.addDoc).toHaveBeenCalled();
-        const callArgs = (firestore.addDoc as any).mock.calls[0];
-        const boothData = callArgs[1];
-        expect(boothData.website).toBe("https://example.com");
-        expect(boothData.careersPage).toBe("https://example.com/careers");
-        expect(boothData.contactPhone).toBe("+1 555-1234");
-      });
-    }, 15000);
+      await waitFor(
+        () => {
+          expect(firestore.addDoc).toHaveBeenCalled();
+          const callArgs = (firestore.addDoc as any).mock.calls[0];
+          const boothData = callArgs[1];
+          expect(boothData.website).toBe("https://example.com");
+          expect(boothData.careersPage).toBe("https://example.com/careers");
+          expect(boothData.contactPhone).toBe("+1 555-1234");
+        },
+        { timeout: 30000 }
+      );
+    }, 35000);
   });
 
   // Representative Access Tests

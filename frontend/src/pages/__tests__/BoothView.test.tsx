@@ -959,17 +959,20 @@ describe("BoothView", () => {
       if (url.includes("/ratings/me") || url.includes("/track-view") || url.includes("/track-leave")) {
         return Promise.resolve({ ok: true, json: async () => ({}) });
       }
+      if (url.includes("/api/booth") && url.includes("/qa-session")) {
+        return Promise.resolve({ ok: true, json: async () => ({ qaSessions: [] }) });
+      }
       return jobsPromise;
     });
 
     renderBoothView();
 
+    // Wait for booth data to load first
     await waitFor(() => {
-      const companyNames = screen.getAllByText("Tech Corp");
-      expect(companyNames.length).toBeGreaterThanOrEqual(1);
-    });
+      expect(screen.getByText("Contact Information")).toBeInTheDocument();
+    }, { timeout: 3000 });
 
-    // Should show loading indicator for jobs
+    // Now check for loading indicator while jobs are still loading
     const progressBars = screen.getAllByRole("progressbar");
     expect(progressBars.length).toBeGreaterThan(0);
 

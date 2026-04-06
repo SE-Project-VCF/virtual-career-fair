@@ -645,6 +645,9 @@ export const authUtils = {
 };
 
 export async function parseMyResume(): Promise<any> {
+  // Wait for Firebase to be initialized before checking auth state
+  await waitForAuthReady();
+  
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw new Error("Not logged in");
 
@@ -662,6 +665,9 @@ export async function parseMyResume(): Promise<any> {
 }
 
 export async function tailorMyResume(jobDescription: string, boothId?: string, roleTitle?: string) {
+  // Wait for Firebase to be initialized before checking auth state
+  await waitForAuthReady();
+  
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw new Error("Not logged in");
 
