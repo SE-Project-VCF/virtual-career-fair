@@ -1090,8 +1090,8 @@ describe("BoothEditor", () => {
       });
       await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
 
-      const locationInput = screen.queryByRole("textbox", { name: /location/i }) || screen.queryByLabelText(/location/i);
-      if (locationInput) await user.type(locationInput, "San Francisco");
+      const locationInput = screen.getByRole("textbox", { name: /^location$/i });
+      await user.type(locationInput, "San Francisco");
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
       await user.type(screen.getByRole("textbox", { name: /company website/i }), "https://example.com");
       await user.type(screen.getByRole("textbox", { name: /careers page/i }), "https://example.com/careers");

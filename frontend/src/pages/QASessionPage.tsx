@@ -11,16 +11,7 @@ import {
   availableSessionsFromQaApiPayload,
   filterJoinableQaSessions,
 } from '../utils/qaSessionPageFetch';
-
-function qaSessionRadioKey(session: Record<string, unknown>, index: number): string {
-  const id = session.sessionId ?? session.id;
-  if (typeof id === 'string' && id.length > 0) {
-    return id;
-  }
-  const t = coerceQaSessionScheduledTime(session.scheduledTime).getTime();
-  const title = typeof session.title === 'string' ? session.title : 'session';
-  return `${title}-${t}-${index}`;
-}
+import { qaSessionRadioKey } from '../utils/qaSessionPageHelpers';
 
 export default function QASessionPage() {
   const { boothId } = useParams<{ boothId: string }>();

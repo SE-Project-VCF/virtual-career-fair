@@ -17,6 +17,10 @@ describe('qaSessionUi', () => {
       const d = coerceQaSessionScheduledTime('2026-01-15T12:00:00.000Z');
       expect(d.toISOString()).toBe('2026-01-15T12:00:00.000Z');
     });
+
+    it('uses numeric timestamp', () => {
+      expect(coerceQaSessionScheduledTime(1700000000000).getTime()).toBe(1700000000000);
+    });
   });
 
   describe('formatQaSessionScheduledDisplay', () => {
@@ -82,6 +86,14 @@ describe('qaSessionUi', () => {
       expect(state.isPast).toBe(true);
       expect(state.joinButtonLabel).toBe('Session Ended');
       expect(state.canJoin).toBe(false);
+    });
+
+    it('boundary: exactly 15 minutes before start is joinable', () => {
+      const start = new Date('2026-06-01T12:15:00.000Z');
+      const now = new Date('2026-06-01T12:00:00.000Z');
+      const state = getQaSessionJoinUiState(start.getTime(), 60, now);
+      expect(state.canJoin).toBe(true);
+      expect(state.minutesUntilStart).toBe(15);
     });
   });
 });

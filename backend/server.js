@@ -11,6 +11,13 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
+const {
+  tryPutQaSessionAtFairBooth,
+  validatePutQaSessionRequestBody,
+  sendPutQaSessionOutcomeResponse,
+  tryDeleteQaSessionAtFairBooth,
+  sendDeleteQaSessionOutcomeResponse,
+} = require("./lib/qaSessionMutations");
 
 // Helper to check if user is company owner or representative
 async function checkCompanyAuthorization(companyId, userId) {
@@ -5698,84 +5705,6 @@ app.get("/api/booth/:boothId/qa-session", async (req, res) => {
   }
 });
 
-function employerAuthorizedForQaBooth(boothData, employerCompanyId, employerId) {
-  return boothData.companyId === employerCompanyId || boothData.employerId === employerId;
-}
-
-async function deleteQaSessionAtBooth(fairBoothRef, boothData, boothId, sessionId) {
-  if (boothData.qaSessions && Array.isArray(boothData.qaSessions)) {
-    const sessionToDelete = boothData.qaSessions.find((s) => s.id === sessionId);
-    if (sessionToDelete) {
-      await fairBoothRef.update({
-        qaSessions: admin.firestore.FieldValue.arrayRemove(sessionToDelete),
-      });
-      return "deleted";
-    }
-    return "missing_in_array";
-  }
-  if (boothData.qaSession && boothId === sessionId) {
-    await fairBoothRef.update({
-      qaSession: admin.firestore.FieldValue.delete(),
-    });
-    return "deleted";
-  }
-  return "not_found";
-}
-
-function applyQaSessionArrayItemUpdates(existingSession, body, admin) {
-  const { title, description, scheduledTime, duration } = body;
-  return {
-    ...existingSession,
-    title: title !== undefined ? title : existingSession.title,
-    description: description !== undefined ? description : existingSession.description,
-    scheduledTime: scheduledTime
-      ? admin.firestore.Timestamp.fromDate(new Date(scheduledTime))
-      : existingSession.scheduledTime,
-    duration:
-      duration !== undefined
-        ? Number.parseInt(String(duration), 10)
-        : existingSession.duration,
-    updatedAt: admin.firestore.Timestamp.now(),
-  };
-}
-
-async function tryPutQaSessionAtFairBooth(
-  fairBoothRef,
-  fairBoothDoc,
-  sessionId,
-  employerCompanyId,
-  employerId,
-  body,
-  admin
-) {
-  if (!fairBoothDoc.exists) {
-    return { code: "skip" };
-  }
-  const boothData = fairBoothDoc.data();
-  if (!employerAuthorizedForQaBooth(boothData, employerCompanyId, employerId)) {
-    return { code: "forbidden" };
-  }
-  if (!boothData.qaSessions || !Array.isArray(boothData.qaSessions)) {
-    return { code: "session_not_found" };
-  }
-  const sessionIndex = boothData.qaSessions.findIndex((s) => s.id === sessionId);
-  if (sessionIndex === -1) {
-    return { code: "session_not_found" };
-  }
-  const updatedSession = applyQaSessionArrayItemUpdates(
-    boothData.qaSessions[sessionIndex],
-    body,
-    admin
-  );
-  const newSessions = [
-    ...boothData.qaSessions.slice(0, sessionIndex),
-    updatedSession,
-    ...boothData.qaSessions.slice(sessionIndex + 1),
-  ];
-  await fairBoothRef.update({ qaSessions: newSessions });
-  return { code: "updated", session: updatedSession };
-}
-
 /**
  * Cancel/Delete Q&A session for a booth
  * DELETE /api/booth/:boothId/qa-session/:sessionId
@@ -5798,25 +5727,17 @@ app.delete("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, asy
       const fairBoothRef = db.collection("fairs").doc(fairDoc.id).collection("booths").doc(boothId);
       const fairBoothDoc = await fairBoothRef.get();
 
-      if (!fairBoothDoc.exists) {
-        continue;
-      }
-
-      const boothData = fairBoothDoc.data();
-
-      if (!employerAuthorizedForQaBooth(boothData, employerCompanyId, employerId)) {
-        return res.status(403).json({ error: "Not authorized to manage this booth" });
-      }
-
-      const outcome = await deleteQaSessionAtBooth(fairBoothRef, boothData, boothId, sessionId);
-      if (outcome === "deleted") {
-        return res.json({
-          success: true,
-          message: "Q&A session deleted successfully",
-        });
-      }
-      if (outcome === "missing_in_array" || outcome === "not_found") {
-        return res.status(404).json({ error: "No Q&A session found with that ID" });
+      const outcome = await tryDeleteQaSessionAtFairBooth(
+        fairBoothRef,
+        fairBoothDoc,
+        boothId,
+        sessionId,
+        employerCompanyId,
+        employerId,
+        admin
+      );
+      if (sendDeleteQaSessionOutcomeResponse(res, outcome)) {
+        return;
       }
     }
 
@@ -5833,24 +5754,13 @@ app.delete("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, asy
  */
 app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async (req, res) => {
   try {
+    const validation = validatePutQaSessionRequestBody(req.body);
+    if (!validation.ok) {
+      return res.status(validation.status).json({ error: validation.error });
+    }
+
     const { boothId, sessionId } = req.params;
-    const { title, description, scheduledTime, duration } = req.body;
     const employerId = req.user.uid;
-
-    if (!title && !description && !scheduledTime && !duration) {
-      return res.status(400).json({ error: "No fields to update" });
-    }
-
-    if (scheduledTime) {
-      const sessionTime = new Date(scheduledTime);
-      if (sessionTime <= new Date()) {
-        return res.status(400).json({ error: "Scheduled time must be in the future" });
-      }
-    }
-
-    if (duration && (duration <= 0 || duration > 480)) {
-      return res.status(400).json({ error: "Duration must be between 1 and 480 minutes" });
-    }
 
     const userDoc = await db.collection("users").doc(employerId).get();
     if (!userDoc.exists) {
@@ -5877,21 +5787,9 @@ app.put("/api/booth/:boothId/qa-session/:sessionId", verifyFirebaseToken, async 
         admin
       );
 
-      if (outcome.code === "skip") {
-        continue;
+      if (sendPutQaSessionOutcomeResponse(res, outcome)) {
+        return;
       }
-      if (outcome.code === "forbidden") {
-        return res.status(403).json({ error: "Not authorized to manage this booth" });
-      }
-      if (outcome.code === "updated") {
-        console.log("[Q&A Edit] Q&A session updated");
-        return res.json({
-          success: true,
-          message: "Q&A session updated successfully",
-          session: outcome.session,
-        });
-      }
-      return res.status(404).json({ error: "No Q&A session found with that ID" });
     }
 
     return res.status(404).json({ error: "Booth not found" });

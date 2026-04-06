@@ -21,6 +21,12 @@ describe('qaSessionPageFetch', () => {
       await expect(fetchIdTokenWithRetries(getToken, 3, 1)).resolves.toBe('ok');
       expect(getToken).toHaveBeenCalledTimes(2);
     });
+
+    it('exhausts retries and returns null', async () => {
+      const getToken = vi.fn().mockResolvedValue(null);
+      await expect(fetchIdTokenWithRetries(getToken, 2, 1)).resolves.toBeNull();
+      expect(getToken.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 
   describe('availableSessionsFromQaApiPayload', () => {
@@ -40,6 +46,10 @@ describe('qaSessionPageFetch', () => {
     it('returns empty when nothing present', () => {
       expect(availableSessionsFromQaApiPayload({})).toEqual([]);
     });
+
+    it('returns empty when qaSessions is empty array without legacy', () => {
+      expect(availableSessionsFromQaApiPayload({ qaSessions: [] })).toEqual([]);
+    });
   });
 
   describe('filterJoinableQaSessions', () => {
@@ -53,6 +63,10 @@ describe('qaSessionPageFetch', () => {
 
     it('drops invalid rows', () => {
       expect(filterJoinableQaSessions([null, {}], new Date())).toHaveLength(0);
+    });
+
+    it('drops session when duration missing', () => {
+      expect(filterJoinableQaSessions([{ scheduledTime: Date.now() }], new Date())).toHaveLength(0);
     });
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, CircularProgress, Alert } from '@mui/material';
+import { formatConferenceErrorForMatch } from '../../utils/jitsiErrors';
 
 interface VideoRoomProps {
   roomName: string;
@@ -224,9 +225,8 @@ export function VideoRoom({
         };
 
         const onConferenceFailed = (error: unknown) => {
-          console.error('[Jitsi] Conference failed:', error);
-          const errorText =
-            typeof error === 'string' ? error : String(error ?? '');
+          const errorText = formatConferenceErrorForMatch(error);
+          console.error('[Jitsi] Conference failed:', errorText || error);
           if (errorText.toLowerCase().includes('membersonly')) {
             console.error('[Jitsi] ❌ Room requires moderator approval (membersOnly mode)');
             if (mountedRef.current && !disposed) {
