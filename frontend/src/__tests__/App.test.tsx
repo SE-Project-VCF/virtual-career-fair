@@ -177,6 +177,8 @@ describe("App", () => {
     globalThis.history.pushState({}, "", "/dashboard/chat")
     render(<App />)
     expect(screen.getByText("ChatPage")).toBeInTheDocument()
+  })
+
   it("renders CallInvitationsPage at /dashboard/call-invitations", () => {
     globalThis.history.pushState({}, "", "/dashboard/call-invitations")
     render(<App />)
