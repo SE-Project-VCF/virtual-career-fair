@@ -38,7 +38,6 @@ interface QAChatMessage {
 interface FirebaseQAChatProps {
   sessionId: string;
   isEmployer: boolean;
-  isPresentationMode?: boolean;
   onError?: (error: Error) => void;
 }
 
@@ -69,7 +68,6 @@ function messagesFromSnapshot(snapshot: QuerySnapshot<DocumentData>): QAChatMess
 export function FirebaseQAChat({
   sessionId,
   isEmployer,
-  isPresentationMode = false,
   onError,
 }: Readonly<FirebaseQAChatProps>) {
   const [messages, setMessages] = useState<QAChatMessage[]>([]);
@@ -223,8 +221,8 @@ export function FirebaseQAChat({
     );
   }
 
-  // In presentation mode, students can't send messages
-  const canSendMessage = !isPresentationMode || isEmployer;
+  // Students can always send messages
+  const canSendMessage = isEmployer || true;
 
   return (
     <Box
@@ -344,14 +342,10 @@ export function FirebaseQAChat({
           <TextField
             size="small"
             fullWidth
-            placeholder={
-              isPresentationMode
-                ? 'Presentation in progress - Listen only'
-                : 'Type a message...'
-            }
+            placeholder="Type a message..."
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            disabled={sending || (!canSendMessage && isPresentationMode)}
+            disabled={sending}
             multiline
             maxRows={3}
             sx={{
@@ -362,30 +356,13 @@ export function FirebaseQAChat({
           />
           <IconButton
             type="submit"
-            disabled={
-              !newMessage.trim() || sending || (!canSendMessage && isPresentationMode)
-            }
+            disabled={!newMessage.trim() || sending}
             sx={{
               color: '#b03a6c',
             }}
           >
             {sending ? <CircularProgress size={20} /> : <SendIcon />}
           </IconButton>
-        </Box>
-      )}
-
-      {isPresentationMode && !isEmployer && (
-        <Box
-          sx={{
-            borderTop: '1px solid #e0e0e0',
-            p: 1.5,
-            textAlign: 'center',
-            backgroundColor: '#fff3e0',
-          }}
-        >
-          <Typography variant="caption" sx={{ color: '#ff6f00' }}>
-            Presentation in progress - Chat disabled for students
-          </Typography>
         </Box>
       )}
     </Box>

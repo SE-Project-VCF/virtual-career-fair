@@ -4904,10 +4904,8 @@ app.post("/api/sessions/create-qa", verifyFirebaseToken, async (req, res) => {
         new Date(scheduledTime)
       ),
       maxDuration: maxDuration || 60,
-      isPresentationMode: true, // Start in presentation mode
       isLive: false,
       attendees: {},
-      raisedHands: [],
       jitsiRoom,
       streamChatChannelId: channelId,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -5012,7 +5010,6 @@ app.post("/api/sessions/:sessionId/join", verifyFirebaseToken, async (req, res) 
       jitsiRoom: sessionData.jitsiRoom,
       streamChatChannelId: sessionData.streamChatChannelId,
       userName,
-      isPresentationMode: sessionData.isPresentationMode,
     });
   } catch (err) {
     console.error("POST /api/sessions/:sessionId/join error:", err);
@@ -5020,157 +5017,7 @@ app.post("/api/sessions/:sessionId/join", verifyFirebaseToken, async (req, res) 
   }
 });
 
-/**
- * Toggle presentation/Q&A mode (employer only)
- * PATCH /api/sessions/{sessionId}/toggle-mode
- */
-app.patch(
-  "/api/sessions/:sessionId/toggle-mode",
-  verifyFirebaseToken,
-  async (req, res) => {
-    try {
-      const { sessionId } = req.params;
-      const { isPresentationMode } = req.body;
-      const employerId = req.user.uid;
 
-      // Get session
-      const sessionDoc = await db
-        .collection("video_sessions")
-        .doc(sessionId)
-        .get();
-
-      if (!sessionDoc.exists) {
-        return res.status(404).json({ error: "Session not found" });
-      }
-
-      const sessionData = sessionDoc.data();
-
-      // Verify employer
-      if (employerId !== sessionData.employerId) {
-        return res.status(403).json({ error: "Only employer can toggle mode" });
-      }
-
-      await db
-        .collection("video_sessions")
-        .doc(sessionId)
-        .update({
-          isPresentationMode,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-      // Send system message to channel
-      try {
-        const channel = streamServer.channel(
-          "messaging",
-          sessionData.streamChatChannelId
-        );
-        await channel.sendMessage({
-          user_id: "system",
-          text: `Mode changed to ${isPresentationMode ? "presentation" : "Q&A"}`,
-          type: "mode_changed",
-          mode: isPresentationMode ? "presentation" : "qa",
-        });
-      } catch (err) {
-        console.error("StreamChat message error:", err);
-      }
-
-      return res.json({
-        success: true,
-        isPresentationMode,
-        message: `Switched to ${isPresentationMode ? "presentation" : "Q&A"} mode`,
-      });
-    } catch (err) {
-      console.error("PATCH /api/sessions/:sessionId/toggle-mode error:", err);
-      return res.status(500).json({ error: "Failed to toggle mode" });
-    }
-  }
-);
-
-/**
- * Student raises hand in Q&A session
- * POST /api/sessions/{sessionId}/raise-hand
- */
-app.post(
-  "/api/sessions/:sessionId/raise-hand",
-  verifyFirebaseToken,
-  async (req, res) => {
-    try {
-      const { sessionId } = req.params;
-      const userId = req.user.uid;
-
-      // Get session
-      const sessionDoc = await db
-        .collection("video_sessions")
-        .doc(sessionId)
-        .get();
-
-      if (!sessionDoc.exists) {
-        return res.status(404).json({ error: "Session not found" });
-      }
-
-      const sessionData = sessionDoc.data();
-      const currentRaisedHands = sessionData.raisedHands || [];
-
-      // Add user if not already raised
-      if (!currentRaisedHands.includes(userId)) {
-        currentRaisedHands.push(userId);
-        await db
-          .collection("video_sessions")
-          .doc(sessionId)
-          .update({
-            raisedHands: currentRaisedHands,
-          });
-      }
-
-      return res.json({ success: true, message: "Hand raised" });
-    } catch (err) {
-      console.error("POST /api/sessions/:sessionId/raise-hand error:", err);
-      return res.status(500).json({ error: "Failed to raise hand" });
-    }
-  }
-);
-
-/**
- * Lower hand (student or employer)
- * POST /api/sessions/{sessionId}/lower-hand
- */
-app.post(
-  "/api/sessions/:sessionId/lower-hand",
-  verifyFirebaseToken,
-  async (req, res) => {
-    try {
-      const { sessionId } = req.params;
-      const userId = req.user.uid;
-
-      // Get session
-      const sessionDoc = await db
-        .collection("video_sessions")
-        .doc(sessionId)
-        .get();
-
-      if (!sessionDoc.exists) {
-        return res.status(404).json({ error: "Session not found" });
-      }
-
-      const sessionData = sessionDoc.data();
-      const currentRaisedHands = (sessionData.raisedHands || []).filter(
-        (id) => id !== userId
-      );
-
-      await db
-        .collection("video_sessions")
-        .doc(sessionId)
-        .update({
-          raisedHands: currentRaisedHands,
-        });
-
-      return res.json({ success: true, message: "Hand lowered" });
-    } catch (err) {
-      console.error("POST /api/sessions/:sessionId/lower-hand error:", err);
-      return res.status(500).json({ error: "Failed to lower hand" });
-    }
-  }
-);
 
 
 /* ============================================================
@@ -5427,7 +5274,6 @@ app.post("/api/booth/:boothId/schedule-qa-session", verifyFirebaseToken, async (
       createdAt: admin.firestore.Timestamp.now(),
       createdBy: employerId,
       status: "scheduled",
-      raisedHands: [],
     };
 
     console.log("[Q&A Schedule] Adding Q&A session to booth");

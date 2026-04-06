@@ -126,21 +126,6 @@ describe("FirebaseQAChat", () => {
     });
   });
 
-  it("hides composer for students in presentation mode", async () => {
-    render(<FirebaseQAChat sessionId="sess-1" isEmployer={false} isPresentationMode />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/presentation in progress - chat disabled/i)).toBeInTheDocument();
-    });
-    expect(screen.queryByPlaceholderText(/type a message/i)).not.toBeInTheDocument();
-  });
-
-  it("allows employer to send in presentation mode", async () => {
-    render(<FirebaseQAChat sessionId="sess-1" isEmployer isPresentationMode />);
-
-    await waitFor(() => expect(screen.getByPlaceholderText(/presentation in progress/i)).toBeInTheDocument());
-  });
-
   it("shows empty state when no messages", async () => {
     const emptySnap = { forEach: () => {} };
     vi.mocked(getDocs).mockResolvedValue(emptySnap as never);

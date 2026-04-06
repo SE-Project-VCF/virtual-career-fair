@@ -148,21 +148,4 @@ export async function joinSession(sessionId: string) {
   });
 }
 
-export async function togglePresentationMode(sessionId: string, isPresentationMode: boolean) {
-  return apiCall(`/sessions/${sessionId}/toggle-mode`, {
-    method: 'PATCH',
-    body: JSON.stringify({ isPresentationMode }),
-  });
-}
 
-export async function raiseHand(sessionId: string) {
-  return apiCall(`/sessions/${sessionId}/raise-hand`, {
-    method: 'POST',
-  });
-}
-
-export async function lowerHand(sessionId: string) {
-  return apiCall(`/sessions/${sessionId}/lower-hand`, {
-    method: 'POST',
-  });
-}

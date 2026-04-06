@@ -18,7 +18,6 @@ const baseSession = {
   description: "Desc",
   scheduledTime: Date.now(),
   maxDuration: 30,
-  isPresentationMode: false,
   isLive: true,
   jitsiRoom: "jit-1",
   streamChatChannelId: "ch-1",

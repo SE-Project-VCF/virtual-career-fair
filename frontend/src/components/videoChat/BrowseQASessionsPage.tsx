@@ -27,7 +27,6 @@ interface QASession {
   description: string;
   scheduledTime: number;
   maxDuration: number;
-  isPresentationMode: boolean;
   isLive: boolean;
   jitsiRoom: string;
   streamChatChannelId: string;
@@ -212,24 +211,6 @@ export function BrowseQASessionsPage({
                       <strong>Duration:</strong> {session.maxDuration} minutes
                     </Typography>
                     <Stack direction="row" spacing={1}>
-                      <Chip
-                        size="small"
-                        label={
-                          session.isPresentationMode
-                            ? 'Presentation'
-                            : 'Q&A'
-                        }
-                        color={
-                          session.isPresentationMode
-                            ? 'default'
-                            : 'success'
-                        }
-                        variant={
-                          session.isPresentationMode
-                            ? 'outlined'
-                            : 'filled'
-                        }
-                      />
                     </Stack>
                   </Stack>
                 </CardContent>
@@ -269,19 +250,9 @@ export function BrowseQASessionsPage({
                     label={selectedSession.isLive ? 'LIVE NOW' : 'Upcoming'}
                     color={selectedSession.isLive ? 'error' : 'warning'}
                   />
-                  <Chip
-                    size="small"
-                    label={
-                      selectedSession.isPresentationMode
-                        ? 'Presentation Mode'
-                        : 'Q&A Mode'
-                    }
-                  />
                 </Stack>
                 <Typography variant="caption" color="textSecondary">
-                  {selectedSession.isPresentationMode
-                    ? 'This is a presentation. You will be unable to unmute your microphone.'
-                    : 'Q&A is open. You can raise your hand to ask questions.'}
+                  Click "Join Now" to connect to this Q&A session
                 </Typography>
               </Box>
             </DialogContent>
