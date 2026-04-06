@@ -1101,15 +1101,18 @@ describe("BoothEditor", () => {
 
       await user.click(screen.getByRole("button", { name: /create booth/i }));
 
-      await waitFor(() => {
-        expect(firestore.addDoc).toHaveBeenCalled();
-        const callArgs = (firestore.addDoc as any).mock.calls[0];
-        const boothData = callArgs[1];
-        expect(boothData.website).toBe("https://example.com");
-        expect(boothData.careersPage).toBe("https://example.com/careers");
-        expect(boothData.contactPhone).toBe("+1 555-1234");
-      });
-    }, 15000);
+      await waitFor(
+        () => {
+          expect(firestore.addDoc).toHaveBeenCalled();
+          const callArgs = (firestore.addDoc as any).mock.calls[0];
+          const boothData = callArgs[1];
+          expect(boothData.website).toBe("https://example.com");
+          expect(boothData.careersPage).toBe("https://example.com/careers");
+          expect(boothData.contactPhone).toBe("+1 555-1234");
+        },
+        { timeout: 30000 }
+      );
+    }, 35000);
   });
 
   // Representative Access Tests

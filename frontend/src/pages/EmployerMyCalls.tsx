@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -14,71 +14,23 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import BaseLayout from '../components/BaseLayout';
+import { TabPanel } from '../components/TabPanel';
+import { InvitationTabContent } from '../components/invitations/InvitationTabContent';
+import { useCallInvitationsPolling } from '../hooks/useCallInvitationsPolling';
 import { getOutgoingCallInvitations, type CallInvitation, cancelCallInvitation } from '../utils/callInvitationApi';
 import { CallInvitationCard } from '../components/videoChat/CallInvitationCard';
 import { ScheduleCallDialog } from '../components/videoChat/ScheduleCallDialog';
 
 type InvitationStatus = 'pending' | 'accepted' | 'all';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: Readonly<TabPanelProps>) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ pt: 2 }}>{children}</Box>}
-    </div>
-  );
-}
-
 export function EmployerMyCalls() {
   const navigate = useNavigate();
-  const [invitations, setInvitations] = useState<CallInvitation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { invitations, loading, error, refresh, setError } = useCallInvitationsPolling(getOutgoingCallInvitations);
   const [tabValue, setTabValue] = useState(0);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
 
-  const loadInvitations = async () => {
-    try {
-      setError(null);
-      const result = await getOutgoingCallInvitations();
-
-      if (!result.success) {
-        setError(result.error || 'Failed to load invitations');
-        return;
-      }
-
-      setInvitations(result.data || []);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setError(message);
-      console.error('Load invitations error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadInvitations();
-    // Refresh every 30 seconds
-    const interval = setInterval(loadInvitations, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
   const handleRefresh = async () => {
-    await loadInvitations();
+    await refresh();
   };
 
   const handleCancel = async (invitationId: string) => {
@@ -110,6 +62,12 @@ export function EmployerMyCalls() {
 
   const pendingCount = invitations.filter((inv) => inv.status === 'pending').length;
   const acceptedCount = invitations.filter((inv) => inv.status === 'accepted').length;
+
+  const cardProps = {
+    isEmployer: true as const,
+    onCancel: (id: string) => handleCancel(id),
+    onJoin: (id: string) => handleJoin(id),
+  };
 
   if (loading) {
     return (
@@ -176,63 +134,39 @@ export function EmployerMyCalls() {
               </Paper>
 
               <TabPanel value={tabValue} index={0}>
-                {getFilteredInvitations('pending').length === 0 ? (
-                  <Typography sx={{ textAlign: 'center', color: '#999', py: 3 }}>
-                    No pending invitations
-                  </Typography>
-                ) : (
-                  <Stack spacing={2}>
-                    {getFilteredInvitations('pending').map((invitation) => (
-                      <CallInvitationCard
-                        key={invitation.id}
-                        invitation={invitation}
-                        isEmployer={true}
-                        onCancel={(id) => handleCancel(id)}
-                        onJoin={(id) => handleJoin(id)}
-                      />
-                    ))}
-                  </Stack>
-                )}
+                <InvitationTabContent
+                  invitations={getFilteredInvitations('pending')}
+                  emptyMessage="No pending invitations"
+                >
+                  {(items) =>
+                    items.map((invitation) => (
+                      <CallInvitationCard key={invitation.id} invitation={invitation} {...cardProps} />
+                    ))
+                  }
+                </InvitationTabContent>
               </TabPanel>
 
               <TabPanel value={tabValue} index={1}>
-                {getFilteredInvitations('accepted').length === 0 ? (
-                  <Typography sx={{ textAlign: 'center', color: '#999', py: 3 }}>
-                    No accepted invitations
-                  </Typography>
-                ) : (
-                  <Stack spacing={2}>
-                    {getFilteredInvitations('accepted').map((invitation) => (
-                      <CallInvitationCard
-                        key={invitation.id}
-                        invitation={invitation}
-                        isEmployer={true}
-                        onCancel={(id) => handleCancel(id)}
-                        onJoin={(id) => handleJoin(id)}
-                      />
-                    ))}
-                  </Stack>
-                )}
+                <InvitationTabContent
+                  invitations={getFilteredInvitations('accepted')}
+                  emptyMessage="No accepted invitations"
+                >
+                  {(items) =>
+                    items.map((invitation) => (
+                      <CallInvitationCard key={invitation.id} invitation={invitation} {...cardProps} />
+                    ))
+                  }
+                </InvitationTabContent>
               </TabPanel>
 
               <TabPanel value={tabValue} index={2}>
-                {invitations.length === 0 ? (
-                  <Typography sx={{ textAlign: 'center', color: '#999', py: 3 }}>
-                    No calls
-                  </Typography>
-                ) : (
-                  <Stack spacing={2}>
-                    {invitations.map((invitation) => (
-                      <CallInvitationCard
-                        key={invitation.id}
-                        invitation={invitation}
-                        isEmployer={true}
-                        onCancel={(id) => handleCancel(id)}
-                        onJoin={(id) => handleJoin(id)}
-                      />
-                    ))}
-                  </Stack>
-                )}
+                <InvitationTabContent invitations={invitations} emptyMessage="No calls">
+                  {(items) =>
+                    items.map((invitation) => (
+                      <CallInvitationCard key={invitation.id} invitation={invitation} {...cardProps} />
+                    ))
+                  }
+                </InvitationTabContent>
               </TabPanel>
             </Box>
           )}

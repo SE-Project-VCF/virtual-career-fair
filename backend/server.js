@@ -11,6 +11,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
+const shortlistRouter = require("./routes/shortlist");
 const {
   tryPutQaSessionAtFairBooth,
   validatePutQaSessionRequestBody,
@@ -220,6 +221,7 @@ app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (r
 
 // Mount fair routes (multi-fair support)
 app.use(fairsRouter);
+app.use(shortlistRouter);
 
 
 app.get("/api/debug/gemini-models", async (req, res) => {
@@ -4513,98 +4515,7 @@ app.get("/api/debug/patch-cache", verifyFirebaseToken, async (req, res) => {
    VIDEO CHAT FEATURES: SHORTLIST MANAGEMENT
 ============================================================ */
 
-/**
- * Add student to employer's candidate shortlist
- * POST /api/shortlist/add
- */
-app.post("/api/shortlist/add", verifyFirebaseToken, async (req, res) => {
-  try {
-    const { studentId, notes } = req.body;
-    const employerId = req.user.uid;
-
-    if (!studentId) {
-      return res.status(400).json({ error: "Missing studentId" });
-    }
-
-    // Verify student exists
-    const studentDoc = await db.collection("users").doc(studentId).get();
-    if (!studentDoc.exists) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
-    // Add to shortlist
-    await db
-      .collection("employers")
-      .doc(employerId)
-      .collection("candidates")
-      .doc(studentId)
-      .set(
-        {
-          addedAt: admin.firestore.FieldValue.serverTimestamp(),
-          notes: notes || "",
-          studentName: studentDoc.data().name || studentDoc.data().firstName || "",
-          studentEmail: studentDoc.data().email || "",
-        },
-        { merge: true }
-      );
-
-    return res.json({ success: true, message: "Student added to shortlist" });
-  } catch (err) {
-    console.error("POST /api/shortlist/add error:", err);
-    return res.status(500).json({ error: "Failed to add student to shortlist" });
-  }
-});
-
-/**
- * Get employer's candidate shortlist
- * GET /api/shortlist/list
- */
-app.get("/api/shortlist/list", verifyFirebaseToken, async (req, res) => {
-  try {
-    const employerId = req.user.uid;
-
-    const shortlistSnapshot = await db
-      .collection("employers")
-      .doc(employerId)
-      .collection("candidates")
-      .orderBy("addedAt", "desc")
-      .get();
-
-    const shortlist = shortlistSnapshot.docs.map((doc) => ({
-      studentId: doc.id,
-      ...doc.data(),
-      addedAt: doc.data().addedAt?.toMillis() || null,
-    }));
-
-    return res.json({ success: true, shortlist });
-  } catch (err) {
-    console.error("GET /api/shortlist/list error:", err);
-    return res.status(500).json({ error: "Failed to fetch shortlist" });
-  }
-});
-
-/**
- * Remove student from shortlist
- * DELETE /api/shortlist/{studentId}
- */
-app.delete("/api/shortlist/:studentId", verifyFirebaseToken, async (req, res) => {
-  try {
-    const { studentId } = req.params;
-    const employerId = req.user.uid;
-
-    await db
-      .collection("employers")
-      .doc(employerId)
-      .collection("candidates")
-      .doc(studentId)
-      .delete();
-
-    return res.json({ success: true, message: "Student removed from shortlist" });
-  } catch (err) {
-    console.error("DELETE /api/shortlist/:studentId error:", err);
-    return res.status(500).json({ error: "Failed to remove student from shortlist" });
-  }
-});
+/* Shortlist routes: ./routes/shortlist.js (mounted via app.use(shortlistRouter)) */
 
 /* ============================================================
    VIDEO CHAT FEATURES: 1v1 CALL MANAGEMENT

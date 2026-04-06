@@ -1,5 +1,5 @@
-import { Box } from '@mui/material';
 import { VideoRoom } from './VideoRoom';
+import { VideoRoomShell } from './VideoRoomShell';
 
 interface QASessionRoomProps {
   jitsiRoom: string;
@@ -8,8 +8,7 @@ interface QASessionRoomProps {
 }
 
 /**
- * QASessionRoom Component - Full-screen video conference for Q&A sessions
- * Uses Jitsi's built-in moderator controls for muting/unmuting participants
+ * Q&A session full-screen Jitsi room (moderator controls in Jitsi UI).
  */
 export function QASessionRoom({
   jitsiRoom,
@@ -22,42 +21,13 @@ export function QASessionRoom({
   };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        height: '100vh',
-        backgroundColor: '#000',
-        p: 0,
-        m: 0,
-      }}
-    >
-      {/* Full-screen video section */}
-      <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          minWidth: 0,
-          width: '100%',
-        }}
-      >
-        <Box
-          sx={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
-        >
-          <VideoRoom
-            roomName={jitsiRoom}
-            userName={userName}
-            onError={handleVideoError}
-            startWithAudioMuted={true}
-          />
-        </Box>
-      </Box>
-    </Box>
+    <VideoRoomShell height="100vh">
+      <VideoRoom
+        roomName={jitsiRoom}
+        userName={userName}
+        onError={handleVideoError}
+        startWithAudioMuted={true}
+      />
+    </VideoRoomShell>
   );
 }

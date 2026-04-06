@@ -8,6 +8,8 @@ module.exports = {
     "server.js",
     "helpers.js",
     "routes/fairs.js",
+    "routes/shortlist.js",
+    "lib/employerCandidates.js",
     "console.js",
     "resumeParser.js",
     "resumeTailorSimple.js",

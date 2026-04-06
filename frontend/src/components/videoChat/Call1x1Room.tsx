@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Box, Typography, CircularProgress, Alert } from '@mui/material';
 import { VideoRoom } from './VideoRoom';
+import { VideoRoomShell } from './VideoRoomShell';
+import { VideoCallLoadingView, VideoCallErrorAlert } from './VideoCallRoomStates';
 import { joinCall } from '../../utils/callInvitationApi';
 
 interface Call1x1RoomProps {
@@ -9,9 +10,7 @@ interface Call1x1RoomProps {
 }
 
 /**
- * Call1x1Room Component - Full-screen video conference for 1v1 calls
- * Fetches call details and displays Jitsi video room
- * Uses Jitsi's built-in features (including chat)
+ * 1x1 call: join via API, then full-screen Jitsi (incl. chat).
  */
 export function Call1x1Room({ invitationId, onError }: Readonly<Call1x1RoomProps>) {
   const [jitsiRoom, setJitsiRoom] = useState<string | null>(null);
@@ -42,9 +41,9 @@ export function Call1x1Room({ invitationId, onError }: Readonly<Call1x1RoomProps
         setJitsiRoom(result.jitsiRoom);
         setUserName(result.userName || 'You');
       } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        setError(error.message);
-        onError?.(error);
+        const e = err instanceof Error ? err : new Error(String(err));
+        setError(e.message);
+        onError?.(e);
         console.error('Initialize call error:', err);
       } finally {
         setLoading(false);
@@ -55,60 +54,15 @@ export function Call1x1Room({ invitationId, onError }: Readonly<Call1x1RoomProps
   }, [invitationId, onError]);
 
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          backgroundColor: '#000',
-          gap: 2,
-          flexDirection: 'column',
-        }}
-      >
-        <CircularProgress sx={{ color: '#fff' }} />
-        <Typography sx={{ color: '#fff' }}>Loading call...</Typography>
-      </Box>
-    );
+    return <VideoCallLoadingView message="Loading call..." />;
   }
 
   if (error) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          backgroundColor: '#000',
-          p: 2,
-        }}
-      >
-        <Alert severity="error" sx={{ width: '100%', maxWidth: '500px' }}>
-          {error}
-        </Alert>
-      </Box>
-    );
+    return <VideoCallErrorAlert>{error}</VideoCallErrorAlert>;
   }
 
   if (!jitsiRoom) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          backgroundColor: '#000',
-          p: 2,
-        }}
-      >
-        <Alert severity="error" sx={{ width: '100%', maxWidth: '500px' }}>
-          Failed to initialize call room
-        </Alert>
-      </Box>
-    );
+    return <VideoCallErrorAlert>Failed to initialize call room</VideoCallErrorAlert>;
   }
 
   const handleVideoError = (err: Error) => {
@@ -117,42 +71,13 @@ export function Call1x1Room({ invitationId, onError }: Readonly<Call1x1RoomProps
   };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        height: '100%',
-        backgroundColor: '#000',
-        p: 0,
-        m: 0,
-      }}
-    >
-      {/* Full-screen video section */}
-      <Box
-        sx={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          minWidth: 0,
-          width: '100%',
-        }}
-      >
-        <Box
-          sx={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
-        >
-          <VideoRoom
-            roomName={jitsiRoom}
-            userName={userName}
-            onError={handleVideoError}
-            startWithAudioMuted={true}
-          />
-        </Box>
-      </Box>
-    </Box>
+    <VideoRoomShell height="100%">
+      <VideoRoom
+        roomName={jitsiRoom}
+        userName={userName}
+        onError={handleVideoError}
+        startWithAudioMuted={true}
+      />
+    </VideoRoomShell>
   );
 }
