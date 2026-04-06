@@ -272,7 +272,9 @@ describe("NotificationBell", () => {
       const setIntervalSpy = vi
         .spyOn(globalThis, "setInterval")
         .mockImplementation((handler: TimerHandler, delay?: number) => {
-          if (delay === 15000 && typeof handler === "function") pollCallbacks.push(handler)
+          if (delay === 15000 && typeof handler === "function") {
+            pollCallbacks.push(handler as () => void)
+          }
           return 0 as unknown as ReturnType<typeof setInterval>
         })
       try {
