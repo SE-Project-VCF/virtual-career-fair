@@ -11,6 +11,7 @@ import {
   CircularProgress,
   Switch,
   TextField,
+  Autocomplete,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -24,7 +25,6 @@ import {
   Paper,
   IconButton,
   Chip,
-  Grid,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -33,6 +33,7 @@ import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
 import { API_URL } from "../config"
 import BaseLayout from "../components/BaseLayout"
+import { useGeocodeSuggest } from "../hooks/useGeocodeSuggest"
 
 /* -------------------------------------------------------
    Inline component: Manage Fairs panel for AdminDashboard
@@ -47,14 +48,23 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
     description: "",
     startTime: "",
     endTime: "",
-    venueCity: "",
-    venueState: "",
-    venueZip: "",
   })
+  const [createHubSearch, setCreateHubSearch] = useState("")
+  const [createPickedHub, setCreatePickedHub] = useState<{
+    label: string
+    city: string
+    state: string
+    zip: string
+  } | null>(null)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState("")
   const [togglingFairId, setTogglingFairId] = useState<string | null>(null)
   const [toggleError, setToggleError] = useState("")
+
+  const { options: createHubOptions, loading: createHubLoading } = useGeocodeSuggest(
+    createHubSearch,
+    createDialogOpen,
+  )
 
   useEffect(() => {
     loadFairs()
@@ -98,11 +108,20 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
     setCreateError("")
     try {
       const token = await auth.currentUser?.getIdToken()
-      const vc = createForm.venueCity.trim()
-      const vs = createForm.venueState.trim()
-      const vz = createForm.venueZip.trim()
-      const hub =
-        vc || vs || vz ? { venueCity: vc, venueState: vs, venueZip: vz } : {}
+      const fromPick =
+        createPickedHub &&
+        (createPickedHub.city.trim() ||
+          createPickedHub.state.trim() ||
+          createPickedHub.zip.trim())
+      const hub: Record<string, string> = fromPick
+        ? {
+            venueCity: createPickedHub.city.trim(),
+            venueState: createPickedHub.state.trim(),
+            venueZip: createPickedHub.zip.trim(),
+          }
+        : createHubSearch.trim()
+          ? { venueGeocodeQuery: createHubSearch.trim() }
+          : {}
       const res = await fetch(`${API_URL}/api/fairs`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -123,10 +142,9 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
         description: "",
         startTime: "",
         endTime: "",
-        venueCity: "",
-        venueState: "",
-        venueZip: "",
       })
+      setCreateHubSearch("")
+      setCreatePickedHub(null)
       loadFairs()
     } catch (err: any) {
       setCreateError(err.message)
@@ -161,7 +179,15 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
               <Typography variant="body2" color="text.secondary">Create and manage multiple concurrent fairs</Typography>
             </Box>
           </Box>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateDialogOpen(true)}
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setCreatePickedHub(null)
+              setCreateHubSearch("")
+              setCreateError("")
+              setCreateDialogOpen(true)
+            }}
             sx={{ background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)" }}>
             New Fair
           </Button>
@@ -249,7 +275,15 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
         )}
       </CardContent>
 
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={createDialogOpen}
+        onClose={() => {
+          setCreateDialogOpen(false)
+          setCreateError("")
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Create New Fair</DialogTitle>
         <DialogContent>
           <TextField label="Fair Name" value={createForm.name}
@@ -265,41 +299,82 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
             onChange={(e) => setCreateForm({ ...createForm, endTime: e.target.value })}
             fullWidth slotProps={{ inputLabel: { shrink: true } }} />
           <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
-            Fair Location (optional)
+            Fair location (optional)
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-            City and state are used for geographic search. ZIP is optional.
+            Search for a place, city, or ZIP. Pick a suggestion or type a query—the server verifies it with Mapbox. Remove
+            the chip to clear.
           </Typography>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                label="City"
-                value={createForm.venueCity}
-                onChange={(e) => setCreateForm({ ...createForm, venueCity: e.target.value })}
-                fullWidth
+          {createPickedHub && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                Location to add
+              </Typography>
+              <Chip
+                label={createPickedHub.label}
+                onDelete={() => {
+                  setCreatePickedHub(null)
+                  setCreateHubSearch("")
+                }}
+                color="secondary"
+                variant="outlined"
               />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
+            </Box>
+          )}
+          <Autocomplete
+            freeSolo
+            size="small"
+            options={createHubOptions}
+            loading={createHubLoading}
+            filterOptions={(opts) => opts}
+            getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+            isOptionEqualToValue={(a, b) =>
+              typeof a === "object" &&
+              typeof b === "object" &&
+              Boolean(a.id && b.id && a.id === b.id)
+            }
+            inputValue={createHubSearch}
+            onInputChange={(_, newInputValue, reason) => {
+              if (reason === "reset") {
+                setCreateHubSearch(newInputValue)
+                return
+              }
+              setCreateHubSearch(newInputValue)
+              if (reason === "input") setCreatePickedHub(null)
+            }}
+            onChange={(_, newValue) => {
+              if (newValue && typeof newValue === "object" && "lat" in newValue) {
+                setCreatePickedHub({
+                  label: typeof newValue.label === "string" ? newValue.label : "",
+                  city: typeof newValue.city === "string" ? newValue.city : "",
+                  state: typeof newValue.state === "string" ? newValue.state : "",
+                  zip: typeof newValue.zip === "string" ? newValue.zip : "",
+                })
+                setCreateHubSearch(
+                  typeof newValue.label === "string" ? newValue.label : "",
+                )
+              }
+            }}
+            renderInput={(params) => (
               <TextField
-                label="State / region"
-                value={createForm.venueState}
-                onChange={(e) => setCreateForm({ ...createForm, venueState: e.target.value })}
-                fullWidth
+                {...params}
+                label="Search places"
+                placeholder="City, ZIP, or address — pick a suggestion or type and create"
+                sx={{ mb: 0 }}
               />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                label="ZIP / postal code"
-                value={createForm.venueZip}
-                onChange={(e) => setCreateForm({ ...createForm, venueZip: e.target.value })}
-                fullWidth
-              />
-            </Grid>
-          </Grid>
+            )}
+          />
           {createError && <Alert severity="error" sx={{ mt: 2 }}>{createError}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              setCreateDialogOpen(false)
+              setCreateError("")
+            }}
+          >
+            Cancel
+          </Button>
           <Button variant="contained" onClick={handleCreateFair} disabled={creating || !createForm.name.trim()}>
             {creating ? "Creating..." : "Create"}
           </Button>

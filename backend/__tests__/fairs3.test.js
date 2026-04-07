@@ -34,6 +34,7 @@ jest.mock("../services/mapboxGeocode", () => ({
       city: "Charlotte",
       state: "NC",
       country: "US",
+      postcode: "28202",
       mapboxId: "mock-id",
     };
   }),
@@ -376,6 +377,42 @@ describe("POST /api/fairs – extra branches", () => {
     expect(res.body.error).toMatch(/startTime must be before endTime/i);
   });
 
+  it("accepts ZIP-only hub on create and geocodes with that string", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({});
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockClear();
+    const res = await request(app)
+      .post("/api/fairs")
+      .set("Authorization", authHeader())
+      .send({
+        name: "Zip Fair",
+        venueCity: "",
+        venueState: "",
+        venueZip: "28202",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.venueCity).toBe("Charlotte");
+    expect(res.body.venueState).toBe("NC");
+    expect(forwardGeocode).toHaveBeenCalledWith("28202");
+  });
+
+  it("accepts venueGeocodeQuery on create", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({});
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockClear();
+    const res = await request(app)
+      .post("/api/fairs")
+      .set("Authorization", authHeader())
+      .send({
+        name: "Query Fair",
+        venueGeocodeQuery: "Charlotte NC",
+      });
+    expect(res.status).toBe(201);
+    expect(forwardGeocode).toHaveBeenCalledWith("Charlotte NC");
+  });
+
   it("returns 500 when DB throws during create", async () => {
     verifyAdmin.mockResolvedValue(null);
     db.batch.mockReturnValue(makeBatch());
@@ -439,6 +476,21 @@ describe("PUT /api/fairs/:fairId – branches", () => {
       .set("Authorization", authHeader())
       .send({ name: "New Name" });
     expect(res.status).toBe(500);
+  });
+
+  it("updates hub via venueGeocodeQuery", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({
+      fair: { ...FAIR_DATA, venueCity: "Old", venueState: "ST", venueZip: "11111" },
+    });
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockClear();
+    const res = await request(app)
+      .put("/api/fairs/fair-id")
+      .set("Authorization", authHeader())
+      .send({ venueGeocodeQuery: "28202" });
+    expect(res.status).toBe(200);
+    expect(forwardGeocode).toHaveBeenCalledWith("28202");
   });
 });
 

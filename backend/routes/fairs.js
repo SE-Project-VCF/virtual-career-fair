@@ -11,7 +11,7 @@ const {
   evaluateFairStatusForFair,
   verifyFirebaseToken,
 } = require("../helpers");
-const { forwardGeocode, suggestPlaces } = require("../services/mapboxGeocode");
+const { forwardGeocode } = require("../services/mapboxGeocode");
 const { haversineMiles, venueFieldsFromDoc } = require("../services/geo");
 
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
@@ -49,6 +49,8 @@ function buildHttpError(status, message) {
 function trimVenuePart(v) {
   return v == null ? "" : String(v).trim();
 }
+
+const HUB_GEOCODE_QUERY_MAX_LEN = 256;
 
 /** Mapbox query for a fair location (city + state + optional ZIP). */
 function virtualFairGeocodeQuery(city, state, zip) {
@@ -280,21 +282,6 @@ async function resolveSearchOriginFromQuery(query) {
    FAIR CRUD
 ======================================================= */
 
-/* GET /api/geocode/suggest - public: Mapbox-backed place hints (token stays server-side) */
-router.get("/api/geocode/suggest", async (req, res) => {
-  try {
-    const q = req.query.q != null ? String(req.query.q).trim() : "";
-    if (q.length < 2) {
-      return res.json({ suggestions: [] });
-    }
-    const suggestions = await suggestPlaces(q);
-    return res.json({ suggestions });
-  } catch (err) {
-    console.error("GET /api/geocode/suggest error:", err);
-    return res.status(500).json({ error: "Failed to suggest locations", suggestions: [] });
-  }
-});
-
 /* GET /api/fairs - public: list fairs; optional geo filter: lat,lng,radiusMiles or address,radiusMiles */
 router.get("/api/fairs", async (req, res) => {
   try {
@@ -411,7 +398,7 @@ router.get("/api/fairs/:fairId/status", async (req, res) => {
 
 /* POST /api/fairs - admin: create fair */
 router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
-  const { name, description, startTime, endTime, venueCity, venueState, venueZip } = req.body;
+  const { name, description, startTime, endTime, venueCity, venueState, venueZip, venueGeocodeQuery } = req.body;
   const adminUid = req.user.uid;
 
   // Admin check
@@ -433,34 +420,62 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ error: "startTime must be before endTime" });
     }
 
+    const geoQField = trimVenuePart(venueGeocodeQuery);
     const city = trimVenuePart(venueCity);
     const state = trimVenuePart(venueState);
     const zip = trimVenuePart(venueZip);
-    const hasAnyHubPart = Boolean(city || state || zip);
+    const useGeoQuery = geoQField.length > 0;
+    const hasAnyHubPart = Boolean(city || state || zip || useGeoQuery);
     let venueFields = {};
     if (hasAnyHubPart) {
-      if (!city || !state) {
-        return res.status(400).json({
-          error: "City and state are required when setting a fair location for geographic search.",
-        });
-      }
-      if (zip.length > 20) {
-        return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+      let geoQuery;
+      let fromSingleQuery = false;
+      if (useGeoQuery) {
+        if (geoQField.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+          return res.status(400).json({ error: "Location search text is too long." });
+        }
+        geoQuery = geoQField;
+        fromSingleQuery = true;
+      } else {
+        if (zip.length > 20) {
+          return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+        }
+        geoQuery = virtualFairGeocodeQuery(city, state, zip);
+        if (!trimVenuePart(geoQuery)) {
+          return res.status(400).json({
+            error: "Enter a location, ZIP, or place to verify with search.",
+          });
+        }
+        if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+          return res.status(400).json({ error: "Location search text is too long." });
+        }
       }
       if (!process.env.MAPBOX_ACCESS_TOKEN) {
         return res.status(503).json({ error: "Geocoding is not configured" });
       }
-      const geoQuery = virtualFairGeocodeQuery(city, state, zip);
       const g = await forwardGeocode(geoQuery);
       if (!g) {
         return res.status(400).json({
-          error: "Could not verify this location. Check city, state, and ZIP, then try again.",
+          error: "Could not verify this location. Try search suggestions or a fuller address.",
         });
       }
+      const finalCity = fromSingleQuery ? g.city || null : g.city || city || null;
+      const finalState = fromSingleQuery ? g.state || null : g.state || state || null;
+      const finalZip = fromSingleQuery ? g.postcode || null : zip || g.postcode || null;
+      if (!finalCity || !finalState) {
+        return res.status(400).json({
+          error:
+            "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
+        });
+      }
+      const zipOut = finalZip || null;
+      if (zipOut && zipOut.length > 20) {
+        return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+      }
       venueFields = removeUndefined({
-        venueCity: city,
-        venueState: state,
-        venueZip: zip || null,
+        venueCity: finalCity,
+        venueState: finalState,
+        venueZip: zipOut,
         venueCountry: g.country,
         venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
         venueMapboxId: g.mapboxId,
@@ -497,7 +512,8 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
 /* PUT /api/fairs/:fairId - admin: update fair metadata/schedule */
 router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
-  const { userId, name, description, startTime, endTime, venueCity, venueState, venueZip } = req.body;
+  const { userId, name, description, startTime, endTime, venueCity, venueState, venueZip, venueGeocodeQuery } =
+    req.body;
   const adminUid = req.user.uid;
   const FieldValue = admin.firestore.FieldValue;
 
@@ -514,50 +530,116 @@ router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
     if (startTime !== undefined) updates.startTime = startTime ? parseUTCToTimestamp(startTime) : null;
     if (endTime !== undefined) updates.endTime = endTime ? parseUTCToTimestamp(endTime) : null;
 
-    const hubTouched = venueCity !== undefined || venueState !== undefined || venueZip !== undefined;
+    const hubTouched =
+      venueCity !== undefined ||
+      venueState !== undefined ||
+      venueZip !== undefined ||
+      venueGeocodeQuery !== undefined;
     if (hubTouched) {
       const prev = fairDoc.data() || {};
-      const city = venueCity !== undefined ? trimVenuePart(venueCity) : trimVenuePart(prev.venueCity);
-      const state = venueState !== undefined ? trimVenuePart(venueState) : trimVenuePart(prev.venueState);
-      const zip = venueZip !== undefined ? trimVenuePart(venueZip) : trimVenuePart(prev.venueZip);
-      const hasAnyHubPart = Boolean(city || state || zip);
+      const sentGeo =
+        venueGeocodeQuery !== undefined ? trimVenuePart(venueGeocodeQuery) : null;
+      const useGeoQuery = sentGeo !== null && sentGeo.length > 0;
 
-      if (!hasAnyHubPart) {
-        updates.venueAddress = FieldValue.delete();
-        updates.venueCity = FieldValue.delete();
-        updates.venueState = FieldValue.delete();
-        updates.venueZip = FieldValue.delete();
-        updates.venueCountry = FieldValue.delete();
-        updates.venueGeo = FieldValue.delete();
-        updates.venueMapboxId = FieldValue.delete();
-      } else {
-        if (!city || !state) {
-          return res.status(400).json({
-            error: "City and state are required when setting a fair location for geographic search.",
-          });
-        }
-        if (zip.length > 20) {
-          return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+      if (useGeoQuery) {
+        if (sentGeo.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+          return res.status(400).json({ error: "Location search text is too long." });
         }
         if (!process.env.MAPBOX_ACCESS_TOKEN) {
           return res.status(503).json({ error: "Geocoding is not configured" });
         }
-        const geoQuery = virtualFairGeocodeQuery(city, state, zip);
-        const g = await forwardGeocode(geoQuery);
+        const g = await forwardGeocode(sentGeo);
         if (!g) {
           return res.status(400).json({
-            error: "Could not verify this location. Check city, state, and ZIP, then try again.",
+            error: "Could not verify this location. Try search suggestions or a fuller address.",
           });
         }
-        Object.assign(updates, removeUndefined({
-          venueCity: city,
-          venueState: state,
-          venueZip: zip || null,
-          venueCountry: g.country,
-          venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
-          venueMapboxId: g.mapboxId,
-        }));
+        const finalCity = g.city || null;
+        const finalState = g.state || null;
+        const finalZip = g.postcode || null;
+        if (!finalCity || !finalState) {
+          return res.status(400).json({
+            error:
+              "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
+          });
+        }
+        if (finalZip && finalZip.length > 20) {
+          return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+        }
+        Object.assign(
+          updates,
+          removeUndefined({
+            venueCity: finalCity,
+            venueState: finalState,
+            venueZip: finalZip || null,
+            venueCountry: g.country,
+            venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
+            venueMapboxId: g.mapboxId,
+          }),
+        );
         updates.venueAddress = FieldValue.delete();
+      } else {
+        const city = venueCity !== undefined ? trimVenuePart(venueCity) : trimVenuePart(prev.venueCity);
+        const state = venueState !== undefined ? trimVenuePart(venueState) : trimVenuePart(prev.venueState);
+        const zip = venueZip !== undefined ? trimVenuePart(venueZip) : trimVenuePart(prev.venueZip);
+        const hasAnyHubPart = Boolean(city || state || zip);
+
+        if (!hasAnyHubPart) {
+          updates.venueAddress = FieldValue.delete();
+          updates.venueCity = FieldValue.delete();
+          updates.venueState = FieldValue.delete();
+          updates.venueZip = FieldValue.delete();
+          updates.venueCountry = FieldValue.delete();
+          updates.venueGeo = FieldValue.delete();
+          updates.venueMapboxId = FieldValue.delete();
+        } else {
+          if (zip.length > 20) {
+            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+          }
+          const geoQuery = virtualFairGeocodeQuery(city, state, zip);
+          if (!trimVenuePart(geoQuery)) {
+            return res.status(400).json({
+              error: "Enter a location, ZIP, or place to verify with search.",
+            });
+          }
+          if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+            return res.status(400).json({ error: "Location search text is too long." });
+          }
+          if (!process.env.MAPBOX_ACCESS_TOKEN) {
+            return res.status(503).json({ error: "Geocoding is not configured" });
+          }
+          const g = await forwardGeocode(geoQuery);
+          if (!g) {
+            return res.status(400).json({
+              error: "Could not verify this location. Try search suggestions or a fuller address.",
+            });
+          }
+          const finalCity = g.city || city || null;
+          const finalState = g.state || state || null;
+          const finalZip = zip || g.postcode || null;
+          if (!finalCity || !finalState) {
+            return res.status(400).json({
+              error:
+                "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
+            });
+          }
+          const zipOut = finalZip || null;
+          if (zipOut && zipOut.length > 20) {
+            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+          }
+          Object.assign(
+            updates,
+            removeUndefined({
+              venueCity: finalCity,
+              venueState: finalState,
+              venueZip: zipOut,
+              venueCountry: g.country,
+              venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
+              venueMapboxId: g.mapboxId,
+            }),
+          );
+          updates.venueAddress = FieldValue.delete();
+        }
       }
     }
 

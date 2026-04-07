@@ -12,6 +12,7 @@ import {
   Switch,
   FormControlLabel,
   TextField,
+  Autocomplete,
   Grid,
   Dialog,
   DialogTitle,
@@ -36,7 +37,24 @@ import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
 import { API_URL } from "../config"
+import { useGeocodeSuggest } from "../hooks/useGeocodeSuggest"
 
+function formatSavedHubLine(fair: {
+  venueCity?: string | null
+  venueState?: string | null
+  venueZip?: string | null
+  venueCountry?: string | null
+}): string | null {
+  const c = fair.venueCity?.trim()
+  const s = fair.venueState?.trim()
+  const z = fair.venueZip?.trim()
+  const parts = [c, s].filter(Boolean).join(", ")
+  if (!parts && !z) return null
+  const line = [parts, z].filter(Boolean).join(" ")
+  const country = fair.venueCountry?.trim()
+  if (country) return `${line} · ${country}`
+  return line
+}
 
 export default function FairAdminDashboard() {
   const navigate = useNavigate()
@@ -62,12 +80,22 @@ export default function FairAdminDashboard() {
     description: "",
     startTime: "",
     endTime: "",
-    venueCity: "",
-    venueState: "",
-    venueZip: "",
   })
+  const [hubPicked, setHubPicked] = useState<{
+    city: string
+    state: string
+    zip: string
+  } | null>(null)
+  const [hubSearchInput, setHubSearchInput] = useState("")
+  const [savedHubLabel, setSavedHubLabel] = useState<string | null>(null)
+  const [hubRemoved, setHubRemoved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [hubDirty, setHubDirty] = useState(false)
+
+  const { options: hubSuggestOptions, loading: hubSuggestLoading } = useGeocodeSuggest(
+    hubSearchInput,
+    editDialogOpen,
+  )
 
   const [codeCopied, setCodeCopied] = useState(false)
   const [refreshingInviteCode, setRefreshingInviteCode] = useState(false)
@@ -84,18 +112,15 @@ export default function FairAdminDashboard() {
   }, [fairLoading, fairId, navigate])
 
   useEffect(() => {
-    if (fair) {
+    if (fair && !editDialogOpen) {
       setEditForm({
         name: fair.name || "",
         description: fair.description || "",
         startTime: fair.startTime ? toLocalDatetime(fair.startTime) : "",
         endTime: fair.endTime ? toLocalDatetime(fair.endTime) : "",
-        venueCity: fair.venueCity ?? "",
-        venueState: fair.venueState ?? "",
-        venueZip: fair.venueZip ?? "",
       })
     }
-  }, [fair])
+  }, [fair, editDialogOpen])
 
   function toLocalDatetime(ms: number): string {
     const d = new Date(ms)
@@ -110,11 +135,12 @@ export default function FairAdminDashboard() {
         description: fair.description || "",
         startTime: fair.startTime ? toLocalDatetime(fair.startTime) : "",
         endTime: fair.endTime ? toLocalDatetime(fair.endTime) : "",
-        venueCity: fair.venueCity ?? "",
-        venueState: fair.venueState ?? "",
-        venueZip: fair.venueZip ?? "",
       })
+      setSavedHubLabel(formatSavedHubLine(fair))
     }
+    setHubPicked(null)
+    setHubSearchInput("")
+    setHubRemoved(false)
     setHubDirty(false)
     setEditDialogOpen(true)
   }
@@ -170,9 +196,20 @@ export default function FairAdminDashboard() {
         endTime: editForm.endTime ? new Date(editForm.endTime).toISOString() : null,
       }
       if (hubDirty) {
-        payload.venueCity = editForm.venueCity.trim()
-        payload.venueState = editForm.venueState.trim()
-        payload.venueZip = editForm.venueZip.trim()
+        const fromPick =
+          hubPicked &&
+          (hubPicked.city.trim() || hubPicked.state.trim() || hubPicked.zip.trim())
+        if (fromPick) {
+          payload.venueCity = hubPicked.city.trim()
+          payload.venueState = hubPicked.state.trim()
+          payload.venueZip = hubPicked.zip.trim()
+        } else if (hubSearchInput.trim()) {
+          payload.venueGeocodeQuery = hubSearchInput.trim()
+        } else {
+          payload.venueCity = ""
+          payload.venueState = ""
+          payload.venueZip = ""
+        }
       }
       const res = await fetch(`${API_URL}/api/fairs/${fairId}`, {
         method: "PUT",
@@ -189,16 +226,20 @@ export default function FairAdminDashboard() {
         }
         throw new Error(message)
       }
-      const refreshToken = await getToken()
-      const fairRes = await fetch(`${API_URL}/api/fairs/${fairId}`, {
-        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
-      })
-      if (fairRes.ok) {
-        const fairData = await fairRes.json()
-        setFair(fairData)
-      }
       setSuccess("Fair updated successfully")
       setEditDialogOpen(false)
+      try {
+        const refreshToken = await getToken()
+        const fairRes = await fetch(`${API_URL}/api/fairs/${fairId}`, {
+          headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+        })
+        if (fairRes.ok) {
+          const fairData = await fairRes.json()
+          setFair(fairData)
+        }
+      } catch {
+        /* PUT succeeded; refresh is best-effort */
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -422,9 +463,12 @@ export default function FairAdminDashboard() {
                     <Grid size={{ xs: 12, sm: 6 }}>
                       <Typography variant="body2" color="text.secondary">Fair Location</Typography>
                       <Typography fontWeight="medium">
-                        {`${[fair.venueCity, fair.venueState].filter(Boolean).join(", ")}${fair.venueZip ? ` ${fair.venueZip}` : ""}`.trim() ||
-                          fair.venueCountry ||
-                          "—"}
+                        {(() => {
+                          const cityState = [fair.venueCity, fair.venueState].filter(Boolean).join(", ")
+                          const zip = fair.venueZip?.trim()
+                          const line = [cityState, zip].filter(Boolean).join(" ").trim()
+                          return line || fair.venueCountry || "—"
+                        })()}
                       </Typography>
                       {fair.venueCountry &&
                         (fair.venueCity || fair.venueState || fair.venueZip) && (
@@ -549,46 +593,81 @@ export default function FairAdminDashboard() {
               sx={{ mb: 2 }}
             />
             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-              Fair Location
+              Fair location (virtual hub)
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-              City and state are required for search. Clear all three and save to remove the fair from distance search.
+              Search for a place, city, or ZIP. Pick a suggestion or type a query and save—the server verifies it with
+              Mapbox. The saved hub appears as a chip below; remove it to clear. Saving after remove with nothing in the
+              search box clears the hub.
             </Typography>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="City"
-                  value={editForm.venueCity}
-                  onChange={(e) => {
+            {savedHubLabel &&
+              !hubRemoved &&
+              !hubPicked &&
+              !hubSearchInput.trim() && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                  Current location
+                </Typography>
+                <Chip
+                  label={savedHubLabel}
+                  onDelete={() => {
+                    setHubRemoved(true)
                     setHubDirty(true)
-                    setEditForm(prev => ({ ...prev, venueCity: e.target.value }))
+                    setHubPicked(null)
+                    setHubSearchInput("")
                   }}
-                  fullWidth
+                  color="secondary"
+                  variant="outlined"
                 />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
+              </Box>
+            )}
+            <Autocomplete
+              freeSolo
+              size="small"
+              options={hubSuggestOptions}
+              loading={hubSuggestLoading}
+              filterOptions={(opts) => opts}
+              getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+              isOptionEqualToValue={(a, b) =>
+                typeof a === "object" &&
+                typeof b === "object" &&
+                Boolean(a.id && b.id && a.id === b.id)
+              }
+              inputValue={hubSearchInput}
+              onInputChange={(_, newInputValue, reason) => {
+                if (reason === "reset") {
+                  setHubSearchInput(newInputValue)
+                  return
+                }
+                setHubSearchInput(newInputValue)
+                if (reason === "input") {
+                  setHubPicked(null)
+                  setHubDirty(true)
+                }
+              }}
+              onChange={(_, newValue) => {
+                if (newValue && typeof newValue === "object" && "lat" in newValue) {
+                  setHubPicked({
+                    city: typeof newValue.city === "string" ? newValue.city : "",
+                    state: typeof newValue.state === "string" ? newValue.state : "",
+                    zip: typeof newValue.zip === "string" ? newValue.zip : "",
+                  })
+                  setHubSearchInput(
+                    typeof newValue.label === "string" ? newValue.label : "",
+                  )
+                  setHubRemoved(false)
+                  setHubDirty(true)
+                }
+              }}
+              renderInput={(params) => (
                 <TextField
-                  label="State / region"
-                  value={editForm.venueState}
-                  onChange={(e) => {
-                    setHubDirty(true)
-                    setEditForm(prev => ({ ...prev, venueState: e.target.value }))
-                  }}
-                  fullWidth
+                  {...params}
+                  label="Search places"
+                  placeholder="City, ZIP, or address — pick a suggestion or type and save"
+                  sx={{ mb: 0 }}
                 />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="ZIP / postal code"
-                  value={editForm.venueZip}
-                  onChange={(e) => {
-                    setHubDirty(true)
-                    setEditForm(prev => ({ ...prev, venueZip: e.target.value }))
-                  }}
-                  fullWidth
-                />
-              </Grid>
-            </Grid>
+              )}
+            />
           </DialogContent>
           <DialogActions>
             <Button type="button" onClick={() => setEditDialogOpen(false)}>Cancel</Button>

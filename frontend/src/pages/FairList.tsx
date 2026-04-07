@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Container,
@@ -33,6 +33,7 @@ import BaseLayout from "../components/BaseLayout"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
+import { useGeocodeSuggest } from "../hooks/useGeocodeSuggest"
 
 function waitForFirebaseUser(): Promise<typeof auth.currentUser> {
   if (auth.currentUser) return Promise.resolve(auth.currentUser)
@@ -46,13 +47,6 @@ function waitForFirebaseUser(): Promise<typeof auth.currentUser> {
       }
     })
   })
-}
-
-interface LocationSuggestOption {
-  id: string
-  label: string
-  lat: number
-  lng: number
 }
 
 interface Fair {
@@ -116,14 +110,15 @@ export default function FairList() {
   const [radiusMiles, setRadiusMiles] = useState("50")
   const [browserCoords, setBrowserCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [geoHint, setGeoHint] = useState("")
-  const [locationOptions, setLocationOptions] = useState<LocationSuggestOption[]>([])
-  const [locationSuggestLoading, setLocationSuggestLoading] = useState(false)
   const [selectedPlace, setSelectedPlace] = useState<{
     placeName: string
     lat: number
     lng: number
   } | null>(null)
-  const suggestAbortRef = useRef<AbortController | null>(null)
+  const { options: locationOptions, loading: locationSuggestLoading } = useGeocodeSuggest(
+    searchAddress,
+    !browserCoords,
+  )
 
   const loadFairsFromUrl = async (url: string, options?: { geo?: boolean }) => {
     const res = await fetch(url)
@@ -153,44 +148,6 @@ export default function FairList() {
     }
     loadFairs()
   }, [])
-
-  useEffect(() => {
-    if (browserCoords) {
-      setLocationOptions([])
-      return
-    }
-    const q = searchAddress.trim()
-    if (q.length < 2) {
-      setLocationOptions([])
-      setLocationSuggestLoading(false)
-      return
-    }
-    const timer = globalThis.setTimeout(() => {
-      suggestAbortRef.current?.abort()
-      const ac = new AbortController()
-      suggestAbortRef.current = ac
-      setLocationSuggestLoading(true)
-      void fetch(`${API_URL}/api/geocode/suggest?q=${encodeURIComponent(q)}`, { signal: ac.signal })
-        .then((res) => res.json())
-        .then((data: { suggestions?: LocationSuggestOption[] }) => {
-          if (!ac.signal.aborted) {
-            setLocationOptions(Array.isArray(data.suggestions) ? data.suggestions : [])
-          }
-        })
-        .catch((err: unknown) => {
-          if (err instanceof Error && err.name !== "AbortError" && !ac.signal.aborted) {
-            setLocationOptions([])
-          }
-        })
-        .finally(() => {
-          if (!ac.signal.aborted) setLocationSuggestLoading(false)
-        })
-    }, 350)
-    return () => {
-      globalThis.clearTimeout(timer)
-      suggestAbortRef.current?.abort()
-    }
-  }, [searchAddress, browserCoords])
 
   const executeGeoSearch = async (
     location: { kind: "coords"; lat: number; lng: number } | { kind: "address"; address: string },
@@ -271,7 +228,6 @@ export default function FairList() {
     setSearchAddress("")
     setBrowserCoords(null)
     setSelectedPlace(null)
-    setLocationOptions([])
     setGeoHint("")
     setLoading(true)
     setError("")

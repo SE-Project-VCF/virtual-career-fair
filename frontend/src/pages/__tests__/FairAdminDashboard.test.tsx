@@ -37,6 +37,10 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:5000",
 }))
 
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => ({ options: [], loading: false }),
+}))
+
 vi.mock("../../firebase", () => ({
   auth: {
     currentUser: {

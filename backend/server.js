@@ -12,6 +12,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
 const shortlistRouter = require("./routes/shortlist");
+const { suggestPlaces } = require("./services/mapboxGeocode");
 const {
   tryPutQaSessionAtFairBooth,
   validatePutQaSessionRequestBody,
@@ -149,6 +150,21 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: "1mb" }));
+
+/* GET /api/geocode/suggest — registered on app (not only fairs router) so it always resolves */
+app.get("/api/geocode/suggest", async (req, res) => {
+  try {
+    const q = req.query.q != null ? String(req.query.q).trim() : "";
+    if (q.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+    const suggestions = await suggestPlaces(q);
+    return res.json({ suggestions });
+  } catch (err) {
+    console.error("GET /api/geocode/suggest error:", err);
+    return res.status(500).json({ error: "Failed to suggest locations", suggestions: [] });
+  }
+});
 
 const crypto = require("node:crypto");
 const { extractTextFromBuffer, toStructuredResume } = require("./resumeParser");

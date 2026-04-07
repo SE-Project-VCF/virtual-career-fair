@@ -27,6 +27,7 @@ const defaultGeocodeResult = {
   city: "Charlotte",
   state: "NC",
   country: "US",
+  postcode: "28202",
   mapboxId: "mock-id",
 };
 

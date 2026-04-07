@@ -37,6 +37,10 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }));
 
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => ({ options: [], loading: false }),
+}));
+
 vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }));
