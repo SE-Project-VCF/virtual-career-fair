@@ -217,13 +217,17 @@ export default function FairList() {
     }
   }
 
+  /**
+   * Optional distance-based fair search: reads the device position only after the user clicks
+   * "Use my location". There is no page-load or background geolocation; address search does not use this API.
+   */
   const handleUseMyLocation = () => {
     setGeoHint("")
     if (!navigator.geolocation) {
       setGeoHint("Location is not available in this browser.")
       return
     }
-    navigator.geolocation.getCurrentPosition(
+    navigator.geolocation.getCurrentPosition( // NOSONAR S5604 — geolocation is necessary for this explicit action only; no non-permission alternative for coordinates
       (pos) => {
         const lat = pos.coords.latitude
         const lng = pos.coords.longitude
