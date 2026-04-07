@@ -1083,9 +1083,10 @@ router.post("/api/fairs/:fairId/lounge/join", verifyFirebaseToken, async (req, r
     const channelId = `lounge-${fairId}`;
 
     // Get or create the lounge channel and add the student as a member
+    // created_by_id must be a real Stream user — use the joining student
     const channel = streamServerClient.channel("messaging", channelId, {
       name: `${fairName} Networking Lounge`,
-      created_by_id: "system",
+      created_by_id: uid,
     });
     await channel.create();
     await channel.addMembers([uid]);
