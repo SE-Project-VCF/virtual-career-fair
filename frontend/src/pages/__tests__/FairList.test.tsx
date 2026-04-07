@@ -55,7 +55,16 @@ vi.mock("../../components/BaseLayout", () => ({
 
 vi.mock("../../config", () => ({
   API_URL: "http://localhost:5000",
+  MAPBOX_ACCESS_TOKEN: "",
 }))
+
+vi.mock("../../components/FairsMapView", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../components/FairsMapView")>()
+  return {
+    ...mod,
+    default: () => <div data-testid="fairs-map-mock">FairsMapMock</div>,
+  }
+})
 
 vi.mock("../../firebase", () => ({
   auth: {
@@ -121,6 +130,41 @@ describe("FairList", () => {
     await waitFor(() => {
       expect(screen.getByText("Spring Fair")).toBeInTheDocument()
     })
+  })
+
+  it("switches to map view and refetches fairs", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [
+          {
+            id: "f1",
+            name: "Spring Fair",
+            description: null,
+            isLive: true,
+            startTime: null,
+            endTime: null,
+            venueGeo: { latitude: 35.2, longitude: -80.8 },
+          },
+        ],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => {
+      expect(screen.getByText("Spring Fair")).toBeInTheDocument()
+    })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole("button", { name: /map view/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("fairs-map-mock")).toBeInTheDocument()
+    })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2)
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[1][0])).toContain("/api/fairs")
   })
 
   it("shows Live Now chip for live fair", async () => {

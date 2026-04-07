@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Container,
@@ -22,6 +22,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material"
 import { alpha } from "@mui/material/styles"
 import EventIcon from "@mui/icons-material/Event"
@@ -29,7 +31,10 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import CheckCircleIcon from "@mui/icons-material/CheckCircle"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import MyLocationIcon from "@mui/icons-material/MyLocation"
+import MapIcon from "@mui/icons-material/Map"
+import TravelExploreIcon from "@mui/icons-material/TravelExplore"
 import BaseLayout from "../components/BaseLayout"
+import FairsMapView, { filterFairsForMapView } from "../components/FairsMapView"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -49,7 +54,7 @@ function waitForFirebaseUser(): Promise<typeof auth.currentUser> {
   })
 }
 
-interface Fair {
+export interface Fair {
   id: string
   name: string
   description: string | null
@@ -59,6 +64,7 @@ interface Fair {
   venueCity?: string | null
   venueState?: string | null
   venueZip?: string | null
+  venueGeo?: { latitude: number; longitude: number } | null
   distanceMiles?: number
 }
 
@@ -115,6 +121,8 @@ export default function FairList() {
     lat: number
     lng: number
   } | null>(null)
+  const [exploreView, setExploreView] = useState<"search" | "map">("search")
+
   const { options: locationOptions, loading: locationSuggestLoading } = useGeocodeSuggest(
     searchAddress,
     !browserCoords,
@@ -148,6 +156,38 @@ export default function FairList() {
     }
     loadFairs()
   }, [])
+
+  useEffect(() => {
+    if (exploreView !== "map") return
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError("")
+      try {
+        const res = await fetch(`${API_URL}/api/fairs`)
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || "Failed to load fairs")
+        if (cancelled) return
+        setFairs(data.fairs || [])
+        setGeoFilterActive(false)
+        setBrowserCoords(null)
+        setSelectedPlace(null)
+        setGeoSearchSummary(null)
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load career fairs")
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [exploreView])
+
+  const mapEligibleFairs = useMemo((): Fair[] => filterFairsForMapView(fairs), [fairs])
+  const displayFairs: Fair[] = exploreView === "map" ? mapEligibleFairs : fairs
 
   const executeGeoSearch = async (
     location: { kind: "coords"; lat: number; lng: number } | { kind: "address"; address: string },
@@ -341,6 +381,10 @@ export default function FairList() {
   const joinDialogFair = fairs.find((f) => f.id === joinDialogFairId)
   const leaveDialogFair = fairs.find((f) => f.id === leaveDialogFairId)
 
+  const handleExploreViewChange = (_: unknown, next: "search" | "map" | null) => {
+    if (next !== null) setExploreView(next)
+  }
+
   return (
     <BaseLayout pageTitle="Career Fairs">
       <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
@@ -364,8 +408,9 @@ export default function FairList() {
           >
             Discover virtual career fairs
           </Typography>
-          <Typography color="text.secondary" sx={{ maxWidth: 540, lineHeight: 1.65 }}>
-            Browse events, search by distance from an address or your location, and join with an invite code from the organizer.
+          <Typography color="text.secondary" sx={{ maxWidth: 560, lineHeight: 1.65 }}>
+            Browse events, search by distance or open the map for live and upcoming fairs with a saved location, and join
+            with an invite code from the organizer.
           </Typography>
         </Box>
 
@@ -398,13 +443,45 @@ export default function FairList() {
               bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06),
             }}
           >
-            <Typography variant="subtitle1" fontWeight={700}>
-              Find fairs by distance
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-              Choose a suggestion to search immediately, or type an address and press Search. My location also searches right away (uses the radius below).
-            </Typography>
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: { xs: "column", sm: "row" },
+                alignItems: { xs: "stretch", sm: "flex-start" },
+                justifyContent: "space-between",
+                gap: 1.5,
+              }}
+            >
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle1" fontWeight={700}>
+                  {exploreView === "search" ? "Find fairs by distance" : "Fair locations on the map"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                  {exploreView === "search"
+                    ? "Choose a suggestion to search immediately, or type an address and press Search. My location also searches right away (uses the radius below)."
+                    : "Pins show live and upcoming fairs that have a hub location saved. Click a pin for details."}
+                </Typography>
+              </Box>
+              <ToggleButtonGroup
+                value={exploreView}
+                exclusive
+                onChange={handleExploreViewChange}
+                size="small"
+                aria-label="Explore fairs by search or map"
+                sx={{ flexShrink: 0, alignSelf: { xs: "stretch", sm: "center" } }}
+              >
+                <ToggleButton value="search" aria-label="Search by distance">
+                  <TravelExploreIcon sx={{ mr: 0.75, fontSize: 20 }} />
+                  Search
+                </ToggleButton>
+                <ToggleButton value="map" aria-label="Map view">
+                  <MapIcon sx={{ mr: 0.75, fontSize: 20 }} />
+                  Map
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
           </Box>
+          {exploreView === "search" ? (
           <CardContent sx={{ pt: 2.5 }}>
             <Grid container spacing={2} alignItems="flex-end">
               <Grid size={{ xs: 12, md: 5 }}>
@@ -513,9 +590,12 @@ export default function FairList() {
               </Typography>
             )}
           </CardContent>
+          ) : (
+            <FairsMapView fairs={fairs} />
+          )}
         </Card>
 
-        {geoFilterActive && geoSearchSummary && (
+        {exploreView === "search" && geoFilterActive && geoSearchSummary && (
           <Box
             sx={(theme) => ({
               mb: 3,
@@ -546,7 +626,7 @@ export default function FairList() {
           </Box>
         )}
 
-        {!loading && !error && fairs.length === 0 && geoFilterActive && (
+        {!loading && !error && exploreView === "search" && fairs.length === 0 && geoFilterActive && (
           <Box sx={{ textAlign: "center", py: 8 }}>
             <LocationOnIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
             <Typography variant="h6" color="text.secondary">
@@ -561,7 +641,10 @@ export default function FairList() {
           </Box>
         )}
 
-        {!loading && !error && fairs.length === 0 && !geoFilterActive && (
+        {!loading &&
+          !error &&
+          fairs.length === 0 &&
+          !(exploreView === "search" && geoFilterActive) && (
           <Box sx={{ textAlign: "center", py: 8 }}>
             <EventIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
             <Typography variant="h6" color="text.secondary">
@@ -574,7 +657,7 @@ export default function FairList() {
         )}
 
         <Grid container spacing={3}>
-          {fairs.length > 0 && fairs.map((fair) => {
+          {displayFairs.length > 0 && displayFairs.map((fair) => {
             const status = getFairStatus(fair)
             const isEnded = fair.endTime !== null && Date.now() > fair.endTime
             const isEnrolled = fair.id in enrolledMap
