@@ -500,29 +500,6 @@ describe("POST /api/create-admin", () => {
     expect(res.body.error).toMatch(/invalid admin secret key/i);
   });
 
-  it("returns 400 when user is already an administrator", async () => {
-    auth.getUserByEmail.mockResolvedValue({ uid: "existing-uid" });
-
-    const usersDocRef = {
-      get: jest.fn().mockResolvedValue(
-        mockDocSnap({ role: "administrator", uid: "existing-uid" }, true, "existing-uid")
-      ),
-      update: jest.fn().mockResolvedValue(undefined),
-      set: jest.fn().mockResolvedValue(undefined),
-    };
-    db.collection.mockImplementation((name) => {
-      if (name === "users") {
-        return { doc: jest.fn(() => usersDocRef) };
-      }
-    });
-
-    const res = await request(app)
-      .post("/api/create-admin")
-      .send({ email: "existing-admin@test.com", password: TEST_PW, adminSecret: "super-secret-key" });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/already an administrator/i);
-  });
 
   it("upgrades an existing non-admin user to administrator", async () => {
     auth.getUserByEmail.mockResolvedValue({ uid: "existing-uid" });

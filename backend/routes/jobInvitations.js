@@ -1,9 +1,64 @@
 const { Router } = require("express");
 const { db } = require("../firebase");
 const admin = require("firebase-admin");
-const { removeUndefined, verifyFirebaseToken, verifyRepOrOwner } = require("../helpers");
+const {
+  removeUndefined,
+  verifyFirebaseToken,
+  verifyRepOrOwner,
+  fetchRelatedJobInvDetails,
+  serializeJobInvTimestamps,
+} = require("../helpers");
 
 const router = Router();
+
+/**
+ * Build a standard invitation response object from doc data + related details.
+ */
+function buildInvitationResponse(docId, invData, related) {
+  return {
+    id: docId,
+    jobId: invData.jobId,
+    companyId: invData.companyId,
+    studentId: invData.studentId,
+    sentBy: invData.sentBy,
+    sentVia: invData.sentVia,
+    status: invData.status,
+    ...serializeJobInvTimestamps(invData),
+    message: invData.message || null,
+    ...related,
+  };
+}
+
+/**
+ * Sort invitations by sentAt descending (newest first), null-safe.
+ */
+function sortBySentAtDesc(invitations) {
+  return invitations.sort((a, b) => {
+    if (!a.sentAt && !b.sentAt) return 0;
+    if (!a.sentAt) return 1;
+    if (!b.sentAt) return -1;
+    return b.sentAt - a.sentAt;
+  });
+}
+
+/**
+ * Verify job exists and user is authorized, returning { jobData, companyId }.
+ * Returns null and sends error response if unauthorized.
+ */
+async function verifyJobAccess(jobId, userId, res) {
+  const jobDoc = await db.collection("jobs").doc(jobId).get();
+  if (!jobDoc.exists) {
+    res.status(404).json({ error: "Job not found" });
+    return null;
+  }
+  const jobData = jobDoc.data();
+  const authCheck = await verifyRepOrOwner(userId, jobData.companyId);
+  if (authCheck) {
+    res.status(authCheck.status).json({ error: authCheck.error });
+    return null;
+  }
+  return { jobData, companyId: jobData.companyId };
+}
 
 /* ----------------------------------------------------
    SEND JOB INVITATION(S) TO STUDENT(S)
@@ -28,20 +83,9 @@ router.post("/job-invitations/send", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Get the job to verify it exists and get company info
-    const jobDoc = await db.collection("jobs").doc(jobId).get();
-    if (!jobDoc.exists) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-
-    const jobData = jobDoc.data();
-    const companyId = jobData.companyId;
-
-    // Verify user has permission
-    const authCheck = await verifyRepOrOwner(userId, companyId);
-    if (authCheck) {
-      return res.status(authCheck.status).json({ error: authCheck.error });
-    }
+    const access = await verifyJobAccess(jobId, userId, res);
+    if (!access) return;
+    const { companyId } = access;
 
     // Validate all student IDs exist and are students
     const studentChecks = await Promise.all(
@@ -84,15 +128,11 @@ router.post("/job-invitations/send", verifyFirebaseToken, async (req, res) => {
         message: message || undefined,
       });
 
-      // Invitation record created
-
       batch.set(invitationRef, invitationData);
     }
 
     await batch.commit();
     console.log(`Successfully created ${invitationIds.length} invitation(s)`);
-
-    // Chat invitations are no longer supported - only dashboard notifications are used
 
     return res.json({
       success: true,
@@ -128,102 +168,23 @@ router.get("/job-invitations/received", verifyFirebaseToken, async (req, res) =>
       return res.status(403).json({ error: "Only students can view received invitations" });
     }
 
-    // Build query (without orderBy to avoid needing a composite index)
     let query = db.collection("jobInvitations").where("studentId", "==", userId);
-
     if (status) {
       query = query.where("status", "==", status);
     }
 
     const invitationsSnapshot = await query.get();
-    // Fetching invitations
 
-    // Get job and company details for each invitation
     const invitations = await Promise.all(
       invitationsSnapshot.docs.map(async (doc) => {
         const invData = doc.data();
-
-        // Get job details
-        let jobDetails = null;
-        try {
-          const jobDoc = await db.collection("jobs").doc(invData.jobId).get();
-          if (jobDoc.exists) {
-            const jobData = jobDoc.data();
-            jobDetails = {
-              id: jobDoc.id,
-              companyId: jobData.companyId,
-              name: jobData.name,
-              description: jobData.description,
-              majorsAssociated: jobData.majorsAssociated,
-              applicationLink: jobData.applicationLink || null,
-              applicationForm: jobData.applicationForm || null,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching job ${invData.jobId}:`, err);
-        }
-
-        // Get company details
-        let companyDetails = null;
-        try {
-          const companyDoc = await db.collection("companies").doc(invData.companyId).get();
-          if (companyDoc.exists) {
-            const companyData = companyDoc.data();
-            companyDetails = {
-              id: companyDoc.id,
-              companyName: companyData.companyName,
-              boothId: companyData.boothId || null,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching company ${invData.companyId}:`, err);
-        }
-
-        // Get sender details
-        let senderDetails = null;
-        try {
-          const senderDoc = await db.collection("users").doc(invData.sentBy).get();
-          if (senderDoc.exists) {
-            const senderData = senderDoc.data();
-            senderDetails = {
-              id: senderDoc.id,
-              firstName: senderData.firstName,
-              lastName: senderData.lastName,
-              email: senderData.email,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching sender ${invData.sentBy}:`, err);
-        }
-
-        return {
-          id: doc.id,
-          jobId: invData.jobId,
-          companyId: invData.companyId,
-          studentId: invData.studentId,
-          sentBy: invData.sentBy,
-          sentVia: invData.sentVia,
-          status: invData.status,
-          sentAt: invData.sentAt ? invData.sentAt.toMillis() : null,
-          viewedAt: invData.viewedAt ? invData.viewedAt.toMillis() : null,
-          clickedAt: invData.clickedAt ? invData.clickedAt.toMillis() : null,
-          message: invData.message || null,
-          job: jobDetails,
-          company: companyDetails,
-          sender: senderDetails,
-        };
+        const related = await fetchRelatedJobInvDetails(invData, { job: true, jobFull: true, company: true, sender: true }); // NOSONAR - fetchRelatedJobInvDetails is async
+        return buildInvitationResponse(doc.id, invData, related);
       })
     );
 
-    // Sort invitations by sentAt descending (newest first) in memory
-    invitations.sort((a, b) => {
-      if (!a.sentAt && !b.sentAt) return 0;
-      if (!a.sentAt) return 1;
-      if (!b.sentAt) return -1;
-      return b.sentAt - a.sentAt;
-    });
+    sortBySentAtDesc(invitations);
 
-    // Returning invitation details
     return res.json({ invitations });
   } catch (err) {
     console.error("Error fetching received invitations:", err);
@@ -242,13 +203,11 @@ router.get("/job-invitations/sent", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Verify user has permission
     const authCheck = await verifyRepOrOwner(userId, companyId);
     if (authCheck) {
       return res.status(authCheck.status).json({ error: authCheck.error });
     }
 
-    // Build query - filter by sentBy or companyId based on what's provided
     let query;
     if (companyId) {
       query = db.collection("jobInvitations").where("companyId", "==", companyId);
@@ -258,58 +217,11 @@ router.get("/job-invitations/sent", verifyFirebaseToken, async (req, res) => {
 
     const invitationsSnapshot = await query.orderBy("sentAt", "desc").get();
 
-    // Get student, job details for each invitation
     const invitations = await Promise.all(
       invitationsSnapshot.docs.map(async (doc) => {
         const invData = doc.data();
-
-        // Get student details
-        let studentDetails = null;
-        try {
-          const studentDoc = await db.collection("users").doc(invData.studentId).get();
-          if (studentDoc.exists) {
-            const studentData = studentDoc.data();
-            studentDetails = {
-              id: studentDoc.id,
-              firstName: studentData.firstName,
-              lastName: studentData.lastName,
-              email: studentData.email,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching student ${invData.studentId}:`, err);
-        }
-
-        // Get job details
-        let jobDetails = null;
-        try {
-          const jobDoc = await db.collection("jobs").doc(invData.jobId).get();
-          if (jobDoc.exists) {
-            const jobData = jobDoc.data();
-            jobDetails = {
-              id: jobDoc.id,
-              name: jobData.name,
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching job ${invData.jobId}:`, err);
-        }
-
-        return {
-          id: doc.id,
-          jobId: invData.jobId,
-          companyId: invData.companyId,
-          studentId: invData.studentId,
-          sentBy: invData.sentBy,
-          sentVia: invData.sentVia,
-          status: invData.status,
-          sentAt: invData.sentAt ? invData.sentAt.toMillis() : null,
-          viewedAt: invData.viewedAt ? invData.viewedAt.toMillis() : null,
-          clickedAt: invData.clickedAt ? invData.clickedAt.toMillis() : null,
-          message: invData.message || null,
-          student: studentDetails,
-          job: jobDetails,
-        };
+        const related = await fetchRelatedJobInvDetails(invData, { student: true, job: true }); // NOSONAR - fetchRelatedJobInvDetails is async
+        return buildInvitationResponse(doc.id, invData, related);
       })
     );
 
@@ -345,20 +257,16 @@ router.patch("/job-invitations/:id/status", verifyFirebaseToken, async (req, res
 
     const invitationData = invitationDoc.data();
 
-    // Verify the user is the intended recipient
     if (invitationData.studentId !== userId) {
       return res.status(403).json({ error: "You can only update your own invitations" });
     }
 
-    const updateData = {
-      status,
-    };
+    const updateData = { status };
 
     if (status === "viewed" && !invitationData.viewedAt) {
       updateData.viewedAt = admin.firestore.Timestamp.now();
     } else if (status === "clicked") {
       updateData.clickedAt = admin.firestore.Timestamp.now();
-      // If not already viewed, mark as viewed too
       if (!invitationData.viewedAt) {
         updateData.viewedAt = admin.firestore.Timestamp.now();
       }
@@ -385,22 +293,9 @@ router.get("/job-invitations/stats/:jobId", verifyFirebaseToken, async (req, res
       return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Get the job to verify it exists and get company info
-    const jobDoc = await db.collection("jobs").doc(jobId).get();
-    if (!jobDoc.exists) {
-      return res.status(404).json({ error: "Job not found" });
-    }
+    const access = await verifyJobAccess(jobId, userId, res);
+    if (!access) return;
 
-    const jobData = jobDoc.data();
-    const companyId = jobData.companyId;
-
-    // Verify user has permission
-    const authCheck = await verifyRepOrOwner(userId, companyId);
-    if (authCheck) {
-      return res.status(authCheck.status).json({ error: authCheck.error });
-    }
-
-    // Get all invitations for this job
     const invitationsSnapshot = await db
       .collection("jobInvitations")
       .where("jobId", "==", jobId)
@@ -441,22 +336,9 @@ router.get("/job-invitations/details/:jobId", verifyFirebaseToken, async (req, r
       return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Get the job to verify it exists and get company info
-    const jobDoc = await db.collection("jobs").doc(jobId).get();
-    if (!jobDoc.exists) {
-      return res.status(404).json({ error: "Job not found" });
-    }
+    const access = await verifyJobAccess(jobId, userId, res);
+    if (!access) return;
 
-    const jobData = jobDoc.data();
-    const companyId = jobData.companyId;
-
-    // Verify user has permission
-    const authCheck = await verifyRepOrOwner(userId, companyId);
-    if (authCheck) {
-      return res.status(authCheck.status).json({ error: authCheck.error });
-    }
-
-    // Get all invitations for this job with student details
     const invitationsSnapshot = await db
       .collection("jobInvitations")
       .where("jobId", "==", jobId)
@@ -465,45 +347,19 @@ router.get("/job-invitations/details/:jobId", verifyFirebaseToken, async (req, r
     const invitations = await Promise.all(
       invitationsSnapshot.docs.map(async (doc) => {
         const invData = doc.data();
-
-        // Get student details
-        let studentDetails = null;
-        try {
-          const studentDoc = await db.collection("users").doc(invData.studentId).get();
-          if (studentDoc.exists) {
-            const studentData = studentDoc.data();
-            studentDetails = {
-              id: studentDoc.id,
-              firstName: studentData.firstName || "",
-              lastName: studentData.lastName || "",
-              email: studentData.email || "",
-              major: studentData.major || "",
-            };
-          }
-        } catch (err) {
-          console.error(`Error fetching student ${invData.studentId}:`, err);
-        }
-
+        const related = await fetchRelatedJobInvDetails(invData, { student: true, studentExtra: true }); // NOSONAR - fetchRelatedJobInvDetails is async
         return {
           id: doc.id,
           studentId: invData.studentId,
-          student: studentDetails,
+          student: related.student || null,
           status: invData.status,
-          sentAt: invData.sentAt ? invData.sentAt.toMillis() : null,
-          viewedAt: invData.viewedAt ? invData.viewedAt.toMillis() : null,
-          clickedAt: invData.clickedAt ? invData.clickedAt.toMillis() : null,
+          ...serializeJobInvTimestamps(invData),
           message: invData.message || null,
         };
       })
     );
 
-    // Sort by sentAt descending (newest first)
-    invitations.sort((a, b) => {
-      if (!a.sentAt && !b.sentAt) return 0;
-      if (!a.sentAt) return 1;
-      if (!b.sentAt) return -1;
-      return b.sentAt - a.sentAt;
-    });
+    sortBySentAtDesc(invitations);
 
     return res.json({ invitations });
   } catch (err) {
@@ -524,7 +380,6 @@ router.get("/job-invitations/:invitationId", verifyFirebaseToken, async (req, re
       return res.status(400).json({ error: "Invitation ID is required" });
     }
 
-    // Fetch the invitation
     const invDoc = await db.collection("jobInvitations").doc(invitationId).get();
     if (!invDoc.exists) {
       return res.status(404).json({ error: "Invitation not found" });
@@ -532,78 +387,12 @@ router.get("/job-invitations/:invitationId", verifyFirebaseToken, async (req, re
 
     const invData = invDoc.data();
 
-    // Verify the user has permission to view this invitation (must be the recipient)
     if (invData.studentId !== authUser.uid) {
       return res.status(403).json({ error: "Not authorized to view this invitation" });
     }
 
-    // Get job details
-    let jobDetails = null;
-    try {
-      const jobDoc = await db.collection("jobs").doc(invData.jobId).get();
-      if (jobDoc.exists) {
-        const jobData = jobDoc.data();
-        jobDetails = {
-          id: jobDoc.id,
-          name: jobData.name,
-          description: jobData.description,
-          majorsAssociated: jobData.majorsAssociated,
-          applicationLink: jobData.applicationLink || null,
-        };
-      }
-    } catch (err) {
-      console.error(`Error fetching job ${invData.jobId}:`, err);
-    }
-
-    // Get company details
-    let companyDetails = null;
-    try {
-      const companyDoc = await db.collection("companies").doc(invData.companyId).get();
-      if (companyDoc.exists) {
-        const companyData = companyDoc.data();
-        companyDetails = {
-          id: companyDoc.id,
-          companyName: companyData.companyName,
-          boothId: companyData.boothId || null,
-        };
-      }
-    } catch (err) {
-      console.error(`Error fetching company ${invData.companyId}:`, err);
-    }
-
-    // Get sender details
-    let senderDetails = null;
-    try {
-      const senderDoc = await db.collection("users").doc(invData.sentBy).get();
-      if (senderDoc.exists) {
-        const senderData = senderDoc.data();
-        senderDetails = {
-          id: senderDoc.id,
-          firstName: senderData.firstName,
-          lastName: senderData.lastName,
-          email: senderData.email,
-        };
-      }
-    } catch (err) {
-      console.error(`Error fetching sender ${invData.sentBy}:`, err);
-    }
-
-    const invitation = {
-      id: invDoc.id,
-      jobId: invData.jobId,
-      companyId: invData.companyId,
-      studentId: invData.studentId,
-      sentBy: invData.sentBy,
-      sentVia: invData.sentVia,
-      status: invData.status,
-      sentAt: invData.sentAt ? invData.sentAt.toMillis() : null,
-      viewedAt: invData.viewedAt ? invData.viewedAt.toMillis() : null,
-      clickedAt: invData.clickedAt ? invData.clickedAt.toMillis() : null,
-      message: invData.message || null,
-      job: jobDetails,
-      company: companyDetails,
-      sender: senderDetails,
-    };
+    const related = await fetchRelatedJobInvDetails(invData, { job: true, jobFull: true, company: true, sender: true }); // NOSONAR - fetchRelatedJobInvDetails is async
+    const invitation = buildInvitationResponse(invDoc.id, invData, related);
 
     return res.json({ data: invitation });
   } catch (err) {

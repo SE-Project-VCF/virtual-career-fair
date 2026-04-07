@@ -170,7 +170,7 @@ describe("POST /api/jobs", () => {
       .set("Authorization", authHeader())
       .send(validJobBody);
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/Invalid company ID/i);
+    expect(res.body.error).toMatch(/company not found/i);
   });
 
   it("returns 403 when user is not authorized for the company", async () => {
@@ -490,7 +490,7 @@ describe("PUT /api/jobs/:id", () => {
       .set("Authorization", authHeader())
       .send(validUpdateBody);
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/Invalid company ID/i);
+    expect(res.body.error).toMatch(/company not found/i);
   });
 
   it("returns 403 when user is not authorized for the company", async () => {
@@ -627,7 +627,7 @@ describe("DELETE /api/jobs/:id", () => {
       .delete("/api/jobs/job-1")
       .set("Authorization", authHeader());
     expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/Invalid company ID/i);
+    expect(res.body.error).toMatch(/company not found/i);
   });
 
   it("returns 403 when user is not authorized for the company", async () => {

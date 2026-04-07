@@ -6,6 +6,8 @@ const {
   verifyFirebaseToken,
   resolveApplicantResumePathOrUrl,
   requireCompanyResumeViewAccess,
+  getSignedResumeUrl,
+  checkCompanyAuthorization,
 } = require("../helpers");
 const upload = require("../middleware/upload");
 const { extractTextFromBuffer, toStructuredResume } = require("../resumeParser");
@@ -123,36 +125,17 @@ router.post("/upload-resume", verifyFirebaseToken, upload.single("file"), async 
 router.get("/get-resume-url/:userId", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId } = req.params;
-    const requesterId = req.user.uid;
 
-    // Only the user can view their own resume
-    if (requesterId !== userId) {
+    if (req.user.uid !== userId) {
       return res.status(403).json({ error: "Not authorized to view this resume" });
     }
 
-    const bucket = admin.storage().bucket();
-
-    // List files in the user's resume folder to get the most recent one
-    const [files] = await bucket.getFiles({ prefix: `resumes/${userId}/` });
-
-    if (files.length === 0) {
+    const signedUrl = await getSignedResumeUrl(userId);
+    if (!signedUrl) {
       return res.status(404).json({ error: "No resume found" });
     }
 
-    // Get the most recent file (last one in the list is usually the newest)
-    const latestFile = files.at(-1);
-
-    // Generate a signed URL valid for 1 hour
-    const [signedUrl] = await latestFile.getSignedUrl({
-      version: 'v4',
-      action: 'read',
-      expires: Date.now() + 60 * 60 * 1000, // 1 hour
-    });
-
-    return res.json({
-      success: true,
-      resumeUrl: signedUrl,
-    });
+    return res.json({ success: true, resumeUrl: signedUrl });
   } catch (err) {
     console.error("Get resume URL error:", err);
     return res.status(500).json({ error: err.message || "Failed to get resume URL" });
@@ -198,29 +181,12 @@ router.get("/student/:studentId/resume-url", verifyFirebaseToken, async (req, re
       }
     }
 
-    const bucket = admin.storage().bucket();
-
-    // List files in the user's resume folder to get the most recent one
-    const [files] = await bucket.getFiles({ prefix: `resumes/${studentId}/` });
-
-    if (files.length === 0) {
+    const signedUrl = await getSignedResumeUrl(studentId);
+    if (!signedUrl) {
       return res.status(404).json({ error: "No resume found" });
     }
 
-    // Get the most recent file (last one in the list is usually the newest)
-    const latestFile = files.at(-1);
-
-    // Generate a signed URL valid for 1 hour
-    const [signedUrl] = await latestFile.getSignedUrl({
-      version: 'v4',
-      action: 'read',
-      expires: Date.now() + 60 * 60 * 1000, // 1 hour
-    });
-
-    return res.json({
-      success: true,
-      resumeUrl: signedUrl,
-    });
+    return res.json({ success: true, resumeUrl: signedUrl });
   } catch (err) {
     console.error("Get student resume URL error:", err);
     return res.status(500).json({ error: err.message || "Failed to get resume URL" });
@@ -298,14 +264,10 @@ router.get("/applicant-tailored-resume/:applicationId", verifyFirebaseToken, asy
     }
 
     // Verify requester is the company's owner or rep
-    const companyDoc = await db.collection("companies").doc(companyId).get();
-    if (!companyDoc.exists) {
-      return res.status(404).json({ error: "Company not found" });
-    }
-    const companyData = companyDoc.data();
-    const reps = companyData.representativeIDs || [];
-    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-      return res.status(403).json({ error: "Not authorized to view this resume" });
+    const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
+    if (!authResult.authorized) {
+      const status = authResult.error === "Invalid company ID" ? 404 : 403;
+      return res.status(status).json({ error: status === 404 ? "Company not found" : "Not authorized to view this resume" });
     }
 
     // Fetch the tailored resume from the student's subcollection

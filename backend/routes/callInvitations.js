@@ -2,7 +2,31 @@ const express = require("express");
 const router = express.Router();
 const admin = require("firebase-admin");
 const { db } = require("../firebase");
-const { verifyFirebaseToken } = require("../helpers");
+const {
+  verifyFirebaseToken,
+  serializeTimestamps,
+  fetchAndAuthorizeCallInvitation,
+  respondToCallInvitation,
+} = require("../helpers");
+
+const CALL_INV_TIMESTAMP_FIELDS = ["scheduledTime", "createdAt", "respondedAt", "startedAt", "endedAt"];
+
+/**
+ * Fetch call invitations by a given field (studentId or employerId).
+ */
+async function fetchCallInvitations(userId, field) {
+  const snapshot = await db
+    .collection("call_invitations")
+    .where(field, "==", userId)
+    .get();
+
+  return snapshot.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...serializeTimestamps(doc.data(), CALL_INV_TIMESTAMP_FIELDS),
+    }))
+    .sort((a, b) => (b.scheduledTime || 0) - (a.scheduledTime || 0));
+}
 
 /**
  * Create call invitation (employer to student)
@@ -114,24 +138,7 @@ router.post("/call-invitations/create", verifyFirebaseToken, async (req, res) =>
  */
 router.get("/call-invitations/incoming", verifyFirebaseToken, async (req, res) => {
   try {
-    const userId = req.user.uid;
-
-    const invitationsSnapshot = await db
-      .collection("call_invitations")
-      .where("studentId", "==", userId)
-      .get();
-
-    const invitations = invitationsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      scheduledTime: doc.data().scheduledTime?.toMillis() || null,
-      createdAt: doc.data().createdAt?.toMillis() || null,
-      respondedAt: doc.data().respondedAt?.toMillis() || null,
-      startedAt: doc.data().startedAt?.toMillis() || null,
-      endedAt: doc.data().endedAt?.toMillis() || null,
-    }))
-    .sort((a, b) => (b.scheduledTime || 0) - (a.scheduledTime || 0));
-
+    const invitations = await fetchCallInvitations(req.user.uid, "studentId");
     return res.json({ success: true, invitations });
   } catch (err) {
     console.error("GET /api/call-invitations/incoming error:", err);
@@ -145,24 +152,7 @@ router.get("/call-invitations/incoming", verifyFirebaseToken, async (req, res) =
  */
 router.get("/call-invitations/outgoing", verifyFirebaseToken, async (req, res) => {
   try {
-    const userId = req.user.uid;
-
-    const invitationsSnapshot = await db
-      .collection("call_invitations")
-      .where("employerId", "==", userId)
-      .get();
-
-    const invitations = invitationsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      scheduledTime: doc.data().scheduledTime?.toMillis() || null,
-      createdAt: doc.data().createdAt?.toMillis() || null,
-      respondedAt: doc.data().respondedAt?.toMillis() || null,
-      startedAt: doc.data().startedAt?.toMillis() || null,
-      endedAt: doc.data().endedAt?.toMillis() || null,
-    }))
-    .sort((a, b) => (b.scheduledTime || 0) - (a.scheduledTime || 0));
-
+    const invitations = await fetchCallInvitations(req.user.uid, "employerId");
     return res.json({ success: true, invitations });
   } catch (err) {
     console.error("GET /api/call-invitations/outgoing error:", err);
@@ -176,33 +166,7 @@ router.get("/call-invitations/outgoing", verifyFirebaseToken, async (req, res) =
  */
 router.post("/call-invitations/:invitationId/accept", verifyFirebaseToken, async (req, res) => {
   try {
-    const { invitationId } = req.params;
-    const userId = req.user.uid;
-
-    const invitationDoc = await db.collection("call_invitations").doc(invitationId).get();
-    if (!invitationDoc.exists) {
-      return res.status(404).json({ error: "Invitation not found" });
-    }
-
-    const invitation = invitationDoc.data();
-
-    if (invitation.studentId !== userId) {
-      return res.status(403).json({ error: "Not authorized to accept this invitation" });
-    }
-
-    if (invitation.status !== "pending") {
-      return res.status(409).json({ error: "Invitation has already been responded to" });
-    }
-
-    await db.collection("call_invitations").doc(invitationId).update({
-      status: "accepted",
-      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return res.json({
-      success: true,
-      message: "Call invitation accepted",
-    });
+    await respondToCallInvitation(req.params.invitationId, req.user.uid, "accepted", res);
   } catch (err) {
     console.error("POST /api/call-invitations/:invitationId/accept error:", err);
     return res.status(500).json({ error: "Failed to accept invitation" });
@@ -215,33 +179,7 @@ router.post("/call-invitations/:invitationId/accept", verifyFirebaseToken, async
  */
 router.post("/call-invitations/:invitationId/decline", verifyFirebaseToken, async (req, res) => {
   try {
-    const { invitationId } = req.params;
-    const userId = req.user.uid;
-
-    const invitationDoc = await db.collection("call_invitations").doc(invitationId).get();
-    if (!invitationDoc.exists) {
-      return res.status(404).json({ error: "Invitation not found" });
-    }
-
-    const invitation = invitationDoc.data();
-
-    if (invitation.studentId !== userId) {
-      return res.status(403).json({ error: "Not authorized to decline this invitation" });
-    }
-
-    if (invitation.status !== "pending") {
-      return res.status(409).json({ error: "Invitation has already been responded to" });
-    }
-
-    await db.collection("call_invitations").doc(invitationId).update({
-      status: "declined",
-      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return res.json({
-      success: true,
-      message: "Call invitation declined",
-    });
+    await respondToCallInvitation(req.params.invitationId, req.user.uid, "declined", res);
   } catch (err) {
     console.error("POST /api/call-invitations/:invitationId/decline error:", err);
     return res.status(500).json({ error: "Failed to decline invitation" });
@@ -254,33 +192,20 @@ router.post("/call-invitations/:invitationId/decline", verifyFirebaseToken, asyn
  */
 router.post("/call-invitations/:invitationId/cancel", verifyFirebaseToken, async (req, res) => {
   try {
-    const { invitationId } = req.params;
-    const userId = req.user.uid;
+    const result = await fetchAndAuthorizeCallInvitation(req.params.invitationId, req.user.uid, "employerId", res);
+    if (!result) return;
 
-    const invitationDoc = await db.collection("call_invitations").doc(invitationId).get();
-    if (!invitationDoc.exists) {
-      return res.status(404).json({ error: "Invitation not found" });
-    }
-
-    const invitation = invitationDoc.data();
-
-    if (invitation.employerId !== userId) {
-      return res.status(403).json({ error: "Not authorized to cancel this invitation" });
-    }
-
+    const { invitation } = result;
     const scheduledTime = new Date(invitation.scheduledTime);
     if (scheduledTime <= new Date()) {
       return res.status(409).json({ error: "Cannot cancel a call that has already started" });
     }
 
-    await db.collection("call_invitations").doc(invitationId).update({
+    await db.collection("call_invitations").doc(req.params.invitationId).update({
       status: "cancelled",
     });
 
-    return res.json({
-      success: true,
-      message: "Call invitation cancelled",
-    });
+    return res.json({ success: true, message: "Call invitation cancelled" });
   } catch (err) {
     console.error("POST /api/call-invitations/:invitationId/cancel error:", err);
     return res.status(500).json({ error: "Failed to cancel invitation" });

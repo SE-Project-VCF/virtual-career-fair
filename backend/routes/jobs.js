@@ -2,7 +2,13 @@ const express = require("express");
 const router = express.Router();
 const { db } = require("../firebase");
 const admin = require("firebase-admin");
-const { verifyFirebaseToken, validateJobInput, checkCompanyAuthorization, removeUndefined } = require("../helpers");
+const {
+  verifyFirebaseToken,
+  validateJobInput,
+  checkCompanyAuthorization,
+  removeUndefined,
+  fetchJobAndAuthorizeCompany,
+} = require("../helpers");
 
 /* ----------------------------------------------------
    CREATE JOB POSTING
@@ -26,7 +32,9 @@ router.post("/jobs", verifyFirebaseToken, async (req, res) => {
 
     const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
     if (!authResult.authorized) {
-      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).send({ success: false, error: authResult.error });
+      const status = authResult.error === "Invalid company ID" ? 404 : 403;
+      const error = status === 404 ? "Company not found" : authResult.error;
+      return res.status(status).send({ success: false, error });
     }
 
 
@@ -132,22 +140,10 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
       }
     }
 
-    const jobRef = db.collection("jobs").doc(id);
-    const jobDoc = await jobRef.get();
+    const result = await fetchJobAndAuthorizeCompany(id, req.user.uid, res);
+    if (!result) return;
 
-    if (!jobDoc.exists) {
-      return res.status(404).json({ success: false, error: "Job not found" });
-    }
-
-    // Verify the user is authorized for this job's company
-    const jobData = jobDoc.data();
-
-    const authResult = await checkCompanyAuthorization(jobData.companyId, req.user.uid);
-    if (!authResult.authorized) {
-      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).json({ success: false, error: authResult.error });
-    }
-
-    await jobRef.update(
+    await result.jobRef.update(
       removeUndefined({
         name: name.trim(),
         description: description.trim(),
@@ -171,22 +167,10 @@ router.delete("/jobs/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const jobRef = db.collection("jobs").doc(id);
-    const jobDoc = await jobRef.get();
+    const result = await fetchJobAndAuthorizeCompany(id, req.user.uid, res);
+    if (!result) return;
 
-    if (!jobDoc.exists) {
-      return res.status(404).json({ success: false, error: "Job not found" });
-    }
-
-    // Verify the user is authorized for this job's company
-    const jobData = jobDoc.data();
-
-    const authResult = await checkCompanyAuthorization(jobData.companyId, req.user.uid);
-    if (!authResult.authorized) {
-      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).json({ success: false, error: authResult.error });
-    }
-
-    await jobRef.delete();
+    await result.jobRef.delete();
 
     return res.json({ success: true });
   } catch (err) {
@@ -207,26 +191,10 @@ router.put("/jobs/:id/form", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ success: false, error: "Form data is required" });
     }
 
-    const jobRef = db.collection("jobs").doc(id);
-    const jobDoc = await jobRef.get();
+    const result = await fetchJobAndAuthorizeCompany(id, req.user.uid, res);
+    if (!result) return;
 
-    if (!jobDoc.exists) {
-      return res.status(404).json({ success: false, error: "Job not found" });
-    }
-
-    const jobData = jobDoc.data();
-    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
-    if (!companyDoc.exists) {
-      return res.status(404).json({ success: false, error: "Company not found" });
-    }
-
-    const companyData = companyDoc.data();
-    const reps = companyData.representativeIDs || [];
-    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-      return res.status(403).json({ success: false, error: "Not authorized for this company" });
-    }
-
-    await jobRef.update({ applicationForm: formData });
+    await result.jobRef.update({ applicationForm: formData });
 
     return res.json({ success: true });
   } catch (err) {
@@ -242,26 +210,10 @@ router.delete("/jobs/:id/form", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const jobRef = db.collection("jobs").doc(id);
-    const jobDoc = await jobRef.get();
+    const result = await fetchJobAndAuthorizeCompany(id, req.user.uid, res);
+    if (!result) return;
 
-    if (!jobDoc.exists) {
-      return res.status(404).json({ success: false, error: "Job not found" });
-    }
-
-    const jobData = jobDoc.data();
-    const companyDoc = await db.collection("companies").doc(jobData.companyId).get();
-    if (!companyDoc.exists) {
-      return res.status(404).json({ success: false, error: "Company not found" });
-    }
-
-    const companyData = companyDoc.data();
-    const reps = companyData.representativeIDs || [];
-    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-      return res.status(403).json({ success: false, error: "Not authorized for this company" });
-    }
-
-    await jobRef.update({ applicationForm: admin.firestore.FieldValue.delete() });
+    await result.jobRef.update({ applicationForm: admin.firestore.FieldValue.delete() });
 
     return res.json({ success: true });
   } catch (err) {
@@ -277,15 +229,11 @@ router.get("/companies/:companyId/submissions", verifyFirebaseToken, async (req,
   try {
     const { companyId } = req.params;
 
-    const companyDoc = await db.collection("companies").doc(companyId).get();
-    if (!companyDoc.exists) {
-      return res.status(404).json({ success: false, error: "Company not found" });
-    }
-
-    const companyData = companyDoc.data();
-    const reps = companyData.representativeIDs || [];
-    if (companyData.ownerId !== req.user.uid && !reps.includes(req.user.uid)) {
-      return res.status(403).json({ success: false, error: "Not authorized for this company" });
+    const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
+    if (!authResult.authorized) {
+      const status = authResult.error === "Invalid company ID" ? 404 : 403;
+      const error = status === 404 ? "Company not found" : authResult.error;
+      return res.status(status).json({ success: false, error });
     }
 
     const snapshot = await db

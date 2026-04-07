@@ -9,7 +9,7 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
-  function GeoPoint(lat, lng) {
+  function GeoPoint(lat, lng) { // NOSONAR - must be inside jest.mock factory
     this.latitude = lat;
     this.longitude = lng;
   }
