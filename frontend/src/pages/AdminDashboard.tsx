@@ -11,6 +11,7 @@ import {
   CircularProgress,
   Switch,
   TextField,
+  Autocomplete,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -36,6 +37,7 @@ import SearchIcon from "@mui/icons-material/Search"
 import ClearIcon from "@mui/icons-material/Clear"
 import { API_URL } from "../config"
 import BaseLayout from "../components/BaseLayout"
+import { useGeocodeSuggest } from "../hooks/useGeocodeSuggest"
 
 type FairStatus = "Live" | "Upcoming" | "Ended"
 type SortColumn = "name" | "status" | "startTime" | "endTime"
@@ -58,7 +60,19 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
   const [fairs, setFairs] = useState<any[]>([])
   const [loadingFairs, setLoadingFairs] = useState(true)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [createForm, setCreateForm] = useState({ name: "", description: "", startTime: "", endTime: "" })
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    description: "",
+    startTime: "",
+    endTime: "",
+  })
+  const [createHubSearch, setCreateHubSearch] = useState("")
+  const [createPickedHub, setCreatePickedHub] = useState<{
+    label: string
+    city: string
+    state: string
+    zip: string
+  } | null>(null)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState("")
   const [togglingFairId, setTogglingFairId] = useState<string | null>(null)
@@ -139,6 +153,11 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
       })
   }, [fairs, activeStatuses, searchQuery, dateFrom, dateTo, sortColumn, sortDirection])
 
+  const { options: createHubOptions, loading: createHubLoading } = useGeocodeSuggest(
+    createHubSearch,
+    createDialogOpen,
+  )
+
   useEffect(() => {
     loadFairs()
   }, [])
@@ -181,6 +200,20 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
     setCreateError("")
     try {
       const token = await auth.currentUser?.getIdToken()
+      const fromPick =
+        createPickedHub &&
+        (createPickedHub.city.trim() ||
+          createPickedHub.state.trim() ||
+          createPickedHub.zip.trim())
+      const hub: Record<string, string> = fromPick
+        ? {
+            venueCity: createPickedHub.city.trim(),
+            venueState: createPickedHub.state.trim(),
+            venueZip: createPickedHub.zip.trim(),
+          }
+        : createHubSearch.trim()
+          ? { venueGeocodeQuery: createHubSearch.trim() }
+          : {}
       const res = await fetch(`${API_URL}/api/fairs`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -190,12 +223,20 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
           description: createForm.description,
           startTime: createForm.startTime ? new Date(createForm.startTime).toISOString() : null,
           endTime: createForm.endTime ? new Date(createForm.endTime).toISOString() : null,
+          ...hub,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to create fair")
       setCreateDialogOpen(false)
-      setCreateForm({ name: "", description: "", startTime: "", endTime: "" })
+      setCreateForm({
+        name: "",
+        description: "",
+        startTime: "",
+        endTime: "",
+      })
+      setCreateHubSearch("")
+      setCreatePickedHub(null)
       loadFairs()
     } catch (err: any) {
       setCreateError(err.message)
@@ -230,7 +271,15 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
               <Typography variant="body2" color="text.secondary">Create and manage multiple concurrent fairs</Typography>
             </Box>
           </Box>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateDialogOpen(true)}
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setCreatePickedHub(null)
+              setCreateHubSearch("")
+              setCreateError("")
+              setCreateDialogOpen(true)
+            }}
             sx={{ background: "linear-gradient(135deg, #b03a6c 0%, #8a2d54 100%)" }}>
             New Fair
           </Button>
@@ -405,7 +454,15 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
         )}
       </CardContent>
 
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={createDialogOpen}
+        onClose={() => {
+          setCreateDialogOpen(false)
+          setCreateError("")
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Create New Fair</DialogTitle>
         <DialogContent>
           <TextField label="Fair Name" value={createForm.name}
@@ -420,10 +477,83 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
           <TextField label="End Time" type="datetime-local" value={createForm.endTime}
             onChange={(e) => setCreateForm({ ...createForm, endTime: e.target.value })}
             fullWidth slotProps={{ inputLabel: { shrink: true } }} />
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+            Fair location (optional)
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+            Search for a place, city, or ZIP. Pick a suggestion or type a query—the server verifies it with Mapbox. Remove
+            the chip to clear.
+          </Typography>
+          {createPickedHub && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                Location to add
+              </Typography>
+              <Chip
+                label={createPickedHub.label}
+                onDelete={() => {
+                  setCreatePickedHub(null)
+                  setCreateHubSearch("")
+                }}
+                color="secondary"
+                variant="outlined"
+              />
+            </Box>
+          )}
+          <Autocomplete
+            freeSolo
+            size="small"
+            options={createHubOptions}
+            loading={createHubLoading}
+            filterOptions={(opts) => opts}
+            getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+            isOptionEqualToValue={(a, b) =>
+              typeof a === "object" &&
+              typeof b === "object" &&
+              Boolean(a.id && b.id && a.id === b.id)
+            }
+            inputValue={createHubSearch}
+            onInputChange={(_, newInputValue, reason) => {
+              if (reason === "reset") {
+                setCreateHubSearch(newInputValue)
+                return
+              }
+              setCreateHubSearch(newInputValue)
+              if (reason === "input") setCreatePickedHub(null)
+            }}
+            onChange={(_, newValue) => {
+              if (newValue && typeof newValue === "object" && "lat" in newValue) {
+                setCreatePickedHub({
+                  label: typeof newValue.label === "string" ? newValue.label : "",
+                  city: typeof newValue.city === "string" ? newValue.city : "",
+                  state: typeof newValue.state === "string" ? newValue.state : "",
+                  zip: typeof newValue.zip === "string" ? newValue.zip : "",
+                })
+                setCreateHubSearch(
+                  typeof newValue.label === "string" ? newValue.label : "",
+                )
+              }
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Search places"
+                placeholder="City, ZIP, or address — pick a suggestion or type and create"
+                sx={{ mb: 0 }}
+              />
+            )}
+          />
           {createError && <Alert severity="error" sx={{ mt: 2 }}>{createError}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              setCreateDialogOpen(false)
+              setCreateError("")
+            }}
+          >
+            Cancel
+          </Button>
           <Button variant="contained" onClick={handleCreateFair} disabled={creating || !createForm.name.trim()}>
             {creating ? "Creating..." : "Create"}
           </Button>

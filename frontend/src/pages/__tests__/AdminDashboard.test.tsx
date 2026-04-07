@@ -37,6 +37,10 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }));
 
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => ({ options: [], loading: false }),
+}));
+
 vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }));
@@ -159,6 +163,19 @@ describe("AdminDashboard", () => {
     });
 
     it("displays empty state when no fairs exist", async () => {
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/No fairs created yet/i)).toBeInTheDocument();
+      });
+    });
+
+    it("handles initial fairs fetch when response is not ok (still shows empty state)", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "server error" }),
+      });
+
       renderAdminDashboard();
 
       await waitFor(() => {

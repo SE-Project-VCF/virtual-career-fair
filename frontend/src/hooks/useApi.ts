@@ -164,6 +164,9 @@ export function useCreateBooth() {
       location?: string;
       description?: string;
       representatives?: string[];
+      locationIsRemote?: boolean;
+      locationCity?: string | null;
+      locationState?: string | null;
     }) => authenticatedFetch("/api/booths", {
       method: "POST",
       body: JSON.stringify(boothData),

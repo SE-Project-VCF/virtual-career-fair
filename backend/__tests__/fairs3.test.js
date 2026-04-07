@@ -9,13 +9,37 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
+  function GeoPoint(lat, lng) {
+    this.latitude = lat;
+    this.longitude = lng;
+  }
+  const FieldValue = {
+    delete: jest.fn(() => ({ __fv: "delete" })),
+  };
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, GeoPoint, FieldValue }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
   };
 });
+
+jest.mock("../services/mapboxGeocode", () => ({
+  forwardGeocode: jest.fn(async (address) => {
+    if (!address || !String(address).trim()) return null;
+    return {
+      lat: 35.2,
+      lng: -80.8,
+      placeName: "Charlotte, NC, USA",
+      city: "Charlotte",
+      state: "NC",
+      country: "US",
+      postcode: "28202",
+      mapboxId: "mock-id",
+    };
+  }),
+  suggestPlaces: jest.fn(async () => []),
+}));
 
 jest.mock("stream-chat", () => ({
   StreamChat: {
@@ -353,6 +377,42 @@ describe("POST /api/fairs – extra branches", () => {
     expect(res.body.error).toMatch(/startTime must be before endTime/i);
   });
 
+  it("accepts ZIP-only hub on create and geocodes with that string", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({});
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockClear();
+    const res = await request(app)
+      .post("/api/fairs")
+      .set("Authorization", authHeader())
+      .send({
+        name: "Zip Fair",
+        venueCity: "",
+        venueState: "",
+        venueZip: "28202",
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.venueCity).toBe("Charlotte");
+    expect(res.body.venueState).toBe("NC");
+    expect(forwardGeocode).toHaveBeenCalledWith("28202");
+  });
+
+  it("accepts venueGeocodeQuery on create", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({});
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockClear();
+    const res = await request(app)
+      .post("/api/fairs")
+      .set("Authorization", authHeader())
+      .send({
+        name: "Query Fair",
+        venueGeocodeQuery: "Charlotte NC",
+      });
+    expect(res.status).toBe(201);
+    expect(forwardGeocode).toHaveBeenCalledWith("Charlotte NC");
+  });
+
   it("returns 500 when DB throws during create", async () => {
     verifyAdmin.mockResolvedValue(null);
     db.batch.mockReturnValue(makeBatch());
@@ -416,6 +476,63 @@ describe("PUT /api/fairs/:fairId – branches", () => {
       .set("Authorization", authHeader())
       .send({ name: "New Name" });
     expect(res.status).toBe(500);
+  });
+
+  it("updates hub via venueGeocodeQuery", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({
+      fair: { ...FAIR_DATA, venueCity: "Old", venueState: "ST", venueZip: "11111" },
+    });
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockClear();
+    const res = await request(app)
+      .put("/api/fairs/fair-id")
+      .set("Authorization", authHeader())
+      .send({ venueGeocodeQuery: "28202" });
+    expect(res.status).toBe(200);
+    expect(forwardGeocode).toHaveBeenCalledWith("28202");
+  });
+
+  it("updates hub via city+state+zip (virtualFairGeocode path, not single query)", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({
+      fair: { ...FAIR_DATA, venueCity: "Old", venueState: "ST", venueZip: "11111" },
+    });
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockClear();
+    const res = await request(app)
+      .put("/api/fairs/fair-id")
+      .set("Authorization", authHeader())
+      .send({ venueCity: "Charlotte", venueState: "NC", venueZip: "28202" });
+    expect(res.status).toBe(200);
+    expect(forwardGeocode).toHaveBeenCalledWith("Charlotte, NC 28202");
+  });
+
+  it("clears hub venue fields when city, state, and zip are all empty", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({
+      fair: { ...FAIR_DATA, venueCity: "X", venueState: "Y", venueZip: "Z" },
+    });
+    const res = await request(app)
+      .put("/api/fairs/fair-id")
+      .set("Authorization", authHeader())
+      .send({ venueCity: "", venueState: "", venueZip: "" });
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 400 when forwardGeocode returns null on city/state/ZIP update", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({
+      fair: { ...FAIR_DATA, venueCity: "Old", venueState: "ST", venueZip: "11111" },
+    });
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockResolvedValueOnce(null);
+    const res = await request(app)
+      .put("/api/fairs/fair-id")
+      .set("Authorization", authHeader())
+      .send({ venueCity: "Nowhere", venueState: "ZZ", venueZip: "00000" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/could not verify/i);
   });
 });
 
@@ -876,6 +993,92 @@ describe("PUT /api/fairs/:fairId/booths/:boothId – error paths", () => {
       .set("Authorization", authHeader())
       .send({ companyName: "Updated" });
     expect(res.status).toBe(500);
+  });
+
+  it("returns 400 when locationCity exceeds 100 characters", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({
+      boothData: { companyId: "company-id", companyName: "Acme" },
+      boothExists: true,
+    });
+    const res = await request(app)
+      .put("/api/fairs/fair-id/booths/booth-id")
+      .set("Authorization", authHeader())
+      .send({ locationCity: `${"C".repeat(101)}` });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/city must be 100/i);
+  });
+
+  it("returns 400 when locationState exceeds 100 characters", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupSimpleFairs({
+      boothData: { companyId: "company-id", companyName: "Acme" },
+      boothExists: true,
+    });
+    const res = await request(app)
+      .put("/api/fairs/fair-id/booths/booth-id")
+      .set("Authorization", authHeader())
+      .send({ locationState: `${"S".repeat(101)}` });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/state must be 100/i);
+  });
+
+  it("nulls location city and state when locationIsRemote is true", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    const update = jest.fn().mockResolvedValue(undefined);
+    setupSimpleFairs({
+      boothData: { companyId: "company-id", companyName: "Acme" },
+      boothExists: true,
+    });
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_DATA, true, "fair-id")),
+            collection: jest.fn((sub) => {
+              if (sub === "booths") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(
+                      mockDocSnap({ companyId: "company-id", companyName: "Acme" }, true, "booth-id")
+                    ),
+                    update,
+                  })),
+                };
+              }
+              return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+            }),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+          orderBy: jest.fn().mockReturnThis(),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyName: "Acme", ownerId: "admin-uid" }, true)),
+          })),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .put("/api/fairs/fair-id/booths/booth-id")
+      .set("Authorization", authHeader())
+      .send({ locationIsRemote: true, locationCity: "Remote City", locationState: "RS" });
+
+    expect(res.status).toBe(200);
+    expect(update).toHaveBeenCalled();
+    const payload = update.mock.calls[0][0];
+    expect(payload.locationIsRemote).toBe(true);
+    expect(payload.locationCity).toBeNull();
+    expect(payload.locationState).toBeNull();
   });
 });
 

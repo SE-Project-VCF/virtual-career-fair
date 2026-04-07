@@ -55,7 +55,16 @@ vi.mock("../../components/BaseLayout", () => ({
 
 vi.mock("../../config", () => ({
   API_URL: "http://localhost:5000",
+  MAPBOX_ACCESS_TOKEN: "",
 }))
+
+vi.mock("../../components/FairsMapView", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../../components/FairsMapView")>()
+  return {
+    ...mod,
+    default: () => <div data-testid="fairs-map-mock">FairsMapMock</div>,
+  }
+})
 
 vi.mock("../../firebase", () => ({
   auth: {
@@ -121,6 +130,41 @@ describe("FairList", () => {
     await waitFor(() => {
       expect(screen.getByText("Spring Fair")).toBeInTheDocument()
     })
+  })
+
+  it("switches to map view and refetches fairs", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [
+          {
+            id: "f1",
+            name: "Spring Fair",
+            description: null,
+            isLive: true,
+            startTime: null,
+            endTime: null,
+            venueGeo: { latitude: 35.2, longitude: -80.8 },
+          },
+        ],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => {
+      expect(screen.getByText("Spring Fair")).toBeInTheDocument()
+    })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole("button", { name: /map view/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId("fairs-map-mock")).toBeInTheDocument()
+    })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2)
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[1][0])).toContain("/api/fairs")
   })
 
   it("shows Live Now chip for live fair", async () => {
@@ -979,5 +1023,292 @@ describe("FairList — join fair flow", () => {
     // Re-open: invite code field should be empty
     await user.click(screen.getByRole("button", { name: /join fair/i }))
     expect(screen.getByLabelText(/invite code/i)).toHaveValue("")
+  })
+})
+
+describe("FairList — distance and location search", () => {
+  const fairRow = {
+    id: "f1",
+    name: "Spring Fair",
+    description: null,
+    isLive: false,
+    startTime: null,
+    endTime: null,
+  }
+
+  let origGeolocation: Geolocation | undefined
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    origGeolocation = globalThis.navigator.geolocation
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "user-1",
+      email: "student@example.com",
+      role: "student",
+    })
+    Object.defineProperty(globalThis.navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: vi.fn((success: PositionCallback) => {
+          success({
+            coords: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              accuracy: 10,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null,
+              toJSON: () => ({}),
+            },
+            timestamp: Date.now(),
+          } as GeolocationPosition)
+        }),
+      } as unknown as Geolocation,
+    })
+  })
+
+  afterEach(() => {
+    Object.defineProperty(globalThis.navigator, "geolocation", {
+      configurable: true,
+      value: origGeolocation,
+    })
+  })
+
+  /** The distance card uses a plain MUI Button labeled "Search" (toggle uses aria-label "Search by distance"). */
+  function getDistanceSearchButton(): HTMLElement {
+    const candidates = screen.getAllByRole("button", { name: /^search$/i })
+    const fromButton = candidates.find((el) => el.classList.contains("MuiButton-contained"))
+    if (fromButton) return fromButton
+    return candidates[candidates.length - 1]!
+  }
+
+  it("searches by typed address and shows geo summary", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    await user.type(screen.getByLabelText(/city, address, or zip/i), "94102")
+    await user.click(getDistanceSearchButton())
+
+    await waitFor(() => {
+      const geoUrl = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])).find((u) => u.includes("address="))
+      expect(geoUrl).toBeDefined()
+      expect(geoUrl).toContain("radiusMiles=50")
+    })
+
+    await waitFor(() => {
+      const banner = screen.getByText(/showing results for/i).closest("div")
+      expect(banner).toHaveTextContent("94102")
+      expect(banner).toHaveTextContent(/within\s+50\s+miles/i)
+    })
+  })
+
+  it("shows hint when Search is clicked with no location", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    await user.click(getDistanceSearchButton())
+
+    expect(await screen.findByText(/enter a location or use your current location/i)).toBeInTheDocument()
+  })
+
+  it("uses My location and requests fairs with lat/lng", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    await user.click(screen.getByRole("button", { name: /my location/i }))
+
+    await waitFor(() => {
+      const geoUrl = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])).find((u) => u.includes("lat=") && u.includes("lng="))
+      expect(geoUrl).toBeDefined()
+    })
+
+    expect(globalThis.navigator.geolocation?.getCurrentPosition).toHaveBeenCalled()
+  })
+
+  it("shows hint when geolocation API is missing", async () => {
+    Object.defineProperty(globalThis.navigator, "geolocation", {
+      configurable: true,
+      value: undefined,
+    })
+
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /my location/i }))
+
+    expect(await screen.findByText(/location is not available in this browser/i)).toBeInTheDocument()
+  })
+
+  it("shows hint when geolocation fails", async () => {
+    Object.defineProperty(globalThis.navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition: vi.fn((_ok: PositionCallback, err: PositionErrorCallback) => {
+          err({
+            code: 1,
+            message: "denied",
+            PERMISSION_DENIED: 1,
+            POSITION_UNAVAILABLE: 2,
+            TIMEOUT: 3,
+          } as unknown as GeolocationPositionError)
+        }),
+      } as unknown as Geolocation,
+    })
+
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /my location/i }))
+
+    expect(await screen.findByText(/could not read your location/i)).toBeInTheDocument()
+  })
+
+  it("clear filters reloads full fair list", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    await user.type(screen.getByLabelText(/city, address, or zip/i), "Austin, TX")
+    await user.click(getDistanceSearchButton())
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /clear filters/i })).toBeInTheDocument())
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    await user.click(screen.getByRole("button", { name: /clear filters/i }))
+
+    await waitFor(() => {
+      const plain = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])).find((u) => u.endsWith("/api/fairs") && !u.includes("?"))
+      expect(plain).toBeDefined()
+    })
+  })
+
+  it("shows empty-radius message when geo search returns no fairs", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [] }),
+    })
+
+    await user.type(screen.getByLabelText(/city, address, or zip/i), "Remote, AK")
+    await user.click(getDistanceSearchButton())
+
+    await waitFor(() => {
+      expect(screen.getByText(/no fairs found within this distance/i)).toBeInTheDocument()
+    })
+  })
+
+  it("shows error when geo fair fetch fails", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "Bad address" }),
+    })
+
+    await user.type(screen.getByLabelText(/city, address, or zip/i), "Nowhere")
+    await user.click(getDistanceSearchButton())
+
+    await waitFor(() => {
+      expect(screen.getByText(/bad address/i)).toBeInTheDocument()
+    })
+  })
+
+  it("changes radius in select and includes it in search URL", async () => {
+    const user = userEvent.setup()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    renderFairList()
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText(/radius/i))
+    await user.click(await screen.findByRole("option", { name: /100 miles/i }))
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [fairRow] }),
+    })
+
+    await user.type(screen.getByLabelText(/city, address, or zip/i), "90210")
+    await user.click(getDistanceSearchButton())
+
+    await waitFor(() => {
+      const geoUrl = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])).find((u) => u.includes("radiusMiles=100"))
+      expect(geoUrl).toBeDefined()
+    })
   })
 })
