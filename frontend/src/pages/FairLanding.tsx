@@ -18,6 +18,7 @@ import EventIcon from "@mui/icons-material/Event"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import ForumIcon from "@mui/icons-material/Forum"
 import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
@@ -207,6 +208,18 @@ export default function FairLanding() {
           >
             {isLive ? "Browse Booths" : "Fair Not Live Yet"}
           </Button>
+
+          {!isCompanyUser && (
+            <Button
+              variant="outlined"
+              size="large"
+              startIcon={<ForumIcon />}
+              onClick={() => navigate(`/fair/${fairId}/lounge`)}
+              disabled={!isLive}
+            >
+              Networking Lounge
+            </Button>
+          )}
 
           {isCompanyUser && (
             <Button

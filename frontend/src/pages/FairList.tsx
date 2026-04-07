@@ -84,6 +84,25 @@ function formatDate(ms: number | null): string {
   })
 }
 
+/** Live first, then upcoming, then ended; within each group by start time (see inline comments). */
+function sortFairsByStatus(fairsList: Fair[]): Fair[] {
+  const now = Date.now()
+  const rank = (f: Fair) => {
+    if (f.isLive) return 0
+    if (f.startTime && now < f.startTime) return 1
+    if (f.endTime && now > f.endTime) return 2
+    return 1 // "Scheduled" treated as upcoming
+  }
+  return [...fairsList].sort((a, b) => {
+    const rankDiff = rank(a) - rank(b)
+    if (rankDiff !== 0) return rankDiff
+    const aStart = a.startTime || 0
+    const bStart = b.startTime || 0
+    if (rank(a) === 2) return bStart - aStart // Ended: most recent first
+    return aStart - bStart // Live/Upcoming: soonest first
+  })
+}
+
 export default function FairList() {
   const navigate = useNavigate()
   const user = authUtils.getCurrentUser()
@@ -132,7 +151,8 @@ export default function FairList() {
     const res = await fetch(url)
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || "Failed to load fairs")
-    setFairs(data.fairs || [])
+    const raw = data.fairs || []
+    setFairs(options?.geo ? raw : sortFairsByStatus(raw))
     if (options?.geo === true) setGeoFilterActive(true)
     else setGeoFilterActive(false)
     if (!options?.geo) {

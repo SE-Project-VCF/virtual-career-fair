@@ -58,9 +58,18 @@ function authHeader(uid = "test-uid") {
 describe("PATCH /api/job-invitations/:id/status", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 401 without auth token", async () => {
+    const res = await request(app)
+      .patch("/api/job-invitations/inv-1/status")
+      .send({ status: "viewed", userId: "u1" });
+
+    expect(res.status).toBe(401);
+  });
+
   it("returns 400 when status is missing", async () => {
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ userId: "u1" });
 
     expect(res.status).toBe(400);
@@ -70,6 +79,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
   it("returns 400 when status is invalid", async () => {
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "accepted", userId: "u1" });
 
     expect(res.status).toBe(400);
@@ -79,6 +89,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
   it("returns 400 when userId is missing", async () => {
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "viewed" });
 
     expect(res.status).toBe(400);
@@ -95,6 +106,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-404/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "viewed", userId: "u1" });
 
     expect(res.status).toBe(404);
@@ -113,6 +125,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("wrong-student"))
       .send({ status: "viewed", userId: "wrong-student" });
 
     expect(res.status).toBe(403);
@@ -132,6 +145,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "viewed", userId: "u1" });
 
     expect(res.status).toBe(200);
@@ -160,6 +174,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "viewed", userId: "u1" });
 
     expect(res.status).toBe(200);
@@ -184,6 +199,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "clicked", userId: "u1" });
 
     expect(res.status).toBe(200);
@@ -208,6 +224,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "clicked", userId: "u1" });
 
     expect(res.status).toBe(200);
@@ -228,6 +245,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", authHeader("u1"))
       .send({ status: "viewed", userId: "u1" });
 
     expect(res.status).toBe(500);
