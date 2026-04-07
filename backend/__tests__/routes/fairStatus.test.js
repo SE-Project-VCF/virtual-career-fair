@@ -609,6 +609,21 @@ describe("POST /api/fair-schedules", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/fair-schedules/:id (Admin only)
 // ─────────────────────────────────────────────────────────────────────────────
+// Build a docRef mock with a dedicated get that can return different values
+function makeDocRefMock(existingData, exists = true, updatedData = null) {
+  const getBeforeUpdate = mockDocSnap(existingData, exists, "sched-123");
+  const getAfterUpdate = mockDocSnap(updatedData || existingData, true, "sched-123");
+  let callCount = 0;
+  const getMock = jest.fn(() => {
+    callCount++;
+    return Promise.resolve(callCount === 1 ? getBeforeUpdate : getAfterUpdate);
+  });
+  return {
+    get: getMock,
+    update: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe("PUT /api/fair-schedules/:id", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -616,21 +631,6 @@ describe("PUT /api/fair-schedules/:id", () => {
 
   const VALID_START = "2026-06-01T09:00:00Z";
   const VALID_END = "2026-06-01T17:00:00Z";
-
-  // Build a docRef mock with a dedicated get that can return different values
-  function makeDocRefMock(existingData, exists = true, updatedData = null) {
-    const getBeforeUpdate = mockDocSnap(existingData, exists, "sched-123");
-    const getAfterUpdate = mockDocSnap(updatedData || existingData, true, "sched-123");
-    let callCount = 0;
-    const getMock = jest.fn(() => {
-      callCount++;
-      return Promise.resolve(callCount === 1 ? getBeforeUpdate : getAfterUpdate);
-    });
-    return {
-      get: getMock,
-      update: jest.fn().mockResolvedValue(undefined),
-    };
-  }
 
   it("returns 400 when userId is missing", async () => {
     verifyAdmin.mockResolvedValue({ status: 400, error: "Missing userId" });
