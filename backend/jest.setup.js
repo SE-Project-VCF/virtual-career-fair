@@ -1,4 +1,3 @@
 require("./jestSetupEnv");
-
-jest.spyOn(console, "error").mockImplementation(() => {});
-jest.spyOn(console, "log").mockImplementation(() => {});
+const { applyJestConsoleMocks } = require("./jestSetupConsole");
+applyJestConsoleMocks();

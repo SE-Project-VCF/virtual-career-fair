@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { BrowserRouter } from "react-router-dom"
 import FairLanding from "../FairLanding"
 import * as authUtils from "../../utils/auth"
+import { auth } from "../../firebase"
 import { useFair } from "../../contexts/FairContext"
 
 const mockNavigate = vi.fn()
@@ -1103,5 +1104,67 @@ describe("FairLanding", () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/company/company-1/booth")
     })
+  })
+
+  it("skips enrollment fetch when getIdToken returns a falsy token", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: false,
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+    const fetchMock = vi.fn()
+    globalThis.fetch = fetchMock
+    vi.mocked(auth.currentUser!.getIdToken).mockResolvedValueOnce("" as unknown as string)
+    renderFairLanding()
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /join this fair/i })).toBeInTheDocument()
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("logs when loading enrollment fails", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: false,
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "not ok" }),
+    })
+    renderFairLanding()
+    await waitFor(() => {
+      expect(errSpy).toHaveBeenCalledWith("Error loading enrollment:", expect.any(Error))
+    })
+    errSpy.mockRestore()
   })
 })
