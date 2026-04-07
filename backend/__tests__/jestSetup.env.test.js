@@ -1,5 +1,5 @@
 /**
- * Guards the contract established by jest.setup.js (setupFiles run before all tests).
+ * Guards the contract established by jest.setup.js + jestSetupEnv.js (setupFiles run before all tests).
  * If these fail, global test env or Mapbox-related tests may behave incorrectly.
  */
 describe("jest.setup.js global environment", () => {

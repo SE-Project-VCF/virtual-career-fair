@@ -5,6 +5,7 @@ module.exports = {
   setupFiles: ["<rootDir>/jest.setup.js"],
   clearMocks: true,
   collectCoverageFrom: [
+    "jestSetupEnv.js",
     "server.js",
     "helpers.js",
     "services/geo.js",
