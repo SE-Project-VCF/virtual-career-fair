@@ -296,7 +296,7 @@ describe("StudentProfilePage", () => {
   });
 
   it("displays loading state while saving", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const alertSpy = vi.spyOn(globalThis, "alert").mockImplementation(() => {});
     const user = userEvent.setup({ delay: null });
     (firestore.setDoc as any).mockImplementation(
       () => new Promise((resolve) => setTimeout(resolve, 500))
