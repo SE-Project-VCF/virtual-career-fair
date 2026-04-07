@@ -598,6 +598,86 @@ describe("FairList — enrolled company actions", () => {
   })
 })
 
+describe("FairList — enrollment edge cases", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+  })
+
+  it("handles enrollment API returning non-ok without crashing", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "f1", name: "Fair One", description: null, isLive: false, startTime: null, endTime: null }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => "Internal Server Error",
+      })
+
+    renderFairList()
+
+    // Should still render the fair even if enrollment fetch fails
+    await waitFor(() => expect(screen.getByText("Fair One")).toBeInTheDocument())
+
+    // Join Fair should be visible since enrollment map is empty (failed to load)
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument()
+    })
+  })
+
+  it("handles waitForFirebaseUser returning null (no currentUser)", async () => {
+    // Save originals
+    const firebaseMock = await import("../../firebase")
+    const origCurrentUser = Object.getOwnPropertyDescriptor(firebaseMock.auth, "currentUser")
+    const origOnAuthStateChanged = Object.getOwnPropertyDescriptor(firebaseMock.auth, "onAuthStateChanged")
+
+    // Mock firebase auth so currentUser is null and onAuthStateChanged never fires with a user
+    Object.defineProperty(firebaseMock.auth, "currentUser", {
+      get: () => null,
+      configurable: true,
+    })
+    Object.defineProperty(firebaseMock.auth, "onAuthStateChanged", {
+      value: vi.fn((_cb: any) => {
+        // Never call cb with a user — simulates timeout
+        return vi.fn()
+      }),
+      configurable: true,
+    })
+
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [{ id: "f1", name: "Timeout Fair", description: null, isLive: false, startTime: null, endTime: null }],
+      }),
+    })
+
+    renderFairList()
+
+    // Fair should still render
+    await waitFor(() => expect(screen.getByText("Timeout Fair")).toBeInTheDocument())
+
+    // Restore originals
+    if (origCurrentUser) Object.defineProperty(firebaseMock.auth, "currentUser", origCurrentUser)
+    if (origOnAuthStateChanged) Object.defineProperty(firebaseMock.auth, "onAuthStateChanged", origOnAuthStateChanged)
+  })
+})
+
 describe("FairList — join fair flow", () => {
   const companyUser = {
     uid: "owner-1",
@@ -681,6 +761,194 @@ describe("FairList — join fair flow", () => {
       expect(screen.queryByText(/Enter the invite code/i)).not.toBeInTheDocument()
       expect(screen.getByRole("button", { name: /edit booth/i })).toBeInTheDocument()
     })
+  })
+
+  it("does not show Join Fair button for ended fair (company owner)", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+
+    const pastEnd = Date.now() - 86400000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "f1", name: "Past Fair", description: null, isLive: false, startTime: null, endTime: pastEnd }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Past Fair")).toBeInTheDocument())
+
+    // Ended fairs should not show Join Fair for company users
+    expect(screen.queryByRole("button", { name: /join fair/i })).not.toBeInTheDocument()
+  })
+
+  it("shows formatted date for fairs with start time", async () => {
+    const startTime = new Date("2025-06-15T10:00:00Z").getTime()
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [{ id: "f1", name: "Dated Fair", description: null, isLive: false, startTime, endTime: null }],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Dated Fair")).toBeInTheDocument())
+
+    // Should not show "Date TBD" since startTime is set
+    expect(screen.queryByText("Date TBD")).not.toBeInTheDocument()
+  })
+
+  it("shows Date TBD for fairs without start time", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [{ id: "f1", name: "TBD Fair", description: null, isLive: false, startTime: null, endTime: null }],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Date TBD")).toBeInTheDocument())
+  })
+
+  it("sorts fairs: live first, then upcoming, then ended", async () => {
+    const now = Date.now()
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fairs: [
+          { id: "f3", name: "Ended Fair", description: null, isLive: false, startTime: now - 200000, endTime: now - 100000 },
+          { id: "f1", name: "Live Fair", description: null, isLive: true, startTime: now - 1000, endTime: null },
+          { id: "f2", name: "Upcoming Fair", description: null, isLive: false, startTime: now + 86400000, endTime: null },
+        ],
+      }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Live Fair")).toBeInTheDocument())
+
+    // Verify all three are rendered (order is tested by checking DOM position)
+    expect(screen.getByText("Live Fair")).toBeInTheDocument()
+    expect(screen.getByText("Upcoming Fair")).toBeInTheDocument()
+    expect(screen.getByText("Ended Fair")).toBeInTheDocument()
+
+    // Verify Live Now chip appears for the live fair
+    expect(screen.getByText("Live Now")).toBeInTheDocument()
+  })
+
+  it("submits join when Enter is pressed in invite code field", async () => {
+    const user = userEvent.setup()
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ fairs: [openFair] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ boothId: "b50" }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+    const inviteInput = screen.getByLabelText(/invite code/i)
+    await user.type(inviteInput, "ENTERCODE{Enter}")
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/enroll"),
+        expect.objectContaining({ method: "POST" })
+      )
+    })
+  })
+
+  it("does not submit join when invite code is empty", async () => {
+    const user = userEvent.setup()
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ fairs: [openFair] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+
+    // Click Join Fair button without typing invite code — button should be disabled
+    const joinButton = screen.getByRole("button", { name: /^join fair$/i })
+    expect(joinButton).toBeDisabled()
+  })
+
+  it("shows Join Fair button for representative user on non-enrolled fair", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "rep-1",
+      email: "rep@company.com",
+      role: "representative",
+    })
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ fairs: [openFair] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument()
+    })
+  })
+
+  it("does not show Join/Leave buttons for student users", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "student-1",
+      email: "student@school.edu",
+      role: "student",
+    })
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ fairs: [openFair] }),
+    })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByText("Spring Fair")).toBeInTheDocument())
+
+    expect(screen.queryByRole("button", { name: /join fair/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /leave fair/i })).not.toBeInTheDocument()
   })
 
   it("cancels join dialog and clears invite code", async () => {

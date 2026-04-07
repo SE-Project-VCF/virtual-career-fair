@@ -859,6 +859,100 @@ describe("FairLanding", () => {
     expect(screen.queryByRole("button", { name: /leave fair/i })).not.toBeInTheDocument()
   })
 
+  it("Networking Lounge button navigates to lounge when fair is live", async () => {
+    const user = userEvent.setup()
+
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "student-1",
+      email: "student@example.com",
+      role: "student",
+    })
+
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: true,
+      },
+      isLive: true,
+      fairId: "f1",
+    })
+
+    renderFairLanding()
+
+    const loungeButton = screen.getByRole("button", { name: /networking lounge/i })
+    expect(loungeButton).not.toBeDisabled()
+
+    await user.click(loungeButton)
+
+    expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/lounge")
+  })
+
+  it("Networking Lounge button is disabled when fair is not live", () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "student-1",
+      email: "student@example.com",
+      role: "student",
+    })
+
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: false,
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+
+    renderFairLanding()
+
+    const loungeButton = screen.getByRole("button", { name: /networking lounge/i })
+    expect(loungeButton).toBeDisabled()
+  })
+
+  it("does not show Networking Lounge button for company users", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: true,
+      },
+      isLive: true,
+      fairId: "f1",
+    })
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ enrollments: [] }),
+    })
+
+    renderFairLanding()
+
+    expect(screen.queryByRole("button", { name: /networking lounge/i })).not.toBeInTheDocument()
+  })
+
   it("shows Join This Fair button for representative role", async () => {
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "rep-1",

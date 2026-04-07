@@ -1313,7 +1313,7 @@ async function verifyRepOrOwner(userId, companyId) {
 /* ----------------------------------------------------
    SEND JOB INVITATION(S) TO STUDENT(S)
 ---------------------------------------------------- */
-app.post("/api/job-invitations/send", async (req, res) => {
+app.post("/api/job-invitations/send", verifyFirebaseToken, async (req, res) => {
   try {
     const { jobId, studentIds, message, sentVia, userId } = req.body;
 
@@ -1413,7 +1413,7 @@ app.post("/api/job-invitations/send", async (req, res) => {
 /* ----------------------------------------------------
    GET INVITATIONS RECEIVED BY A STUDENT
 ---------------------------------------------------- */
-app.get("/api/job-invitations/received", async (req, res) => {
+app.get("/api/job-invitations/received", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, status } = req.query;
     console.log("Fetching job invitations for student");
@@ -1542,7 +1542,7 @@ app.get("/api/job-invitations/received", async (req, res) => {
 /* ----------------------------------------------------
    GET INVITATIONS SENT BY A REPRESENTATIVE
 ---------------------------------------------------- */
-app.get("/api/job-invitations/sent", async (req, res) => {
+app.get("/api/job-invitations/sent", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, companyId } = req.query;
 
@@ -1631,7 +1631,7 @@ app.get("/api/job-invitations/sent", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE JOB INVITATION STATUS
 ---------------------------------------------------- */
-app.patch("/api/job-invitations/:id/status", async (req, res) => {
+app.patch("/api/job-invitations/:id/status", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, userId } = req.body;
@@ -1684,7 +1684,7 @@ app.patch("/api/job-invitations/:id/status", async (req, res) => {
 /* ----------------------------------------------------
    GET LIST OF STUDENTS (for invitation UI)
 ---------------------------------------------------- */
-app.get("/api/students", async (req, res) => {
+app.get("/api/students", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, search, major, boothId } = req.query;
 
@@ -1780,7 +1780,7 @@ app.get("/api/students", async (req, res) => {
 /* ----------------------------------------------------
    GET INVITATION STATS FOR A JOB
 ---------------------------------------------------- */
-app.get("/api/job-invitations/stats/:jobId", async (req, res) => {
+app.get("/api/job-invitations/stats/:jobId", verifyFirebaseToken, async (req, res) => {
   try {
     const { jobId } = req.params;
     const { userId } = req.query;
@@ -1836,7 +1836,7 @@ app.get("/api/job-invitations/stats/:jobId", async (req, res) => {
 /* ----------------------------------------------------
    GET DETAILED INVITATION DATA FOR A JOB
 ---------------------------------------------------- */
-app.get("/api/job-invitations/details/:jobId", async (req, res) => {
+app.get("/api/job-invitations/details/:jobId", verifyFirebaseToken, async (req, res) => {
   try {
     const { jobId } = req.params;
     const { userId } = req.query;
@@ -2212,7 +2212,7 @@ app.get("/api/fair-status", async (req, res) => {
    TOGGLE CAREER FAIR LIVE STATUS (Admin only)
    Note: Manual toggle will override schedule temporarily
 ---------------------------------------------------- */
-app.post("/api/toggle-fair-status", async (req, res) => {
+app.post("/api/toggle-fair-status", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId } = req.body;
 
@@ -2259,7 +2259,7 @@ app.post("/api/toggle-fair-status", async (req, res) => {
 /* ----------------------------------------------------
    GET ALL FAIR SCHEDULES (Admin only)
 ---------------------------------------------------- */
-app.get("/api/fair-schedules", async (req, res) => {
+app.get("/api/fair-schedules", verifyFirebaseToken, async (req, res) => {
   try {
     const userId = req.query.userId;
 
@@ -2333,7 +2333,7 @@ app.get("/api/public/fair-schedules", async (req, res) => {
 /* ----------------------------------------------------
    CREATE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
-app.post("/api/fair-schedules", async (req, res) => {
+app.post("/api/fair-schedules", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, name, startTime, endTime, description } = req.body;
 
@@ -2403,7 +2403,7 @@ function resolveScheduleTimes(existingData, startTime, endTime) {
 /* ----------------------------------------------------
    UPDATE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
-app.put("/api/fair-schedules/:id", async (req, res) => {
+app.put("/api/fair-schedules/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, name, startTime, endTime, description } = req.body;
@@ -2462,7 +2462,7 @@ app.put("/api/fair-schedules/:id", async (req, res) => {
 /* ----------------------------------------------------
    DELETE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
-app.delete("/api/fair-schedules/:id", async (req, res) => {
+app.delete("/api/fair-schedules/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.query.userId;
@@ -2491,7 +2491,7 @@ app.delete("/api/fair-schedules/:id", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE COMPANY INVITE CODE (Owner only)
 ---------------------------------------------------- */
-app.post("/api/update-invite-code", async (req, res) => {
+app.post("/api/update-invite-code", verifyFirebaseToken, async (req, res) => {
   try {
     const { companyId, userId, newInviteCode } = req.body;
 

@@ -118,6 +118,11 @@ vi.mock("stream-chat", () => ({
       })),
     })),
   },
+  StateStore: vi.fn().mockImplementation(() => ({
+    getLatestValue: vi.fn(() => ({})),
+    subscribe: vi.fn(),
+    next: vi.fn(),
+  })),
 }))
 
 // jsdom does not implement scrollTo (used by BoothEditor and others)

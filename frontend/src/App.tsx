@@ -29,6 +29,7 @@ import FairLanding from "./pages/FairLanding"
 import FairBooths from "./pages/FairBooths"
 import FairBoothView from "./pages/FairBoothView"
 import FairAdminDashboard from "./pages/FairAdminDashboard"
+import NetworkingLounge from "./pages/NetworkingLounge"
 import ShortlistPage from "./pages/ShortlistPage"
 import QASessionsPage from "./pages/QASessionsPage"
 import QASessionPage from "./pages/QASessionPage"
@@ -62,6 +63,10 @@ function FairAdminWrapper() {
 function FairBoothEditorWrapper() {
   const { fairId } = useParams<{ fairId: string }>()
   return <FairProvider fairId={fairId || ""}><BoothEditor /></FairProvider>
+}
+function NetworkingLoungeWrapper() {
+  const { fairId } = useParams<{ fairId: string }>()
+  return <FairProvider fairId={fairId || ""}><NetworkingLounge /></FairProvider>
 }
 
 function Call1x1RoomWrapper() {
@@ -122,6 +127,7 @@ function App() {
         <Route path="/fair/:fairId/booths" element={<FairBoothsWrapper />} />
         <Route path="/fair/:fairId/booth/:boothId" element={<FairBoothViewWrapper />} />
         <Route path="/fair/:fairId/admin" element={<FairAdminWrapper />} />
+        <Route path="/fair/:fairId/lounge" element={<NetworkingLoungeWrapper />} />
         <Route path="/fair/:fairId/company/:companyId/booth" element={<FairBoothEditorWrapper />} />
       </Routes>
     </BrowserRouter>

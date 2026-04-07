@@ -11,6 +11,7 @@ const {
   evaluateFairStatusForFair,
   verifyFirebaseToken,
 } = require("../helpers");
+const { streamServerClient } = require("../streamServerClient");
 
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
 const enrollmentLimiter = rateLimit({
@@ -1054,6 +1055,95 @@ router.get("/api/fairs/:fairId/company/:companyId/booth", verifyFirebaseToken, a
   } catch (err) {
     console.error("GET /api/fairs/:fairId/company/:companyId/booth error:", err);
     return res.status(500).json({ error: "Failed to load fair booth" });
+  }
+});
+
+/* =======================================================
+   NETWORKING LOUNGE
+======================================================= */
+
+/* POST /api/fairs/:fairId/lounge/join - student: join the fair's networking lounge */
+router.post("/api/fairs/:fairId/lounge/join", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const uid = req.user.uid;
+
+  try {
+    // Verify user is a student
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().role !== "student") {
+      return res.status(403).json({ error: "Only students can join the networking lounge" });
+    }
+
+    // Verify fair exists
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+
+    const fairName = fairDoc.data().name || "Career Fair";
+    const channelId = `lounge-${fairId}`;
+
+    // Get or create the lounge channel and add the student as a member
+    // created_by_id must be a real Stream user — use the joining student
+    const channel = streamServerClient.channel("messaging", channelId, {
+      name: `${fairName} Networking Lounge`,
+      created_by_id: uid,
+    });
+    await channel.create();
+    await channel.addMembers([uid]);
+
+    return res.json({ success: true, channelId });
+  } catch (err) {
+    console.error("POST /api/fairs/:fairId/lounge/join error:", err);
+    return res.status(500).json({ error: "Failed to join networking lounge" });
+  }
+});
+
+/* GET /api/fairs/:fairId/lounge/attendees - student: list students in the lounge */
+router.get("/api/fairs/:fairId/lounge/attendees", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const uid = req.user.uid;
+
+  try {
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().role !== "student") {
+      return res.status(403).json({ error: "Only students can view lounge attendees" });
+    }
+
+    const channelId = `lounge-${fairId}`;
+    const channel = streamServerClient.channel("messaging", channelId);
+    const channelState = await channel.query({ members: { limit: 100 } });
+
+    const memberUids = (channelState.members || [])
+      .map((m) => m.user_id)
+      .filter((id) => id && id !== "system");
+
+    if (memberUids.length === 0) return res.json({ attendees: [] });
+
+    const profileDocs = await Promise.all(
+      memberUids.map((id) => db.collection("users").doc(id).get())
+    );
+
+    const attendees = profileDocs
+      .filter((doc) => doc.exists && doc.data().role === "student")
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          uid: doc.id,
+          firstName: data.firstName || "",
+          lastName: data.lastName || "",
+          email: data.email || "",
+          major: data.major || "",
+          expectedGradYear: data.expectedGradYear || null,
+          skills: data.skills || "",
+          linkedinUrl: data.linkedinUrl || null,
+        };
+      });
+
+    return res.json({ attendees });
+  } catch (err) {
+    console.error("GET /api/fairs/:fairId/lounge/attendees error:", err);
+    return res.status(500).json({ error: "Failed to fetch lounge attendees" });
   }
 });
 

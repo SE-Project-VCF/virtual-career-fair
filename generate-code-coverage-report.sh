@@ -22,23 +22,28 @@ npx vitest run --coverage --reporter=silent --coverage.reporter=text --coverage.
 
 cd "$ROOT"
 
-# Pull backend totals
-BE_LINES=$(node -e "console.log(require('$BE_SUMMARY').total.lines.pct)")
-BE_BRANCHES=$(node -e "console.log(require('$BE_SUMMARY').total.branches.pct)")
-BE_FUNCTIONS=$(node -e "console.log(require('$BE_SUMMARY').total.functions.pct)")
-BE_STATEMENTS=$(node -e "console.log(require('$BE_SUMMARY').total.statements.pct)")
+# Convert Unix-style paths to Windows paths for node require() on Windows
+WIN_BE_SUMMARY=$(cygpath -w "$BE_SUMMARY" 2>/dev/null || echo "$BE_SUMMARY" | sed 's|^/\([a-zA-Z]\)/|\1:/|')
+WIN_FE_SUMMARY=$(cygpath -w "$FE_SUMMARY" 2>/dev/null || echo "$FE_SUMMARY" | sed 's|^/\([a-zA-Z]\)/|\1:/|')
+WIN_ROOT=$(cygpath -w "$ROOT" 2>/dev/null || echo "$ROOT" | sed 's|^/\([a-zA-Z]\)/|\1:/|')
+
+# Pull backend totals (pass paths via env vars to avoid backslash escape issues)
+BE_LINES=$(  _P="$WIN_BE_SUMMARY" node -e "console.log(require(process.env._P).total.lines.pct)")
+BE_BRANCHES=$(_P="$WIN_BE_SUMMARY" node -e "console.log(require(process.env._P).total.branches.pct)")
+BE_FUNCTIONS=$(_P="$WIN_BE_SUMMARY" node -e "console.log(require(process.env._P).total.functions.pct)")
+BE_STATEMENTS=$(_P="$WIN_BE_SUMMARY" node -e "console.log(require(process.env._P).total.statements.pct)")
 
 # Pull frontend totals
-FE_LINES=$(node -e "console.log(require('$FE_SUMMARY').total.lines.pct)")
-FE_BRANCHES=$(node -e "console.log(require('$FE_SUMMARY').total.branches.pct)")
-FE_FUNCTIONS=$(node -e "console.log(require('$FE_SUMMARY').total.functions.pct)")
-FE_STATEMENTS=$(node -e "console.log(require('$FE_SUMMARY').total.statements.pct)")
+FE_LINES=$(  _P="$WIN_FE_SUMMARY" node -e "console.log(require(process.env._P).total.lines.pct)")
+FE_BRANCHES=$(_P="$WIN_FE_SUMMARY" node -e "console.log(require(process.env._P).total.branches.pct)")
+FE_FUNCTIONS=$(_P="$WIN_FE_SUMMARY" node -e "console.log(require(process.env._P).total.functions.pct)")
+FE_STATEMENTS=$(_P="$WIN_FE_SUMMARY" node -e "console.log(require(process.env._P).total.statements.pct)")
 
 # Merge both summaries and find 3 lowest-covered files
-WEAK=$(node -e "
-const be = require('$BE_SUMMARY');
-const fe = require('$FE_SUMMARY');
-const root = '$ROOT/';
+WEAK=$(_BE="$WIN_BE_SUMMARY" _FE="$WIN_FE_SUMMARY" _ROOT="$WIN_ROOT" node -e "
+const be = require(process.env._BE);
+const fe = require(process.env._FE);
+const root = process.env._ROOT.replace(/\\\\/g, '/') + '/';
 
 const allFiles = [
   ...Object.entries(be).filter(([k]) => k !== 'total'),

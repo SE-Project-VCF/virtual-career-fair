@@ -29,6 +29,8 @@ vi.mock("../pages/TailorResumeSimplePage", () => ({ default: () => <div>TailorRe
 vi.mock("../pages/TailoredResumeViewPage", () => ({ default: () => <div>TailoredResumeViewPage</div> }))
 vi.mock("../pages/TailoredResumesPage", () => ({ default: () => <div>TailoredResumesPage</div> }))
 vi.mock("../pages/SubmissionsPage", () => ({ default: () => <div>SubmissionsPage</div> }))
+vi.mock("../pages/NetworkingLounge", () => ({ default: () => <div>NetworkingLounge</div> }))
+vi.mock("../pages/StudentProfilePage", () => ({ default: () => <div>StudentProfilePage</div> }))
 vi.mock("../pages/CallInvitationsPage", () => ({ default: () => <div>CallInvitationsPage</div> }))
 vi.mock("../pages/StudentCallInvitations", () => ({
   StudentCallInvitations: () => <div>StudentCallInvitations</div>,
@@ -133,6 +135,48 @@ describe("App", () => {
     globalThis.history.pushState({}, "", "/dashboard/tailored-resume/res-123")
     render(<App />)
     expect(screen.getByText("TailoredResumeViewPage")).toBeInTheDocument()
+  })
+
+  it("renders NetworkingLoungeWrapper at /fair/:fairId/lounge", () => {
+    globalThis.history.pushState({}, "", "/fair/test-fair-id/lounge")
+    render(<App />)
+    expect(screen.getByText("NetworkingLounge")).toBeInTheDocument()
+  })
+
+  it("renders StudentProfilePage at /profile", () => {
+    globalThis.history.pushState({}, "", "/profile")
+    render(<App />)
+    expect(screen.getByText("StudentProfilePage")).toBeInTheDocument()
+  })
+
+  it("renders Register at /register", () => {
+    globalThis.history.pushState({}, "", "/register")
+    render(<App />)
+    expect(screen.getByText("Register")).toBeInTheDocument()
+  })
+
+  it("renders Login at /login", () => {
+    globalThis.history.pushState({}, "", "/login")
+    render(<App />)
+    expect(screen.getByText("Login")).toBeInTheDocument()
+  })
+
+  it("renders Dashboard at /dashboard", () => {
+    globalThis.history.pushState({}, "", "/dashboard")
+    render(<App />)
+    expect(screen.getByText("Dashboard")).toBeInTheDocument()
+  })
+
+  it("renders AdminDashboard at /admin", () => {
+    globalThis.history.pushState({}, "", "/admin")
+    render(<App />)
+    expect(screen.getByText("AdminDashboard")).toBeInTheDocument()
+  })
+
+  it("renders ChatPage at /dashboard/chat", () => {
+    globalThis.history.pushState({}, "", "/dashboard/chat")
+    render(<App />)
+    expect(screen.getByText("ChatPage")).toBeInTheDocument()
   })
 
   it("renders CallInvitationsPage at /dashboard/call-invitations", () => {
