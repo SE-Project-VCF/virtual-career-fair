@@ -634,6 +634,75 @@ describe("BoothEditor", () => {
 
       if (resolveSubmit) resolveSubmit({ id: "booth-1" });
     });
+
+    it("shows validation error when city and state are empty for non-remote booth", async () => {
+      const user = userEvent.setup({ delay: null });
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await waitFor(() => {
+        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "We build software");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/City and state are required unless you mark the booth as Remote/i),
+        ).toBeInTheDocument();
+      });
+    }, 20000);
+
+    it("submits remote booth with null location fields", async () => {
+      const user = userEvent.setup({ delay: null });
+      renderBoothEditor();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
+      }, { timeout: 5000 });
+
+      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+      await user.click(industrySelect);
+      await user.click(await screen.findByRole("option", { name: /software development/i }));
+
+      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+      await user.click(sizeSelect);
+      await user.click(await screen.findByRole("option", { name: /51-200 employees/i }));
+
+      await user.click(screen.getByRole("checkbox", { name: /remote employer/i }));
+
+      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Remote-first");
+      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe");
+      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+      await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+      await waitFor(() => {
+        expect(firestore.addDoc).toHaveBeenCalled();
+      });
+      const payload = (firestore.addDoc as any).mock.calls[0][1];
+      expect(payload.locationIsRemote).toBe(true);
+      expect(payload.locationCity).toBeNull();
+      expect(payload.locationState).toBeNull();
+      expect(payload.location).toBeNull();
+    }, 20000);
   });
 
   // Error Handling Tests

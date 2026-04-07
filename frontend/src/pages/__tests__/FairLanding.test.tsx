@@ -1017,6 +1017,30 @@ describe("FairLanding", () => {
     expect(screen.getByText(/Charlotte,\s*NC\s+28202/)).toBeInTheDocument()
   })
 
+  it("renders venue ZIP when only venueZip is present", () => {
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "ZIP Only Fair",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: false,
+        venueCity: null,
+        venueState: null,
+        venueZip: "28202",
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+
+    renderFairLanding()
+
+    expect(screen.getByText(/\s*28202/)).toBeInTheDocument()
+  })
+
   it("passes fair name to BaseLayout as page title", () => {
     vi.mocked(useFair).mockReturnValue({
       setFair: vi.fn(),

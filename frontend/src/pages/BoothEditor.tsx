@@ -792,7 +792,7 @@ export default function BoothEditor() {
         )}
 
         <Card sx={{ p: 4 }}>
-          <form onSubmit={handleSubmit}>
+          <form noValidate onSubmit={handleSubmit}>
             {/* Company Information Section */}
             <Box sx={{ mb: 4 }}>
               <Typography

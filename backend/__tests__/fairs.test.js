@@ -332,6 +332,83 @@ describe("GET /api/fairs", () => {
       .query({ radiusMiles: "50", address: "___nonexistent_place_xyz___" });
     expect(res.status).toBe(400);
   });
+
+  it("filters by address + radius using forward geocode origin", async () => {
+    const nearFair = {
+      ...FAIR_DATA,
+      venueGeo: { latitude: 35.2, longitude: -80.8 },
+      venueCity: "Charlotte",
+    };
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-near", data: () => nearFair }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ radiusMiles: "50", address: "Charlotte NC" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs).toHaveLength(1);
+    expect(res.body.fairs[0].distanceMiles).toBeDefined();
+    expect(res.body.fairs[0].id).toBe("fair-near");
+  });
+
+  it("excludes fairs without venueGeo when radius search is active", async () => {
+    const noGeo = { ...FAIR_DATA };
+    const withGeo = {
+      ...FAIR_DATA,
+      venueGeo: { latitude: 35.2271, longitude: -80.8431 },
+    };
+    setupFairsDbMock({
+      fairDocs: [
+        { id: "fair-no-geo", data: () => noGeo },
+        { id: "fair-with", data: () => withGeo },
+      ],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "500" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs.map((f) => f.id)).toEqual(["fair-with"]);
+  });
+
+  it("sorts multiple geo results by distance ascending", async () => {
+    const farther = {
+      ...FAIR_DATA,
+      name: "Far",
+      venueGeo: { latitude: 34.0, longitude: -80.0 },
+    };
+    const nearer = {
+      ...FAIR_DATA,
+      name: "Near",
+      venueGeo: { latitude: 35.25, longitude: -80.85 },
+    };
+    setupFairsDbMock({
+      fairDocs: [
+        { id: "fair-far", data: () => farther },
+        { id: "fair-near", data: () => nearer },
+      ],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "5000" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs.map((f) => f.name)).toEqual(["Near", "Far"]);
+    expect(res.body.fairs[0].distanceMiles).toBeLessThan(res.body.fairs[1].distanceMiles);
+  });
+
+  it("computes distance when venueGeo uses Firestore underscore lat/lng fields", async () => {
+    const nearFair = {
+      ...FAIR_DATA,
+      venueGeo: { _latitude: 35.2271, _longitude: -80.8431 },
+    };
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => nearFair }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "500" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs[0].distanceMiles).toBeDefined();
+  });
 });
 
 /* =======================================================
