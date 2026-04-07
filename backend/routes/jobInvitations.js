@@ -8,7 +8,7 @@ const router = Router();
 /* ----------------------------------------------------
    SEND JOB INVITATION(S) TO STUDENT(S)
 ---------------------------------------------------- */
-router.post("/job-invitations/send", async (req, res) => {
+router.post("/job-invitations/send", verifyFirebaseToken, async (req, res) => {
   try {
     const { jobId, studentIds, message, sentVia, userId } = req.body;
 
@@ -108,7 +108,7 @@ router.post("/job-invitations/send", async (req, res) => {
 /* ----------------------------------------------------
    GET INVITATIONS RECEIVED BY A STUDENT
 ---------------------------------------------------- */
-router.get("/job-invitations/received", async (req, res) => {
+router.get("/job-invitations/received", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, status } = req.query;
     console.log("Fetching job invitations for student");
@@ -234,7 +234,7 @@ router.get("/job-invitations/received", async (req, res) => {
 /* ----------------------------------------------------
    GET INVITATIONS SENT BY A REPRESENTATIVE
 ---------------------------------------------------- */
-router.get("/job-invitations/sent", async (req, res) => {
+router.get("/job-invitations/sent", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, companyId } = req.query;
 
@@ -323,7 +323,7 @@ router.get("/job-invitations/sent", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE JOB INVITATION STATUS
 ---------------------------------------------------- */
-router.patch("/job-invitations/:id/status", async (req, res) => {
+router.patch("/job-invitations/:id/status", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, userId } = req.body;
@@ -376,7 +376,7 @@ router.patch("/job-invitations/:id/status", async (req, res) => {
 /* ----------------------------------------------------
    GET INVITATION STATS FOR A JOB
 ---------------------------------------------------- */
-router.get("/job-invitations/stats/:jobId", async (req, res) => {
+router.get("/job-invitations/stats/:jobId", verifyFirebaseToken, async (req, res) => {
   try {
     const { jobId } = req.params;
     const { userId } = req.query;
@@ -432,7 +432,7 @@ router.get("/job-invitations/stats/:jobId", async (req, res) => {
 /* ----------------------------------------------------
    GET DETAILED INVITATION DATA FOR A JOB
 ---------------------------------------------------- */
-router.get("/job-invitations/details/:jobId", async (req, res) => {
+router.get("/job-invitations/details/:jobId", verifyFirebaseToken, async (req, res) => {
   try {
     const { jobId } = req.params;
     const { userId } = req.query;

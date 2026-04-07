@@ -51,7 +51,7 @@ app.use(express.json({ limit: "1mb" }));
 /* GET /api/geocode/suggest — registered on app (not only fairs router) so it always resolves */
 app.get("/api/geocode/suggest", async (req, res) => {
   try {
-    const q = req.query.q != null ? String(req.query.q).trim() : "";
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (q.length < 2) {
       return res.json({ suggestions: [] });
     }

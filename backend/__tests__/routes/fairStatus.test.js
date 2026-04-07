@@ -39,9 +39,16 @@ const { db, auth } = require("../../firebase");
 const { verifyAdmin } = require("../../helpers");
 const app = createTestApp(fairStatusRouter);
 
+// Auto-authenticate all requests so verifyFirebaseToken passes
+beforeEach(() => {
+  auth.verifyIdToken.mockResolvedValue({ uid: "test-uid", email: "test@test.com" });
+});
+
+const AUTH = "Bearer valid-token";
+
 function authHeader() {
   auth.verifyIdToken.mockResolvedValue({ uid: "test-uid", email: "test@test.com" });
-  return "Bearer valid-token";
+  return AUTH;
 }
 
 // Helper: build a schedule doc mock with toMillis-aware timestamps
@@ -81,7 +88,7 @@ describe("GET /api/fair-status", () => {
       }
     });
 
-    const res = await request(app).get("/api/fair-status");
+    const res = await request(app).get("/api/fair-status").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       isLive: false,
@@ -105,7 +112,7 @@ describe("GET /api/fair-status", () => {
       }
     });
 
-    const res = await request(app).get("/api/fair-status");
+    const res = await request(app).get("/api/fair-status").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.isLive).toBe(true);
     expect(res.body.source).toBe("manual");
@@ -124,7 +131,7 @@ describe("GET /api/fair-status", () => {
       }
     });
 
-    const res = await request(app).get("/api/fair-status");
+    const res = await request(app).get("/api/fair-status").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       isLive: true,
@@ -151,7 +158,7 @@ describe("GET /api/fair-status", () => {
       }
     });
 
-    const res = await request(app).get("/api/fair-status");
+    const res = await request(app).get("/api/fair-status").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.isLive).toBe(false);
     expect(res.body.source).toBe("manual");
@@ -174,7 +181,7 @@ describe("GET /api/fair-status", () => {
       }
     });
 
-    const res = await request(app).get("/api/fair-status");
+    const res = await request(app).get("/api/fair-status").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.source).toBe("manual");
   });
@@ -184,7 +191,7 @@ describe("GET /api/fair-status", () => {
       throw new Error("Firestore unavailable");
     });
 
-    const res = await request(app).get("/api/fair-status");
+    const res = await request(app).get("/api/fair-status").set("Authorization", AUTH);
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Failed to fetch fair status" });
   });
@@ -199,7 +206,7 @@ describe("POST /api/toggle-fair-status", () => {
   });
 
   it("returns 400 when userId is missing", async () => {
-    const res = await request(app).post("/api/toggle-fair-status").send({});
+    const res = await request(app).post("/api/toggle-fair-status").set("Authorization", AUTH).send({});
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "Missing userId" });
   });
@@ -211,7 +218,7 @@ describe("POST /api/toggle-fair-status", () => {
       }
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "ghost-uid" });
+    const res = await request(app).post("/api/toggle-fair-status").set("Authorization", AUTH).send({ userId: "ghost-uid" });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "User not found" });
   });
@@ -227,7 +234,7 @@ describe("POST /api/toggle-fair-status", () => {
       }
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "student-uid" });
+    const res = await request(app).post("/api/toggle-fair-status").set("Authorization", AUTH).send({ userId: "student-uid" });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: "Only administrators can toggle fair status" });
   });
@@ -258,7 +265,7 @@ describe("POST /api/toggle-fair-status", () => {
       }
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "admin-uid" });
+    const res = await request(app).post("/api/toggle-fair-status").set("Authorization", AUTH).send({ userId: "admin-uid" });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, isLive: true });
     expect(statusSetMock).toHaveBeenCalledWith(
@@ -291,7 +298,7 @@ describe("POST /api/toggle-fair-status", () => {
       }
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "admin-uid" });
+    const res = await request(app).post("/api/toggle-fair-status").set("Authorization", AUTH).send({ userId: "admin-uid" });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, isLive: false });
   });
@@ -322,7 +329,7 @@ describe("POST /api/toggle-fair-status", () => {
       }
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "admin-uid" });
+    const res = await request(app).post("/api/toggle-fair-status").set("Authorization", AUTH).send({ userId: "admin-uid" });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, isLive: false });
   });
@@ -332,7 +339,7 @@ describe("POST /api/toggle-fair-status", () => {
       throw new Error("DB failure");
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "admin-uid" });
+    const res = await request(app).post("/api/toggle-fair-status").set("Authorization", AUTH).send({ userId: "admin-uid" });
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Failed to toggle fair status" });
   });
@@ -348,20 +355,20 @@ describe("GET /api/fair-schedules", () => {
 
   it("returns 400 when userId is missing (verifyAdmin rejects)", async () => {
     verifyAdmin.mockResolvedValue({ status: 400, error: "Missing userId" });
-    const res = await request(app).get("/api/fair-schedules");
+    const res = await request(app).get("/api/fair-schedules").set("Authorization", AUTH);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "Missing userId" });
   });
 
   it("returns 404 when user is not found", async () => {
     verifyAdmin.mockResolvedValue({ status: 404, error: "User not found" });
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "ghost" });
+    const res = await request(app).get("/api/fair-schedules").set("Authorization", AUTH).query({ userId: "ghost" });
     expect(res.status).toBe(404);
   });
 
   it("returns 403 when user is not an administrator", async () => {
     verifyAdmin.mockResolvedValue({ status: 403, error: "Only administrators can manage schedules" });
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "non-admin" });
+    const res = await request(app).get("/api/fair-schedules").set("Authorization", AUTH).query({ userId: "non-admin" });
     expect(res.status).toBe(403);
   });
 
@@ -374,7 +381,7 @@ describe("GET /api/fair-schedules", () => {
     };
     db.collection.mockReturnValue(collRef);
 
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "admin-uid" });
+    const res = await request(app).get("/api/fair-schedules").set("Authorization", AUTH).query({ userId: "admin-uid" });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ schedules: [] });
   });
@@ -397,7 +404,7 @@ describe("GET /api/fair-schedules", () => {
     };
     db.collection.mockReturnValue(collRef);
 
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "admin-uid" });
+    const res = await request(app).get("/api/fair-schedules").set("Authorization", AUTH).query({ userId: "admin-uid" });
     expect(res.status).toBe(200);
     expect(res.body.schedules).toHaveLength(1);
     expect(res.body.schedules[0]).toEqual({
@@ -417,7 +424,7 @@ describe("GET /api/fair-schedules", () => {
     verifyAdmin.mockResolvedValue(null);
     db.collection.mockImplementation(() => { throw new Error("DB error"); });
 
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "admin-uid" });
+    const res = await request(app).get("/api/fair-schedules").set("Authorization", AUTH).query({ userId: "admin-uid" });
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Failed to fetch fair schedules" });
   });
@@ -434,7 +441,7 @@ describe("GET /api/public/fair-schedules", () => {
   it("returns empty schedules list", async () => {
     db.collection.mockReturnValue({ get: jest.fn().mockResolvedValue(mockQuerySnap([])) });
 
-    const res = await request(app).get("/api/public/fair-schedules");
+    const res = await request(app).get("/api/public/fair-schedules").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ schedules: [] });
   });
@@ -447,7 +454,7 @@ describe("GET /api/public/fair-schedules", () => {
       get: jest.fn().mockResolvedValue(mockQuerySnap([doc1, doc2])),
     });
 
-    const res = await request(app).get("/api/public/fair-schedules");
+    const res = await request(app).get("/api/public/fair-schedules").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.schedules[0].id).toBe("sched-a");
     expect(res.body.schedules[1].id).toBe("sched-b");
@@ -465,7 +472,7 @@ describe("GET /api/public/fair-schedules", () => {
       get: jest.fn().mockResolvedValue(mockQuerySnap([docNoTime, docWithTime])),
     });
 
-    const res = await request(app).get("/api/public/fair-schedules");
+    const res = await request(app).get("/api/public/fair-schedules").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.schedules[0].id).toBe("sched-real");
     expect(res.body.schedules[1].id).toBe("sched-null");
@@ -475,7 +482,7 @@ describe("GET /api/public/fair-schedules", () => {
     const doc = makeScheduleDoc("sched-1", 1000000, 2000000, { name: "Pub" });
     db.collection.mockReturnValue({ get: jest.fn().mockResolvedValue(mockQuerySnap([doc])) });
 
-    const res = await request(app).get("/api/public/fair-schedules");
+    const res = await request(app).get("/api/public/fair-schedules").set("Authorization", AUTH);
     const schedule = res.body.schedules[0];
     expect(schedule).toHaveProperty("id");
     expect(schedule).toHaveProperty("name");
@@ -491,7 +498,7 @@ describe("GET /api/public/fair-schedules", () => {
   it("returns 500 on Firestore error", async () => {
     db.collection.mockImplementation(() => { throw new Error("DB error"); });
 
-    const res = await request(app).get("/api/public/fair-schedules");
+    const res = await request(app).get("/api/public/fair-schedules").set("Authorization", AUTH);
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Failed to fetch fair schedules" });
   });
@@ -510,26 +517,26 @@ describe("POST /api/fair-schedules", () => {
 
   it("returns 400 when userId is missing (verifyAdmin rejects)", async () => {
     verifyAdmin.mockResolvedValue({ status: 400, error: "Missing userId" });
-    const res = await request(app).post("/api/fair-schedules").send({ startTime: VALID_START, endTime: VALID_END });
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({ startTime: VALID_START, endTime: VALID_END });
     expect(res.status).toBe(400);
   });
 
   it("returns 403 when user is not an administrator", async () => {
     verifyAdmin.mockResolvedValue({ status: 403, error: "Only administrators can manage schedules" });
-    const res = await request(app).post("/api/fair-schedules").send({ userId: "non-admin", startTime: VALID_START, endTime: VALID_END });
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({ userId: "non-admin", startTime: VALID_START, endTime: VALID_END });
     expect(res.status).toBe(403);
   });
 
   it("returns 400 when startTime is missing", async () => {
     verifyAdmin.mockResolvedValue(null);
-    const res = await request(app).post("/api/fair-schedules").send({ userId: "admin-uid", endTime: VALID_END });
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({ userId: "admin-uid", endTime: VALID_END });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "Start time and end time are required" });
   });
 
   it("returns 400 when endTime is missing", async () => {
     verifyAdmin.mockResolvedValue(null);
-    const res = await request(app).post("/api/fair-schedules").send({ userId: "admin-uid", startTime: VALID_START });
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({ userId: "admin-uid", startTime: VALID_START });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "Start time and end time are required" });
   });
@@ -537,7 +544,7 @@ describe("POST /api/fair-schedules", () => {
   it("returns 400 when endTime is not after startTime", async () => {
     verifyAdmin.mockResolvedValue(null);
     // endTime equals startTime
-    const res = await request(app).post("/api/fair-schedules").send({
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({
       userId: "admin-uid",
       startTime: VALID_START,
       endTime: VALID_START,
@@ -552,7 +559,7 @@ describe("POST /api/fair-schedules", () => {
     const addMock = jest.fn().mockResolvedValue({ id: "new-sched-id" });
     db.collection.mockReturnValue({ add: addMock });
 
-    const res = await request(app).post("/api/fair-schedules").send({
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({
       userId: "admin-uid",
       name: "Summer Fair",
       description: "Great event",
@@ -575,7 +582,7 @@ describe("POST /api/fair-schedules", () => {
     const addMock = jest.fn().mockResolvedValue({ id: "sched-no-name" });
     db.collection.mockReturnValue({ add: addMock });
 
-    const res = await request(app).post("/api/fair-schedules").send({
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({
       userId: "admin-uid",
       startTime: VALID_START,
       endTime: VALID_END,
@@ -589,7 +596,7 @@ describe("POST /api/fair-schedules", () => {
     verifyAdmin.mockResolvedValue(null);
     db.collection.mockImplementation(() => { throw new Error("DB error"); });
 
-    const res = await request(app).post("/api/fair-schedules").send({
+    const res = await request(app).post("/api/fair-schedules").set("Authorization", AUTH).send({
       userId: "admin-uid",
       startTime: VALID_START,
       endTime: VALID_END,
@@ -627,13 +634,13 @@ describe("PUT /api/fair-schedules/:id", () => {
 
   it("returns 400 when userId is missing", async () => {
     verifyAdmin.mockResolvedValue({ status: 400, error: "Missing userId" });
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({});
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({});
     expect(res.status).toBe(400);
   });
 
   it("returns 403 when user is not an administrator", async () => {
     verifyAdmin.mockResolvedValue({ status: 403, error: "Only administrators can manage schedules" });
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({ userId: "non-admin" });
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({ userId: "non-admin" });
     expect(res.status).toBe(403);
   });
 
@@ -642,7 +649,7 @@ describe("PUT /api/fair-schedules/:id", () => {
     const docRef = makeDocRefMock(null, false);
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({ userId: "admin-uid" });
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({ userId: "admin-uid" });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "Schedule not found" });
   });
@@ -658,7 +665,7 @@ describe("PUT /api/fair-schedules/:id", () => {
     const docRef = makeDocRefMock(existingData);
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({
       userId: "admin-uid",
       startTime: VALID_START,
     });
@@ -677,7 +684,7 @@ describe("PUT /api/fair-schedules/:id", () => {
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
     // End time same as start time → error
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({
       userId: "admin-uid",
       startTime: VALID_START,
       endTime: VALID_START,
@@ -703,7 +710,7 @@ describe("PUT /api/fair-schedules/:id", () => {
     const docRef = makeDocRefMock(existingData, true, updatedData);
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({
       userId: "admin-uid",
       name: "New Name",
       description: "New Desc",
@@ -731,7 +738,7 @@ describe("PUT /api/fair-schedules/:id", () => {
     const docRef = makeDocRefMock(existingData, true, existingData);
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({
       userId: "admin-uid",
       startTime: "2026-01-01T00:00:00Z",
     });
@@ -757,7 +764,7 @@ describe("PUT /api/fair-schedules/:id", () => {
     const docRef = makeDocRefMock(existingData, true, updatedData);
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({
       userId: "admin-uid",
       startTime: VALID_START,
       endTime: VALID_END,
@@ -771,7 +778,7 @@ describe("PUT /api/fair-schedules/:id", () => {
     verifyAdmin.mockResolvedValue(null);
     db.collection.mockImplementation(() => { throw new Error("DB error"); });
 
-    const res = await request(app).put("/api/fair-schedules/sched-123").send({ userId: "admin-uid" });
+    const res = await request(app).put("/api/fair-schedules/sched-123").set("Authorization", AUTH).send({ userId: "admin-uid" });
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Failed to update fair schedule" });
   });
@@ -787,13 +794,13 @@ describe("DELETE /api/fair-schedules/:id", () => {
 
   it("returns 400 when userId is missing", async () => {
     verifyAdmin.mockResolvedValue({ status: 400, error: "Missing userId" });
-    const res = await request(app).delete("/api/fair-schedules/sched-123");
+    const res = await request(app).delete("/api/fair-schedules/sched-123").set("Authorization", AUTH);
     expect(res.status).toBe(400);
   });
 
   it("returns 403 when user is not an administrator", async () => {
     verifyAdmin.mockResolvedValue({ status: 403, error: "Only administrators can manage schedules" });
-    const res = await request(app).delete("/api/fair-schedules/sched-123").query({ userId: "non-admin" });
+    const res = await request(app).delete("/api/fair-schedules/sched-123").set("Authorization", AUTH).query({ userId: "non-admin" });
     expect(res.status).toBe(403);
   });
 
@@ -805,7 +812,7 @@ describe("DELETE /api/fair-schedules/:id", () => {
     };
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
-    const res = await request(app).delete("/api/fair-schedules/sched-123").query({ userId: "admin-uid" });
+    const res = await request(app).delete("/api/fair-schedules/sched-123").set("Authorization", AUTH).query({ userId: "admin-uid" });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "Schedule not found" });
   });
@@ -819,7 +826,7 @@ describe("DELETE /api/fair-schedules/:id", () => {
     };
     db.collection.mockReturnValue({ doc: jest.fn(() => docRef) });
 
-    const res = await request(app).delete("/api/fair-schedules/sched-123").query({ userId: "admin-uid" });
+    const res = await request(app).delete("/api/fair-schedules/sched-123").set("Authorization", AUTH).query({ userId: "admin-uid" });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, message: "Schedule deleted successfully" });
     expect(deleteMock).toHaveBeenCalledTimes(1);
@@ -829,7 +836,7 @@ describe("DELETE /api/fair-schedules/:id", () => {
     verifyAdmin.mockResolvedValue(null);
     db.collection.mockImplementation(() => { throw new Error("DB error"); });
 
-    const res = await request(app).delete("/api/fair-schedules/sched-123").query({ userId: "admin-uid" });
+    const res = await request(app).delete("/api/fair-schedules/sched-123").set("Authorization", AUTH).query({ userId: "admin-uid" });
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: "Failed to delete fair schedule" });
   });
@@ -844,13 +851,13 @@ describe("POST /api/update-invite-code", () => {
   });
 
   it("returns 400 when companyId is missing", async () => {
-    const res = await request(app).post("/api/update-invite-code").send({ userId: "user-uid" });
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({ userId: "user-uid" });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "Missing required fields" });
   });
 
   it("returns 400 when userId is missing", async () => {
-    const res = await request(app).post("/api/update-invite-code").send({ companyId: "comp-1" });
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({ companyId: "comp-1" });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: "Missing required fields" });
   });
@@ -862,7 +869,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({ companyId: "comp-ghost", userId: "user-uid" });
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({ companyId: "comp-ghost", userId: "user-uid" });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "Company not found" });
   });
@@ -878,7 +885,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({ companyId: "comp-1", userId: "user-uid" });
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({ companyId: "comp-1", userId: "user-uid" });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: "Only the company owner can update the invite code" });
   });
@@ -894,7 +901,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
       newInviteCode: "AB",
@@ -914,7 +921,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
       newInviteCode: "HELLO!@#$",
@@ -938,7 +945,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
       newInviteCode: "MYCODE123",
@@ -968,7 +975,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
       newInviteCode: "NEWCODE99",
@@ -999,7 +1006,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
     });
@@ -1030,7 +1037,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
       newInviteCode: "mycode12",
@@ -1056,7 +1063,7 @@ describe("POST /api/update-invite-code", () => {
       }
     });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
       newInviteCode: "VALID123",
@@ -1069,7 +1076,7 @@ describe("POST /api/update-invite-code", () => {
   it("returns 500 on Firestore error during company lookup", async () => {
     db.collection.mockImplementation(() => { throw new Error("DB error"); });
 
-    const res = await request(app).post("/api/update-invite-code").send({
+    const res = await request(app).post("/api/update-invite-code").set("Authorization", AUTH).send({
       companyId: "comp-1",
       userId: "owner-uid",
     });

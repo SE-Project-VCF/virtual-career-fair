@@ -95,7 +95,7 @@ router.get("/fair-status", async (req, res) => {
    TOGGLE CAREER FAIR LIVE STATUS (Admin only)
    Note: Manual toggle will override schedule temporarily
 ---------------------------------------------------- */
-router.post("/toggle-fair-status", async (req, res) => {
+router.post("/toggle-fair-status", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId } = req.body;
 
@@ -142,7 +142,7 @@ router.post("/toggle-fair-status", async (req, res) => {
 /* ----------------------------------------------------
    GET ALL FAIR SCHEDULES (Admin only)
 ---------------------------------------------------- */
-router.get("/fair-schedules", async (req, res) => {
+router.get("/fair-schedules", verifyFirebaseToken, async (req, res) => {
   try {
     const userId = req.query.userId;
 
@@ -216,7 +216,7 @@ router.get("/public/fair-schedules", async (req, res) => {
 /* ----------------------------------------------------
    CREATE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
-router.post("/fair-schedules", async (req, res) => {
+router.post("/fair-schedules", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, name, startTime, endTime, description } = req.body;
 
@@ -269,7 +269,7 @@ router.post("/fair-schedules", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
-router.put("/fair-schedules/:id", async (req, res) => {
+router.put("/fair-schedules/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { userId, name, startTime, endTime, description } = req.body;
@@ -328,7 +328,7 @@ router.put("/fair-schedules/:id", async (req, res) => {
 /* ----------------------------------------------------
    DELETE FAIR SCHEDULE (Admin only)
 ---------------------------------------------------- */
-router.delete("/fair-schedules/:id", async (req, res) => {
+router.delete("/fair-schedules/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.query.userId;
@@ -357,7 +357,7 @@ router.delete("/fair-schedules/:id", async (req, res) => {
 /* ----------------------------------------------------
    UPDATE COMPANY INVITE CODE (Owner only)
 ---------------------------------------------------- */
-router.post("/update-invite-code", async (req, res) => {
+router.post("/update-invite-code", verifyFirebaseToken, async (req, res) => {
   try {
     const { companyId, userId, newInviteCode } = req.body;
 

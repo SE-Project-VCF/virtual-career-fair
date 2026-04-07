@@ -38,9 +38,15 @@ const jobInvitationsRouter = require("../../routes/jobInvitations");
 const { db, auth } = require("../../firebase");
 const app = createTestApp(jobInvitationsRouter);
 
+// Auto-authenticate all requests so verifyFirebaseToken passes
+const AUTH = "Bearer valid-token";
+beforeEach(() => {
+  auth.verifyIdToken.mockResolvedValue({ uid: "test-uid", email: "test@test.com" });
+});
+
 function authHeader() {
   auth.verifyIdToken.mockResolvedValue({ uid: "test-uid", email: "test@test.com" });
-  return "Bearer valid-token";
+  return AUTH;
 }
 
 // ─── Fixture data ────────────────────────────────────────────────────────────
@@ -88,6 +94,7 @@ describe("POST /api/job-invitations/send", () => {
   it("returns 400 when jobId is missing", async () => {
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send({ ...validBody, jobId: undefined });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Job ID is required/i);
@@ -96,6 +103,7 @@ describe("POST /api/job-invitations/send", () => {
   it("returns 400 when studentIds is missing", async () => {
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send({ ...validBody, studentIds: undefined });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/At least one student ID is required/i);
@@ -104,6 +112,7 @@ describe("POST /api/job-invitations/send", () => {
   it("returns 400 when studentIds is empty array", async () => {
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send({ ...validBody, studentIds: [] });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/At least one student ID is required/i);
@@ -112,6 +121,7 @@ describe("POST /api/job-invitations/send", () => {
   it("returns 400 when sentVia is not 'notification'", async () => {
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send({ ...validBody, sentVia: "chat" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/sentVia must be 'notification'/i);
@@ -120,6 +130,7 @@ describe("POST /api/job-invitations/send", () => {
   it("returns 400 when userId is missing", async () => {
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send({ ...validBody, userId: undefined });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/User ID is required/i);
@@ -134,6 +145,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/Job not found/i);
@@ -151,6 +163,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/User not found/i);
@@ -172,6 +185,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/Only representatives and company owners/i);
@@ -193,6 +207,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/You can only send invitations for your own company/i);
@@ -220,6 +235,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Invalid student IDs/i);
@@ -246,6 +262,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Invalid student IDs/i);
@@ -280,6 +297,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -294,6 +312,7 @@ describe("POST /api/job-invitations/send", () => {
 
     const res = await request(app)
       .post("/api/job-invitations/send")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to send invitations/i);
@@ -307,7 +326,7 @@ describe("GET /api/job-invitations/received", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns 400 when userId is missing", async () => {
-    const res = await request(app).get("/api/job-invitations/received");
+    const res = await request(app).get("/api/job-invitations/received").set("Authorization", AUTH);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/User ID is required/i);
   });
@@ -319,7 +338,7 @@ describe("GET /api/job-invitations/received", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/received?userId=nonexistent");
+    const res = await request(app).get("/api/job-invitations/received?userId=nonexistent").set("Authorization", AUTH);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/User not found/i);
   });
@@ -335,7 +354,7 @@ describe("GET /api/job-invitations/received", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/received?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/received?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/Only students can view received invitations/i);
   });
@@ -370,7 +389,7 @@ describe("GET /api/job-invitations/received", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/received?userId=student-1");
+    const res = await request(app).get("/api/job-invitations/received?userId=student-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.invitations)).toBe(true);
     expect(res.body.invitations).toHaveLength(1);
@@ -421,7 +440,7 @@ describe("GET /api/job-invitations/received", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/received?userId=student-1");
+    const res = await request(app).get("/api/job-invitations/received?userId=student-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.invitations[0].job.name).toBe("SWE");
     expect(res.body.invitations[0].company.companyName).toBe("Acme Corp");
@@ -447,7 +466,7 @@ describe("GET /api/job-invitations/received", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/received?userId=student-1&status=viewed");
+    const res = await request(app).get("/api/job-invitations/received?userId=student-1&status=viewed").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     // where was called twice: once for studentId filter, once for status filter
     expect(queryRef.where).toHaveBeenCalledTimes(2);
@@ -458,7 +477,7 @@ describe("GET /api/job-invitations/received", () => {
       throw new Error("db exploded");
     });
 
-    const res = await request(app).get("/api/job-invitations/received?userId=student-1");
+    const res = await request(app).get("/api/job-invitations/received?userId=student-1").set("Authorization", AUTH);
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to fetch invitations/i);
   });
@@ -471,7 +490,7 @@ describe("GET /api/job-invitations/sent", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns 400 when userId is missing", async () => {
-    const res = await request(app).get("/api/job-invitations/sent");
+    const res = await request(app).get("/api/job-invitations/sent").set("Authorization", AUTH);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/User ID is required/i);
   });
@@ -483,7 +502,7 @@ describe("GET /api/job-invitations/sent", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/sent?userId=nobody");
+    const res = await request(app).get("/api/job-invitations/sent?userId=nobody").set("Authorization", AUTH);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/User not found/i);
   });
@@ -499,7 +518,7 @@ describe("GET /api/job-invitations/sent", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/sent?userId=student-1");
+    const res = await request(app).get("/api/job-invitations/sent?userId=student-1").set("Authorization", AUTH);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/Only representatives and company owners/i);
   });
@@ -515,7 +534,7 @@ describe("GET /api/job-invitations/sent", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1&companyId=company-1");
+    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1&companyId=company-1").set("Authorization", AUTH);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/You can only send invitations for your own company/i);
   });
@@ -547,7 +566,7 @@ describe("GET /api/job-invitations/sent", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.invitations)).toBe(true);
     expect(res.body.invitations).toHaveLength(1);
@@ -583,7 +602,7 @@ describe("GET /api/job-invitations/sent", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1&companyId=company-1");
+    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1&companyId=company-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     // "companyId" filter path: where called with "companyId"
     expect(jobInvRef.where).toHaveBeenCalledWith("companyId", "==", "company-1");
@@ -594,7 +613,7 @@ describe("GET /api/job-invitations/sent", () => {
       throw new Error("db exploded");
     });
 
-    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to fetch invitations/i);
   });
@@ -611,6 +630,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
   it("returns 400 when status is invalid", async () => {
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send({ status: "invalid", userId: "student-1" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Status must be 'viewed' or 'clicked'/i);
@@ -619,6 +639,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
   it("returns 400 when userId is missing", async () => {
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send({ status: "viewed" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/User ID is required/i);
@@ -638,6 +659,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/Invitation not found/i);
@@ -659,6 +681,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/You can only update your own invitations/i);
@@ -681,6 +704,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -706,6 +730,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send({ status: "clicked", userId: "student-1" });
     expect(res.status).toBe(200);
     const updateArg = updateFn.mock.calls[0][0];
@@ -735,6 +760,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(200);
     const updateArg = updateFn.mock.calls[0][0];
@@ -748,6 +774,7 @@ describe("PATCH /api/job-invitations/:id/status", () => {
 
     const res = await request(app)
       .patch("/api/job-invitations/inv-1/status")
+      .set("Authorization", AUTH)
       .send(validBody);
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to update invitation status/i);
@@ -761,7 +788,7 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns 400 when userId is missing", async () => {
-    const res = await request(app).get("/api/job-invitations/stats/job-1");
+    const res = await request(app).get("/api/job-invitations/stats/job-1").set("Authorization", AUTH);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/User ID is required/i);
   });
@@ -773,7 +800,7 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/Job not found/i);
   });
@@ -792,7 +819,7 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=student-1");
+    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=student-1").set("Authorization", AUTH);
     expect(res.status).toBe(403);
   });
 
@@ -827,7 +854,7 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.totalSent).toBe(3);
     expect(res.body.totalViewed).toBe(2);
@@ -858,7 +885,7 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.viewRate).toBe("0");
     expect(res.body.clickRate).toBe("0");
@@ -869,7 +896,7 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
       throw new Error("db exploded");
     });
 
-    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to fetch stats/i);
   });
@@ -882,7 +909,7 @@ describe("GET /api/job-invitations/details/:jobId", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns 400 when userId is missing", async () => {
-    const res = await request(app).get("/api/job-invitations/details/job-1");
+    const res = await request(app).get("/api/job-invitations/details/job-1").set("Authorization", AUTH);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/User ID is required/i);
   });
@@ -894,7 +921,7 @@ describe("GET /api/job-invitations/details/:jobId", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/details/job-1?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/details/job-1?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/Job not found/i);
   });
@@ -913,7 +940,7 @@ describe("GET /api/job-invitations/details/:jobId", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/details/job-1?userId=student-1");
+    const res = await request(app).get("/api/job-invitations/details/job-1?userId=student-1").set("Authorization", AUTH);
     expect(res.status).toBe(403);
   });
 
@@ -955,7 +982,7 @@ describe("GET /api/job-invitations/details/:jobId", () => {
       }
     });
 
-    const res = await request(app).get("/api/job-invitations/details/job-1?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/details/job-1?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.invitations)).toBe(true);
     expect(res.body.invitations[0].id).toBe("inv-1");
@@ -967,7 +994,7 @@ describe("GET /api/job-invitations/details/:jobId", () => {
       throw new Error("db exploded");
     });
 
-    const res = await request(app).get("/api/job-invitations/details/job-1?userId=rep-1");
+    const res = await request(app).get("/api/job-invitations/details/job-1?userId=rep-1").set("Authorization", AUTH);
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to fetch invitation details/i);
   });

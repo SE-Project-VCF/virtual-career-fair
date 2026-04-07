@@ -49,6 +49,12 @@ const app = createTestApp(usersRouter);
 // Placeholder credential used in request bodies — not a real secret
 const TEST_PW = "test-pw-placeholder";
 
+// Auto-authenticate all requests so verifyFirebaseToken passes
+const AUTH = "Bearer valid-token";
+beforeEach(() => {
+  auth.verifyIdToken.mockResolvedValue({ uid: "test-uid", email: "test@test.com" });
+});
+
 /* ============================================================
    POST /api/register-user
 ============================================================ */
@@ -220,7 +226,7 @@ describe("GET /api/students", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns 400 when userId is missing", async () => {
-    const res = await request(app).get("/api/students");
+    const res = await request(app).get("/api/students").set("Authorization", AUTH);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/user id is required/i);
   });
@@ -236,7 +242,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=unknown-uid");
+    const res = await request(app).get("/api/students?userId=unknown-uid").set("Authorization", AUTH);
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/user not found/i);
   });
@@ -251,7 +257,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=student-uid");
+    const res = await request(app).get("/api/students?userId=student-uid").set("Authorization", AUTH);
     expect(res.status).toBe(403);
   });
 
@@ -276,7 +282,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=rep-uid");
+    const res = await request(app).get("/api/students?userId=rep-uid").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(2);
     expect(res.body.students[0].firstName).toBe("Alice");
@@ -304,7 +310,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=rep-uid&search=alice");
+    const res = await request(app).get("/api/students?userId=rep-uid&search=alice").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
     expect(res.body.students[0].firstName).toBe("Alice");
@@ -331,7 +337,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=rep-uid&major=electrical");
+    const res = await request(app).get("/api/students?userId=rep-uid&major=electrical").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
     expect(res.body.students[0].firstName).toBe("Bob");
@@ -384,7 +390,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=rep-uid&boothId=booth-1");
+    const res = await request(app).get("/api/students?userId=rep-uid&boothId=booth-1").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     // Only Alice visited the booth
     const names = res.body.students.map((s) => s.firstName);
@@ -412,7 +418,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=admin-uid");
+    const res = await request(app).get("/api/students?userId=admin-uid").set("Authorization", AUTH);
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
   });
@@ -432,7 +438,7 @@ describe("GET /api/students", () => {
       }
     });
 
-    const res = await request(app).get("/api/students?userId=rep-uid");
+    const res = await request(app).get("/api/students?userId=rep-uid").set("Authorization", AUTH);
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/failed to fetch students/i);
   });

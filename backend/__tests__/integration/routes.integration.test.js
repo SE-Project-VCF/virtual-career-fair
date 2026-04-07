@@ -123,9 +123,9 @@ describe("Integration: users routes", () => {
 });
 
 describe("Integration: fairStatus routes", () => {
-  it("POST /api/toggle-fair-status is mounted (no auth, returns 400 without userId)", async () => {
+  it("POST /api/toggle-fair-status requires auth", async () => {
     const res = await request(app).post("/api/toggle-fair-status").send({});
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 });
 
@@ -137,9 +137,9 @@ describe("Integration: booths routes", () => {
 });
 
 describe("Integration: jobInvitations routes", () => {
-  it("POST /api/job-invitations/send is mounted (no auth, returns 400 for validation)", async () => {
+  it("POST /api/job-invitations/send requires auth", async () => {
     const res = await request(app).post("/api/job-invitations/send").send({});
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("GET /api/job-invitations/:invitationId requires auth", async () => {

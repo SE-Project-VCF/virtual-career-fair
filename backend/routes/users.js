@@ -109,7 +109,7 @@ router.post("/register-user", async (req, res) => {
 /* ----------------------------------------------------
    GET LIST OF STUDENTS (for invitation UI)
 ---------------------------------------------------- */
-router.get("/students", async (req, res) => {
+router.get("/students", verifyFirebaseToken, async (req, res) => {
   try {
     const { userId, search, major, boothId } = req.query;
 
