@@ -264,7 +264,7 @@ describe("POST /api/jobs", () => {
       }
     });
 
-    const { applicationLink: _unused, ...bodyWithoutLink } = validJobBody;
+    const { applicationLink, ...bodyWithoutLink } = validJobBody;
     const res = await request(app)
       .post("/api/jobs")
       .set("Authorization", authHeader())
@@ -566,7 +566,7 @@ describe("PUT /api/jobs/:id", () => {
       }
     });
 
-    const { applicationLink: _unused, ...bodyWithoutLink } = validUpdateBody;
+    const { applicationLink, ...bodyWithoutLink } = validUpdateBody;
     const res = await request(app)
       .put("/api/jobs/job-1")
       .set("Authorization", authHeader())
