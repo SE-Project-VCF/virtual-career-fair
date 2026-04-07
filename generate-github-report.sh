@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: ./generate-github-report <SprintNumber> <GitHubUsername> <StartDate> <EndDate> [Name]
-# Example: ./generate-github-report 2 austinmoser 2026-02-03 2026-02-17 AustinMoser
+# Example: ./generate-github-report 2   2026-02-03 2026-02-17 AustinMoser
 set -e
 
 SPRINT="${1:?Usage: ./generate-github-report <SprintNumber> <GitHubUsername> <StartDate> <EndDate> [Name]}"
