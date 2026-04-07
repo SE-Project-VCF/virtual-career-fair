@@ -7,6 +7,8 @@ module.exports = {
   collectCoverageFrom: [
     "server.js",
     "helpers.js",
+    "services/geo.js",
+    "services/mapboxGeocode.js",
     "routes/fairs.js",
     "routes/shortlist.js",
     "lib/employerCandidates.js",

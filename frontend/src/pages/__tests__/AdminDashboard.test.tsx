@@ -170,6 +170,19 @@ describe("AdminDashboard", () => {
       });
     });
 
+    it("handles initial fairs fetch when response is not ok (still shows empty state)", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "server error" }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/No fairs created yet/i)).toBeInTheDocument();
+      });
+    });
+
     it("displays fairs list when fairs exist", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,

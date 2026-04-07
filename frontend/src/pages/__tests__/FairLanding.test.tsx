@@ -1,5 +1,6 @@
 /// <reference types="vitest/globals" />
 /// <reference types="@testing-library/jest-dom" />
+import type { ReactNode } from "react"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi, beforeEach } from "vitest"
@@ -29,8 +30,13 @@ vi.mock("../../contexts/FairContext", () => ({
   FairProvider: ({ children }: any) => <>{children}</>,
 }))
 
-vi.mock("../../components/PageHeader", () => ({
-  default: () => <div data-testid="page-header" />,
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children, pageTitle }: { children?: ReactNode; pageTitle?: string }) => (
+    <div data-testid="base-layout">
+      {pageTitle && <h6>{pageTitle}</h6>}
+      {children}
+    </div>
+  ),
 }))
 
 vi.mock("../../config", () => ({
@@ -890,6 +896,94 @@ describe("FairLanding", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /join this fair/i })).toBeInTheDocument()
+    })
+  })
+
+  it("renders venue city, state, and ZIP when present", () => {
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: false,
+        venueCity: "Charlotte",
+        venueState: "NC",
+        venueZip: "28202",
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+
+    renderFairLanding()
+
+    expect(screen.getByText(/Charlotte,\s*NC\s+28202/)).toBeInTheDocument()
+  })
+
+  it("passes fair name to BaseLayout as page title", () => {
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Regional Hiring Day",
+        description: null,
+        startTime: null,
+        endTime: null,
+        isLive: false,
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+
+    renderFairLanding()
+
+    expect(screen.getByTestId("base-layout")).toHaveTextContent("Regional Hiring Day")
+  })
+
+  it("handleJoinFair: navigates using context fairId when response has boothId but no fairId", async () => {
+    const user = userEvent.setup()
+
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+      companyId: "company-1",
+    })
+
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: { id: "f1", name: "Spring Fair", description: null, startTime: null, endTime: null, isLive: false },
+      isLive: false,
+      fairId: "f1",
+    })
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ boothId: "booth-only" }),
+      })
+
+    renderFairLanding()
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /join this fair/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole("button", { name: /join this fair/i }))
+    await user.type(screen.getByLabelText(/fair invite code/i), "ABC")
+    await user.click(screen.getByRole("button", { name: /^join fair$/i }))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/company/company-1/booth")
     })
   })
 })
