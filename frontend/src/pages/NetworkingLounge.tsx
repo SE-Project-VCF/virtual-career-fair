@@ -10,8 +10,10 @@ import {
   Tab,
   Card,
   CardContent,
+  CardActions,
   Chip,
-  Avatar,
+  Container,
+  Grid,
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ChatIcon from "@mui/icons-material/Chat"
@@ -64,84 +66,63 @@ function AttendeeCard({
     ? attendee.skills.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean)
     : []
 
-  const initials =
-    `${attendee.firstName?.[0] ?? ""}${attendee.lastName?.[0] ?? ""}`.toUpperCase() ||
-    attendee.email[0].toUpperCase()
-
   return (
-    <Card variant="outlined" sx={{ mb: 2 }}>
-      <CardContent sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-        <Avatar sx={{ bgcolor: "#388560", width: 44, height: 44, flexShrink: 0 }}>
-          {initials}
-        </Avatar>
-
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="subtitle1" fontWeight={600}>
+    <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1, gap: 1 }}>
+          <Typography variant="h6" fontWeight="bold">
             {attendee.firstName} {attendee.lastName}
           </Typography>
-
-          {(attendee.major || attendee.expectedGradYear) && (
-            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: 0.5 }}>
-              {attendee.major && (
-                <Chip
-                  label={attendee.major}
-                  size="small"
-                  variant="outlined"
-                  sx={{ borderColor: "#388560", color: "#388560" }}
-                />
-              )}
-              {attendee.expectedGradYear && (
-                <Chip
-                  label={`Class of ${attendee.expectedGradYear}`}
-                  size="small"
-                  variant="outlined"
-                  sx={{ borderColor: "#388560", color: "#388560" }}
-                />
-              )}
-            </Box>
+          {attendee.expectedGradYear && (
+            <Chip label={`Class of ${attendee.expectedGradYear}`} size="small" sx={{ flexShrink: 0 }} />
           )}
-
-          {skills.length > 0 && (
-            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 1 }}>
-              {skills.map((skill) => (
-                <Chip
-                  key={skill}
-                  label={skill}
-                  size="small"
-                  sx={{ bgcolor: "rgba(56,133,96,0.1)", color: "#388560" }}
-                />
-              ))}
-            </Box>
-          )}
-
-          <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
-            {attendee.linkedinUrl && (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<LinkedInIcon />}
-                href={attendee.linkedinUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ borderColor: "#0a66c2", color: "#0a66c2" }}
-              >
-                LinkedIn
-              </Button>
-            )}
-            {attendee.uid !== currentUid && (
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<ChatIcon />}
-                onClick={() => onMessage(attendee)}
-                sx={{ bgcolor: "#388560" }}
-              >
-                Message
-              </Button>
-            )}
-          </Box>
         </Box>
+
+        {attendee.major && (
+          <Typography color="text.secondary" variant="body2" sx={{ mb: 1 }}>
+            {attendee.major}
+          </Typography>
+        )}
+
+        {skills.length > 0 && (
+          <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 1 }}>
+            {skills.map((skill) => (
+              <Chip
+                key={skill}
+                label={skill}
+                size="small"
+                sx={{ bgcolor: "rgba(56,133,96,0.1)", color: "#388560" }}
+              />
+            ))}
+          </Box>
+        )}
       </CardContent>
+
+      <CardActions sx={{ p: 2, pt: 0, flexWrap: "wrap", gap: 1 }}>
+        {attendee.linkedinUrl && (
+          <Button
+            variant="outlined"
+            startIcon={<LinkedInIcon />}
+            href={attendee.linkedinUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{ borderColor: "#0a66c2", color: "#0a66c2", flexGrow: 1 }}
+          >
+            LinkedIn
+          </Button>
+        )}
+        {attendee.uid !== currentUid && (
+          <Button
+            variant="contained"
+            startIcon={<ChatIcon />}
+            onClick={() => onMessage(attendee)}
+            fullWidth={!attendee.linkedinUrl}
+            sx={{ bgcolor: "#388560", flexGrow: 1 }}
+          >
+            Message
+          </Button>
+        )}
+      </CardActions>
     </Card>
   )
 }
@@ -390,25 +371,36 @@ export default function NetworkingLounge() {
 
         {/* Attendees Tab */}
         {activeTab === 1 && (
-          <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
-            {loadingAttendees && (
-              <Box sx={{ display: "flex", justifyContent: "center", pt: 4 }}>
-                <CircularProgress />
-              </Box>
-            )}
-            {!loadingAttendees && attendees.length === 0 && (
-              <Typography color="text.secondary" sx={{ pt: 2 }}>
-                No other students in the lounge yet.
-              </Typography>
-            )}
-            {!loadingAttendees && attendees.length > 0 && attendees.map((a) => (
-              <AttendeeCard
-                key={a.uid}
-                attendee={a}
-                currentUid={user?.uid ?? ""}
-                onMessage={handleMessageAttendee}
-              />
-            ))}
+          <Box sx={{ flex: 1, overflowY: "auto" }}>
+            <Container maxWidth="lg" sx={{ py: 4 }}>
+              {loadingAttendees && (
+                <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                  <CircularProgress />
+                </Box>
+              )}
+              {!loadingAttendees && attendees.length === 0 && (
+                <Box sx={{ textAlign: "center", py: 8 }}>
+                  <PeopleIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary">
+                    No other students in the lounge yet
+                  </Typography>
+                  <Typography color="text.secondary" mt={1}>
+                    Check back soon as more attendees join
+                  </Typography>
+                </Box>
+              )}
+              <Grid container spacing={3}>
+                {!loadingAttendees && attendees.map((a) => (
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }} key={a.uid}>
+                    <AttendeeCard
+                      attendee={a}
+                      currentUid={user?.uid ?? ""}
+                      onMessage={handleMessageAttendee}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </Container>
           </Box>
         )}
       </Box>
