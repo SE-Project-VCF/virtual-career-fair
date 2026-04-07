@@ -300,11 +300,11 @@ describe("Login", () => {
 
     await screen.findByText("Complete Your Profile")
 
-    const firstNameInput = screen.getByLabelText("First Name") as HTMLInputElement
-    const lastNameInput = screen.getByLabelText("Last Name") as HTMLInputElement
+    const firstNameInput = screen.getByLabelText("First Name")
+    const lastNameInput = screen.getByLabelText("Last Name")
 
-    expect(firstNameInput.value).toBe("John")
-    expect(lastNameInput.value).toBe("Doe")
+    expect(firstNameInput).toHaveValue("John")
+    expect(lastNameInput).toHaveValue("Doe")
   })
 
   it("handles Google profile dialog save", async () => {
@@ -330,8 +330,8 @@ describe("Login", () => {
 
     await screen.findByText("Complete Your Profile")
 
-    const firstNameInput = screen.getByLabelText("First Name") as HTMLInputElement
-    const lastNameInput = screen.getByLabelText("Last Name") as HTMLInputElement
+    const firstNameInput = screen.getByLabelText("First Name")
+    const lastNameInput = screen.getByLabelText("Last Name")
 
     await user.clear(firstNameInput)
     await user.clear(lastNameInput)
@@ -492,11 +492,11 @@ describe("Login", () => {
 
     await screen.findByText("Complete Your Profile")
 
-    const firstNameInput = screen.getByLabelText("First Name") as HTMLInputElement
-    const lastNameInput = screen.getByLabelText("Last Name") as HTMLInputElement
+    const firstNameInput = screen.getByLabelText("First Name")
+    const lastNameInput = screen.getByLabelText("Last Name")
 
-    expect(firstNameInput.value).toBe("SingleName")
-    expect(lastNameInput.value).toBe("")
+    expect(firstNameInput).toHaveValue("SingleName")
+    expect(lastNameInput).toHaveValue("")
   })
 
   it("handles Google profile without displayName", async () => {
@@ -522,11 +522,11 @@ describe("Login", () => {
 
     await screen.findByText("Complete Your Profile")
 
-    const firstNameInput = screen.getByLabelText("First Name") as HTMLInputElement
-    const lastNameInput = screen.getByLabelText("Last Name") as HTMLInputElement
+    const firstNameInput = screen.getByLabelText("First Name")
+    const lastNameInput = screen.getByLabelText("Last Name")
 
-    expect(firstNameInput.value).toBe("")
-    expect(lastNameInput.value).toBe("")
+    expect(firstNameInput).toHaveValue("")
+    expect(lastNameInput).toHaveValue("")
   })
 
   it("validates empty fields when HTML5 validation is bypassed", async () => {

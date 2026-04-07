@@ -6,7 +6,7 @@ interface MessageListProps {
   channel: StreamChannel | null;
 }
 
-export default function ChatMessages({ channel }: MessageListProps) {
+export default function ChatMessages({ channel }: Readonly<MessageListProps>) {
   useEffect(() => {
     if (channel) {
       // ✅ Mark as read when opening

@@ -17,7 +17,7 @@ vi.mock("react-router-dom", async () => {
     useLocation: () => ({
       state: {
         email: "test@example.com",
-        password: "password123",
+        password: "password123", // NOSONAR - test fixture password
       },
     }),
   };

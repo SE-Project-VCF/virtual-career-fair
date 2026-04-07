@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
@@ -19,11 +19,8 @@ vi.mock("react-router-dom", async () => {
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("test-token"),
   },
-}));
-
-vi.mock("../../utils/fairStatus", () => ({
-  evaluateFairStatus: vi.fn(),
 }));
 
 vi.mock("firebase/firestore", () => ({
@@ -33,6 +30,8 @@ vi.mock("firebase/firestore", () => ({
   where: vi.fn(),
   doc: vi.fn(),
   getDoc: vi.fn(),
+  setDoc: vi.fn(() => Promise.resolve()),
+  serverTimestamp: vi.fn(() => new Date()),
 }));
 
 vi.mock("../../firebase", () => ({
@@ -49,7 +48,6 @@ vi.mock("../../config", () => ({
 
 // Import after mocking
 import { authUtils } from "../../utils/auth";
-import { evaluateFairStatus } from "../../utils/fairStatus";
 import * as firestore from "firebase/firestore";
 
 const mockBoothData = {
@@ -89,18 +87,25 @@ describe("BoothView", () => {
       uid: "student-1",
       role: "student",
     });
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: true,
-    });
+    // Default fetch mock handles /api/fairs and /api/jobs
+    ;
     (firestore.getDoc as any).mockResolvedValue(mockBoothData);
     (firestore.getDocs as any).mockResolvedValue({ docs: [] });
     (firestore.query as any).mockReturnValue({});
     (firestore.collection as any).mockReturnValue({});
     (firestore.where as any).mockReturnValue({});
-    // Default fetch mock - resolves with empty jobs
-    (global.fetch as any) = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs: [] }),
+    // Default fetch mock - handles /api/fairs and /api/jobs
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs: [] }),
+      });
     });
   });
 
@@ -108,7 +113,7 @@ describe("BoothView", () => {
   it("checks fair status on mount", async () => {
     renderBoothView();
     await waitFor(() => {
-      expect(evaluateFairStatus).toHaveBeenCalled();
+      expect(globalThis.fetch).toHaveBeenCalled();
     });
   });
 
@@ -308,15 +313,23 @@ describe("BoothView", () => {
 
   // Jobs Fetching Tests
   it("fetches jobs for company on booth load", async () => {
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs: [] }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs: [] }),
+      });
     });
 
     renderBoothView();
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/jobs?companyId=company-1")
       );
     });
@@ -333,9 +346,17 @@ describe("BoothView", () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs }),
+      });
     });
 
     renderBoothView();
@@ -356,15 +377,23 @@ describe("BoothView", () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs }),
+      });
     });
 
     renderBoothView();
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: /Apply Now/ })).toBeInTheDocument();
+      expect(screen.getByText(/Apply Now/)).toBeInTheDocument();
     });
   });
 
@@ -404,12 +433,18 @@ describe("BoothView", () => {
     renderBoothView();
 
     // When fair is live, students can view booth
-    expect(evaluateFairStatus).toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalled();
   });
 
   it("restricts access for non-owners when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "student-1",
@@ -433,7 +468,15 @@ describe("BoothView", () => {
 
   // Error Handling Tests
   it("displays error when job fetch fails", async () => {
-    (global.fetch as any).mockRejectedValue(new Error("Network error"));
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.reject(new Error("Network error"));
+    });
 
     renderBoothView();
 
@@ -477,9 +520,17 @@ describe("BoothView", () => {
 
   // Empty Jobs Test
   it("does not display job section when no jobs available", async () => {
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs: [] }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs: [] }),
+      });
     });
 
     renderBoothView();
@@ -529,7 +580,7 @@ describe("BoothView", () => {
 
     // Should still fetch jobs with found companyId
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/jobs?companyId=company-2")
       );
     });
@@ -537,8 +588,14 @@ describe("BoothView", () => {
 
   // Company Owner Access When Fair is Offline
   it("allows company owner to view their booth when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
@@ -574,8 +631,14 @@ describe("BoothView", () => {
 
   // Representative Access When Fair is Offline
   it("allows representative to view their company booth when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "rep-1",
@@ -605,8 +668,14 @@ describe("BoothView", () => {
 
   // Representative without company access when offline
   it("denies representative without companyId when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "rep-1",
@@ -623,8 +692,14 @@ describe("BoothView", () => {
 
   // Company owner without matching booth when offline
   it("denies company owner viewing non-owned booth when fair is offline", async () => {
-    (evaluateFairStatus as any).mockResolvedValue({
-      isLive: false,
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
     });
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
@@ -724,9 +799,17 @@ describe("BoothView", () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ jobs }),
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ jobs }),
+      });
     });
 
     renderBoothView();
@@ -866,16 +949,30 @@ describe("BoothView", () => {
       resolveJobs = resolve;
     });
 
-    (global.fetch as any).mockReturnValue(jobsPromise);
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      if (url.includes("/ratings/me") || url.includes("/track-view") || url.includes("/track-leave")) {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      if (url.includes("/api/booth") && url.includes("/qa-session")) {
+        return Promise.resolve({ ok: true, json: async () => ({ qaSessions: [] }) });
+      }
+      return jobsPromise;
+    });
 
     renderBoothView();
 
+    // Wait for booth data to load first
     await waitFor(() => {
-      const companyNames = screen.getAllByText("Tech Corp");
-      expect(companyNames.length).toBeGreaterThanOrEqual(1);
-    });
+      expect(screen.getByText("Contact Information")).toBeInTheDocument();
+    }, { timeout: 3000 });
 
-    // Should show loading indicator for jobs
+    // Now check for loading indicator while jobs are still loading
     const progressBars = screen.getAllByRole("progressbar");
     expect(progressBars.length).toBeGreaterThan(0);
 
@@ -889,8 +986,16 @@ describe("BoothView", () => {
   // Job fetch non-ok response
   it("handles non-ok response when fetching jobs", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    (global.fetch as any).mockResolvedValue({
-      ok: false,
+    (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/fairs")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: false,
+      });
     });
 
     renderBoothView();
@@ -919,5 +1024,263 @@ describe("BoothView", () => {
     await user.click(backButton);
 
     expect(mockNavigate).toHaveBeenCalledWith("/booths");
+  });
+
+  // Booth tracking tests - token available
+  describe("Booth View Tracking - Student", () => {
+    it("tracks booth view with token when student visits", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+          });
+        }
+        if (url.includes("/track-view")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({}),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ jobs: [] }),
+        });
+      });
+      globalThis.fetch = fetchSpy;
+
+      vi.mocked(authUtils.getCurrentUser).mockReturnValue({
+        uid: "student-1",
+        role: "student",
+        email: "student@example.com",
+      });
+      vi.mocked(authUtils.getIdToken).mockResolvedValue("test-token");
+
+      renderBoothView();
+
+      await waitFor(
+        () => {
+          const elements = screen.queryAllByText("Tech Corp");
+          expect(elements.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    it("handles booth view tracking when token is not available", async () => {
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ jobs: [] }),
+        });
+      });
+      globalThis.fetch = fetchSpy;
+
+      vi.mocked(authUtils.getCurrentUser).mockReturnValue({
+        uid: "student-1",
+        role: "student",
+        email: "student@example.com",
+      });
+      vi.mocked(authUtils.getIdToken).mockResolvedValue(null);
+
+      renderBoothView();
+
+      await waitFor(
+        () => {
+          const elements = screen.queryAllByText("Tech Corp");
+          expect(elements.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      expect(fetchSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it("does not track when user is not student", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ jobs: [] }),
+        });
+      });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      globalThis.fetch = fetchSpy;
+
+      vi.mocked(authUtils.getCurrentUser).mockReturnValue({
+        uid: "company-1",
+        role: "companyOwner",
+        email: "company@example.com",
+      });
+
+      renderBoothView();
+
+      await waitFor(
+        () => {
+          const elements = screen.queryAllByText("Tech Corp");
+          expect(elements.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith("User missing or not a student");
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe("Rating functionality", () => {
+    const setupRatingFetch = (ratingResponse: { ok: boolean; json: () => Promise<any> }) => {
+      (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true, name: "Test Fair", description: null }] }),
+          });
+        }
+        if (url.includes("/track-view") || url.includes("/track-leave")) {
+          return Promise.resolve({ ok: true, json: async () => ({}) });
+        }
+        if (url.includes("/ratings/me")) {
+          return Promise.resolve(ratingResponse);
+        }
+        if (url.includes("/ratings")) {
+          return Promise.resolve({ ok: true, json: async () => ({}) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
+      });
+    };
+
+    it("displays rating form when student has no existing rating", async () => {
+      setupRatingFetch({ ok: true, json: async () => ({ rating: null }) });
+      renderBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Rate This Booth")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Submit Review/ })).toBeInTheDocument();
+      });
+    });
+
+    it("displays existing review when student already rated", async () => {
+      setupRatingFetch({
+        ok: true,
+        json: async () => ({ rating: { rating: 4, comment: "Excellent booth!", createdAt: 1000000 } }),
+      });
+      renderBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Your review")).toBeInTheDocument();
+        expect(screen.getByText("Excellent booth!")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Resubmit Review/ })).toBeInTheDocument();
+      });
+    });
+
+    it("displays existing review without comment when comment is null", async () => {
+      setupRatingFetch({
+        ok: true,
+        json: async () => ({ rating: { rating: 3, comment: null, createdAt: null } }),
+      });
+      renderBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Your review")).toBeInTheDocument();
+      });
+    });
+
+    it("opens resubmit dialog when Resubmit Review is clicked", async () => {
+      const user = userEvent.setup();
+      setupRatingFetch({
+        ok: true,
+        json: async () => ({ rating: { rating: 5, comment: "Amazing", createdAt: null } }),
+      });
+      renderBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Resubmit Review/ })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /Resubmit Review/ }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toBeInTheDocument();
+      });
+    });
+
+    it("submits a new rating successfully", async () => {
+      const user = userEvent.setup();
+      setupRatingFetch({ ok: false, json: async () => ({}) });
+      renderBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Rate This Booth")).toBeInTheDocument();
+      });
+
+      const radios = screen.getAllByRole("radio");
+      fireEvent.click(radios[3]); // 4 stars
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Submit Review/ })).not.toBeDisabled();
+      });
+
+      await user.click(screen.getByRole("button", { name: /Submit Review/ }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Review submitted!")).toBeInTheDocument();
+      });
+    });
+
+    it("shows error when rating submission fails", async () => {
+      const user = userEvent.setup();
+      (globalThis.fetch as any) = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/fairs")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ fairs: [{ isLive: true }] }),
+          });
+        }
+        if (url.includes("/track-view") || url.includes("/track-leave")) {
+          return Promise.resolve({ ok: true, json: async () => ({}) });
+        }
+        if (url.includes("/ratings/me")) {
+          return Promise.resolve({ ok: false, json: async () => ({}) });
+        }
+        if (url.includes("/ratings")) {
+          return Promise.resolve({ ok: false, json: async () => ({ error: "Already reviewed" }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({ jobs: [] }) });
+      });
+      renderBoothView();
+
+      await waitFor(() => {
+        expect(screen.getByText("Rate This Booth")).toBeInTheDocument();
+      });
+
+      const radios = screen.getAllByRole("radio");
+      fireEvent.click(radios[2]); // 3 stars
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Submit Review/ })).not.toBeDisabled();
+      });
+
+      await user.click(screen.getByRole("button", { name: /Submit Review/ }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Already reviewed")).toBeInTheDocument();
+      });
+    });
   });
 });

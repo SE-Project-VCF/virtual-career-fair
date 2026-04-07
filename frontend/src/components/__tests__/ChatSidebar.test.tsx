@@ -7,13 +7,16 @@ import * as streamChatReact from "stream-chat-react";
 vi.mock("stream-chat-react", () => ({
   ChannelList: ({ Preview }: any) => (
     <div data-testid="channel-list">
-      {Preview && Preview({ channel: { cid: "test-channel" }, setActiveChannel: vi.fn() })}
+      {Preview?.({ channel: { cid: "test-channel" }, setActiveChannel: vi.fn() })}
     </div>
   ),
   ChannelPreviewMessenger: (props: any) => (
-    <div data-testid="channel-preview" onClick={props.onSelect}>
+    <button 
+      data-testid="channel-preview" 
+      onClick={props.onSelect}
+    >
       {props.channel?.name || "Test Channel"}
-    </div>
+    </button>
   ),
 }));
 
@@ -182,6 +185,37 @@ describe("ChatSidebar", () => {
       expect(result?.props?.latestMessagePreview).toBe(mockLatestMessage);
       expect(result?.props?.Avatar).toBe(mockAvatar);
       expect(result?.props?.active).toBe(false);
+    }
+
+    channelListSpy.mockRestore();
+  });
+
+  it("calls onSelectChannel and skips setActiveChannel when it is not provided", () => {
+    const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
+
+    render(
+      <ChatSidebar
+        client={mockClient}
+        onSelectChannel={mockOnSelectChannel}
+        activeChannel={null}
+      />
+    );
+
+    const preview = channelListSpy.mock.calls[0]?.[0]?.Preview as any;
+    if (preview) {
+      const result = preview({
+        channel: mockChannel,
+        // setActiveChannel intentionally omitted — exercises the ?. branch
+        latestMessagePreview: { text: "Hello" },
+        Avatar: () => null,
+      });
+
+      const onSelect = result?.props?.onSelect;
+      if (onSelect) {
+        onSelect();
+      }
+
+      expect(mockOnSelectChannel).toHaveBeenCalledWith(mockChannel);
     }
 
     channelListSpy.mockRestore();

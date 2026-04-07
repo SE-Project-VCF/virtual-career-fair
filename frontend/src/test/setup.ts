@@ -22,13 +22,18 @@ const mockCurrentUser = { uid: "user1", email: "test@test.com", emailVerified: t
 
 // Mock GoogleAuthProvider as a class constructor
 class MockGoogleAuthProvider {
-  constructor() {}
+  static readonly providerId = "google.com"
 }
 
 vi.mock("firebase/auth", () => ({
   getAuth: vi.fn(() => ({
     currentUser: mockCurrentUser,
     signOut: mockSignOut,
+    onAuthStateChanged: vi.fn((callback: any) => {
+      const unsub = vi.fn()
+      queueMicrotask(() => callback(mockCurrentUser))
+      return unsub
+    }),
   })),
   GoogleAuthProvider: MockGoogleAuthProvider,
   createUserWithEmailAndPassword: vi.fn(),
@@ -36,6 +41,13 @@ vi.mock("firebase/auth", () => ({
   sendEmailVerification: vi.fn(),
   signOut: mockSignOut,
   signInWithPopup: vi.fn(),
+  onAuthStateChanged: vi.fn((auth, callback) => {
+    const unsub = vi.fn()
+    // Call the callback asynchronously to avoid temporal dead zone issues
+    queueMicrotask(() => callback(mockCurrentUser))
+    // Return an unsubscribe function
+    return unsub
+  }),
 }))
 
 // Mock firebase/firestore
@@ -48,16 +60,23 @@ const mockFirestore = {
   }
 }
 
+let mockDocCounter = 0
+
 vi.mock("firebase/firestore", () => ({
   getFirestore: vi.fn(() => mockFirestore),
-  doc: vi.fn((_db: any, ...pathSegments: string[]) => ({
-    path: pathSegments.join("/"),
-    id: `mock-id-${Math.random().toString(36).substring(7)}`
-  })),
+  doc: vi.fn((_db: any, ...pathSegments: string[]) => {
+    mockDocCounter += 1
+    return {
+      path: pathSegments.join("/"),
+      id: `mock-id-${mockDocCounter}`,
+    }
+  }),
   collection: vi.fn((_db: any, path: string) => ({ path })),
   setDoc: vi.fn(),
   getDoc: vi.fn(),
   getDocs: vi.fn(),
+  onSnapshot: vi.fn(),
+  serverTimestamp: vi.fn(() => ({ type: "serverTimestamp" })),
   deleteDoc: vi.fn(),
   updateDoc: vi.fn(),
   addDoc: vi.fn(),
@@ -67,8 +86,8 @@ vi.mock("firebase/firestore", () => ({
   Timestamp: class MockTimestamp {
     seconds: number
     nanoseconds: number
-    static now = vi.fn(() => ({ toMillis: () => Date.now() }))
-    static fromMillis = vi.fn((ms: number) => ({ toMillis: () => ms }))
+    static readonly now = vi.fn(() => ({ toMillis: () => Date.now() }))
+    static readonly fromMillis = vi.fn((ms: number) => ({ toMillis: () => ms }))
     constructor(seconds: number, nanoseconds: number) {
       this.seconds = seconds
       this.nanoseconds = nanoseconds
@@ -99,10 +118,26 @@ vi.mock("stream-chat", () => ({
       })),
     })),
   },
+  StateStore: vi.fn().mockImplementation(() => ({
+    getLatestValue: vi.fn(() => ({})),
+    subscribe: vi.fn(),
+    next: vi.fn(),
+  })),
 }))
 
+// jsdom does not implement scrollTo (used by BoothEditor and others)
+window.scrollTo = vi.fn()
+
+// jsdom: ensure scrollIntoView exists (FirebaseQAChat and other components)
+if (typeof HTMLElement !== "undefined") {
+  HTMLElement.prototype.scrollIntoView = vi.fn()
+}
+
+// jsdom does not implement alert (e.g. StudentProfilePage); avoid throwing during tests
+window.alert = vi.fn()
+
 // Mock window.matchMedia
-Object.defineProperty(window, "matchMedia", {
+Object.defineProperty(globalThis, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
     matches: false,
@@ -119,3 +154,13 @@ Object.defineProperty(window, "matchMedia", {
 // Suppress console.error/warn in tests
 vi.spyOn(console, "error").mockImplementation(() => {})
 vi.spyOn(console, "warn").mockImplementation(() => {})
+
+// Mock global fetch - default to 404 for unmocked endpoints
+globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+  // Return a default 404 response for unmocked fetch calls
+  return Promise.resolve({
+    ok: false,
+    status: 404,
+    json: async () => ({ error: "Not found" }),
+  })
+})

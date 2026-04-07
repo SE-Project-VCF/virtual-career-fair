@@ -101,7 +101,7 @@ export function useCreateJob() {
       method: "POST",
       body: JSON.stringify(jobData),
     }),
-    onSuccess: (_, variables) => {
+    onSuccess: (_: any, variables: any) => {
       // Invalidate and refetch jobs for this company
       queryClient.invalidateQueries({ queryKey: ["jobs", variables.companyId] });
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
@@ -114,22 +114,21 @@ export function useUpdateJob() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      jobId,
-      companyId,
-      ...jobData
-    }: {
+    mutationFn: async (payload: {
       jobId: string;
       companyId: string;
       name: string;
       description: string;
       majorsAssociated: string;
       applicationLink?: string;
-    }) => authenticatedFetch(`/api/jobs/${jobId}`, {
-      method: "PUT",
-      body: JSON.stringify(jobData),
-    }),
-    onSuccess: (_, variables) => {
+    }) => {
+      const { jobId, ...jobData } = payload;
+      return authenticatedFetch(`/api/jobs/${jobId}`, {
+        method: "PUT",
+        body: JSON.stringify(jobData),
+      });
+    },
+    onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["jobs", variables.companyId] });
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
     },
@@ -141,11 +140,13 @@ export function useDeleteJob() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ jobId, companyId }: { jobId: string; companyId: string }) =>
-      authenticatedFetch(`/api/jobs/${jobId}`, {
+    mutationFn: async (payload: { jobId: string; companyId: string }) => {
+      const { jobId } = payload;
+      return authenticatedFetch(`/api/jobs/${jobId}`, {
         method: "DELETE",
-      }),
-    onSuccess: (_, variables) => {
+      });
+    },
+    onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["jobs", variables.companyId] });
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
     },
@@ -167,7 +168,7 @@ export function useCreateBooth() {
       method: "POST",
       body: JSON.stringify(boothData),
     }),
-    onSuccess: (_, variables) => {
+    onSuccess: (_: any, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ["company", variables.companyId] });
     },
   });

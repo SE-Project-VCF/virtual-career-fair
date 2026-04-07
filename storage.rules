@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow authenticated users to read their own resumes
+    match /resumes/{userId}/{allPaths=**} {
+      allow read: if request.auth.uid == userId;
+      allow write: if false; // Backend only
+    }
+    
+    // Allow authenticated users to read booth logos for booths they have access to
+    match /boothLogos/{companyId}/{userId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // Backend only
+    }
+    
+    // Default deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
