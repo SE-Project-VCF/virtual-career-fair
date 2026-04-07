@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type React from "react"
 import { useNavigate } from "react-router-dom"
 import {
@@ -33,6 +33,12 @@ import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
 import { streamClient } from "../utils/streamClient"
 import { API_URL } from "../config"
+
+function waitForFirebaseUser(): Promise<import("firebase/auth").User | null> {
+  return new Promise((resolve) => {
+    const unsub = auth.onAuthStateChanged((u) => { unsub(); resolve(u) })
+  })
+}
 
 interface Attendee {
   uid: string
@@ -153,6 +159,7 @@ export default function NetworkingLounge() {
   const [activeTab, setActiveTab] = useState(0)
   const [attendees, setAttendees] = useState<Attendee[]>([])
   const [loadingAttendees, setLoadingAttendees] = useState(false)
+  const attendeesFetched = useRef(false)
 
   useEffect(() => {
     if (!user) navigate("/")
@@ -169,12 +176,7 @@ export default function NetworkingLounge() {
         }
 
         if (!client.userID) {
-          // Wait for Firebase auth to hydrate if currentUser isn't available yet
-          const firebaseUser = auth.currentUser ?? await new Promise<import("firebase/auth").User | null>(
-            (resolve) => {
-              const unsub = auth.onAuthStateChanged((u) => { unsub(); resolve(u) })
-            }
-          )
+          const firebaseUser = auth.currentUser ?? await waitForFirebaseUser()
           if (!firebaseUser) throw new Error("Not authenticated")
 
           const idToken = await firebaseUser.getIdToken()
@@ -243,9 +245,10 @@ export default function NetworkingLounge() {
     void joinLounge()
   }, [clientReady, client, fairId])
 
-  // Load attendees when switching to that tab
+  // Load attendees when switching to that tab (fetch only once)
   useEffect(() => {
-    if (activeTab !== 1 || !fairId || attendees.length > 0) return
+    if (activeTab !== 1 || !fairId || attendeesFetched.current) return
+    attendeesFetched.current = true
 
     const fetchAttendees = async () => {
       try {
@@ -265,7 +268,7 @@ export default function NetworkingLounge() {
     }
 
     void fetchAttendees()
-  }, [activeTab, fairId, attendees.length])
+  }, [activeTab, fairId])
 
   const handleMessageAttendee = (attendee: Attendee) => {
     navigate("/dashboard/chat", { state: { repId: attendee.uid } })
