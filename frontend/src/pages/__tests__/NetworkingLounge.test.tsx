@@ -568,6 +568,38 @@ describe("NetworkingLounge", () => {
       expect(screen.getAllByRole("button", { name: /message/i })).toHaveLength(1)
     })
 
+    it("clicking Message navigates to /dashboard/chat with attendee uid as repId", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            attendees: [
+              { uid: "student-2", firstName: "Jane", lastName: "Smith", email: "jane@example.com", major: "CS", expectedGradYear: 2025, skills: "", linkedinUrl: null },
+            ],
+          }),
+        })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => expect(screen.getByText("Jane Smith")).toBeInTheDocument())
+
+      await user.click(screen.getByRole("button", { name: /message/i }))
+
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard/chat", {
+        state: { repId: "student-2" },
+      })
+    })
+
     it("shows 'No other students' when attendees list is empty", async () => {
       const user = userEvent.setup()
       setupConnected()

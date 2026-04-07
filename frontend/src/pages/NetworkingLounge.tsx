@@ -267,32 +267,8 @@ export default function NetworkingLounge() {
     void fetchAttendees()
   }, [activeTab, fairId, attendees.length])
 
-  const handleMessageAttendee = async (attendee: Attendee) => {
-    if (!client || !user) return
-    try {
-      const sorted = [user.uid, attendee.uid].sort((a, b) => a.localeCompare(b))
-      const channelId = `dm-${sorted[0]}-${sorted[1]}`
-
-      const existing = await client.queryChannels(
-        { type: "messaging", cid: `messaging:${channelId}` },
-        {},
-        { limit: 1 }
-      )
-
-      let dmChannel
-      if (existing.length > 0) {
-        dmChannel = existing[0]
-        await dmChannel.watch()
-      } else {
-        dmChannel = client.channel("messaging", channelId, { members: sorted })
-        await dmChannel.create()
-        await dmChannel.watch()
-      }
-
-      navigate("/dashboard/chat")
-    } catch (err) {
-      console.error("Error opening DM:", err)
-    }
+  const handleMessageAttendee = (attendee: Attendee) => {
+    navigate("/dashboard/chat", { state: { repId: attendee.uid } })
   }
 
   const sendMessage = async () => {
