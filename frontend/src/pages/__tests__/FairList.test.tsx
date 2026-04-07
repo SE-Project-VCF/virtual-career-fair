@@ -784,11 +784,20 @@ describe("FairList — distance and location search", () => {
       value: {
         getCurrentPosition: vi.fn((success: PositionCallback) => {
           success({
-            coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 10, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+            coords: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              accuracy: 10,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null,
+              toJSON: () => ({}),
+            },
             timestamp: Date.now(),
-          })
+          } as GeolocationPosition)
         }),
-      } as Geolocation,
+      } as unknown as Geolocation,
     })
   })
 
@@ -904,9 +913,15 @@ describe("FairList — distance and location search", () => {
       configurable: true,
       value: {
         getCurrentPosition: vi.fn((_ok: PositionCallback, err: PositionErrorCallback) => {
-          err({ code: 1, message: "denied", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError)
+          err({
+            code: 1,
+            message: "denied",
+            PERMISSION_DENIED: 1,
+            POSITION_UNAVAILABLE: 2,
+            TIMEOUT: 3,
+          } as unknown as GeolocationPositionError)
         }),
-      } as Geolocation,
+      } as unknown as Geolocation,
     })
 
     const user = userEvent.setup()
