@@ -174,10 +174,9 @@ describe("GET /api/fair-status", () => {
 describe("POST /api/toggle-fair-status", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 400 when userId is missing", async () => {
+  it("returns 401 without auth token", async () => {
     const res = await request(app).post("/api/toggle-fair-status").send({});
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/missing userId/i);
+    expect(res.status).toBe(401);
   });
 
   it("returns 404 when user not found", async () => {
@@ -188,7 +187,10 @@ describe("POST /api/toggle-fair-status", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "no-such-user" });
+    const res = await request(app)
+      .post("/api/toggle-fair-status")
+      .set("Authorization", authAs("no-such-user"))
+      .send({ userId: "no-such-user" });
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/user not found/i);
   });
@@ -205,7 +207,10 @@ describe("POST /api/toggle-fair-status", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "student-uid" });
+    const res = await request(app)
+      .post("/api/toggle-fair-status")
+      .set("Authorization", authAs("student-uid"))
+      .send({ userId: "student-uid" });
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/administrator/i);
   });
@@ -236,7 +241,10 @@ describe("POST /api/toggle-fair-status", () => {
       return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "admin-uid" });
+    const res = await request(app)
+      .post("/api/toggle-fair-status")
+      .set("Authorization", authAs("admin-uid"))
+      .send({ userId: "admin-uid" });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -272,7 +280,10 @@ describe("POST /api/toggle-fair-status", () => {
       return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
     });
 
-    const res = await request(app).post("/api/toggle-fair-status").send({ userId: "admin-uid" });
+    const res = await request(app)
+      .post("/api/toggle-fair-status")
+      .set("Authorization", authAs("admin-uid"))
+      .send({ userId: "admin-uid" });
 
     expect(res.status).toBe(200);
     expect(res.body.isLive).toBe(true);
@@ -285,10 +296,18 @@ describe("POST /api/toggle-fair-status", () => {
 describe("GET /api/fair-schedules", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).get("/api/fair-schedules").query({ userId: "student-uid" });
+    expect(res.status).toBe(401);
+  });
+
   it("returns 403 when verifyAdmin rejects", async () => {
     verifyAdmin.mockResolvedValue({ status: 403, error: "Not admin" });
 
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "student-uid" });
+    const res = await request(app)
+      .get("/api/fair-schedules")
+      .set("Authorization", authAs("student-uid"))
+      .query({ userId: "student-uid" });
     expect(res.status).toBe(403);
   });
 
@@ -306,7 +325,10 @@ describe("GET /api/fair-schedules", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "admin-uid" });
+    const res = await request(app)
+      .get("/api/fair-schedules")
+      .set("Authorization", authAs("admin-uid"))
+      .query({ userId: "admin-uid" });
 
     expect(res.status).toBe(200);
     expect(res.body.schedules).toHaveLength(1);
@@ -329,7 +351,10 @@ describe("GET /api/fair-schedules", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).get("/api/fair-schedules").query({ userId: "admin-uid" });
+    const res = await request(app)
+      .get("/api/fair-schedules")
+      .set("Authorization", authAs("admin-uid"))
+      .query({ userId: "admin-uid" });
 
     expect(res.status).toBe(200);
     expect(res.body.schedules).toHaveLength(0);
@@ -389,24 +414,38 @@ describe("GET /api/public/fair-schedules", () => {
 describe("POST /api/fair-schedules", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 403 when verifyAdmin rejects", async () => {
-    verifyAdmin.mockResolvedValue({ status: 403, error: "Not admin" });
-
+  it("returns 401 without auth token", async () => {
     const res = await request(app).post("/api/fair-schedules").send({
-      userId: "student-uid",
       startTime: "2026-03-01T10:00:00Z",
       endTime: "2026-03-01T18:00:00Z",
     });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 when verifyAdmin rejects", async () => {
+    verifyAdmin.mockResolvedValue({ status: 403, error: "Not admin" });
+
+    const res = await request(app)
+      .post("/api/fair-schedules")
+      .set("Authorization", authAs("student-uid"))
+      .send({
+        userId: "student-uid",
+        startTime: "2026-03-01T10:00:00Z",
+        endTime: "2026-03-01T18:00:00Z",
+      });
     expect(res.status).toBe(403);
   });
 
   it("returns 400 when startTime is missing", async () => {
     verifyAdmin.mockResolvedValue(null);
 
-    const res = await request(app).post("/api/fair-schedules").send({
-      userId: "admin-uid",
-      endTime: "2026-03-01T18:00:00Z",
-    });
+    const res = await request(app)
+      .post("/api/fair-schedules")
+      .set("Authorization", authAs("admin-uid"))
+      .send({
+        userId: "admin-uid",
+        endTime: "2026-03-01T18:00:00Z",
+      });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/start time and end time/i);
   });
@@ -414,11 +453,14 @@ describe("POST /api/fair-schedules", () => {
   it("returns 400 when end is before start", async () => {
     verifyAdmin.mockResolvedValue(null);
 
-    const res = await request(app).post("/api/fair-schedules").send({
-      userId: "admin-uid",
-      startTime: "2026-03-01T18:00:00Z",
-      endTime: "2026-03-01T10:00:00Z",
-    });
+    const res = await request(app)
+      .post("/api/fair-schedules")
+      .set("Authorization", authAs("admin-uid"))
+      .send({
+        userId: "admin-uid",
+        startTime: "2026-03-01T18:00:00Z",
+        endTime: "2026-03-01T10:00:00Z",
+      });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/end time must be after start time/i);
   });
@@ -435,13 +477,16 @@ describe("POST /api/fair-schedules", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).post("/api/fair-schedules").send({
-      userId: "admin-uid",
-      name: "Career Fair",
-      description: "Annual fair",
-      startTime: "2026-03-01T10:00:00Z",
-      endTime: "2026-03-01T18:00:00Z",
-    });
+    const res = await request(app)
+      .post("/api/fair-schedules")
+      .set("Authorization", authAs("admin-uid"))
+      .send({
+        userId: "admin-uid",
+        name: "Career Fair",
+        description: "Annual fair",
+        startTime: "2026-03-01T10:00:00Z",
+        endTime: "2026-03-01T18:00:00Z",
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -456,10 +501,18 @@ describe("POST /api/fair-schedules", () => {
 describe("PUT /api/fair-schedules/:id", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).put("/api/fair-schedules/sched-1").send({ userId: "student-uid" });
+    expect(res.status).toBe(401);
+  });
+
   it("returns 403 when verifyAdmin rejects", async () => {
     verifyAdmin.mockResolvedValue({ status: 403, error: "Not admin" });
 
-    const res = await request(app).put("/api/fair-schedules/sched-1").send({ userId: "student-uid" });
+    const res = await request(app)
+      .put("/api/fair-schedules/sched-1")
+      .set("Authorization", authAs("student-uid"))
+      .send({ userId: "student-uid" });
     expect(res.status).toBe(403);
   });
 
@@ -477,7 +530,10 @@ describe("PUT /api/fair-schedules/:id", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).put("/api/fair-schedules/sched-1").send({ userId: "admin-uid" });
+    const res = await request(app)
+      .put("/api/fair-schedules/sched-1")
+      .set("Authorization", authAs("admin-uid"))
+      .send({ userId: "admin-uid" });
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/schedule not found/i);
   });
@@ -519,11 +575,14 @@ describe("PUT /api/fair-schedules/:id", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).put("/api/fair-schedules/sched-1").send({
-      userId: "admin-uid",
-      name: "New Name",
-      description: "New Desc",
-    });
+    const res = await request(app)
+      .put("/api/fair-schedules/sched-1")
+      .set("Authorization", authAs("admin-uid"))
+      .send({
+        userId: "admin-uid",
+        name: "New Name",
+        description: "New Desc",
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -550,11 +609,14 @@ describe("PUT /api/fair-schedules/:id", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).put("/api/fair-schedules/sched-1").send({
-      userId: "admin-uid",
-      startTime: "2026-03-01T18:00:00Z",
-      endTime: "2026-03-01T10:00:00Z",
-    });
+    const res = await request(app)
+      .put("/api/fair-schedules/sched-1")
+      .set("Authorization", authAs("admin-uid"))
+      .send({
+        userId: "admin-uid",
+        startTime: "2026-03-01T18:00:00Z",
+        endTime: "2026-03-01T10:00:00Z",
+      });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/end time must be after start time/i);
@@ -567,10 +629,18 @@ describe("PUT /api/fair-schedules/:id", () => {
 describe("DELETE /api/fair-schedules/:id", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).delete("/api/fair-schedules/sched-1").query({ userId: "student-uid" });
+    expect(res.status).toBe(401);
+  });
+
   it("returns 403 when verifyAdmin rejects", async () => {
     verifyAdmin.mockResolvedValue({ status: 403, error: "Not admin" });
 
-    const res = await request(app).delete("/api/fair-schedules/sched-1").query({ userId: "student-uid" });
+    const res = await request(app)
+      .delete("/api/fair-schedules/sched-1")
+      .set("Authorization", authAs("student-uid"))
+      .query({ userId: "student-uid" });
     expect(res.status).toBe(403);
   });
 
@@ -588,7 +658,10 @@ describe("DELETE /api/fair-schedules/:id", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).delete("/api/fair-schedules/sched-1").query({ userId: "admin-uid" });
+    const res = await request(app)
+      .delete("/api/fair-schedules/sched-1")
+      .set("Authorization", authAs("admin-uid"))
+      .query({ userId: "admin-uid" });
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/schedule not found/i);
   });
@@ -610,7 +683,10 @@ describe("DELETE /api/fair-schedules/:id", () => {
       return { doc: jest.fn() };
     });
 
-    const res = await request(app).delete("/api/fair-schedules/sched-1").query({ userId: "admin-uid" });
+    const res = await request(app)
+      .delete("/api/fair-schedules/sched-1")
+      .set("Authorization", authAs("admin-uid"))
+      .query({ userId: "admin-uid" });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

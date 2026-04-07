@@ -45,7 +45,12 @@ jest.mock("../helpers", () => {
 
 const request = require("supertest");
 const app = require("../server");
-const { db } = require("../firebase");
+const { db, auth } = require("../firebase");
+
+function authHeader(uid = "rep-1") {
+  auth.verifyIdToken.mockResolvedValue({ uid, email: `${uid}@test.com` });
+  return "Bearer valid-token";
+}
 
 const sampleStudents = [
   {
@@ -144,8 +149,15 @@ function setupRepAuth(uid = "rep-1") {
 describe("GET /api/students", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 400 when userId is missing", async () => {
+  it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/students");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 when userId is missing", async () => {
+    const res = await request(app)
+      .get("/api/students")
+      .set("Authorization", authHeader("rep-1"));
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/user id is required/i);
   });
@@ -161,14 +173,18 @@ describe("GET /api/students", () => {
       get: jest.fn().mockResolvedValue(mockQuerySnap([])),
     }));
 
-    const res = await request(app).get("/api/students?userId=student-1");
+    const res = await request(app)
+      .get("/api/students?userId=student-1")
+      .set("Authorization", authHeader("student-1"));
     expect(res.status).toBe(403);
   });
 
   it("returns all students for a representative", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(3);
@@ -179,7 +195,9 @@ describe("GET /api/students", () => {
   it("returns student id in each result", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students[0].id).toBe("s1");
@@ -189,7 +207,9 @@ describe("GET /api/students", () => {
   it("filters students by search term matching first name", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&search=alice");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&search=alice")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
@@ -199,7 +219,9 @@ describe("GET /api/students", () => {
   it("filters students by search term matching last name", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&search=jones");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&search=jones")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
@@ -209,7 +231,9 @@ describe("GET /api/students", () => {
   it("filters students by search term matching email", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&search=carol@example");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&search=carol@example")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
@@ -219,7 +243,9 @@ describe("GET /api/students", () => {
   it("search is case-insensitive", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&search=ALICE");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&search=ALICE")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
@@ -229,7 +255,9 @@ describe("GET /api/students", () => {
   it("returns empty array when search matches no students", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&search=zzznomatch");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&search=zzznomatch")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(0);
@@ -238,7 +266,9 @@ describe("GET /api/students", () => {
   it("filters students by major", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&major=Computer+Science");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&major=Computer+Science")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(2);
@@ -248,7 +278,9 @@ describe("GET /api/students", () => {
   it("major filter is case-insensitive", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&major=computer+science");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&major=computer+science")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(2);
@@ -257,7 +289,9 @@ describe("GET /api/students", () => {
   it("returns empty array when major matches no students", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&major=History");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&major=History")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(0);
@@ -266,7 +300,9 @@ describe("GET /api/students", () => {
   it("applies both search and major filters together", async () => {
     setupRepAuth("rep-1");
 
-    const res = await request(app).get("/api/students?userId=rep-1&search=carol&major=Computer+Science");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&search=carol&major=Computer+Science")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students).toHaveLength(1);
@@ -294,7 +330,9 @@ describe("GET /api/students", () => {
       };
     });
 
-    const res = await request(app).get("/api/students?userId=rep-1&boothId=booth-99");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&boothId=booth-99")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     // Only visitors appear; exact count depends on boothHistory mock resolution
@@ -317,7 +355,9 @@ describe("GET /api/students", () => {
       return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(mockQuerySnap([])) };
     });
 
-    const res = await request(app).get("/api/students?userId=rep-1");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1")
+      .set("Authorization", authHeader("rep-1"));
     expect(res.status).toBe(500);
   });
 
@@ -344,7 +384,9 @@ describe("GET /api/students", () => {
       return { where: jest.fn().mockReturnThis(), get: jest.fn().mockResolvedValue(mockQuerySnap([])) };
     });
 
-    const res = await request(app).get("/api/students?userId=rep-1");
+    const res = await request(app)
+      .get("/api/students?userId=rep-1")
+      .set("Authorization", authHeader("rep-1"));
 
     expect(res.status).toBe(200);
     expect(res.body.students[0].firstName).toBe("");
