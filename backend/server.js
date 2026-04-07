@@ -8,13 +8,6 @@ const rateLimit = require("express-rate-limit");
 const fairsRouter = require("./routes/fairs");
 const shortlistRouter = require("./routes/shortlist");
 const { suggestPlaces } = require("./services/mapboxGeocode");
-const {
-  tryPutQaSessionAtFairBooth,
-  validatePutQaSessionRequestBody,
-  sendPutQaSessionOutcomeResponse,
-  tryDeleteQaSessionAtFairBooth,
-  sendDeleteQaSessionOutcomeResponse,
-} = require("./lib/qaSessionMutations");
 
 // --------------------------
 // ENVIRONMENT VALIDATION
@@ -99,6 +92,9 @@ app.use("/api", require("./routes/resume"));
 app.use("/api", require("./routes/companies"));
 app.use("/api", require("./routes/booths"));
 app.use("/api", require("./routes/jobInvitations"));
+app.use("/api", require("./routes/calls"));
+app.use("/api", require("./routes/sessions"));
+app.use("/api", require("./routes/callInvitations"));
 
 if (require.main === module) {
   app.listen(PORT, () => {

@@ -162,4 +162,71 @@ router.post("/sync-stream-users", verifyFirebaseToken, async (req, res) => {
   }
 });
 
+/* ----------------------------------------------------
+   ADD USER TO STREAM CHANNEL
+---------------------------------------------------- */
+router.post("/stream-channel/:channelId/add-member", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.uid;
+
+    if (!channelId) {
+      return res.status(400).json({ error: "Channel ID is required" });
+    }
+
+    const channel = streamServerClient.channel("messaging", channelId);
+
+    // Add user to channel with required permissions
+    await channel.addMembers([userId]);
+
+    console.log("[StreamChat] User added to channel (add-member)");
+
+    return res.json({ success: true, message: "User added to channel" });
+  } catch (err) {
+    console.error("Error adding user to StreamChat channel:", err);
+    return res.status(500).json({ error: "Failed to add user to channel" });
+  }
+});
+
+/* ----------------------------------------------------
+   ENSURE USER IS IN STREAM CHANNEL
+---------------------------------------------------- */
+router.post("/stream-channel/:channelId/ensure-member", verifyFirebaseToken, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.user.uid;
+    const { userName = userId } = req.body;
+
+    if (!channelId) {
+      return res.status(400).json({ error: "Channel ID is required" });
+    }
+
+    // First, upsert user to ensure they exist in Stream
+    await streamServerClient.upsertUser({
+      id: userId,
+      name: userName,
+    });
+
+    const channel = streamServerClient.channel("messaging", channelId);
+
+    try {
+      // Try to add user to channel
+      await channel.addMembers([userId]);
+      console.log("[StreamChat] User added to channel (ensure-member)");
+    } catch (addErr) {
+      // If user is already a member, that's fine - just ignore
+      const errorMsg = addErr?.message || "";
+      if (!errorMsg.includes("already a member")) {
+        throw addErr;
+      }
+      console.log("[StreamChat] User already a member of channel (ensure-member)");
+    }
+
+    return res.json({ success: true, message: "User is member of channel" });
+  } catch (err) {
+    console.error("Error ensuring user in StreamChat channel:", err);
+    return res.status(500).json({ error: "Failed to ensure user in channel" });
+  }
+});
+
 module.exports = router;
