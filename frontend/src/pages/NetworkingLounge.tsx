@@ -169,11 +169,22 @@ export default function NetworkingLounge() {
         }
 
         if (!client.userID) {
-          const idToken = await auth.currentUser?.getIdToken()
+          // Wait for Firebase auth to hydrate if currentUser isn't available yet
+          const firebaseUser = auth.currentUser ?? await new Promise<import("firebase/auth").User | null>(
+            (resolve) => {
+              const unsub = auth.onAuthStateChanged((u) => { unsub(); resolve(u) })
+            }
+          )
+          if (!firebaseUser) throw new Error("Not authenticated")
+
+          const idToken = await firebaseUser.getIdToken()
           const res = await fetch(`${API_URL}/api/stream-token`, {
             headers: { Authorization: `Bearer ${idToken}` },
           })
-          if (!res.ok) throw new Error("Failed to fetch Stream token")
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}))
+            throw new Error(data.error || `Stream token request failed (${res.status})`)
+          }
 
           const { token } = await res.json()
           const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email
