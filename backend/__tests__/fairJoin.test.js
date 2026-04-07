@@ -160,4 +160,84 @@ describe("POST /api/fairs/:fairId/enroll", () => {
     expect(res.body.boothId).toBe("fairBooth1");
     expect(batch.commit).toHaveBeenCalled();
   });
+
+  it("copies company jobs into the fair when jobs exist", async () => {
+    const enrollmentBatch = {
+      set: jest.fn(),
+      commit: jest.fn().mockResolvedValue(undefined),
+    };
+    const jobBatch = {
+      set: jest.fn(),
+      commit: jest.fn().mockResolvedValue(undefined),
+    };
+    let batchN = 0;
+    db.batch.mockImplementation(() => {
+      batchN += 1;
+      return batchN === 1 ? enrollmentBatch : jobBatch;
+    });
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ name: "Spring Fair" }, true, "fair1")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "booths") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairBooth1" })),
+                };
+              }
+              if (sub === "jobs") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairJob1" })),
+                };
+              }
+              return { doc: jest.fn(() => ({ id: "x" })) };
+            }),
+          })),
+        };
+      }
+
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: "Acme", ownerId: "owner-1" }, true, "comp1")
+            ),
+          })),
+        };
+      }
+
+      if (name === "jobs") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(
+            mockQuerySnap([{ id: "j1", data: () => ({ title: "Engineer", companyId: "comp1" }) }])
+          ),
+        };
+      }
+
+      return {
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair1/enroll")
+      .set("Authorization", VALID_TOKEN)
+      .send({ companyId: "comp1" });
+
+    expect(res.status).toBe(201);
+    expect(jobBatch.set).toHaveBeenCalled();
+    expect(jobBatch.commit).toHaveBeenCalled();
+  });
 });

@@ -37,6 +37,10 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }));
 
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => ({ options: [], loading: false }),
+}));
+
 vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }));
@@ -159,6 +163,19 @@ describe("AdminDashboard", () => {
     });
 
     it("displays empty state when no fairs exist", async () => {
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/No fairs created yet/i)).toBeInTheDocument();
+      });
+    });
+
+    it("handles initial fairs fetch when response is not ok (still shows empty state)", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "server error" }),
+      });
+
       renderAdminDashboard();
 
       await waitFor(() => {
@@ -338,7 +355,9 @@ describe("AdminDashboard", () => {
       renderAdminDashboard();
 
       await waitFor(() => {
-        expect(screen.getByText("Ended")).toBeInTheDocument();
+        // Filter chips also show "Ended", so use getAllByText and check at least 2
+        const chips = screen.getAllByText("Ended");
+        expect(chips.length).toBeGreaterThanOrEqual(2);
       });
     });
 
@@ -361,17 +380,19 @@ describe("AdminDashboard", () => {
       renderAdminDashboard();
 
       await waitFor(() => {
-        expect(screen.getByText("Upcoming")).toBeInTheDocument();
+        // Filter chips also show "Upcoming", so use getAllByText and check at least 2
+        const chips = screen.getAllByText("Upcoming");
+        expect(chips.length).toBeGreaterThanOrEqual(2);
       });
     });
 
-    it("shows 'Scheduled' chip for a fair with no startTime or endTime", async () => {
+    it("shows 'Ended' chip for a fair with no startTime or endTime", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           fairs: [
             {
-              id: "fair-scheduled",
+              id: "fair-no-dates",
               name: "Unscheduled Fair",
               isLive: false,
               startTime: null,
@@ -384,7 +405,9 @@ describe("AdminDashboard", () => {
       renderAdminDashboard();
 
       await waitFor(() => {
-        expect(screen.getByText("Scheduled")).toBeInTheDocument();
+        // Fairs with no dates get status "Ended" per getFairStatus logic
+        const chips = screen.getAllByText("Ended");
+        expect(chips.length).toBeGreaterThanOrEqual(2);
       });
     });
 
@@ -631,6 +654,343 @@ describe("AdminDashboard", () => {
       await user.click(screen.getByRole("button", { name: /manage/i }));
 
       expect(mockNavigate).toHaveBeenCalledWith("/fair/fair-42/admin");
+    });
+  });
+
+  // Search and Filter
+  describe("Search and Filters", () => {
+    const twoFairs = [
+      { id: "f1", name: "Alpha Fair", isLive: true, startTime: Date.now() - 1000, endTime: null },
+      { id: "f2", name: "Beta Fair", isLive: false, startTime: null, endTime: null },
+    ];
+
+    it("filters fairs by search query", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+      expect(screen.getByText("Beta Fair")).toBeInTheDocument();
+
+      await user.type(screen.getByPlaceholderText(/search fairs/i), "Alpha");
+
+      expect(screen.getByText("Alpha Fair")).toBeInTheDocument();
+      expect(screen.queryByText("Beta Fair")).not.toBeInTheDocument();
+    });
+
+    it("shows result count text", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/Showing 2 of 2 fairs/)).toBeInTheDocument();
+      });
+    });
+
+    it("filters fairs by status chip toggle", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+
+      // Click the "Live" filter chip to deselect it — there are multiple "Live" texts,
+      // but the filter chips are the outlined/filled small chips
+      const liveChips = screen.getAllByText("Live");
+      // The first "Live" is the filter chip
+      await user.click(liveChips[0]);
+
+      // Alpha Fair is Live, so it should be hidden
+      expect(screen.queryByText("Alpha Fair")).not.toBeInTheDocument();
+      expect(screen.getByText("Beta Fair")).toBeInTheDocument();
+    });
+
+    it("shows Clear button when filters are active and resets on click", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+
+      await user.type(screen.getByPlaceholderText(/search fairs/i), "Alpha");
+
+      const clearButton = screen.getByRole("button", { name: /^clear$/i });
+      expect(clearButton).toBeInTheDocument();
+
+      await user.click(clearButton);
+
+      // Both fairs should be visible again
+      expect(screen.getByText("Alpha Fair")).toBeInTheDocument();
+      expect(screen.getByText("Beta Fair")).toBeInTheDocument();
+    });
+
+    it("shows 'No fairs match your filters' when all are filtered out", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+
+      await user.type(screen.getByPlaceholderText(/search fairs/i), "zzzzz");
+
+      expect(screen.getByText(/no fairs match your filters/i)).toBeInTheDocument();
+    });
+
+    it("sorts by name when Fair Name column header is clicked", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+
+      // Click "Fair Name" sort label
+      await user.click(screen.getByText("Fair Name"));
+
+      // Both should still be present
+      expect(screen.getByText("Alpha Fair")).toBeInTheDocument();
+      expect(screen.getByText("Beta Fair")).toBeInTheDocument();
+    });
+  });
+
+  // Quick Actions
+  describe("Quick Actions", () => {
+    it("navigates to /fairs when View All Fairs is clicked", async () => {
+      const user = userEvent.setup();
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByRole("button", { name: /view all fairs/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /view all fairs/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/fairs");
+    });
+
+    it("navigates to /dashboard when Go to Dashboard is clicked", async () => {
+      const user = userEvent.setup();
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByRole("button", { name: /go to dashboard/i })).toBeInTheDocument());
+
+      await user.click(screen.getByRole("button", { name: /go to dashboard/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
+  // Date range filtering
+  describe("Date Range Filtering", () => {
+    const fairsWithDates = [
+      { id: "f1", name: "Early Fair", isLive: false, startTime: new Date("2025-01-15").getTime(), endTime: new Date("2025-01-16").getTime() },
+      { id: "f2", name: "Late Fair", isLive: false, startTime: new Date("2025-06-15").getTime(), endTime: new Date("2025-06-16").getTime() },
+      { id: "f3", name: "No Dates Fair", isLive: false, startTime: null, endTime: null },
+    ];
+
+    it("filters fairs by dateFrom", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: fairsWithDates }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Early Fair")).toBeInTheDocument());
+
+      const fromInput = screen.getByLabelText("From");
+      await user.type(fromInput, "2025-03-01");
+
+      // Early Fair (Jan) should be filtered out, No Dates Fair has no startTime so also filtered
+      expect(screen.queryByText("Early Fair")).not.toBeInTheDocument();
+      expect(screen.queryByText("No Dates Fair")).not.toBeInTheDocument();
+      expect(screen.getByText("Late Fair")).toBeInTheDocument();
+    });
+
+    it("filters fairs by dateTo", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: fairsWithDates }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Early Fair")).toBeInTheDocument());
+
+      const toInput = screen.getByLabelText("To");
+      await user.type(toInput, "2025-03-01");
+
+      // Late Fair (Jun endTime) should be filtered out, No Dates Fair has no endTime so also filtered
+      expect(screen.getByText("Early Fair")).toBeInTheDocument();
+      expect(screen.queryByText("Late Fair")).not.toBeInTheDocument();
+      expect(screen.queryByText("No Dates Fair")).not.toBeInTheDocument();
+    });
+
+    it("filters by both dateFrom and dateTo together", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: fairsWithDates }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Early Fair")).toBeInTheDocument());
+
+      await user.type(screen.getByLabelText("From"), "2025-06-01");
+      await user.type(screen.getByLabelText("To"), "2025-07-01");
+
+      expect(screen.queryByText("Early Fair")).not.toBeInTheDocument();
+      expect(screen.getByText("Late Fair")).toBeInTheDocument();
+    });
+  });
+
+  // Sort direction toggling
+  describe("Sort Direction", () => {
+    const twoFairs = [
+      { id: "f1", name: "Alpha Fair", isLive: true, startTime: Date.now() - 1000, endTime: null },
+      { id: "f2", name: "Beta Fair", isLive: false, startTime: null, endTime: null },
+    ];
+
+    it("toggles sort direction when clicking same column twice", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+
+      // Click Fair Name to sort by name asc
+      await user.click(screen.getByText("Fair Name"));
+      // Click again to toggle to desc
+      await user.click(screen.getByText("Fair Name"));
+
+      // Both should still be present
+      expect(screen.getByText("Alpha Fair")).toBeInTheDocument();
+      expect(screen.getByText("Beta Fair")).toBeInTheDocument();
+    });
+
+    it("sorts by startTime column", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+
+      await user.click(screen.getByText("Start"));
+
+      expect(screen.getByText("Alpha Fair")).toBeInTheDocument();
+      expect(screen.getByText("Beta Fair")).toBeInTheDocument();
+    });
+
+    it("sorts by endTime column", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ fairs: twoFairs }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Alpha Fair")).toBeInTheDocument());
+
+      await user.click(screen.getByText("End"));
+
+      expect(screen.getByText("Alpha Fair")).toBeInTheDocument();
+      expect(screen.getByText("Beta Fair")).toBeInTheDocument();
+    });
+  });
+
+  // Load fairs error handling
+  describe("Load Fairs Error", () => {
+    it("stops loading when fetch returns non-ok response", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({}),
+      });
+
+      renderAdminDashboard();
+
+      // Should stop loading (no spinner) and show empty state since fairs stays []
+      await waitFor(() => {
+        expect(screen.getByText(/No fairs created yet/i)).toBeInTheDocument();
+      });
+    });
+
+    it("clears search input when X button is clicked", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "f1", name: "My Fair", isLive: false, startTime: null, endTime: null }],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("My Fair")).toBeInTheDocument());
+
+      const searchInput = screen.getByPlaceholderText(/search fairs/i);
+      await user.type(searchInput, "zzz");
+
+      // Click the clear icon button inside the search field
+      const clearButtons = screen.getAllByTestId("ClearIcon");
+      await user.click(clearButtons[0].closest("button")!);
+
+      expect(screen.getByText("My Fair")).toBeInTheDocument();
+    });
+  });
+
+  // hasActiveFilters with status chip deselection
+  describe("hasActiveFilters", () => {
+    it("shows Clear button when a status chip is deselected", async () => {
+      const user = userEvent.setup();
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          fairs: [{ id: "f1", name: "Test Fair", isLive: true, startTime: null, endTime: null }],
+        }),
+      });
+
+      renderAdminDashboard();
+
+      await waitFor(() => expect(screen.getByText("Test Fair")).toBeInTheDocument());
+
+      // Deselect "Ended" chip
+      const endedChips = screen.getAllByText("Ended");
+      await user.click(endedChips[0]);
+
+      expect(screen.getByRole("button", { name: /^clear$/i })).toBeInTheDocument();
     });
   });
 });

@@ -22,8 +22,10 @@
     "@mui/material": "^7.3.2",
     "@tanstack/react-query": "^5.90.21",
     "firebase": "^12.4.0",
+    "mapbox-gl": "^3.21.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-map-gl": "^8.1.0",
     "react-router-dom": "^7.9.4",
     "stream-chat": "^9.25.0",
     "stream-chat-react": "^13.11.0"

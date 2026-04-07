@@ -5,13 +5,36 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
+  function GeoPoint(lat, lng) {
+    this.latitude = lat;
+    this.longitude = lng;
+  }
+  const FieldValue = {
+    delete: jest.fn(() => ({ __fv: "delete" })),
+  };
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, GeoPoint, FieldValue }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
   };
 });
+
+jest.mock("../services/mapboxGeocode", () => ({
+  forwardGeocode: jest.fn(async (address) => {
+    if (!address || !String(address).trim()) return null;
+    return {
+      lat: 35.2,
+      lng: -80.8,
+      placeName: "Charlotte, NC, USA",
+      city: "Charlotte",
+      state: "NC",
+      country: "US",
+      mapboxId: "mock-id",
+    };
+  }),
+  suggestPlaces: jest.fn(async () => []),
+}));
 
 jest.mock("stream-chat", () => ({
   StreamChat: {

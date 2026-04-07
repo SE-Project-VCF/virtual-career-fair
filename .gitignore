@@ -142,3 +142,6 @@ firebase.json
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 backend/privateKey.json
+
+# Local test output captures (do not commit)
+**/test-output*.txt

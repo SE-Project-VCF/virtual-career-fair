@@ -36,6 +36,7 @@ export default function StudentProfilePage() {
   const [major, setMajor] = useState("")
   const [year, setYear] = useState("")
   const [skills, setSkills] = useState("")
+  const [linkedinUrl, setLinkedinUrl] = useState("")
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [resumeUrl, setResumeUrl] = useState<string | null>(null)
   const [resumeVisible, setResumeVisible] = useState(true)
@@ -71,6 +72,7 @@ export default function StudentProfilePage() {
           setMajor(data.major || "")
           setYear(validYears.includes(rawYear) ? rawYear : "")
           setSkills(data.skills || "")
+          setLinkedinUrl(data.linkedinUrl || "")
           setResumeUrl(data.resumeUrl || null)
           setResumeVisible(data.resumeVisible !== false)
         }
@@ -191,6 +193,7 @@ export default function StudentProfilePage() {
           major,
           expectedGradYear: year || null,
           skills,
+          linkedinUrl: linkedinUrl.trim() || null,
           resumeUrl: uploadedUrl || null,
           resumeVisible,
         },
@@ -316,6 +319,15 @@ export default function StudentProfilePage() {
               value={skills}
               onChange={(e) => setSkills(e.target.value)}
               placeholder="e.g., Python, React, SQL"
+              sx={{ mb: 3 }}
+            />
+
+            <TextField
+              label="LinkedIn URL"
+              fullWidth
+              value={linkedinUrl}
+              onChange={(e) => setLinkedinUrl(e.target.value)}
+              placeholder="https://linkedin.com/in/your-profile"
               sx={{ mb: 3 }}
             />
 

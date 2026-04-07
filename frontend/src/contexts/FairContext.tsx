@@ -3,6 +3,11 @@ import type { Dispatch, ReactNode, SetStateAction } from "react"
 import { API_URL } from "../config"
 import { auth } from "../firebase"
 
+interface FairVenueGeo {
+  latitude: number
+  longitude: number
+}
+
 interface FairData {
   id: string
   name: string
@@ -11,6 +16,11 @@ interface FairData {
   startTime: number | null
   endTime: number | null
   inviteCode?: string
+  venueCity?: string | null
+  venueState?: string | null
+  venueZip?: string | null
+  venueCountry?: string | null
+  venueGeo?: FairVenueGeo | null
 }
 
 interface FairContextType {

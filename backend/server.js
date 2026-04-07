@@ -6,6 +6,15 @@ const rateLimit = require("express-rate-limit");
 
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
+const shortlistRouter = require("./routes/shortlist");
+const { suggestPlaces } = require("./services/mapboxGeocode");
+const {
+  tryPutQaSessionAtFairBooth,
+  validatePutQaSessionRequestBody,
+  sendPutQaSessionOutcomeResponse,
+  tryDeleteQaSessionAtFairBooth,
+  sendDeleteQaSessionOutcomeResponse,
+} = require("./lib/qaSessionMutations");
 
 // --------------------------
 // ENVIRONMENT VALIDATION
@@ -46,6 +55,21 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: "1mb" }));
 
+/* GET /api/geocode/suggest — registered on app (not only fairs router) so it always resolves */
+app.get("/api/geocode/suggest", async (req, res) => {
+  try {
+    const q = req.query.q != null ? String(req.query.q).trim() : "";
+    if (q.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+    const suggestions = await suggestPlaces(q);
+    return res.json({ suggestions });
+  } catch (err) {
+    console.error("GET /api/geocode/suggest error:", err);
+    return res.status(500).json({ error: "Failed to suggest locations", suggestions: [] });
+  }
+});
+
 // Rate limiting: per-IP. Higher limit when not production (dev or NODE_ENV unset) to avoid 429s from polling and booth/dashboard loads.
 if (process.env.NODE_ENV !== "test") {
   const limit = process.env.NODE_ENV === "production" ? 100 : 1000;
@@ -64,7 +88,7 @@ app.post("/test-endpoint", (req, res) => {
 
 // Mount fair routes (multi-fair support)
 app.use("/api", fairsRouter);
-
+app.use("/api", shortlistRouter);
 
 app.use("/api", require("./routes/debug"));
 app.use("/api", require("./routes/stream"));

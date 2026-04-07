@@ -340,7 +340,7 @@ export default function StudentFairBoothsPage() {
           <BoothCardsSection
             booths={booths}
             getJobCountForBooth={getJobCountForBooth}
-            onVisitBooth={(boothId) => navigate(`/booth/${boothId}`)}
+            onVisitBooth={(boothId) => navigate(`/fair/${fairId}/booth/${boothId}`)}
           />
         )}
       </Container>
