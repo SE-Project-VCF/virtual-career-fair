@@ -6,7 +6,7 @@ const { employerCandidatesCollection } = require("../lib/employerCandidates");
 
 const router = express.Router();
 
-router.post("/api/shortlist/add", verifyFirebaseToken, async (req, res) => {
+router.post("/shortlist/add", verifyFirebaseToken, async (req, res) => {
   try {
     const { studentId, notes } = req.body;
     const employerId = req.user.uid;
@@ -32,12 +32,12 @@ router.post("/api/shortlist/add", verifyFirebaseToken, async (req, res) => {
 
     return res.json({ success: true, message: "Student added to shortlist" });
   } catch (err) {
-    console.error("POST /api/shortlist/add error:", err);
+    console.error("POST /shortlist/add error:", err);
     return res.status(500).json({ error: "Failed to add student to shortlist" });
   }
 });
 
-router.get("/api/shortlist/list", verifyFirebaseToken, async (req, res) => {
+router.get("/shortlist/list", verifyFirebaseToken, async (req, res) => {
   try {
     const employerId = req.user.uid;
 
@@ -51,12 +51,12 @@ router.get("/api/shortlist/list", verifyFirebaseToken, async (req, res) => {
 
     return res.json({ success: true, shortlist });
   } catch (err) {
-    console.error("GET /api/shortlist/list error:", err);
+    console.error("GET /shortlist/list error:", err);
     return res.status(500).json({ error: "Failed to fetch shortlist" });
   }
 });
 
-router.delete("/api/shortlist/:studentId", verifyFirebaseToken, async (req, res) => {
+router.delete("/shortlist/:studentId", verifyFirebaseToken, async (req, res) => {
   try {
     const { studentId } = req.params;
     const employerId = req.user.uid;
@@ -65,7 +65,7 @@ router.delete("/api/shortlist/:studentId", verifyFirebaseToken, async (req, res)
 
     return res.json({ success: true, message: "Student removed from shortlist" });
   } catch (err) {
-    console.error("DELETE /api/shortlist/:studentId error:", err);
+    console.error("DELETE /shortlist/:studentId error:", err);
     return res.status(500).json({ error: "Failed to remove student from shortlist" });
   }
 });
