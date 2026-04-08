@@ -43,6 +43,8 @@ import {
   formatStartsInCountdown,
   getQaSessionJoinUiState,
 } from "../utils/qaSessionUi"
+import CompanyOfficeLocationsReadOnly from "../components/CompanyOfficeLocationsReadOnly"
+import type { CompanyLocationRow } from "../components/CompanyLocationsSection"
 
 interface Booth {
   id: string
@@ -109,6 +111,7 @@ export default function FairBoothView() {
   const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false)
   const [resubmitValue, setResubmitValue] = useState<number | null>(null)
   const [resubmitComment, setResubmitComment] = useState("")
+  const [companyOfficeLocations, setCompanyOfficeLocations] = useState<CompanyLocationRow[]>([])
 
   const trackStudentBoothLeave = async () => {
     try {
@@ -209,11 +212,32 @@ export default function FairBoothView() {
     if (isMountedRef.current) setJobs(companyJobs)
   }
 
+  const loadCompanyLocations = async (companyId: string | undefined) => {
+    if (!companyId) {
+      if (isMountedRef.current) setCompanyOfficeLocations([])
+      return
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/companies/${companyId}/locations`)
+      if (!res.ok) {
+        if (isMountedRef.current) setCompanyOfficeLocations([])
+        return
+      }
+      const data = await res.json()
+      if (isMountedRef.current) {
+        setCompanyOfficeLocations(Array.isArray(data.locations) ? data.locations : [])
+      }
+    } catch {
+      if (isMountedRef.current) setCompanyOfficeLocations([])
+    }
+  }
+
   const fetchBooth = async () => {
     if (!fairId || !boothId) return
     try {
       setLoading(true)
       setError("")
+      setCompanyOfficeLocations([])
 
       const headers: Record<string, string> = {}
       const token = await auth.currentUser?.getIdToken()
@@ -237,7 +261,10 @@ export default function FairBoothView() {
 
       setBooth({ id: boothId, ...boothData })
       await trackStudentBoothView(boothData)
-      await loadCompanyJobs(jobsRes, boothData.companyId)
+      await Promise.all([
+        loadCompanyJobs(jobsRes, boothData.companyId),
+        loadCompanyLocations(boothData.companyId),
+      ])
       const mainBoothId = boothData.originalBoothId || null
       setRatingBoothId(mainBoothId)
       if (mainBoothId) {
@@ -363,6 +390,16 @@ export default function FairBoothView() {
                       </Grid>
                     )}
                   </Grid>
+
+                  {companyOfficeLocations.length > 0 && (
+                    <>
+                      <Divider sx={{ my: 2 }} />
+                      <CompanyOfficeLocationsReadOnly
+                        locations={companyOfficeLocations}
+                        publicProfileTo={`/company/${booth.companyId}/public`}
+                      />
+                    </>
+                  )}
 
                   {booth.description && (
                     <>

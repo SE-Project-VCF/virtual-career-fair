@@ -66,6 +66,25 @@ const renderFairBoothView = () =>
     </BrowserRouter>
   )
 
+/** Order after booth + jobs: Q&A session fetch, then company locations (FairBoothView). */
+const fetchQaSessionEmpty = () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({}),
+})
+const fetchCompanyLocationsEmpty = () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({ companyName: "Tech Corp", locations: [] }),
+})
+
+/** Student booth view tracking (after Q&A fetch, before company locations). */
+const fetchTrackViewOk = () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({}),
+})
+
 const boothFetchResponse = () => ({
   ok: true,
   status: 200,
@@ -123,10 +142,59 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
     await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
+  })
+
+  it("shows office locations and full profile link when company has locations", async () => {
+    const loc = {
+      id: "l1",
+      label: "HQ",
+      venueCity: "Charlotte",
+      venueState: "NC",
+      venueZip: "28202",
+      venueCountry: null,
+      venueGeo: null,
+      createdAt: null,
+      updatedAt: null,
+    }
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Tech Corp",
+          industry: "software",
+          companySize: "51-200",
+          location: "NYC",
+          description: "A great company",
+          contactName: "Jane",
+          contactEmail: "jane@tech.com",
+          companyId: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ companyName: "Tech Corp", locations: [loc] }),
+      })
+
+    renderFairBoothView()
+
+    await waitFor(() => expect(screen.getByText(/Charlotte, NC/)).toBeInTheDocument())
+    expect(screen.getByRole("link", { name: /full company profile/i })).toHaveAttribute("href", "/company/c1/public")
   })
 
   it("shows error on 403 (fair not live)", async () => {
@@ -181,6 +249,9 @@ describe("FairBoothView", () => {
           ],
         }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -208,6 +279,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -238,6 +312,8 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -268,6 +344,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -306,6 +385,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -339,6 +421,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     const { unmount } = render(
       <BrowserRouter>
@@ -381,6 +466,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -419,6 +507,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -465,6 +556,8 @@ describe("FairBoothView", () => {
       .mockResolvedValueOnce(boothRes)
       .mockResolvedValueOnce(jobsRes)
       .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -498,6 +591,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     renderFairBoothView()
 
@@ -529,6 +625,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     const mockDoc = { data: () => ({ uid: "rep-uid-123" }) }
     vi.mocked(firestore.getDocs).mockResolvedValueOnce({
@@ -571,6 +670,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     vi.mocked(firestore.getDocs).mockResolvedValueOnce({
       empty: true,
@@ -616,6 +718,9 @@ describe("FairBoothView", () => {
         status: 200,
         json: async () => ({ jobs: [] }),
       })
+      .mockResolvedValueOnce(fetchQaSessionEmpty())
+      .mockResolvedValueOnce(fetchTrackViewOk())
+      .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
     vi.mocked(firestore.getDocs).mockRejectedValueOnce(new Error("Firestore unavailable"))
 
@@ -671,6 +776,9 @@ describe("FairBoothView", () => {
             ],
           }),
         })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
       renderFairBoothView()
 
@@ -723,6 +831,9 @@ describe("FairBoothView", () => {
             ],
           }),
         })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
       renderFairBoothView()
 
@@ -768,6 +879,9 @@ describe("FairBoothView", () => {
             ],
           }),
         })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
       renderFairBoothView()
 
@@ -815,6 +929,9 @@ describe("FairBoothView", () => {
             ],
           }),
         })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
       renderFairBoothView()
 
@@ -860,6 +977,9 @@ describe("FairBoothView", () => {
             ],
           }),
         })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
       renderFairBoothView()
 
@@ -910,6 +1030,9 @@ describe("FairBoothView", () => {
             ],
           }),
         })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
       renderFairBoothView()
 
@@ -944,6 +1067,16 @@ describe("FairBoothView", () => {
         }
         if (url.includes("/jobs")) {
           return Promise.resolve({ ok: true, status: 200, json: async () => ({ jobs: [] }) });
+        }
+        if (url.includes("/api/booth/") && url.includes("/qa-session")) {
+          return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+        }
+        if (url.includes("/api/companies/") && url.includes("/locations")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ companyName: "Tech Corp", locations: [] }),
+          });
         }
         if (url.includes("/track-view") || url.includes("/track-leave")) {
           return Promise.resolve({ ok: true, json: async () => ({}) });
@@ -995,7 +1128,10 @@ describe("FairBoothView", () => {
             companyId: "c1",
           }),
         })
-        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ jobs: [] }) });
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ jobs: [] }) })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty());
 
       renderFairBoothView();
 
@@ -1062,6 +1198,9 @@ describe("FairBoothView", () => {
             ],
           }),
         })
+        .mockResolvedValueOnce(fetchQaSessionEmpty())
+        .mockResolvedValueOnce(fetchTrackViewOk())
+        .mockResolvedValueOnce(fetchCompanyLocationsEmpty())
 
       renderFairBoothView()
 

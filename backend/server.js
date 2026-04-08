@@ -12,6 +12,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 // Fair routes (multi-fair support)
 const fairsRouter = require("./routes/fairs");
 const shortlistRouter = require("./routes/shortlist");
+const companyLocationsRouter = require("./routes/companyLocations");
 const { suggestPlaces } = require("./services/mapboxGeocode");
 const {
   tryPutQaSessionAtFairBooth,
@@ -238,6 +239,7 @@ app.post("/api/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (r
 // Mount fair routes (multi-fair support)
 app.use(fairsRouter);
 app.use(shortlistRouter);
+app.use(companyLocationsRouter);
 
 
 app.get("/api/debug/gemini-models", async (req, res) => {

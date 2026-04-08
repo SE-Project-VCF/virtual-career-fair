@@ -7,6 +7,7 @@ import Login from "./pages/Login"
 import Dashboard from "./pages/Dashboard"
 import CompanyManagement from "./pages/CompanyManagement"
 import Company from "./pages/Company"
+import CompanyPublicProfile from "./pages/CompanyPublicProfile"
 import BoothEditor from "./pages/BoothEditor"
 import Booths from "./pages/Booths"
 import BoothView from "./pages/BoothView"
@@ -109,6 +110,7 @@ function App() {
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/fairs/:fairId" element={<FairBoothsPage />} />
         <Route path="/companies" element={<CompanyManagement />} />
+        <Route path="/company/:companyId/public" element={<CompanyPublicProfile />} />
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />
         <Route path="/company/:companyId/submissions" element={<SubmissionsPage />} />

@@ -25,6 +25,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import VisibilityIcon from "@mui/icons-material/Visibility"
 import BaseLayout from "../components/BaseLayout"
+import CompanyLocationsSection from "../components/CompanyLocationsSection"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
@@ -1099,6 +1100,7 @@ export default function Company() {
   if (!company) return null
 
   const isOwner = userRole === "companyOwner" && company.ownerId === userId
+  const canManageCompanyLocations = isOwner || userRole === "representative"
   const saveButtonLabel = getSaveButtonLabel(savingJob, editingJob)
 
   return (
@@ -1141,6 +1143,8 @@ export default function Company() {
             boothId={company.boothId}
             navigate={navigate}
           />
+
+          <CompanyLocationsSection companyId={company.id} canManage={canManageCompanyLocations} />
 
           {/* Representatives List Card */}
           <RepresentativesSection

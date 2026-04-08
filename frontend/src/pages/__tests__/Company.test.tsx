@@ -140,8 +140,14 @@ describe("Company", () => {
     (deleteDoc as any).mockResolvedValue(undefined);
     (arrayRemove as any).mockImplementation((v: unknown) => v);
 
-    // Mock fetch for invite code API
+    // Mock fetch for invite code API and company office locations
     globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/companies/") && url.includes("/locations")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ locations: [] }),
+        });
+      }
       if (url.includes('/api/companies/') && url.includes('/invite-code')) {
         return Promise.resolve({
           ok: true,
@@ -160,6 +166,9 @@ describe("Company", () => {
 
   it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
     globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/companies/") && url.includes("/locations")) {
+        return Promise.resolve({ ok: true, json: async () => ({ locations: [] }) });
+      }
       if (url.includes('/api/companies/') && url.includes('/invite-code')) {
         return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
       }
@@ -488,11 +497,8 @@ describe("Company", () => {
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i });
 
-    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
-    if (addButtons.length > 0) {
-      await user.click(addButtons[0]);
-      expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    }
+    await user.click(await screen.findByRole("button", { name: /create job posting/i }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("creates new job", async () => {
@@ -500,23 +506,20 @@ describe("Company", () => {
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i });
 
-    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
-    if (addButtons.length > 0) {
-      await user.click(addButtons[0]);
+    await user.click(await screen.findByRole("button", { name: /create job posting/i }));
 
-      const titleInput = screen.getByLabelText(/job title/i);
-      const descInput = screen.getByLabelText(/description/i);
+    const titleInput = screen.getByLabelText(/job title/i);
+    const descInput = screen.getByLabelText(/description/i);
 
-      await user.type(titleInput, "New Job");
-      await user.type(descInput, "Description");
+    await user.type(titleInput, "New Job");
+    await user.type(descInput, "Description");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        await waitFor(() => {
-          expect(addDoc).toHaveBeenCalled();
-        });
-      }
+    const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+    if (saveButtons.length > 0) {
+      await user.click(saveButtons[0]);
+      await waitFor(() => {
+        expect(addDoc).toHaveBeenCalled();
+      });
     }
   });
 
@@ -525,15 +528,12 @@ describe("Company", () => {
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i });
 
-    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
-    if (addButtons.length > 0) {
-      await user.click(addButtons[0]);
+    await user.click(await screen.findByRole("button", { name: /create job posting/i }));
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        expect(addDoc).not.toHaveBeenCalled();
-      }
+    const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+    if (saveButtons.length > 0) {
+      await user.click(saveButtons[0]);
+      expect(addDoc).not.toHaveBeenCalled();
     }
   });
 
@@ -542,21 +542,18 @@ describe("Company", () => {
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i });
 
-    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
-    if (addButtons.length > 0) {
-      await user.click(addButtons[0]);
+    await user.click(await screen.findByRole("button", { name: /create job posting/i }));
 
-      const titleInput = screen.getByLabelText(/job title/i);
-      const linkInput = screen.getByLabelText(/application link/i);
+    const titleInput = screen.getByLabelText(/job title/i);
+    const linkInput = screen.getByLabelText(/application url/i);
 
-      await user.type(titleInput, "Job");
-      await user.type(linkInput, "not-a-url");
+    await user.type(titleInput, "Job");
+    await user.type(linkInput, "not-a-url");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        expect(addDoc).not.toHaveBeenCalled();
-      }
+    const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+    if (saveButtons.length > 0) {
+      await user.click(saveButtons[0]);
+      expect(addDoc).not.toHaveBeenCalled();
     }
   });
 
@@ -757,17 +754,14 @@ describe("Company", () => {
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i });
 
-    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
-    if (addButtons.length > 0) {
-      await user.click(addButtons[0]);
+    await user.click(await screen.findByRole("button", { name: /create job posting/i }));
 
-      const titleInput = screen.getByLabelText(/job title/i);
-      await user.type(titleInput, "New Job");
+    const titleInput = screen.getByLabelText(/job title/i);
+    await user.type(titleInput, "New Job");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-      }
+    const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+    if (saveButtons.length > 0) {
+      await user.click(saveButtons[0]);
     }
   });
 
@@ -824,29 +818,32 @@ describe("Company", () => {
     renderComp();
     await screen.findByRole('heading', { name: /Tech Corp/i });
 
-    const addButtons = screen.queryAllByRole("button").filter(b => b.textContent?.includes("Add"));
-    if (addButtons.length > 0) {
-      await user.click(addButtons[0]);
+    await user.click(await screen.findByRole("button", { name: /create job posting/i }));
 
-      const titleInput = screen.getByLabelText(/job title/i);
-      const descInput = screen.getByLabelText(/description/i);
+    const titleInput = screen.getByLabelText(/job title/i);
+    const descInput = screen.getByLabelText(/description/i);
 
-      await user.type(titleInput, "New Job");
-      await user.type(descInput, "Description");
+    await user.type(titleInput, "New Job");
+    await user.type(descInput, "Description");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        await waitFor(() => {
-          expect(addDoc).toHaveBeenCalled();
-        });
-      }
+    const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
+    if (saveButtons.length > 0) {
+      await user.click(saveButtons[0]);
+      await waitFor(() => {
+        expect(addDoc).toHaveBeenCalled();
+      });
     }
   });
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
       globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/companies/") && url.includes("/locations")) {
+          return Promise.resolve({ ok: true, json: async () => ({ locations: [] }) });
+        }
+        if (url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
         if (url.includes("/ratings")) {
           return Promise.resolve({
             ok: true,
@@ -1080,9 +1077,17 @@ describe("Company", () => {
     };
 
     beforeEach(() => {
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/companies/") && url.includes("/locations")) {
+          return Promise.resolve({ ok: true, json: async () => ({ locations: [] }) });
+        }
+        if (url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+        });
       });
     });
 
@@ -1272,6 +1277,9 @@ describe("Company", () => {
       const user = userEvent.setup();
 
       (globalThis.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/companies/") && url.includes("/locations")) {
+          return Promise.resolve({ ok: true, json: async () => ({ locations: [] }) });
+        }
         if (url.includes("/invite-code")) {
           return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
         }
@@ -1318,9 +1326,17 @@ describe("Company", () => {
         uid: "rep-1",
         role: "representative",
       });
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/companies/") && url.includes("/locations")) {
+          return Promise.resolve({ ok: true, json: async () => ({ locations: [] }) });
+        }
+        if (url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+        });
       });
     });
 

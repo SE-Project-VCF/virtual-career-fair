@@ -21,6 +21,8 @@ module.exports = {
     "patchApplier.js",
     "patchValidator.js",
     "lib/qaSessionMutations.js",
+    "lib/resolveHubVenueFields.js",
+    "routes/companyLocations.js",
   ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov"],
