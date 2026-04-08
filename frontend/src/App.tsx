@@ -37,6 +37,7 @@ import { StudentCallInvitations } from "./pages/StudentCallInvitations"
 import { EmployerMyCalls } from "./pages/EmployerMyCalls"
 import { Call1x1Room } from "./components/videoChat/Call1x1Room"
 import BaseLayout from "./components/BaseLayout"
+import FairyJobmotherPage from "./pages/FairyJobmotherPage"
 import { FairProvider } from "./contexts/FairContext"
 import { setupConsoleErrorFilter } from "./utils/consoleErrorFilter"
 
@@ -93,6 +94,7 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard/fairy-jobmother" element={<FairyJobmotherPage />} />
         <Route path="/dashboard/chat" element={<ChatPage />} />
         <Route path="/dashboard/booth-history" element={<BoothHistoryPage />} />
         <Route path="/dashboard/job-invitations" element={<JobInvitations />} />

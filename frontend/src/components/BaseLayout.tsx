@@ -31,8 +31,10 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import ApartmentIcon from "@mui/icons-material/Apartment"
 import PresentationIcon from "@mui/icons-material/Slideshow"
 import PeopleIcon from "@mui/icons-material/People"
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import NotificationBell from "./NotificationBell"
 import ProfileMenu from "../pages/ProfileMenu"
+import FairyJobmotherAssistant from "./jobmother/FairyJobmotherAssistant"
 import { authUtils, type User } from "../utils/auth"
 
 const DRAWER_WIDTH = 260
@@ -47,6 +49,7 @@ function getNavItems(user: User | null): NavItem[] {
   const common: NavItem[] = [
     { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
     { label: "Browse Fairs", path: "/fairs", icon: <EventIcon /> },
+    { label: "Fairy Jobmother", path: "/dashboard/fairy-jobmother", icon: <AutoAwesomeIcon /> },
     { label: "Chat", path: "/dashboard/chat", icon: <ChatIcon /> },
     { label: "Profile", path: "/profile", icon: <PersonIcon /> },
   ]
@@ -97,9 +100,16 @@ export interface BaseLayoutProps {
   children: React.ReactNode
   showChat?: boolean
   pageTitle?: string
+  /** When false, hides the floating Fairy Jobmother help widget. Default true. */
+  showJobmotherAssistant?: boolean
 }
 
-export default function BaseLayout({ children, showChat = true, pageTitle }: Readonly<BaseLayoutProps>) {
+export default function BaseLayout({
+  children,
+  showChat = true,
+  pageTitle,
+  showJobmotherAssistant = true,
+}: Readonly<BaseLayoutProps>) {
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const user = authUtils.getCurrentUser()
@@ -235,6 +245,7 @@ export default function BaseLayout({ children, showChat = true, pageTitle }: Rea
             </Typography>
           </Box>
           <IconButton
+            aria-label="Close navigation menu"
             onClick={() => setDrawerOpen(false)}
             sx={{ color: "white", "&:hover": { background: "rgba(255,255,255,0.15)" } }}
           >
@@ -324,6 +335,10 @@ export default function BaseLayout({ children, showChat = true, pageTitle }: Rea
 
       {/* Page content */}
       {children}
+
+      {user && showJobmotherAssistant ? (
+        <FairyJobmotherAssistant key={user.uid} />
+      ) : null}
     </Box>
   )
 }
