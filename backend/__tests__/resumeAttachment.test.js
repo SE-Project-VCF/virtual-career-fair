@@ -202,6 +202,24 @@ describe("GET /api/applicant-resume-url/:applicationId", () => {
     expect(res.body.url).toBe("https://example.com/signed-resume.pdf");
   });
 
+  it("returns 200 with external https URL without hitting storage (resolveApplicantResumePathOrUrl url branch)", async () => {
+    setupResumeUrlDbMock({
+      appData: {
+        companyId: "c1",
+        studentId: "u1",
+        attachedResumePath: "https://cdn.example.com/student-resume.pdf",
+      },
+    });
+
+    const res = await request(app)
+      .get("/api/applicant-resume-url/app-1")
+      .set("Authorization", authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBe("https://cdn.example.com/student-resume.pdf");
+    expect(admin.storage).not.toHaveBeenCalled();
+  });
+
   it("returns 200 with a signed URL when a company representative requests", async () => {
     setupResumeUrlDbMock({
       companyData: { ownerId: "other-owner", representativeIDs: ["test-uid"] },

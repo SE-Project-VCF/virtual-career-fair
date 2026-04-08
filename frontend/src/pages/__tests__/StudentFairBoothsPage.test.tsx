@@ -40,6 +40,10 @@ vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }))
 
+vi.mock("../../components/NotificationBell", () => ({
+  default: () => <div data-testid="notification-bell">Notifications</div>,
+}))
+
 import { authUtils } from "../../utils/auth"
 import { getDoc, getDocs } from "firebase/firestore"
 import type { Mock } from "vitest"
@@ -205,6 +209,32 @@ describe("StudentFairBoothsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/fair not found/i)).toBeInTheDocument()
+    })
+  })
+
+  it("shows notification bell when a user is logged in", async () => {
+    ;(authUtils.getCurrentUser as Mock).mockReturnValue({
+      uid: "student-1",
+      role: "student",
+      email: "s@test.com",
+    })
+
+    ;(getDoc as Mock).mockImplementation((ref: { _collection: string; _id: string }) => {
+      if (ref._collection === "fairSchedules") return Promise.resolve(liveFairDoc())
+      if (ref._collection === "booths" && ref._id === "booth-1") return Promise.resolve(boothDoc1)
+      if (ref._collection === "booths" && ref._id === "booth-2") return Promise.resolve(boothDoc2)
+      return Promise.resolve(mockDocSnap(false))
+    })
+
+    ;(getDocs as Mock).mockResolvedValue({
+      forEach: () => {},
+      docs: [],
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId("notification-bell")).toBeInTheDocument()
     })
   })
 

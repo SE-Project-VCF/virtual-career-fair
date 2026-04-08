@@ -11,6 +11,9 @@ const {
   evaluateFairStatusForFair,
   verifyFirebaseToken,
 } = require("../helpers");
+const { streamServerClient } = require("../streamServerClient");
+const { forwardGeocode } = require("../services/mapboxGeocode");
+const { haversineMiles, venueFieldsFromDoc } = require("../services/geo");
 
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
 const enrollmentLimiter = rateLimit({
@@ -42,6 +45,22 @@ function buildHttpError(status, message) {
   const err = new Error(message);
   err.status = status;
   return err;
+}
+
+function trimVenuePart(v) {
+  return v == null ? "" : String(v).trim();
+}
+
+const HUB_GEOCODE_QUERY_MAX_LEN = 256;
+
+/** Mapbox query for a fair location (city + state + optional ZIP). */
+function virtualFairGeocodeQuery(city, state, zip) {
+  const c = trimVenuePart(city);
+  const s = trimVenuePart(state);
+  const z = trimVenuePart(zip);
+  const head = [c, s].filter(Boolean).join(", ");
+  if (!head) return z;
+  return z ? `${head} ${z}` : head;
 }
 
 async function resolveFairIdFromInviteCode(fairId, inviteCode) {
@@ -91,6 +110,9 @@ async function getCompanyAndBoothSnapshot(companyId) {
     industry: null,
     companySize: null,
     location: null,
+    locationIsRemote: false,
+    locationCity: null,
+    locationState: null,
     description: null,
     logoUrl: null,
     website: null,
@@ -112,6 +134,9 @@ async function getCompanyAndBoothSnapshot(companyId) {
         industry: bData.industry || null,
         companySize: bData.companySize || null,
         location: bData.location || null,
+        locationIsRemote: bData.locationIsRemote === true,
+        locationCity: bData.locationCity ?? null,
+        locationState: bData.locationState ?? null,
         description: bData.description || null,
         logoUrl: bData.logoUrl || null,
         website: bData.website || null,
@@ -191,31 +216,105 @@ async function verifyCompanyAccess(userId, companyId) {
   return null;
 }
 
+function fairVenueGeoCoords(venueGeo) {
+  if (!venueGeo) return null;
+  if (typeof venueGeo.latitude === "number" && typeof venueGeo.longitude === "number") {
+    return { lat: venueGeo.latitude, lng: venueGeo.longitude };
+  }
+  if (typeof venueGeo._latitude === "number" && typeof venueGeo._longitude === "number") {
+    return { lat: venueGeo._latitude, lng: venueGeo._longitude };
+  }
+  return null;
+}
+
+function buildFairListItem(doc, data, now, searchOrigin) {
+  const startMs = data.startTime ? data.startTime.toMillis() : null;
+  const endMs = data.endTime ? data.endTime.toMillis() : null;
+  const isScheduledLive = startMs !== null && endMs !== null && now >= startMs && now <= endMs;
+  const isLive = data.isLive === true || isScheduledLive;
+  const item = {
+    id: doc.id,
+    name: data.name,
+    description: data.description || null,
+    isLive,
+    startTime: startMs,
+    endTime: endMs,
+    createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+    ...venueFieldsFromDoc(data),
+  };
+  if (searchOrigin && data.venueGeo) {
+    const coords = fairVenueGeoCoords(data.venueGeo);
+    if (coords) {
+      const miles = haversineMiles(searchOrigin.lat, searchOrigin.lng, coords.lat, coords.lng);
+      item.distanceMiles = Math.round(miles * 10) / 10;
+    }
+  }
+  return item;
+}
+
+async function resolveSearchOriginFromQuery(query) {
+  const radiusMiles = query.radiusMiles !== undefined && query.radiusMiles !== ""
+    ? Number.parseFloat(String(query.radiusMiles))
+    : NaN;
+  if (Number.isNaN(radiusMiles) || radiusMiles <= 0) return null;
+
+  const address = query.address != null ? String(query.address).trim() : "";
+  if (address) {
+    const g = await forwardGeocode(address);
+    if (!g) {
+      const err = new Error("Could not find that location. Try a more specific address or city.");
+      err.status = 400;
+      throw err;
+    }
+    return { lat: g.lat, lng: g.lng, radiusMiles };
+  }
+
+  const lat = Number.parseFloat(String(query.lat ?? ""));
+  const lng = Number.parseFloat(String(query.lng ?? ""));
+  if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    const err = new Error("Provide lat, lng, and radiusMiles, or address and radiusMiles");
+    err.status = 400;
+    throw err;
+  }
+  return { lat, lng, radiusMiles };
+}
+
 /* =======================================================
    FAIR CRUD
 ======================================================= */
 
-/* GET /api/fairs - public: list all fairs */
-router.get("/api/fairs", async (_req, res) => {
+/* GET /api/fairs - public: list fairs; optional geo filter: lat,lng,radiusMiles or address,radiusMiles */
+router.get("/api/fairs", async (req, res) => {
   try {
+    const hasRadius = req.query.radiusMiles !== undefined && String(req.query.radiusMiles).trim() !== "";
+    let search = null;
+    if (hasRadius) {
+      try {
+        search = await resolveSearchOriginFromQuery(req.query);
+      } catch (e) {
+        if (e.status) return res.status(e.status).json({ error: e.message });
+        throw e;
+      }
+      if (!search) {
+        return res.status(400).json({
+          error: "Provide a positive radiusMiles together with lat and lng, or with address.",
+        });
+      }
+    }
+
     const snap = await db.collection("fairs").orderBy("createdAt", "desc").get();
     const now = Date.now();
-    const fairs = snap.docs.map((doc) => {
-      const data = doc.data();
-      const startMs = data.startTime ? data.startTime.toMillis() : null;
-      const endMs = data.endTime ? data.endTime.toMillis() : null;
-      const isScheduledLive = startMs !== null && endMs !== null && now >= startMs && now <= endMs;
-      const isLive = data.isLive === true || isScheduledLive;
-      return {
-        id: doc.id,
-        name: data.name,
-        description: data.description || null,
-        isLive,
-        startTime: startMs,
-        endTime: endMs,
-        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
-      };
-    });
+    let fairs = snap.docs.map((doc) => buildFairListItem(doc, doc.data(), now, search));
+
+    if (search) {
+      fairs = fairs.filter((f) => {
+        if (!f.venueGeo) return false;
+        if (f.distanceMiles === undefined) return false;
+        return f.distanceMiles <= search.radiusMiles;
+      });
+      fairs.sort((a, b) => (a.distanceMiles ?? 0) - (b.distanceMiles ?? 0));
+    }
+
     return res.json({ fairs });
   } catch (err) {
     console.error("GET /api/fairs error:", err);
@@ -274,6 +373,7 @@ router.get("/api/fairs/:fairId", async (req, res) => {
       endTime: data.endTime ? data.endTime.toMillis() : null,
       createdAt: data.createdAt ? data.createdAt.toMillis() : null,
       updatedAt: data.updatedAt ? data.updatedAt.toMillis() : null,
+      ...venueFieldsFromDoc(data),
     };
     if (inviteCode !== undefined) response.inviteCode = inviteCode;
 
@@ -299,7 +399,7 @@ router.get("/api/fairs/:fairId/status", async (req, res) => {
 
 /* POST /api/fairs - admin: create fair */
 router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
-  const { name, description, startTime, endTime } = req.body;
+  const { name, description, startTime, endTime, venueCity, venueState, venueZip, venueGeocodeQuery } = req.body;
   const adminUid = req.user.uid;
 
   // Admin check
@@ -321,6 +421,68 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ error: "startTime must be before endTime" });
     }
 
+    const geoQField = trimVenuePart(venueGeocodeQuery);
+    const city = trimVenuePart(venueCity);
+    const state = trimVenuePart(venueState);
+    const zip = trimVenuePart(venueZip);
+    const useGeoQuery = geoQField.length > 0;
+    const hasAnyHubPart = Boolean(city || state || zip || useGeoQuery);
+    let venueFields = {};
+    if (hasAnyHubPart) {
+      let geoQuery;
+      let fromSingleQuery = false;
+      if (useGeoQuery) {
+        if (geoQField.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+          return res.status(400).json({ error: "Location search text is too long." });
+        }
+        geoQuery = geoQField;
+        fromSingleQuery = true;
+      } else {
+        if (zip.length > 20) {
+          return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+        }
+        geoQuery = virtualFairGeocodeQuery(city, state, zip);
+        if (!trimVenuePart(geoQuery)) {
+          return res.status(400).json({
+            error: "Enter a location, ZIP, or place to verify with search.",
+          });
+        }
+        if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+          return res.status(400).json({ error: "Location search text is too long." });
+        }
+      }
+      if (!process.env.MAPBOX_ACCESS_TOKEN) {
+        return res.status(503).json({ error: "Geocoding is not configured" });
+      }
+      const g = await forwardGeocode(geoQuery);
+      if (!g) {
+        return res.status(400).json({
+          error: "Could not verify this location. Try search suggestions or a fuller address.",
+        });
+      }
+      const finalCity = fromSingleQuery ? g.city || null : g.city || city || null;
+      const finalState = fromSingleQuery ? g.state || null : g.state || state || null;
+      const finalZip = fromSingleQuery ? g.postcode || null : zip || g.postcode || null;
+      if (!finalCity || !finalState) {
+        return res.status(400).json({
+          error:
+            "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
+        });
+      }
+      const zipOut = finalZip || null;
+      if (zipOut && zipOut.length > 20) {
+        return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+      }
+      venueFields = removeUndefined({
+        venueCity: finalCity,
+        venueState: finalState,
+        venueZip: zipOut,
+        venueCountry: g.country,
+        venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
+        venueMapboxId: g.mapboxId,
+      });
+    }
+
     const rawCode = generateInviteCode();
     const fairData = removeUndefined({
       name: name.trim(),
@@ -332,10 +494,16 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
       createdAt: admin.firestore.Timestamp.now(),
       createdBy: adminUid,
       updatedAt: admin.firestore.Timestamp.now(),
+      ...venueFields,
     });
 
     const fairRef = await db.collection("fairs").add(fairData);
-    return res.status(201).json({ id: fairRef.id, ...fairData });
+    return res.status(201).json({
+      id: fairRef.id,
+      name: fairData.name,
+      description: fairData.description ?? null,
+      ...venueFieldsFromDoc(fairData),
+    });
   } catch (err) {
     console.error("POST /api/fairs error:", err);
     return res.status(500).json({ error: "Failed to create fair" });
@@ -345,8 +513,10 @@ router.post("/api/fairs", verifyFirebaseToken, async (req, res) => {
 /* PUT /api/fairs/:fairId - admin: update fair metadata/schedule */
 router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
-  const { userId, name, description, startTime, endTime } = req.body;
+  const { userId, name, description, startTime, endTime, venueCity, venueState, venueZip, venueGeocodeQuery } =
+    req.body;
   const adminUid = req.user.uid;
+  const FieldValue = admin.firestore.FieldValue;
 
   const adminError = await verifyAdmin(userId || adminUid);
   if (adminError) return res.status(adminError.status).json({ error: adminError.error });
@@ -360,6 +530,119 @@ router.put("/api/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
     if (description !== undefined) updates.description = description ? description.trim() : null;
     if (startTime !== undefined) updates.startTime = startTime ? parseUTCToTimestamp(startTime) : null;
     if (endTime !== undefined) updates.endTime = endTime ? parseUTCToTimestamp(endTime) : null;
+
+    const hubTouched =
+      venueCity !== undefined ||
+      venueState !== undefined ||
+      venueZip !== undefined ||
+      venueGeocodeQuery !== undefined;
+    if (hubTouched) {
+      const prev = fairDoc.data() || {};
+      const sentGeo =
+        venueGeocodeQuery !== undefined ? trimVenuePart(venueGeocodeQuery) : null;
+      const useGeoQuery = sentGeo !== null && sentGeo.length > 0;
+
+      if (useGeoQuery) {
+        if (sentGeo.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+          return res.status(400).json({ error: "Location search text is too long." });
+        }
+        if (!process.env.MAPBOX_ACCESS_TOKEN) {
+          return res.status(503).json({ error: "Geocoding is not configured" });
+        }
+        const g = await forwardGeocode(sentGeo);
+        if (!g) {
+          return res.status(400).json({
+            error: "Could not verify this location. Try search suggestions or a fuller address.",
+          });
+        }
+        const finalCity = g.city || null;
+        const finalState = g.state || null;
+        const finalZip = g.postcode || null;
+        if (!finalCity || !finalState) {
+          return res.status(400).json({
+            error:
+              "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
+          });
+        }
+        if (finalZip && finalZip.length > 20) {
+          return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+        }
+        Object.assign(
+          updates,
+          removeUndefined({
+            venueCity: finalCity,
+            venueState: finalState,
+            venueZip: finalZip || null,
+            venueCountry: g.country,
+            venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
+            venueMapboxId: g.mapboxId,
+          }),
+        );
+        updates.venueAddress = FieldValue.delete();
+      } else {
+        const city = venueCity !== undefined ? trimVenuePart(venueCity) : trimVenuePart(prev.venueCity);
+        const state = venueState !== undefined ? trimVenuePart(venueState) : trimVenuePart(prev.venueState);
+        const zip = venueZip !== undefined ? trimVenuePart(venueZip) : trimVenuePart(prev.venueZip);
+        const hasAnyHubPart = Boolean(city || state || zip);
+
+        if (!hasAnyHubPart) {
+          updates.venueAddress = FieldValue.delete();
+          updates.venueCity = FieldValue.delete();
+          updates.venueState = FieldValue.delete();
+          updates.venueZip = FieldValue.delete();
+          updates.venueCountry = FieldValue.delete();
+          updates.venueGeo = FieldValue.delete();
+          updates.venueMapboxId = FieldValue.delete();
+        } else {
+          if (zip.length > 20) {
+            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+          }
+          const geoQuery = virtualFairGeocodeQuery(city, state, zip);
+          if (!trimVenuePart(geoQuery)) {
+            return res.status(400).json({
+              error: "Enter a location, ZIP, or place to verify with search.",
+            });
+          }
+          if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+            return res.status(400).json({ error: "Location search text is too long." });
+          }
+          if (!process.env.MAPBOX_ACCESS_TOKEN) {
+            return res.status(503).json({ error: "Geocoding is not configured" });
+          }
+          const g = await forwardGeocode(geoQuery);
+          if (!g) {
+            return res.status(400).json({
+              error: "Could not verify this location. Try search suggestions or a fuller address.",
+            });
+          }
+          const finalCity = g.city || city || null;
+          const finalState = g.state || state || null;
+          const finalZip = zip || g.postcode || null;
+          if (!finalCity || !finalState) {
+            return res.status(400).json({
+              error:
+                "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
+            });
+          }
+          const zipOut = finalZip || null;
+          if (zipOut && zipOut.length > 20) {
+            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
+          }
+          Object.assign(
+            updates,
+            removeUndefined({
+              venueCity: finalCity,
+              venueState: finalState,
+              venueZip: zipOut,
+              venueCountry: g.country,
+              venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
+              venueMapboxId: g.mapboxId,
+            }),
+          );
+          updates.venueAddress = FieldValue.delete();
+        }
+      }
+    }
 
     if (updates.startTime && updates.endTime && updates.startTime.toMillis() >= updates.endTime.toMillis()) {
       return res.status(400).json({ error: "startTime must be before endTime" });
@@ -736,11 +1019,21 @@ router.put("/api/fairs/:fairId/booths/:boothId", verifyFirebaseToken, async (req
     const allowedFields = [
       "companyName", "industry", "companySize", "location", "description",
       "logoUrl", "website", "careersPage", "contactName", "contactEmail",
-      "contactPhone", "hiringFor",
+      "contactPhone", "hiringFor", "locationIsRemote", "locationCity", "locationState",
     ];
     const updates = {};
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
+    if (updates.locationIsRemote === true) {
+      updates.locationCity = null;
+      updates.locationState = null;
+    }
+    if (updates.locationCity != null && String(updates.locationCity).length > 100) {
+      return res.status(400).json({ error: "City must be 100 characters or less" });
+    }
+    if (updates.locationState != null && String(updates.locationState).length > 100) {
+      return res.status(400).json({ error: "State must be 100 characters or less" });
     }
     updates.updatedAt = admin.firestore.Timestamp.now();
 
@@ -749,7 +1042,7 @@ router.put("/api/fairs/:fairId/booths/:boothId", verifyFirebaseToken, async (req
       .doc(fairId)
       .collection("booths")
       .doc(boothId)
-      .update(updates);
+      .update(removeUndefined(updates));
 
     return res.json({ success: true });
   } catch (err) {
@@ -1054,6 +1347,95 @@ router.get("/api/fairs/:fairId/company/:companyId/booth", verifyFirebaseToken, a
   } catch (err) {
     console.error("GET /api/fairs/:fairId/company/:companyId/booth error:", err);
     return res.status(500).json({ error: "Failed to load fair booth" });
+  }
+});
+
+/* =======================================================
+   NETWORKING LOUNGE
+======================================================= */
+
+/* POST /api/fairs/:fairId/lounge/join - student: join the fair's networking lounge */
+router.post("/api/fairs/:fairId/lounge/join", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const uid = req.user.uid;
+
+  try {
+    // Verify user is a student
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().role !== "student") {
+      return res.status(403).json({ error: "Only students can join the networking lounge" });
+    }
+
+    // Verify fair exists
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+
+    const fairName = fairDoc.data().name || "Career Fair";
+    const channelId = `lounge-${fairId}`;
+
+    // Get or create the lounge channel and add the student as a member
+    // created_by_id must be a real Stream user — use the joining student
+    const channel = streamServerClient.channel("messaging", channelId, {
+      name: `${fairName} Networking Lounge`,
+      created_by_id: uid,
+    });
+    await channel.create();
+    await channel.addMembers([uid]);
+
+    return res.json({ success: true, channelId });
+  } catch (err) {
+    console.error("POST /api/fairs/:fairId/lounge/join error:", err);
+    return res.status(500).json({ error: "Failed to join networking lounge" });
+  }
+});
+
+/* GET /api/fairs/:fairId/lounge/attendees - student: list students in the lounge */
+router.get("/api/fairs/:fairId/lounge/attendees", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const uid = req.user.uid;
+
+  try {
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    if (userDoc.data().role !== "student") {
+      return res.status(403).json({ error: "Only students can view lounge attendees" });
+    }
+
+    const channelId = `lounge-${fairId}`;
+    const channel = streamServerClient.channel("messaging", channelId);
+    const channelState = await channel.query({ members: { limit: 100 } });
+
+    const memberUids = (channelState.members || [])
+      .map((m) => m.user_id)
+      .filter((id) => id && id !== "system");
+
+    if (memberUids.length === 0) return res.json({ attendees: [] });
+
+    const profileDocs = await Promise.all(
+      memberUids.map((id) => db.collection("users").doc(id).get())
+    );
+
+    const attendees = profileDocs
+      .filter((doc) => doc.exists && doc.data().role === "student")
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          uid: doc.id,
+          firstName: data.firstName || "",
+          lastName: data.lastName || "",
+          email: data.email || "",
+          major: data.major || "",
+          expectedGradYear: data.expectedGradYear || null,
+          skills: data.skills || "",
+          linkedinUrl: data.linkedinUrl || null,
+        };
+      });
+
+    return res.json({ attendees });
+  } catch (err) {
+    console.error("GET /api/fairs/:fairId/lounge/attendees error:", err);
+    return res.status(500).json({ error: "Failed to fetch lounge attendees" });
   }
 });
 

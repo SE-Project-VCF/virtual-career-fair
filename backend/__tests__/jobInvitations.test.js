@@ -71,9 +71,9 @@ function setupDbMock(configs) {
 describe("POST /api/job-invitations/send", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 400 without userId (checked before auth)", async () => {
+  it("returns 401 without auth token", async () => {
     const res = await request(app).post("/api/job-invitations/send").send({});
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("returns 400 when jobId is missing", async () => {
@@ -307,9 +307,9 @@ describe("POST /api/job-invitations/send", () => {
 describe("GET /api/job-invitations/received", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 400 without userId (checked before auth)", async () => {
+  it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/job-invitations/received");
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("returns 400 when userId is missing", async () => {
@@ -403,9 +403,9 @@ describe("GET /api/job-invitations/received", () => {
 describe("GET /api/job-invitations/sent", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 400 without userId (checked before auth)", async () => {
+  it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/job-invitations/sent");
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("returns 400 when userId is missing", async () => {
@@ -531,9 +531,9 @@ describe("GET /api/job-invitations/sent", () => {
 describe("GET /api/job-invitations/stats/:jobId", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 400 without userId (checked before auth)", async () => {
+  it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/job-invitations/stats/j1");
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("returns 400 when userId is missing", async () => {
@@ -627,9 +627,9 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
 describe("GET /api/job-invitations/details/:jobId", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("returns 400 without userId (checked before auth)", async () => {
+  it("returns 401 without auth token", async () => {
     const res = await request(app).get("/api/job-invitations/details/j1");
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("returns 400 when userId is missing", async () => {

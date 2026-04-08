@@ -15,8 +15,10 @@ import {
   TextField,
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
+import LocationOnIcon from "@mui/icons-material/LocationOn"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import ForumIcon from "@mui/icons-material/Forum"
 import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
@@ -167,12 +169,22 @@ export default function FairLanding() {
           </Typography>
         )}
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary", mb: 4 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary", mb: 2 }}>
           <EventIcon />
           <Typography>
             {formatDate(fair.startTime)} – {formatDate(fair.endTime)}
           </Typography>
         </Box>
+
+        {(fair.venueCity || fair.venueState || fair.venueZip) && (
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, color: "text.secondary", mb: 4 }}>
+            <LocationOnIcon sx={{ mt: 0.25 }} />
+            <Typography fontWeight={600}>
+              {[fair.venueCity, fair.venueState].filter(Boolean).join(", ")}
+              {fair.venueZip ? ` ${fair.venueZip}` : ""}
+            </Typography>
+          </Box>
+        )}
 
         {joinSuccess && (
           <Alert severity="success" sx={{ mb: 3 }}>
@@ -196,6 +208,18 @@ export default function FairLanding() {
           >
             {isLive ? "Browse Booths" : "Fair Not Live Yet"}
           </Button>
+
+          {!isCompanyUser && (
+            <Button
+              variant="outlined"
+              size="large"
+              startIcon={<ForumIcon />}
+              onClick={() => navigate(`/fair/${fairId}/lounge`)}
+              disabled={!isLive}
+            >
+              Networking Lounge
+            </Button>
+          )}
 
           {isCompanyUser && (
             <Button

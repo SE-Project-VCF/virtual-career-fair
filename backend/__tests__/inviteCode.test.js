@@ -39,14 +39,27 @@ jest.mock("../helpers", () => {
 
 const request = require("supertest");
 const app = require("../server");
-const { db } = require("../firebase");
+const { db, auth } = require("../firebase");
+
+function authHeader(uid = "user1") {
+  auth.verifyIdToken.mockResolvedValue({ uid, email: `${uid}@test.com` });
+  return "Bearer valid-token";
+}
 
 describe("POST /api/update-invite-code", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 401 without auth token", async () => {
+    const res = await request(app)
+      .post("/api/update-invite-code")
+      .send({ companyId: "c1", userId: "user1" });
+    expect(res.status).toBe(401);
+  });
+
   it("returns 400 when companyId is missing", async () => {
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ userId: "user1" });
     expect(res.status).toBe(400);
   });
@@ -54,6 +67,7 @@ describe("POST /api/update-invite-code", () => {
   it("returns 400 when userId is missing", async () => {
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1" });
     expect(res.status).toBe(400);
   });
@@ -69,6 +83,7 @@ describe("POST /api/update-invite-code", () => {
 
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1", userId: "user1" });
     expect(res.status).toBe(404);
   });
@@ -86,6 +101,7 @@ describe("POST /api/update-invite-code", () => {
 
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1", userId: "user1" });
     expect(res.status).toBe(403);
   });
@@ -103,6 +119,7 @@ describe("POST /api/update-invite-code", () => {
 
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1", userId: "user1", newInviteCode: "ab" }); // too short
     expect(res.status).toBe(400);
   });
@@ -125,6 +142,7 @@ describe("POST /api/update-invite-code", () => {
 
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1", userId: "user1", newInviteCode: takenCode });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("already in use");
@@ -143,7 +161,7 @@ describe("POST /api/update-invite-code", () => {
 
     db.runTransaction.mockImplementation(async (callback) => {
       const transaction = {
-        get: jest.fn().mockResolvedValue({ 
+        get: jest.fn().mockResolvedValue({
           exists: true,
           data: () => ({ ownerId: "user1" })
         }),
@@ -154,6 +172,7 @@ describe("POST /api/update-invite-code", () => {
 
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1", userId: "user1", newInviteCode: "MYCODE12" });
 
     expect(res.status).toBe(200);
@@ -174,7 +193,7 @@ describe("POST /api/update-invite-code", () => {
 
     db.runTransaction.mockImplementation(async (callback) => {
       const transaction = {
-        get: jest.fn().mockResolvedValue({ 
+        get: jest.fn().mockResolvedValue({
           exists: true,
           data: () => ({ ownerId: "user1" })
         }),
@@ -185,6 +204,7 @@ describe("POST /api/update-invite-code", () => {
 
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1", userId: "user1" });
 
     expect(res.status).toBe(200);
@@ -207,6 +227,7 @@ describe("POST /api/update-invite-code", () => {
 
     const res = await request(app)
       .post("/api/update-invite-code")
+      .set("Authorization", authHeader("user1"))
       .send({ companyId: "c1", userId: "user1", newInviteCode: "CODE1234" });
 
     expect(res.status).toBe(500);

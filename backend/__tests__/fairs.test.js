@@ -5,13 +5,42 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
+  function GeoPoint(lat, lng) {
+    this.latitude = lat;
+    this.longitude = lng;
+  }
+  const FieldValue = {
+    delete: jest.fn(() => ({ __fv: "delete" })),
+  };
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, GeoPoint, FieldValue }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
   };
 });
+
+const defaultGeocodeResult = {
+  lat: 35.2,
+  lng: -80.8,
+  placeName: "Charlotte, NC, USA",
+  city: "Charlotte",
+  state: "NC",
+  country: "US",
+  postcode: "28202",
+  mapboxId: "mock-id",
+};
+
+jest.mock("../services/mapboxGeocode", () => ({
+  forwardGeocode: jest.fn(async (address) => {
+    if (!address || !String(address).trim()) return null;
+    return defaultGeocodeResult;
+  }),
+  suggestPlaces: jest.fn(async (q) => {
+    if (!q || String(q).trim().length < 2) return [];
+    return [{ id: "mock.place", label: "Cleveland, Ohio, United States", lat: 41.5, lng: -81.69 }];
+  }),
+}));
 
 jest.mock("stream-chat", () => ({
   StreamChat: {
@@ -219,6 +248,28 @@ const FAIR_DATA = {
 };
 
 /* =======================================================
+   GET /api/geocode/suggest
+======================================================= */
+describe("GET /api/geocode/suggest", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("returns empty suggestions when query is too short", async () => {
+    const res = await request(app).get("/api/geocode/suggest").query({ q: "a" });
+    expect(res.status).toBe(200);
+    expect(res.body.suggestions).toEqual([]);
+  });
+
+  it("returns suggestions from Mapbox helper for multi-character query", async () => {
+    const res = await request(app).get("/api/geocode/suggest").query({ q: "Cle" });
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.suggestions)).toBe(true);
+    expect(res.body.suggestions.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.suggestions[0].label).toMatch(/Cleveland/i);
+    expect(res.body.suggestions[0]).toMatchObject({ lat: expect.any(Number), lng: expect.any(Number) });
+  });
+});
+
+/* =======================================================
    GET /api/fairs
 ======================================================= */
 describe("GET /api/fairs", () => {
@@ -233,6 +284,130 @@ describe("GET /api/fairs", () => {
     expect(res.status).toBe(200);
     expect(res.body.fairs).toHaveLength(1);
     expect(res.body.fairs[0].name).toBe("Spring Fair");
+  });
+
+  it("returns 400 when radius is set but neither coordinates nor address are provided", async () => {
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => FAIR_DATA }],
+    });
+    const res = await request(app).get("/api/fairs").query({ radiusMiles: "25" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when radiusMiles is zero or invalid", async () => {
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => FAIR_DATA }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ radiusMiles: "0", lat: "35", lng: "-80" });
+    expect(res.status).toBe(400);
+  });
+
+  it("filters by distance and includes distanceMiles when lat lng and radius are provided", async () => {
+    const nearFair = {
+      ...FAIR_DATA,
+      venueGeo: { latitude: 35.2271, longitude: -80.8431 },
+      venueCity: "Charlotte",
+      venueState: "NC",
+    };
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => nearFair }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "500" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs).toHaveLength(1);
+    expect(res.body.fairs[0].distanceMiles).toBeDefined();
+    expect(res.body.fairs[0].venueCity).toBe("Charlotte");
+  });
+
+  it("returns 400 when address cannot be geocoded for radius search", async () => {
+    const { forwardGeocode } = require("../services/mapboxGeocode");
+    forwardGeocode.mockResolvedValueOnce(null);
+    setupFairsDbMock({ fairDocs: [] });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ radiusMiles: "50", address: "___nonexistent_place_xyz___" });
+    expect(res.status).toBe(400);
+  });
+
+  it("filters by address + radius using forward geocode origin", async () => {
+    const nearFair = {
+      ...FAIR_DATA,
+      venueGeo: { latitude: 35.2, longitude: -80.8 },
+      venueCity: "Charlotte",
+    };
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-near", data: () => nearFair }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ radiusMiles: "50", address: "Charlotte NC" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs).toHaveLength(1);
+    expect(res.body.fairs[0].distanceMiles).toBeDefined();
+    expect(res.body.fairs[0].id).toBe("fair-near");
+  });
+
+  it("excludes fairs without venueGeo when radius search is active", async () => {
+    const noGeo = { ...FAIR_DATA };
+    const withGeo = {
+      ...FAIR_DATA,
+      venueGeo: { latitude: 35.2271, longitude: -80.8431 },
+    };
+    setupFairsDbMock({
+      fairDocs: [
+        { id: "fair-no-geo", data: () => noGeo },
+        { id: "fair-with", data: () => withGeo },
+      ],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "500" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs.map((f) => f.id)).toEqual(["fair-with"]);
+  });
+
+  it("sorts multiple geo results by distance ascending", async () => {
+    const farther = {
+      ...FAIR_DATA,
+      name: "Far",
+      venueGeo: { latitude: 34.0, longitude: -80.0 },
+    };
+    const nearer = {
+      ...FAIR_DATA,
+      name: "Near",
+      venueGeo: { latitude: 35.25, longitude: -80.85 },
+    };
+    setupFairsDbMock({
+      fairDocs: [
+        { id: "fair-far", data: () => farther },
+        { id: "fair-near", data: () => nearer },
+      ],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "5000" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs.map((f) => f.name)).toEqual(["Near", "Far"]);
+    expect(res.body.fairs[0].distanceMiles).toBeLessThan(res.body.fairs[1].distanceMiles);
+  });
+
+  it("computes distance when venueGeo uses Firestore underscore lat/lng fields", async () => {
+    const nearFair = {
+      ...FAIR_DATA,
+      venueGeo: { _latitude: 35.2271, _longitude: -80.8431 },
+    };
+    setupFairsDbMock({
+      fairDocs: [{ id: "fair-1", data: () => nearFair }],
+    });
+    const res = await request(app)
+      .get("/api/fairs")
+      .query({ lat: "35.23", lng: "-80.84", radiusMiles: "500" });
+    expect(res.status).toBe(200);
+    expect(res.body.fairs[0].distanceMiles).toBeDefined();
   });
 });
 

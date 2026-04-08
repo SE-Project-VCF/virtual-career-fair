@@ -1,21 +1,62 @@
-import { describe, it, expect } from "vitest";
-import { API_URL } from "../config";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 describe("config", () => {
-  it("exports API_URL constant", () => {
-    expect(API_URL).toBeDefined();
-    expect(typeof API_URL).toBe("string");
-  });
+  beforeEach(() => {
+    vi.resetModules()
+  })
 
-  it("API_URL is a valid URL or localhost", () => {
-    expect(API_URL).toMatch(/^https?:\/\/.+/);
-  });
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
 
-  it("API_URL has correct default fallback value", () => {
-    // This will use whatever is configured in env or fall back to localhost
-    const isLocalhost = API_URL === "http://localhost:5000";
-    const isRemoteUrl = API_URL.startsWith("http://") || API_URL.startsWith("https://");
-    
-    expect(isLocalhost || isRemoteUrl).toBe(true);
-  });
-});
+  it("API_URL uses VITE_API_URL when set", async () => {
+    vi.stubEnv("VITE_API_URL", "http://api.example:9000")
+    const mod = await import("../config")
+    expect(mod.API_URL).toBe("http://api.example:9000")
+  })
+
+  it("API_URL falls back to localhost when VITE_API_URL is empty", async () => {
+    vi.stubEnv("VITE_API_URL", "")
+    const mod = await import("../config")
+    expect(mod.API_URL).toBe("http://localhost:5000")
+  })
+
+  it("MAPBOX_ACCESS_TOKEN is empty when VITE_MAPBOX_ACCESS_TOKEN is not a string", async () => {
+    vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", undefined as unknown as string)
+    const mod = await import("../config")
+    expect(mod.MAPBOX_ACCESS_TOKEN).toBe("")
+    expect(mod.MAPBOX_TOKEN_LOOKS_PUBLIC).toBe(false)
+  })
+
+  it("normalizeMapboxToken strips BOM, CR, uses first line, and unwraps double quotes", async () => {
+    const token = `"pk.${"x".repeat(25)}"`
+    const raw = `\r\n\uFEFF${token}\nignored-line`
+    vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", raw)
+    const mod = await import("../config")
+    expect(mod.MAPBOX_ACCESS_TOKEN.startsWith("pk.")).toBe(true)
+    expect(mod.MAPBOX_ACCESS_TOKEN).not.toContain("\r")
+    expect(mod.MAPBOX_ACCESS_TOKEN).not.toContain('"')
+    expect(mod.MAPBOX_TOKEN_LOOKS_PUBLIC).toBe(true)
+  })
+
+  it("normalizeMapboxToken unwraps single-quoted token", async () => {
+    vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", `'pk.${"y".repeat(25)}'`)
+    const mod = await import("../config")
+    expect(mod.MAPBOX_ACCESS_TOKEN.startsWith("pk.")).toBe(true)
+    expect(mod.MAPBOX_TOKEN_LOOKS_PUBLIC).toBe(true)
+  })
+
+  it("MAPBOX_TOKEN_LOOKS_PUBLIC is false for non-pk tokens", async () => {
+    vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", `sk.${"z".repeat(30)}`)
+    const mod = await import("../config")
+    expect(mod.MAPBOX_ACCESS_TOKEN.startsWith("sk.")).toBe(true)
+    expect(mod.MAPBOX_TOKEN_LOOKS_PUBLIC).toBe(false)
+  })
+
+  it("MAPBOX_TOKEN_LOOKS_PUBLIC is false when pk token is too short", async () => {
+    vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", "pk.short")
+    const mod = await import("../config")
+    expect(mod.MAPBOX_ACCESS_TOKEN).toBe("pk.short")
+    expect(mod.MAPBOX_TOKEN_LOOKS_PUBLIC).toBe(false)
+  })
+})

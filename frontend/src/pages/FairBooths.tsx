@@ -16,6 +16,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
+import ForumIcon from "@mui/icons-material/Forum"
 import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
@@ -90,10 +91,20 @@ export default function FairBooths() {
   return (
     <BaseLayout>
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
           <Button variant="text" onClick={() => navigate(`/fair/${fairId}`)}>
             ← Back
           </Button>
+          {user?.role === "student" && isLive && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ForumIcon />}
+              onClick={() => navigate(`/fair/${fairId}/lounge`)}
+            >
+              Networking Lounge
+            </Button>
+          )}
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
