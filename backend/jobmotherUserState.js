@@ -41,7 +41,7 @@ function hasResumeUploaded(u) {
  * @returns {string[]}
  */
 function sanitizeJobmotherTips(parsed) {
-  const raw = parsed && typeof parsed === "object" && parsed !== null ? parsed.tips : undefined;
+  const raw = parsed && typeof parsed === "object" && parsed != null ? parsed.tips : undefined;
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((t) => typeof t === "string")
@@ -56,7 +56,7 @@ function sanitizeJobmotherTips(parsed) {
  * @returns {boolean}
  */
 function parseNeedsClarification(parsed) {
-  return Boolean(parsed && typeof parsed === "object" && parsed !== null && parsed.needsClarification === true);
+  return Boolean(parsed && typeof parsed === "object" && parsed != null && parsed.needsClarification === true);
 }
 
 /**
