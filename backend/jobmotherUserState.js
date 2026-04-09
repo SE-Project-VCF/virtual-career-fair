@@ -141,4 +141,8 @@ module.exports = {
   parseNeedsClarification,
   profileBasicsComplete,
   hasResumeUploaded,
+  /** @internal exported for unit tests */
+  normalizeRole,
+  countUnseenJobInvitations,
+  countPendingCallInvitations,
 };

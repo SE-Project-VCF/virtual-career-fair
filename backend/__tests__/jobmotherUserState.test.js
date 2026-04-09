@@ -12,6 +12,9 @@ const {
   parseNeedsClarification,
   profileBasicsComplete,
   hasResumeUploaded,
+  normalizeRole,
+  countUnseenJobInvitations,
+  countPendingCallInvitations,
 } = require("../jobmotherUserState");
 
 function makeWhereMock(docDatas) {
@@ -23,6 +26,41 @@ function makeWhereMock(docDatas) {
     })),
   };
 }
+
+describe("normalizeRole", () => {
+  it("maps company to companyowner and lowercases roles", () => {
+    expect(normalizeRole("company")).toBe("companyowner");
+    expect(normalizeRole("  Student ")).toBe("student");
+    expect(normalizeRole("Representative")).toBe("representative");
+  });
+
+  it("returns empty string for missing or non-string roles", () => {
+    expect(normalizeRole("")).toBe("");
+    expect(normalizeRole(null)).toBe("");
+    expect(normalizeRole(undefined)).toBe("");
+    expect(normalizeRole(42)).toBe("");
+  });
+});
+
+describe("countUnseenJobInvitations / countPendingCallInvitations", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("counts only sent job invitations", async () => {
+    db.collection.mockImplementation(() =>
+      makeWhereMock([{ status: "sent" }, { status: "viewed" }, { status: undefined }])
+    );
+    await expect(countUnseenJobInvitations("u1")).resolves.toBe(1);
+    expect(db.collection).toHaveBeenCalledWith("jobInvitations");
+  });
+
+  it("counts pending call invitations and treats missing status as empty", async () => {
+    db.collection.mockImplementation(() =>
+      makeWhereMock([{ status: "pending" }, { status: "done" }, { status: undefined }])
+    );
+    await expect(countPendingCallInvitations("u1", "studentId")).resolves.toBe(1);
+    expect(db.collection).toHaveBeenCalledWith("call_invitations");
+  });
+});
 
 describe("sanitizeJobmotherTips", () => {
   it("returns empty for non-array or missing", () => {
@@ -41,6 +79,14 @@ describe("sanitizeJobmotherTips", () => {
     const long = "x".repeat(300);
     expect(sanitizeJobmotherTips({ tips: [long] })).toEqual(["x".repeat(240)]);
   });
+
+  it("filters out non-string tip entries", () => {
+    expect(
+      sanitizeJobmotherTips({
+        tips: ["ok", 1, null, "  z ", false, "last"],
+      })
+    ).toEqual(["ok", "z", "last"]);
+  });
 });
 
 describe("parseNeedsClarification", () => {
@@ -48,6 +94,8 @@ describe("parseNeedsClarification", () => {
     expect(parseNeedsClarification({ needsClarification: true })).toBe(true);
     expect(parseNeedsClarification({ needsClarification: "true" })).toBe(false);
     expect(parseNeedsClarification({})).toBe(false);
+    expect(parseNeedsClarification(null)).toBe(false);
+    expect(parseNeedsClarification([])).toBe(false);
   });
 });
 
@@ -57,6 +105,7 @@ describe("profileBasicsComplete", () => {
     expect(profileBasicsComplete({ displayName: "AB" })).toBe(true);
     expect(profileBasicsComplete({ firstName: "A" })).toBe(false);
     expect(profileBasicsComplete({ firstName: 1, lastName: "B" })).toBe(false);
+    expect(profileBasicsComplete({ displayName: "   " })).toBe(false);
   });
 });
 
@@ -177,5 +226,19 @@ describe("buildJobmotherUserStateBlock", () => {
     const block = await buildJobmotherUserStateBlock("u1", { role: "companyOwner" }, null);
     expect(block).toContain("pendingOutgoingCallInvitationsCount: unknown");
     errSpy.mockRestore();
+  });
+
+  it("uses empty role string when userDoc.role is not a string", async () => {
+    db.collection.mockImplementation(() => makeWhereMock([]));
+    const block = await buildJobmotherUserStateBlock("u1", { role: 99 }, null);
+    expect(block).toContain("profileBasicsComplete: false");
+    expect(block).not.toContain("adminRole");
+  });
+
+  it("covers student branch with zero counts", async () => {
+    db.collection.mockImplementation(() => makeWhereMock([]));
+    const block = await buildJobmotherUserStateBlock("u1", { role: "student" }, undefined);
+    expect(block).toContain("unseenJobInvitationsCount: 0");
+    expect(block).toContain("pendingIncomingCallInvitationsCount: 0");
   });
 });

@@ -9,6 +9,26 @@ const {
 } = require("../jobmotherIntentResolver");
 
 describe("resolveJobmotherIntents", () => {
+  it("trims intent id strings", () => {
+    const { links } = resolveJobmotherIntents([{ id: "  GO_DASHBOARD  " }], { role: "student" });
+    expect(links).toEqual([{ path: "/dashboard", label: "Dashboard" }]);
+  });
+
+  it("stops at MAX_LINKS and does not process further intents", () => {
+    const { links } = resolveJobmotherIntents(
+      [
+        { id: "GO_DASHBOARD" },
+        { id: "GO_FAIRS" },
+        { id: "GO_CHAT" },
+        { id: "GO_PROFILE" },
+        { id: "GO_BOOTHS" },
+      ],
+      { role: "student" }
+    );
+    expect(links).toHaveLength(3);
+    expect(links.map((l) => l.path)).toEqual(["/dashboard", "/fairs", "/dashboard/chat"]);
+  });
+
   it("returns empty links for non-array intents", () => {
     expect(resolveJobmotherIntents(null, { role: "student" })).toEqual({
       links: [],
@@ -200,6 +220,38 @@ describe("intentAllowedForRole / intentToLink (spot checks)", () => {
     expect(intentToLink("GO_BOOTHS", { role: "company" })).toEqual({
       path: "/booths",
       label: "Browse Booths",
+    });
+  });
+
+  it("normalizeRole via intentAllowedForRole handles non-string role", () => {
+    expect(intentAllowedForRole("GO_JOB_INVITATIONS", { role: 123 })).toBe(false);
+    expect(intentAllowedForRole("GO_DASHBOARD", { role: 123 })).toBe(true);
+  });
+
+  it("GO_BOOTHS allows administrator and representative", () => {
+    expect(intentAllowedForRole("GO_BOOTHS", { role: "administrator" })).toBe(true);
+    expect(intentAllowedForRole("GO_BOOTHS", { role: "representative" })).toBe(true);
+  });
+
+  it("GO_SHORTLIST and GO_MY_CALLS allow companyOwner or representative distinctly", () => {
+    expect(intentAllowedForRole("GO_SHORTLIST", { role: "companyOwner" })).toBe(true);
+    expect(intentAllowedForRole("GO_QA_SESSIONS", { role: "representative" })).toBe(true);
+  });
+
+  it("GO_SUBMISSIONS requires representative and non-empty companyId", () => {
+    expect(intentAllowedForRole("GO_SUBMISSIONS", { role: "representative", companyId: "  " })).toBe(false);
+    expect(intentAllowedForRole("GO_SUBMISSIONS", { role: "representative", companyId: "c1" })).toBe(true);
+  });
+
+  it("GO_FAIR_LANDING requires truthy fairId after trim", () => {
+    expect(intentAllowedForRole("GO_FAIR_LANDING", { role: "student", fairId: "   " })).toBe(false);
+    expect(intentToLink("GO_FAIR_LANDING", { role: "student", fairId: "   " })).toBeNull();
+  });
+
+  it("intentToLink uses trimmed fairId for fair routes", () => {
+    expect(intentToLink("GO_FAIR_BOOTHS", { role: "student", fairId: "  fair-x  " })).toEqual({
+      path: "/fair/fair-x/booths",
+      label: "Fair booths",
     });
   });
 
