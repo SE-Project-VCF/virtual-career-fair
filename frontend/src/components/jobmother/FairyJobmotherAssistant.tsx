@@ -39,7 +39,10 @@ export type JobmotherMessage = {
 }
 
 function nextId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  const bytes = new Uint8Array(8)
+  globalThis.crypto.getRandomValues(bytes)
+  const suffix = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")
+  return `${Date.now()}-${suffix}`
 }
 
 type NavigateOk = {
