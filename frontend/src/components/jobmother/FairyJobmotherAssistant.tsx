@@ -13,15 +13,16 @@ import {
 } from "@mui/material"
 import CloseIcon from "@mui/icons-material/Close"
 import SendIcon from "@mui/icons-material/Send"
-import { JOBMOTHER_TEASER_DISMISSED_KEY } from "../../constants/jobmother"
+import {
+  JOBMOTHER_WELCOME_BUBBLE_DISMISSED_KEY,
+  readWelcomeBubbleDismissed,
+} from "../../constants/jobmother"
 import { API_URL } from "../../config"
 import { authUtils } from "../../utils/auth"
 import { jobmotherFloat } from "./jobmotherFloat"
 
-/** Full-body illustration for the welcome teaser */
+/** Full-body illustration for the floating launcher (same art before/after bubble dismiss). */
 const FULL_BODY_SRC = "/assets/mascot/fairy-jobmother-cartoon-full.png"
-/** Head-only asset for the small launcher (never use full-body here) */
-const AVATAR_SRC = "/assets/mascot/fairy-jobmother-cartoon-avatar.png"
 
 export type JobmotherMessage = {
   id: string
@@ -43,16 +44,8 @@ const glass = {
   WebkitBackdropFilter: "blur(12px)",
 } as const
 
-/** Teaser speech bubble border (tail uses same for outline) */
-const TEASER_BUBBLE_BORDER = "rgba(176, 58, 108, 0.28)"
-
-function readTeaserDismissed(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(JOBMOTHER_TEASER_DISMISSED_KEY) === "true"
-  } catch {
-    return false
-  }
-}
+/** Welcome speech bubble border (tail uses same for outline) */
+const WELCOME_BUBBLE_BORDER = "rgba(176, 58, 108, 0.28)"
 
 export default function FairyJobmotherAssistant() {
   const titleId = useId()
@@ -60,21 +53,17 @@ export default function FairyJobmotherAssistant() {
   const location = useLocation()
   const params = useParams<{ fairId?: string }>()
   const [open, setOpen] = useState(false)
-  const [teaserDismissed, setTeaserDismissed] = useState(readTeaserDismissed)
+  const [welcomeBubbleDismissed, setWelcomeBubbleDismissed] = useState(readWelcomeBubbleDismissed)
   const [messages, setMessages] = useState<JobmotherMessage[]>([])
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const launcherRef = useRef<HTMLButtonElement>(null)
-  const teaserLauncherRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const focusLauncher = useCallback(() => {
-    queueMicrotask(() => {
-      if (teaserDismissed) launcherRef.current?.focus()
-      else teaserLauncherRef.current?.focus()
-    })
-  }, [teaserDismissed])
+    queueMicrotask(() => launcherRef.current?.focus())
+  }, [])
 
   const close = useCallback(() => {
     setOpen(false)
@@ -86,11 +75,11 @@ export default function FairyJobmotherAssistant() {
     queueMicrotask(() => inputRef.current?.focus())
   }, [])
 
-  const dismissTeaser = useCallback((e: React.MouseEvent) => {
+  const dismissWelcomeBubble = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    setTeaserDismissed(true)
+    setWelcomeBubbleDismissed(true)
     try {
-      globalThis.localStorage?.setItem(JOBMOTHER_TEASER_DISMISSED_KEY, "true")
+      globalThis.localStorage?.setItem(JOBMOTHER_WELCOME_BUBBLE_DISMISSED_KEY, "true")
     } catch {
       /* ignore */
     }
@@ -210,8 +199,7 @@ export default function FairyJobmotherAssistant() {
     }
   }
 
-  const showTeaser = !teaserDismissed
-  const showSmallLauncher = teaserDismissed
+  const showWelcomeBubble = !welcomeBubbleDismissed
 
   return (
     <Box
@@ -378,107 +366,107 @@ export default function FairyJobmotherAssistant() {
         </Paper>
       )}
 
-      {!open && showTeaser && (
+      {!open && (
         <Box
           sx={{
             position: "relative",
             alignSelf: "flex-end",
             display: "inline-block",
-            maxWidth: "min(100vw - 32px, 320px)",
+            maxWidth: "min(100vw - 32px, 280px)",
           }}
         >
-          {/* Right-align bubble with the mascot; offset left slightly so it sits over the fairy more. */}
-          <Box
-            sx={{
-              position: "absolute",
-              right: "60px",
-              left: "auto",
-              bottom: "calc(100% + 10px)",
-              zIndex: 2,
-              width: "max-content",
-              maxWidth: "min(220px, calc(100vw - 40px))",
-            }}
-          >
-            <Paper
-              elevation={0}
-              onClick={() => openPanel()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  openPanel()
-                }
-              }}
-              role="button"
-              tabIndex={0}
-              aria-label="Open Fairy Jobmother assistant"
-              sx={{
-                ...glass,
-                position: "relative",
-                px: 2,
-                py: 1.25,
-                maxWidth: "min(220px, calc(100vw - 40px))",
-                cursor: "pointer",
-                borderRadius: 3,
-                border: `1px solid ${TEASER_BUBBLE_BORDER}`,
-                overflow: "visible",
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.06)",
-                "&:hover": { bgcolor: "rgba(255, 255, 255, 0.6)" },
-                // Speech tail: border layer + fill (same rgba as glass.bgcolor; tail can’t use backdrop-filter)
-                "&::before": {
-                  content: '""',
-                  position: "absolute",
-                  right: "calc(12% - 1px)",
-                  bottom: -11,
-                  width: 0,
-                  height: 0,
-                  borderLeft: "10px solid transparent",
-                  borderRight: "5px solid transparent",
-                  borderTop: `11px solid ${TEASER_BUBBLE_BORDER}`,
-                },
-                "&::after": {
-                  content: '""',
-                  position: "absolute",
-                  right: "12%",
-                  bottom: -9,
-                  width: 0,
-                  height: 0,
-                  borderLeft: "9px solid transparent",
-                  borderRight: "4px solid transparent",
-                  borderTop: `10px solid ${glass.bgcolor}`,
-                },
-                "&:hover::after": {
-                  borderTop: "10px solid rgba(255, 255, 255, 0.6)",
-                },
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 600, color: "#4a1530", lineHeight: 1.4 }}>
-                Hi! I&apos;m your Fairy Jobmother!
-              </Typography>
-            </Paper>
-            <IconButton
-              size="small"
-              onClick={dismissTeaser}
-              aria-label="Dismiss welcome message"
+          {showWelcomeBubble && (
+            <Box
               sx={{
                 position: "absolute",
-                top: -10,
-                right: -20,
-                zIndex: 3,
-                ...glass,
-                boxShadow: 1,
-                width: 28,
-                height: 28,
-                "&:hover": { bgcolor: "rgba(255, 255, 255, 0.65)" },
+                right: "52px",
+                left: "auto",
+                bottom: "calc(100% + 8px)",
+                zIndex: 2,
+                width: "max-content",
+                maxWidth: "min(220px, calc(100vw - 40px))",
               }}
             >
-              <CloseIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-          </Box>
+              <Paper
+                elevation={0}
+                onClick={() => openPanel()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    openPanel()
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Open Fairy Jobmother assistant"
+                sx={{
+                  ...glass,
+                  position: "relative",
+                  px: 2,
+                  py: 1.25,
+                  maxWidth: "min(220px, calc(100vw - 40px))",
+                  cursor: "pointer",
+                  borderRadius: 3,
+                  border: `1px solid ${WELCOME_BUBBLE_BORDER}`,
+                  overflow: "visible",
+                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.06)",
+                  "&:hover": { bgcolor: "rgba(255, 255, 255, 0.6)" },
+                  "&::before": {
+                    content: '""',
+                    position: "absolute",
+                    right: "calc(12% - 1px)",
+                    bottom: -11,
+                    width: 0,
+                    height: 0,
+                    borderLeft: "10px solid transparent",
+                    borderRight: "5px solid transparent",
+                    borderTop: `11px solid ${WELCOME_BUBBLE_BORDER}`,
+                  },
+                  "&::after": {
+                    content: '""',
+                    position: "absolute",
+                    right: "12%",
+                    bottom: -9,
+                    width: 0,
+                    height: 0,
+                    borderLeft: "9px solid transparent",
+                    borderRight: "4px solid transparent",
+                    borderTop: `10px solid ${glass.bgcolor}`,
+                  },
+                  "&:hover::after": {
+                    borderTop: "10px solid rgba(255, 255, 255, 0.6)",
+                  },
+                }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 600, color: "#4a1530", lineHeight: 1.4 }}>
+                  Hi! I&apos;m your Fairy Jobmother!
+                </Typography>
+              </Paper>
+              <IconButton
+                size="small"
+                onClick={dismissWelcomeBubble}
+                aria-label="Dismiss welcome message"
+                sx={{
+                  position: "absolute",
+                  top: -10,
+                  right: -20,
+                  zIndex: 3,
+                  ...glass,
+                  boxShadow: 1,
+                  width: 28,
+                  height: 28,
+                  "&:hover": { bgcolor: "rgba(255, 255, 255, 0.65)" },
+                }}
+              >
+                <CloseIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
+          )}
 
           <Box
             component="button"
             type="button"
-            ref={teaserLauncherRef}
+            ref={launcherRef}
             onClick={() => openPanel()}
             aria-label="Open Fairy Jobmother help"
             aria-expanded={open}
@@ -503,9 +491,9 @@ export default function FairyJobmotherAssistant() {
               src={FULL_BODY_SRC}
               alt=""
               sx={{
-                maxHeight: { xs: 140, sm: 160 },
+                maxHeight: { xs: 118, sm: 132 },
                 width: "auto",
-                maxWidth: "min(140px, 35vw)",
+                maxWidth: "min(118px, 32vw)",
                 objectFit: "contain",
                 objectPosition: "bottom center",
                 display: "block",
@@ -516,38 +504,6 @@ export default function FairyJobmotherAssistant() {
             />
           </Box>
         </Box>
-      )}
-
-      {!open && showSmallLauncher && (
-        <IconButton
-          ref={launcherRef}
-          onClick={() => openPanel()}
-          aria-label="Open Fairy Jobmother help"
-          aria-expanded={open}
-          aria-controls={open ? DIALOG_DOM_ID : undefined}
-          sx={{
-            width: 56,
-            height: 56,
-            p: 0,
-            boxShadow: 3,
-            border: "2px solid rgba(255, 255, 255, 0.65)",
-            ...glass,
-            "&:hover": { bgcolor: "rgba(255, 255, 255, 0.65)" },
-          }}
-        >
-          <Box
-            component="img"
-            src={AVATAR_SRC}
-            alt=""
-            sx={{
-              width: 52,
-              height: 52,
-              borderRadius: "50%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-        </IconButton>
       )}
     </Box>
   )

@@ -5,7 +5,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import FairyJobmotherAssistant from "../FairyJobmotherAssistant"
-import { JOBMOTHER_TEASER_DISMISSED_KEY } from "../../../constants/jobmother"
+import { JOBMOTHER_WELCOME_BUBBLE_DISMISSED_KEY } from "../../../constants/jobmother"
 import { authUtils } from "../../../utils/auth"
 
 vi.mock("../../../utils/auth", () => ({
@@ -27,7 +27,8 @@ function renderAt(path: string) {
 
 describe("FairyJobmotherAssistant", () => {
   beforeEach(() => {
-    globalThis.localStorage?.removeItem(JOBMOTHER_TEASER_DISMISSED_KEY)
+    globalThis.localStorage?.removeItem(JOBMOTHER_WELCOME_BUBBLE_DISMISSED_KEY)
+    globalThis.localStorage?.removeItem("jobmother-teaser-dismissed")
     vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token")
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -166,7 +167,7 @@ describe("FairyJobmotherAssistant", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
-  it("dismissing the welcome shows the small circular launcher", async () => {
+  it("dismissing the welcome hides only the speech bubble; full-body launcher remains", async () => {
     const user = userEvent.setup()
     renderAt("/dashboard")
 
@@ -175,7 +176,9 @@ describe("FairyJobmotherAssistant", () => {
     await user.click(screen.getByRole("button", { name: /Dismiss welcome message/i }))
 
     expect(screen.queryByText(/Hi! I'm your Fairy Jobmother!/i)).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /Open Fairy Jobmother help/i })).toBeInTheDocument()
+    const launcher = screen.getByRole("button", { name: /Open Fairy Jobmother help/i })
+    expect(launcher).toBeInTheDocument()
+    expect(launcher.querySelector('img[src="/assets/mascot/fairy-jobmother-cartoon-full.png"]')).not.toBeNull()
   })
 
   it("opens chat from the speech bubble", async () => {
