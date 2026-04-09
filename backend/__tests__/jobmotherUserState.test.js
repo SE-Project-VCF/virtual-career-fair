@@ -1,5 +1,10 @@
 "use strict";
 
+/** Avoid loading real firebase-admin (needs credentials); jobmotherUserState still pulls ./firebase at import. */
+jest.mock("../firebase", () => ({
+  db: { collection: jest.fn() },
+}));
+
 const {
   sanitizeJobmotherTips,
   parseNeedsClarification,
