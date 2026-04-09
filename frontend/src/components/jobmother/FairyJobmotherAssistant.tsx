@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
 import {
   Box,
+  Button,
+  CircularProgress,
   IconButton,
   Paper,
+  Stack,
   TextField,
   Typography,
   InputAdornment,
@@ -10,6 +14,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close"
 import SendIcon from "@mui/icons-material/Send"
 import { JOBMOTHER_TEASER_DISMISSED_KEY } from "../../constants/jobmother"
+import { API_URL } from "../../config"
+import { authUtils } from "../../utils/auth"
 import { jobmotherFloat } from "./jobmotherFloat"
 
 /** Full-body illustration for the welcome teaser */
@@ -17,13 +23,11 @@ const FULL_BODY_SRC = "/assets/mascot/fairy-jobmother-cartoon-full.png"
 /** Head-only asset for the small launcher (never use full-body here) */
 const AVATAR_SRC = "/assets/mascot/fairy-jobmother-cartoon-avatar.png"
 
-const PLACEHOLDER_ASSISTANT_REPLY =
-  "Thanks! Full AI answers will arrive in a future update."
-
 export type JobmotherMessage = {
   id: string
   role: "user" | "assistant"
   text: string
+  links?: { path: string; label: string }[]
 }
 
 function nextId() {
@@ -52,15 +56,18 @@ function readTeaserDismissed(): boolean {
 
 export default function FairyJobmotherAssistant() {
   const titleId = useId()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const params = useParams<{ fairId?: string }>()
   const [open, setOpen] = useState(false)
   const [teaserDismissed, setTeaserDismissed] = useState(readTeaserDismissed)
   const [messages, setMessages] = useState<JobmotherMessage[]>([])
   const [draft, setDraft] = useState("")
+  const [sending, setSending] = useState(false)
   const launcherRef = useRef<HTMLButtonElement>(null)
   const teaserLauncherRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const focusLauncher = useCallback(() => {
     queueMicrotask(() => {
@@ -71,10 +78,6 @@ export default function FairyJobmotherAssistant() {
 
   const close = useCallback(() => {
     setOpen(false)
-    if (replyTimerRef.current) {
-      clearTimeout(replyTimerRef.current)
-      replyTimerRef.current = null
-    }
     focusLauncher()
   }, [focusLauncher])
 
@@ -111,31 +114,99 @@ export default function FairyJobmotherAssistant() {
     listRef.current.scrollTop = listRef.current.scrollHeight
   }, [open, messages])
 
-  useEffect(
-    () => () => {
-      if (replyTimerRef.current) clearTimeout(replyTimerRef.current)
-    },
-    []
-  )
-
-  const send = useCallback(() => {
+  const send = useCallback(async () => {
     const text = draft.trim()
-    if (!text) return
+    if (!text || sending) return
     setDraft("")
     setMessages((prev) => [...prev, { id: nextId(), role: "user", text }])
-    replyTimerRef.current = setTimeout(() => {
+    setSending(true)
+    try {
+      const token = await authUtils.getIdToken()
+      if (!token) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: nextId(),
+            role: "assistant",
+            text: "Please sign in again to use navigation help.",
+          },
+        ])
+        return
+      }
+
+      const fairId = params.fairId?.trim() || undefined
+      const res = await fetch(`${API_URL}/api/jobmother/navigate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: text,
+          pathname: location.pathname,
+          ...(fairId ? { fairId } : {}),
+        }),
+      })
+
+      let data: { ok?: boolean; reply?: string; links?: unknown; error?: string } = {}
+      try {
+        data = await res.json()
+      } catch {
+        data = {}
+      }
+
+      if (!res.ok) {
+        const err =
+          typeof data.error === "string" && data.error.trim()
+            ? data.error.trim()
+            : "Something went wrong. Try again."
+        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", text: err }])
+        return
+      }
+
+      if (data.ok !== true) {
+        const err =
+          typeof data.error === "string" && data.error.trim()
+            ? data.error.trim()
+            : "Unexpected response from the assistant."
+        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", text: err }])
+        return
+      }
+
+      const reply = typeof data.reply === "string" ? data.reply : ""
+      const rawLinks = Array.isArray(data.links) ? data.links : []
+      const links = rawLinks
+        .filter(
+          (l): l is { path: string; label: string } =>
+            l != null &&
+            typeof l === "object" &&
+            typeof (l as { path?: unknown }).path === "string" &&
+            typeof (l as { label?: unknown }).label === "string"
+        )
+        .map((l) => ({ path: l.path, label: l.label }))
+
       setMessages((prev) => [
         ...prev,
-        { id: nextId(), role: "assistant", text: PLACEHOLDER_ASSISTANT_REPLY },
+        { id: nextId(), role: "assistant", text: reply, links },
       ])
-      replyTimerRef.current = null
-    }, 400)
-  }, [draft])
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: "assistant",
+          text: "Network error. Check your connection and try again.",
+        },
+      ])
+    } finally {
+      setSending(false)
+    }
+  }, [draft, sending, location.pathname, params.fairId])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      send()
+      void send()
     }
   }
 
@@ -191,7 +262,7 @@ export default function FairyJobmotherAssistant() {
                 Fairy Jobmother
               </Typography>
               <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.9)", display: "block" }}>
-                Tips & tours (coming soon) · Beta
+                AI navigation · Beta
               </Typography>
             </Box>
             <IconButton
@@ -218,7 +289,7 @@ export default function FairyJobmotherAssistant() {
           >
             {messages.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                Ask me how to use Job Goblin — I&apos;ll share more once our AI guide is connected.
+                Ask where you want to go in Job Goblin — I&apos;ll suggest vetted pages you can open with one tap.
               </Typography>
             ) : (
               messages.map((m) => (
@@ -245,6 +316,24 @@ export default function FairyJobmotherAssistant() {
                     <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                       {m.text}
                     </Typography>
+                    {m.role === "assistant" && m.links && m.links.length > 0 ? (
+                      <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ mt: 0.75 }}>
+                        {m.links.map((link) => (
+                          <Button
+                            key={`${link.path}-${link.label}`}
+                            size="small"
+                            variant="outlined"
+                            color="success"
+                            onClick={() => {
+                              navigate(link.path)
+                              close()
+                            }}
+                          >
+                            {link.label}
+                          </Button>
+                        ))}
+                      </Stack>
+                    ) : null}
                   </Box>
                 </Box>
               ))
@@ -263,16 +352,20 @@ export default function FairyJobmotherAssistant() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={onKeyDown}
+              disabled={sending}
               slotProps={{
                 input: {
                   endAdornment: (
                     <InputAdornment position="end">
+                      {sending ? (
+                        <CircularProgress size={20} sx={{ mr: 0.5 }} aria-label="Sending" />
+                      ) : null}
                       <IconButton
                         size="small"
                         color="primary"
                         aria-label="Send message"
-                        onClick={() => send()}
-                        disabled={!draft.trim()}
+                        onClick={() => void send()}
+                        disabled={!draft.trim() || sending}
                       >
                         <SendIcon fontSize="small" />
                       </IconButton>

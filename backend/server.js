@@ -95,6 +95,7 @@ app.use("/api", require("./routes/jobInvitations"));
 app.use("/api", require("./routes/calls"));
 app.use("/api", require("./routes/sessions"));
 app.use("/api", require("./routes/callInvitations"));
+app.use("/api", require("./routes/jobmother"));
 
 if (require.main === module) {
   app.listen(PORT, () => {

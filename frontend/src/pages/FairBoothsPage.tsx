@@ -17,6 +17,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import { auth } from "../firebase"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
+import BaseLayout from "../components/BaseLayout"
 
 type ReviewEntry = {
   studentId: string
@@ -79,9 +80,13 @@ export default function FairBoothsPage() {
   const formatDate = (ms: number | null) =>
     ms ? new Date(ms).toLocaleString() : "—"
 
+  const pageTitle = fairData?.fairName?.trim()
+    ? `${fairData.fairName.trim()} — Booth reviews`
+    : "Booth reviews"
+
   return (
-    <Box sx={{ minHeight: "100vh", backgroundColor: "#f8f9fa", py: 4 }}>
-      <Container maxWidth="md">
+    <BaseLayout pageTitle={pageTitle}>
+      <Container maxWidth="md" sx={{ py: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin")}
@@ -95,9 +100,6 @@ export default function FairBoothsPage() {
 
         {fairData && (
           <>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
-              {fairData.fairName || "Career Fair"}
-            </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               {formatDate(fairData.startTime)} – {formatDate(fairData.endTime)}
             </Typography>
@@ -156,6 +158,6 @@ export default function FairBoothsPage() {
           </>
         )}
       </Container>
-    </Box>
+    </BaseLayout>
   )
 }
