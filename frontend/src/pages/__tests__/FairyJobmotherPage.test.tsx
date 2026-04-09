@@ -64,9 +64,8 @@ describe("FairyJobmotherPage", () => {
     expect(screen.getByRole("heading", { name: /Example things to ask/i, level: 2 })).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: /Tips/i, level: 2 })).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: /Frequently asked questions/i, level: 2 })).toBeInTheDocument()
-    expect(
-      screen.getByText(/Open the floating assistant, ask what you need/i)
-    ).toBeInTheDocument()
+    expect(screen.getByText(/in-app guide for Job Goblin/i)).toBeInTheDocument()
+    expect(screen.getByText(/vetted navigation/i)).toBeInTheDocument()
   })
 
   it("shows student-oriented example prompts for students", () => {

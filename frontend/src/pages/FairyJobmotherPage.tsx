@@ -234,9 +234,13 @@ export default function FairyJobmotherPage() {
                     Meet the Fairy Jobmother
                   </Typography>
                   <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.78)", lineHeight: 1.7, maxWidth: 560 }}>
-                    She helps you move around Job Goblin in plain language. Open the floating assistant, ask what you
-                    need, and she&apos;ll reply with short guidance plus buttons to the right places in the app when
-                    she can map your request to navigation.
+                    She&apos;s your in-app guide for Job Goblin: turn a question into{" "}
+                    <strong>vetted navigation</strong> (links respect your role and whether you&apos;re inside a fair),
+                    optional <strong>tips</strong> for fairs and using the product, and <strong>quick-reply chips</strong>{" "}
+                    when she needs a nudge. She can use light <strong>account context</strong>—like invitation counts or
+                    whether your profile basics are filled in—to tailor answers, without exposing private content. Open
+                    the floating assistant from the bottom-right, and use the header <strong>expand</strong> control when
+                    you want a taller chat.
                   </Typography>
                 </Box>
 
@@ -255,16 +259,29 @@ export default function FairyJobmotherPage() {
                       layout).
                     </Typography>
                     <Typography component="li" variant="body2" sx={{ lineHeight: 1.7 }}>
-                      Type a question or goal in your own words.
+                      Type a question or goal in your own words—navigation, invitations, booths, profile, admin, and
+                      more.
                     </Typography>
                     <Typography component="li" variant="body2" sx={{ lineHeight: 1.7 }}>
-                      Read her reply and use any <strong>suggested links</strong> to jump straight there.
+                      Read her reply. Use <strong>suggested links</strong> for one-tap jumps to allowed pages for your
+                      account.
+                    </Typography>
+                    <Typography component="li" variant="body2" sx={{ lineHeight: 1.7 }}>
+                      Scan optional <strong>tips</strong> under a reply for extra fair- or app-focused ideas.
+                    </Typography>
+                    <Typography component="li" variant="body2" sx={{ lineHeight: 1.7 }}>
+                      If she asks you to clarify, use <strong>quick-reply chips</strong> (or type a follow-up) to narrow
+                      things down.
+                    </Typography>
+                    <Typography component="li" variant="body2" sx={{ lineHeight: 1.7 }}>
+                      Tap the header <strong>expand</strong> icon to grow the panel upward and see more of the thread.
                     </Typography>
                   </Stack>
                   <Typography variant="body2" sx={{ mt: 2, color: "rgba(255,255,255,0.65)", lineHeight: 1.65 }}>
-                    You need to stay signed in. Which links appear depends on your <strong>role</strong> (student,
-                    representative, company owner, or administrator). If you are inside a fair URL, she can also point
-                    you to that fair&apos;s home or booth list when it fits your question.
+                    Stay signed in. Links and chips follow your <strong>role</strong> (student, representative, company
+                    owner, or administrator). On a fair URL, she can include that fair&apos;s home or booth list when it
+                    matches your question. She may use high-level account signals—never full resume text or
+                    messages—to steer suggestions.
                   </Typography>
                 </Paper>
 
@@ -278,7 +295,8 @@ export default function FairyJobmotherPage() {
                     Example things to ask
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2, color: "rgba(255,255,255,0.65)", lineHeight: 1.65 }}>
-                    Phrasing can vary; these are patterns that usually map well to in-app navigation.
+                    Phrasing can vary. These patterns usually map well to navigation; you may also get tips or clarify
+                    chips depending on your message.
                   </Typography>
                   {promptGroups.map((group) => (
                     <Box key={group.title} sx={{ mb: group.title === "Everyone" ? 2 : 2.5 }}>
@@ -323,8 +341,16 @@ export default function FairyJobmotherPage() {
                     <Stack direction="row" spacing={1} alignItems="flex-start">
                       <StarsIcon sx={{ color: "#81c784", fontSize: 20, mt: 0.25, flexShrink: 0 }} />
                       <Typography variant="body2" sx={{ lineHeight: 1.65 }}>
-                        If a reply has no links, try rephrasing or ask more specifically about a page you want (e.g.
-                        &quot;job invitations&quot; or &quot;admin panel&quot;).
+                        Use the <strong>expand</strong> control in the chat header for a taller window and more message
+                        history.
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={1} alignItems="flex-start">
+                      <StarsIcon sx={{ color: "#ffb74d", fontSize: 20, mt: 0.25, flexShrink: 0 }} />
+                      <Typography variant="body2" sx={{ lineHeight: 1.65 }}>
+                        If a reply has no links, rephrase or name a destination (e.g. &quot;job invitations&quot; or
+                        &quot;admin panel&quot;). Watch for <strong>tips</strong> and <strong>quick replies</strong>{" "}
+                        when she needs clearer intent.
                       </Typography>
                     </Stack>
                   </Stack>

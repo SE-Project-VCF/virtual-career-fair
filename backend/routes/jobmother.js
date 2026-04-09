@@ -9,6 +9,11 @@ const {
   resolveJobmotherIntents,
   buildIntentCatalogForPrompt,
 } = require("../jobmotherIntentResolver");
+const {
+  buildJobmotherUserStateBlock,
+  sanitizeJobmotherTips,
+  parseNeedsClarification,
+} = require("../jobmotherUserState");
 
 const router = Router();
 
@@ -65,11 +70,21 @@ router.post("/jobmother/navigate", verifyFirebaseToken, async (req, res) => {
       pathname ? `Current pathname: ${pathname}` : "No pathname sent.",
     ].join("\n");
 
+    let userStateBlock = "";
+    try {
+      userStateBlock = await buildJobmotherUserStateBlock(req.user.uid, u, fairId);
+    } catch (stateErr) {
+      console.error("[jobmother] user state block:", stateErr);
+      userStateBlock = "User state (for context only): unavailable.";
+    }
+
     const prompt = `You are the Fairy Jobmother, a warm, concise guide for the Job Goblin virtual career fair app.
 
 ${catalog}
 
 ${contextBlock}
+
+${userStateBlock}
 
 User message:
 """
@@ -80,12 +95,14 @@ Respond with JSON only (no markdown), shape:
 {
   "reply": "short friendly message in Fairy Jobmother voice (1-4 sentences)",
   "intents": [ { "id": "INTENT_ID_FROM_LIST" } ],
-  "needsClarification": false
+  "needsClarification": false,
+  "tips": []
 }
 
 Rules:
 - Use only intent ids from the catalog list. Never invent new ids.
-- Never include URLs, paths, or route strings in "reply" or anywhere else.
+- Never include URLs, paths, or route strings in "reply", "tips", or anywhere else.
+- "tips": array of 0 to 3 short one-sentence strings with practical career-fair or in-app advice (booths, calls, resumes). Use [] if the user only asked for navigation. Tips should complement "reply", not duplicate it.
 - Order "intents" by most helpful first (max about 5; the server will trim).
 - If the user is vague, set needsClarification true and use CLARIFY as the only intent or pair with one safe intent like GO_DASHBOARD.
 `;
@@ -119,8 +136,10 @@ Rules:
 
     const intents = Array.isArray(parsed.intents) ? parsed.intents : [];
     const { links } = resolveJobmotherIntents(intents, userContext);
+    const tips = sanitizeJobmotherTips(parsed);
+    const needsClarification = parseNeedsClarification(parsed);
 
-    return res.json({ ok: true, reply, links });
+    return res.json({ ok: true, reply, links, tips, needsClarification });
   } catch (err) {
     console.error("[jobmother] navigate error:", err);
     return res.status(500).json({ ok: false, error: "Navigation assistant failed" });

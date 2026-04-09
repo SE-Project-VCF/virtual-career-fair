@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom"
 import {
   Box,
   Button,
+  Chip,
   CircularProgress,
   IconButton,
   Paper,
@@ -11,10 +12,14 @@ import {
   Typography,
   InputAdornment,
 } from "@mui/material"
+import { alpha } from "@mui/material/styles"
 import CloseIcon from "@mui/icons-material/Close"
+import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen"
+import OpenInFullIcon from "@mui/icons-material/OpenInFull"
 import SendIcon from "@mui/icons-material/Send"
 import {
   JOBMOTHER_WELCOME_BUBBLE_DISMISSED_KEY,
+  getJobmotherClarifyChips,
   readWelcomeBubbleDismissed,
 } from "../../constants/jobmother"
 import { API_URL } from "../../config"
@@ -29,10 +34,93 @@ export type JobmotherMessage = {
   role: "user" | "assistant"
   text: string
   links?: { path: string; label: string }[]
+  tips?: string[]
+  needsClarification?: boolean
 }
 
 function nextId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+type NavigateOk = {
+  ok: true
+  reply: string
+  links: { path: string; label: string }[]
+  tips: string[]
+  needsClarification: boolean
+}
+
+type NavigateErr = { ok: false; error: string }
+
+async function postJobmotherNavigate(
+  token: string,
+  pathname: string,
+  fairId: string | undefined,
+  message: string
+): Promise<NavigateOk | NavigateErr> {
+  const res = await fetch(`${API_URL}/api/jobmother/navigate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      message,
+      pathname,
+      ...(fairId ? { fairId } : {}),
+    }),
+  })
+
+  let data: {
+    ok?: boolean
+    reply?: string
+    links?: unknown
+    tips?: unknown
+    needsClarification?: boolean
+    error?: string
+  } = {}
+  try {
+    data = await res.json()
+  } catch {
+    data = {}
+  }
+
+  if (!res.ok) {
+    const err =
+      typeof data.error === "string" && data.error.trim()
+        ? data.error.trim()
+        : "Something went wrong. Try again."
+    return { ok: false, error: err }
+  }
+
+  if (data.ok !== true) {
+    const err =
+      typeof data.error === "string" && data.error.trim()
+        ? data.error.trim()
+        : "Unexpected response from the assistant."
+    return { ok: false, error: err }
+  }
+
+  const reply = typeof data.reply === "string" ? data.reply : ""
+  const rawLinks = Array.isArray(data.links) ? data.links : []
+  const links = rawLinks
+    .filter(
+      (l): l is { path: string; label: string } =>
+        l != null &&
+        typeof l === "object" &&
+        typeof (l as { path?: unknown }).path === "string" &&
+        typeof (l as { label?: unknown }).label === "string"
+    )
+    .map((l) => ({ path: l.path, label: l.label }))
+
+  const rawTips = Array.isArray(data.tips) ? data.tips : []
+  const tips = rawTips
+    .filter((t): t is string => typeof t === "string")
+    .map((t) => t.trim())
+    .filter(Boolean)
+  const needsClarification = data.needsClarification === true
+
+  return { ok: true, reply, links, tips, needsClarification }
 }
 
 const DIALOG_DOM_ID = "fairy-jobmother-dialog"
@@ -57,6 +145,7 @@ export default function FairyJobmotherAssistant() {
   const [messages, setMessages] = useState<JobmotherMessage[]>([])
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
+  const [panelExpanded, setPanelExpanded] = useState(false)
   const launcherRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -103,10 +192,9 @@ export default function FairyJobmotherAssistant() {
     listRef.current.scrollTop = listRef.current.scrollHeight
   }, [open, messages])
 
-  const send = useCallback(async () => {
-    const text = draft.trim()
+  const sendWithText = useCallback(async (rawText: string) => {
+    const text = rawText.trim()
     if (!text || sending) return
-    setDraft("")
     setMessages((prev) => [...prev, { id: nextId(), role: "user", text }])
     setSending(true)
     try {
@@ -124,59 +212,23 @@ export default function FairyJobmotherAssistant() {
       }
 
       const fairId = params.fairId?.trim() || undefined
-      const res = await fetch(`${API_URL}/api/jobmother/navigate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          message: text,
-          pathname: location.pathname,
-          ...(fairId ? { fairId } : {}),
-        }),
-      })
-
-      let data: { ok?: boolean; reply?: string; links?: unknown; error?: string } = {}
-      try {
-        data = await res.json()
-      } catch {
-        data = {}
-      }
-
-      if (!res.ok) {
-        const err =
-          typeof data.error === "string" && data.error.trim()
-            ? data.error.trim()
-            : "Something went wrong. Try again."
-        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", text: err }])
+      const result = await postJobmotherNavigate(token, location.pathname, fairId, text)
+      if (!result.ok) {
+        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", text: result.error }])
         return
       }
 
-      if (data.ok !== true) {
-        const err =
-          typeof data.error === "string" && data.error.trim()
-            ? data.error.trim()
-            : "Unexpected response from the assistant."
-        setMessages((prev) => [...prev, { id: nextId(), role: "assistant", text: err }])
-        return
-      }
-
-      const reply = typeof data.reply === "string" ? data.reply : ""
-      const rawLinks = Array.isArray(data.links) ? data.links : []
-      const links = rawLinks
-        .filter(
-          (l): l is { path: string; label: string } =>
-            l != null &&
-            typeof l === "object" &&
-            typeof (l as { path?: unknown }).path === "string" &&
-            typeof (l as { label?: unknown }).label === "string"
-        )
-        .map((l) => ({ path: l.path, label: l.label }))
-
+      const { reply, links, tips, needsClarification } = result
       setMessages((prev) => [
         ...prev,
-        { id: nextId(), role: "assistant", text: reply, links },
+        {
+          id: nextId(),
+          role: "assistant",
+          text: reply,
+          links,
+          ...(tips.length > 0 ? { tips } : {}),
+          ...(needsClarification ? { needsClarification: true } : {}),
+        },
       ])
     } catch {
       setMessages((prev) => [
@@ -190,7 +242,14 @@ export default function FairyJobmotherAssistant() {
     } finally {
       setSending(false)
     }
-  }, [draft, sending, location.pathname, params.fairId])
+  }, [sending, location.pathname, params.fairId])
+
+  const send = useCallback(async () => {
+    const text = draft.trim()
+    if (!text || sending) return
+    setDraft("")
+    await sendWithText(text)
+  }, [draft, sending, sendWithText])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -225,7 +284,7 @@ export default function FairyJobmotherAssistant() {
             ...glass,
             width: { xs: "calc(100vw - 32px)", sm: 380 },
             maxWidth: 380,
-            maxHeight: "min(480px, 50vh)",
+            maxHeight: panelExpanded ? "min(720px, 85vh)" : "min(480px, 50vh)",
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
@@ -250,17 +309,32 @@ export default function FairyJobmotherAssistant() {
                 Fairy Jobmother
               </Typography>
               <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.9)", display: "block" }}>
-                AI navigation · Beta
+                AI guide · Beta
               </Typography>
             </Box>
-            <IconButton
-              size="small"
-              onClick={close}
-              aria-label="Close Fairy Jobmother"
-              sx={{ color: "white", "&:hover": { bgcolor: "rgba(255,255,255,0.15)" } }}
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
+            <Stack direction="row" spacing={0.25} alignItems="center">
+              <IconButton
+                size="small"
+                onClick={() => setPanelExpanded((v) => !v)}
+                aria-label={panelExpanded ? "Collapse chat panel" : "Expand chat panel"}
+                aria-expanded={panelExpanded}
+                sx={{ color: "white", "&:hover": { bgcolor: "rgba(255,255,255,0.15)" } }}
+              >
+                {panelExpanded ? (
+                  <CloseFullscreenIcon fontSize="small" />
+                ) : (
+                  <OpenInFullIcon fontSize="small" />
+                )}
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={close}
+                aria-label="Close Fairy Jobmother"
+                sx={{ color: "white", "&:hover": { bgcolor: "rgba(255,255,255,0.15)" } }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Stack>
           </Box>
 
           <Box
@@ -268,7 +342,7 @@ export default function FairyJobmotherAssistant() {
             sx={{
               flex: 1,
               minHeight: 160,
-              maxHeight: 280,
+              maxHeight: panelExpanded ? "min(560px, 62vh)" : 280,
               overflow: "auto",
               px: 1.5,
               py: 1,
@@ -276,55 +350,108 @@ export default function FairyJobmotherAssistant() {
             }}
           >
             {messages.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                Ask where you want to go in Job Goblin — I&apos;ll suggest vetted pages you can open with one tap.
+              <Typography
+                variant="body2"
+                sx={{
+                  py: 1,
+                  lineHeight: 1.65,
+                  color: (theme) => alpha(theme.palette.text.secondary, 0.68),
+                }}
+              >
+                Ask the Fairy Jobmother whenever you need help in Job Goblin—she can point you to the right places,
+                offer short tips when they help, and suggest quick replies if your question needs a little focus.
               </Typography>
             ) : (
-              messages.map((m) => (
-                <Box
-                  key={m.id}
-                  sx={{
-                    display: "flex",
-                    justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-                    mb: 1,
-                  }}
-                >
+              messages.map((m, idx) => {
+                const showClarifyChips =
+                  m.role === "assistant" &&
+                  m.needsClarification === true &&
+                  idx === messages.length - 1 &&
+                  !sending
+                return (
                   <Box
+                    key={m.id}
                     sx={{
-                      maxWidth: "85%",
-                      px: 1.25,
-                      py: 0.75,
-                      borderRadius: 2,
-                      bgcolor: m.role === "user" ? "#b03a6c" : "#e8f5ef",
-                      color: m.role === "user" ? "white" : "text.primary",
-                      border:
-                        m.role === "assistant" ? "1px solid rgba(56, 133, 96, 0.35)" : "none",
+                      display: "flex",
+                      justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+                      mb: 1,
                     }}
                   >
-                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                      {m.text}
-                    </Typography>
-                    {m.role === "assistant" && m.links && m.links.length > 0 ? (
-                      <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ mt: 0.75 }}>
-                        {m.links.map((link) => (
-                          <Button
-                            key={`${link.path}-${link.label}`}
-                            size="small"
-                            variant="outlined"
-                            color="success"
-                            onClick={() => {
-                              navigate(link.path)
-                              close()
-                            }}
-                          >
-                            {link.label}
-                          </Button>
-                        ))}
-                      </Stack>
-                    ) : null}
+                    <Box
+                      sx={{
+                        maxWidth: "85%",
+                        px: 1.25,
+                        py: 0.75,
+                        borderRadius: 2,
+                        bgcolor: m.role === "user" ? "#b03a6c" : "#e8f5ef",
+                        color: m.role === "user" ? "white" : "text.primary",
+                        border:
+                          m.role === "assistant" ? "1px solid rgba(56, 133, 96, 0.35)" : "none",
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                        {m.text}
+                      </Typography>
+                      {m.role === "assistant" && m.tips && m.tips.length > 0 ? (
+                        <Box
+                          component="ul"
+                          sx={{
+                            mt: 0.75,
+                            mb: 0,
+                            pl: 2.25,
+                            color: "text.secondary",
+                          }}
+                        >
+                          {m.tips.map((tip) => (
+                            <Typography
+                              key={tip}
+                              component="li"
+                              variant="caption"
+                              sx={{ display: "list-item", lineHeight: 1.5 }}
+                            >
+                              {tip}
+                            </Typography>
+                          ))}
+                        </Box>
+                      ) : null}
+                      {m.role === "assistant" && m.links && m.links.length > 0 ? (
+                        <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ mt: 0.75 }}>
+                          {m.links.map((link) => (
+                            <Button
+                              key={`${link.path}-${link.label}`}
+                              size="small"
+                              variant="outlined"
+                              color="success"
+                              onClick={() => {
+                                navigate(link.path)
+                                close()
+                              }}
+                            >
+                              {link.label}
+                            </Button>
+                          ))}
+                        </Stack>
+                      ) : null}
+                      {showClarifyChips ? (
+                        <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ mt: 0.75 }} useFlexGap>
+                          {getJobmotherClarifyChips(authUtils.getCurrentUser()?.role).map((label) => (
+                            <Chip
+                              key={label}
+                              size="small"
+                              label={label}
+                              variant="outlined"
+                              color="primary"
+                              onClick={() => void sendWithText(label)}
+                              disabled={sending}
+                              sx={{ maxWidth: "100%", height: "auto", py: 0.25, "& .MuiChip-label": { whiteSpace: "normal" } }}
+                            />
+                          ))}
+                        </Stack>
+                      ) : null}
+                    </Box>
                   </Box>
-                </Box>
-              ))
+                )
+              })
             )}
           </Box>
 
@@ -352,7 +479,9 @@ export default function FairyJobmotherAssistant() {
                         size="small"
                         color="primary"
                         aria-label="Send message"
-                        onClick={() => void send()}
+                        onClick={() => {
+                          void send()
+                        }}
                         disabled={!draft.trim() || sending}
                       >
                         <SendIcon fontSize="small" />

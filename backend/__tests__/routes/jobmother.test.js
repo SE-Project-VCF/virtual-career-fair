@@ -69,7 +69,11 @@ describe("POST /api/jobmother/navigate", () => {
           doc: jest.fn(() => ({ get: usersDocGet })),
         };
       }
-      return { doc: jest.fn(() => ({ get: jest.fn() })) };
+      return {
+        where: jest.fn(() => ({
+          get: jest.fn().mockResolvedValue({ docs: [] }),
+        })),
+      };
     });
   });
 
@@ -145,6 +149,8 @@ describe("POST /api/jobmother/navigate", () => {
               { id: "UNKNOWN_XYZ" },
               { id: "GO_MANAGE_BOOTH" },
             ],
+            tips: ["Bring a short intro.", "x".repeat(300)],
+            needsClarification: true,
           }),
       },
     });
@@ -161,6 +167,8 @@ describe("POST /api/jobmother/navigate", () => {
       { path: "/fairs", label: "Browse Fairs" },
       { path: "/dashboard/job-invitations", label: "Job Invitations" },
     ]);
+    expect(res.body.needsClarification).toBe(true);
+    expect(res.body.tips).toEqual(["Bring a short intro.", "x".repeat(240)]);
   });
 
   it("uses fairId from body and maps fair intents", async () => {
@@ -182,6 +190,28 @@ describe("POST /api/jobmother/navigate", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.links).toEqual([{ path: "/fair/fair-42/booths", label: "Fair booths" }]);
+  });
+
+  it("defaults needsClarification false and tips empty when omitted from Gemini", async () => {
+    usersDocGet.mockResolvedValue(mockDocSnap({ role: "student" }, true, "u1"));
+    mockGenerateContent.mockResolvedValue({
+      response: {
+        text: () =>
+          JSON.stringify({
+            reply: "Ok.",
+            intents: [{ id: "GO_DASHBOARD" }],
+          }),
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/jobmother/navigate")
+      .set("Authorization", AUTH)
+      .send({ message: "hi" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.needsClarification).toBe(false);
+    expect(res.body.tips).toEqual([]);
   });
 
   it("derives fairId from pathname when body omits it", async () => {

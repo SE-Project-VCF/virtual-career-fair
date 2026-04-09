@@ -11,6 +11,11 @@ import { authUtils } from "../../../utils/auth"
 vi.mock("../../../utils/auth", () => ({
   authUtils: {
     getIdToken: vi.fn(),
+    getCurrentUser: vi.fn(() => ({
+      uid: "u1",
+      email: "u@test.com",
+      role: "student" as const,
+    })),
   },
 }))
 
@@ -36,6 +41,8 @@ describe("FairyJobmotherAssistant", () => {
         ok: true,
         reply: "Try this page.",
         links: [{ path: "/fairs", label: "Browse Fairs" }],
+        tips: [],
+        needsClarification: false,
       }),
     }) as unknown as typeof fetch
   })
@@ -187,5 +194,74 @@ describe("FairyJobmotherAssistant", () => {
 
     await user.click(screen.getByRole("button", { name: /Open Fairy Jobmother assistant/i }))
     expect(screen.getByRole("dialog")).toBeInTheDocument()
+  })
+
+  it("renders tips from the API under the assistant reply", async () => {
+    const user = userEvent.setup()
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        reply: "Here you go.",
+        links: [],
+        tips: ["Bring water.", "Smile."],
+        needsClarification: false,
+      }),
+    } as Response)
+
+    renderAt("/dashboard")
+    await user.click(screen.getByRole("button", { name: /Open Fairy Jobmother help/i }))
+    await user.type(screen.getByPlaceholderText(/Type a message/i), "tips please")
+    await user.click(screen.getByRole("button", { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText("Bring water.")).toBeInTheDocument()
+    })
+    expect(screen.getByText("Smile.")).toBeInTheDocument()
+  })
+
+  it("shows clarify chips when needsClarification is true and sends chip text on click", async () => {
+    const user = userEvent.setup()
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          reply: "What would you like?",
+          links: [],
+          tips: [],
+          needsClarification: true,
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          reply: "Ok.",
+          links: [{ path: "/dashboard", label: "Dashboard" }],
+          tips: [],
+          needsClarification: false,
+        }),
+      } as Response)
+
+    renderAt("/dashboard")
+    await user.click(screen.getByRole("button", { name: /Open Fairy Jobmother help/i }))
+    await user.type(screen.getByPlaceholderText(/Type a message/i), "hm")
+    await user.click(screen.getByRole("button", { name: /Send message/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText("What would you like?")).toBeInTheDocument()
+    })
+    const chip = screen.getByRole("button", { name: /Take me to my dashboard/i })
+    expect(chip).toBeInTheDocument()
+    await user.click(chip)
+
+    await waitFor(() => {
+      expect(vi.mocked(globalThis.fetch).mock.calls.length).toBeGreaterThanOrEqual(2)
+    })
+    const secondBody = JSON.parse(
+      (vi.mocked(globalThis.fetch).mock.calls[1]?.[1] as { body?: string })?.body || "{}"
+    )
+    expect(secondBody.message).toBe("Take me to my dashboard")
   })
 })
