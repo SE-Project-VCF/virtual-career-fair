@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Box,
@@ -112,13 +112,34 @@ export default function BaseLayout({
 }: Readonly<BaseLayoutProps>) {
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [headerHeightPx, setHeaderHeightPx] = useState(0)
   const user = authUtils.getCurrentUser()
   const navItems = getNavItems(user)
 
+  useLayoutEffect(() => {
+    const el = headerRef.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const measure = () => setHeaderHeightPx(Math.round(el.getBoundingClientRect().height))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#fafafa" }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: "#fafafa",
+        ...(headerHeightPx > 0
+          ? ({ "--base-layout-header-height": `${headerHeightPx}px` } as Record<string, string>)
+          : {}),
+      }}
+    >
       {/* Header */}
       <Box
+        ref={headerRef}
         sx={{
           background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
           py: 2,

@@ -287,7 +287,17 @@ export default function FairyJobmotherAssistant() {
             ...glass,
             width: { xs: "calc(100vw - 32px)", sm: 380 },
             maxWidth: 380,
-            maxHeight: panelExpanded ? "min(720px, 85vh)" : "min(480px, 50vh)",
+            ...(panelExpanded
+              ? {
+                  position: "fixed",
+                  top: "calc(var(--base-layout-header-height, 88px) + 8px)",
+                  right: { xs: 16, sm: 24 },
+                  bottom: { xs: 16, sm: 24 },
+                  maxHeight: "none",
+                }
+              : {
+                  maxHeight: "min(480px, 50vh)",
+                }),
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
@@ -344,8 +354,8 @@ export default function FairyJobmotherAssistant() {
             ref={listRef}
             sx={{
               flex: 1,
-              minHeight: 160,
-              maxHeight: panelExpanded ? "min(560px, 62vh)" : 280,
+              minHeight: panelExpanded ? 0 : 160,
+              maxHeight: panelExpanded ? "none" : 280,
               overflow: "auto",
               px: 1.5,
               py: 1,
