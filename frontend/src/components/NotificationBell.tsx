@@ -61,11 +61,17 @@ export default function NotificationBell() {
     if (currentUser?.role !== "student") return;
 
     try {
+      const token = await authUtils.getIdToken();
+      if (!token) return;
+
       const response = await fetch(
         `${API_URL}/api/job-invitations/received?userId=${currentUser.uid}&status=sent`,
         {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 

@@ -14,6 +14,7 @@ vi.mock("../../utils/auth", () => ({
     isAuthenticated: vi.fn(() => true),
     deleteCompany: vi.fn(),
     updateInviteCode: vi.fn(),
+    getIdToken: vi.fn(() => Promise.resolve("mock-token")),
   },
 }));
 
@@ -846,6 +847,7 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
+      (authUtils.getIdToken as any).mockResolvedValue("mock-token");
       globalThis.fetch = vi.fn().mockImplementation((url: string) => {
         if (url.includes("/ratings")) {
           return Promise.resolve({
@@ -854,6 +856,31 @@ describe("Company", () => {
           });
         }
         return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+    });
+
+    it("does not request job-invitations stats when getIdToken returns null", async () => {
+      (authUtils.getIdToken as any).mockResolvedValue(null);
+
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls).toHaveLength(0);
       });
     });
 
@@ -878,6 +905,58 @@ describe("Company", () => {
           expect.any(Object)
         );
       }, { timeout: 5000 });
+    });
+
+    it("ignores job invitation stats payload when response is not ok", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        if (String(url).includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({ ok: false, json: async () => ({ error: "forbidden" }) });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls.length).toBeGreaterThan(0);
+      });
+    });
+
+    it("still renders company when job invitation stats fetch throws", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        if (String(url).includes("/api/job-invitations/stats/")) {
+          return Promise.reject(new Error("network down"));
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls.length).toBeGreaterThan(0);
+      });
     });
 
     it("displays View Details button when invitations exist", async () => {

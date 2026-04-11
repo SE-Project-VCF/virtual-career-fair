@@ -3,6 +3,7 @@ import { getRepresentativeName } from "../utils/representativeUtils"
 import { useNavigate, useParams } from "react-router-dom"
 import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip, Rating } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { fetchJobInvitationStats } from "../utils/jobInvitationStatsFetch"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
 import { db, auth } from "../firebase"
@@ -698,23 +699,11 @@ export default function Company() {
   }
 
   const fetchJobStats = async (jobId: string) => {
-    if (!userId) return
-
-    try {
-      const response = await fetch(
-        `${API_URL}/api/job-invitations/stats/${jobId}?userId=${userId}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        }
-      )
-
-      if (response.ok) {
-        const stats = await response.json()
-        setJobStats((prev) => ({ ...prev, [jobId]: stats }))
-      }
-    } catch (err) {
-      console.error(`Error fetching stats for job ${jobId}:`, err)
+    const result = await fetchJobInvitationStats<JobInvitationStats>(API_URL, jobId, userId || "", () =>
+      authUtils.getIdToken()
+    )
+    if (result.ok) {
+      setJobStats((prev) => ({ ...prev, [jobId]: result.stats }))
     }
   }
 

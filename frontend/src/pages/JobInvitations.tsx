@@ -21,6 +21,7 @@ import LaunchIcon from "@mui/icons-material/Launch";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import EditIcon from "@mui/icons-material/Edit";
 import { authUtils } from "../utils/auth";
+import { API_URL } from "../config";
 import BaseLayout from "../components/BaseLayout";
 import JobApplicationFormDialog from "../components/JobApplicationFormDialog";
 import type { ApplicationForm } from "../types/applicationForm";
@@ -79,11 +80,19 @@ export default function JobInvitations() {
         setLoading(true);
         setError("");
 
+        const token = await authUtils.getIdToken();
+        if (!token) {
+          throw new Error("Not authenticated");
+        }
+
         const response = await fetch(
-          `http://localhost:5000/api/job-invitations/received?userId=${user.uid}`,
+          `${API_URL}/api/job-invitations/received?userId=${user.uid}`,
           {
             method: "GET",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
           }
         );
 
@@ -123,9 +132,15 @@ export default function JobInvitations() {
     // Mark as viewed if not already
     if (invitation.status === "sent" && user) {
       try {
-        await fetch(`http://localhost:5000/api/job-invitations/${invitation.id}/status`, {
+        const token = await authUtils.getIdToken();
+        if (!token) return;
+
+        await fetch(`${API_URL}/api/job-invitations/${invitation.id}/status`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
             status: "viewed",
             userId: user.uid,
@@ -148,9 +163,15 @@ export default function JobInvitations() {
     // Mark as clicked
     if (user) {
       try {
-        await fetch(`http://localhost:5000/api/job-invitations/${invitation.id}/status`, {
+        const token = await authUtils.getIdToken();
+        if (!token) return;
+
+        await fetch(`${API_URL}/api/job-invitations/${invitation.id}/status`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify({
             status: "clicked",
             userId: user.uid,

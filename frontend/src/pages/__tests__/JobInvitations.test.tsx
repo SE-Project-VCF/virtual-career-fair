@@ -11,7 +11,12 @@ vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom")
   return { ...actual, useNavigate: () => mockNavigate }
 })
-vi.mock("../../utils/auth", () => ({ authUtils: { getCurrentUser: vi.fn() } }))
+vi.mock("../../utils/auth", () => ({
+  authUtils: {
+    getCurrentUser: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-token"),
+  },
+}))
 vi.mock("../ProfileMenu", () => ({ default: () => <div data-testid="profile-menu" /> }))
 vi.mock("../../components/NotificationBell", () => ({ default: () => <div data-testid="notification-bell" /> }))
 vi.mock("../../components/BaseLayout", () => ({
@@ -26,6 +31,18 @@ vi.mock("../../components/BaseLayout", () => ({
       {children}
     </div>
   ),
+}))
+
+vi.mock("../../components/JobApplicationFormDialog", () => ({
+  default: ({ open, onClose, job }: { open: boolean; onClose: () => void; job: { name?: string } }) =>
+    open ? (
+      <div data-testid="apply-form-dialog">
+        <span>Apply: {job?.name}</span>
+        <button type="button" onClick={onClose}>
+          Close apply dialog
+        </button>
+      </div>
+    ) : null,
 }))
 
 const mockInvitation = {
@@ -58,7 +75,19 @@ const renderJobInvitations = () =>
 describe("JobInvitations", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token")
     globalThis.fetch = vi.fn()
+  })
+
+  it("shows Not authenticated when getIdToken returns null", async () => {
+    vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
+    vi.mocked(authUtils.getIdToken).mockResolvedValue(null)
+
+    renderJobInvitations()
+
+    await waitFor(() => {
+      expect(screen.getByText(/not authenticated/i)).toBeInTheDocument()
+    })
   })
 
   it("shows error for non-student users", () => {
@@ -114,6 +143,143 @@ describe("JobInvitations", () => {
     await waitFor(() => expect(screen.getByText("New")).toBeInTheDocument())
   })
 
+  it("truncates job description longer than 200 characters", async () => {
+    const longDesc = "x".repeat(250)
+    const inv = {
+      ...mockInvitation,
+      job: { ...mockInvitation.job, description: longDesc },
+    }
+
+    vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ invitations: [inv] }),
+    })
+
+    renderJobInvitations()
+
+    await waitFor(() => {
+      const truncated = screen.getByText((_, el) =>
+        Boolean(el?.textContent?.startsWith("x".repeat(200)) && el?.textContent?.endsWith("..."))
+      );
+      expect(truncated).toBeInTheDocument();
+    })
+  })
+
+  it("does not show Required Skills when majorsAssociated is empty", async () => {
+    const inv = {
+      ...mockInvitation,
+      job: { ...mockInvitation.job, majorsAssociated: "" },
+    }
+
+    vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ invitations: [inv] }),
+    })
+
+    renderJobInvitations()
+
+    await waitFor(() => expect(screen.getByText("Software Engineer")).toBeInTheDocument())
+
+    expect(screen.queryByText("Required Skills:")).not.toBeInTheDocument()
+  })
+
+  it("shows Representative when message exists but sender is null", async () => {
+    const inv = {
+      ...mockInvitation,
+      message: "Join us!",
+      sender: null as any,
+    }
+
+    vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ invitations: [inv] }),
+    })
+
+    renderJobInvitations()
+
+    await waitFor(() => {
+      expect(screen.getByText("Representative")).toBeInTheDocument()
+      expect(screen.getByText(/Join us!/)).toBeInTheDocument()
+    })
+  })
+
+  it("shows locale date when invitation was sent more than 7 days ago", async () => {
+    const oldSent = new Date("2019-06-01T12:00:00.000Z").getTime()
+    const expectedLabel = new Date(oldSent).toLocaleDateString()
+    const oldInv = { ...mockInvitation, sentAt: oldSent }
+
+    vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ invitations: [oldInv] }),
+    })
+
+    renderJobInvitations()
+
+    await waitFor(() => expect(screen.getByText(expectedLabel)).toBeInTheDocument())
+  })
+
+  it("navigates to tailor-simple when Tailor Resume is clicked", async () => {
+    vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ invitations: [mockInvitation] }),
+    })
+
+    const user = userEvent.setup()
+    renderJobInvitations()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /tailor resume/i })).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /tailor resume/i }))
+
+    expect(mockNavigate).toHaveBeenCalledWith("/invitations/inv-1/tailor-simple")
+  })
+
+  it("opens apply dialog for published application form and closes it", async () => {
+    const invWithPublishedForm = {
+      ...mockInvitation,
+      company: { id: "c1", companyName: "Tech Corp", boothId: null },
+      job: {
+        ...mockInvitation.job,
+        applicationLink: null,
+        applicationForm: {
+          title: "Company form",
+          fields: [],
+          status: "published" as const,
+        },
+      },
+    }
+
+    vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ invitations: [invWithPublishedForm] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+      })
+
+    const user = userEvent.setup()
+    renderJobInvitations()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /apply now/i })).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /apply now/i }))
+
+    await waitFor(() => expect(screen.getByTestId("apply-form-dialog")).toBeInTheDocument())
+    expect(screen.getByText(/Apply: Software Engineer/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /close apply dialog/i }))
+
+    await waitFor(() => expect(screen.queryByTestId("apply-form-dialog")).not.toBeInTheDocument())
+  })
+
   it("shows empty state when no invitations", async () => {
     vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -166,6 +332,7 @@ describe("JobInvitations", () => {
 describe("JobInvitations — Apply Now button", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token")
     globalThis.fetch = vi.fn()
     vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
   })
@@ -212,6 +379,54 @@ describe("JobInvitations — Apply Now button", () => {
     })
   })
 
+  it("logs when PATCH for clicked status fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ invitations: [mockInvitation] }),
+      })
+      .mockRejectedValueOnce(new Error("patch failed"));
+
+    const user = userEvent.setup();
+    renderJobInvitations();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /apply now/i })).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /apply now/i }));
+
+    await waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith("Error updating invitation status:", expect.any(Error));
+    });
+
+    consoleError.mockRestore();
+  });
+
+  it("does not PATCH clicked status when getIdToken returns null after load", async () => {
+    vi.mocked(authUtils.getIdToken).mockResolvedValueOnce("mock-token").mockResolvedValueOnce(null)
+
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ invitations: [mockInvitation] }),
+    })
+
+    const user = userEvent.setup()
+    renderJobInvitations()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /apply now/i })).toBeInTheDocument())
+
+    const callsBefore = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length
+
+    await user.click(screen.getByRole("button", { name: /apply now/i }))
+
+    const patchCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call: any[]) => call[1]?.method === "PATCH"
+    )
+    expect(patchCalls).toHaveLength(0)
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore)
+  })
+
   it("updates status chip to Applied after Apply Now", async () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
@@ -252,6 +467,7 @@ describe("JobInvitations — Apply Now button", () => {
 describe("JobInvitations — tab filtering", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token")
     globalThis.fetch = vi.fn()
     vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
   })
@@ -345,6 +561,7 @@ describe("JobInvitations — tab filtering", () => {
 describe("JobInvitations — handleViewJob error case", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token")
     globalThis.fetch = vi.fn()
     vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
   })
@@ -401,6 +618,56 @@ describe("JobInvitations — handleViewJob error case", () => {
     })
   })
 
+  it("logs when PATCH for viewed status fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ invitations: [mockInvitation] }),
+      })
+      .mockRejectedValueOnce(new Error("network error"));
+
+    const user = userEvent.setup();
+    renderJobInvitations();
+
+    await waitFor(() => expect(screen.getByText("Software Engineer")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /view full details/i }));
+
+    await waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith("Error updating invitation status:", expect.any(Error));
+    });
+
+    consoleError.mockRestore();
+  });
+
+  it("does not send PATCH when getIdToken returns null after load", async () => {
+    vi.mocked(authUtils.getIdToken).mockResolvedValueOnce("mock-token").mockResolvedValueOnce(null)
+
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ invitations: [mockInvitation] }),
+    })
+
+    const user = userEvent.setup()
+    renderJobInvitations()
+
+    await waitFor(() => expect(screen.getByText("Software Engineer")).toBeInTheDocument())
+
+    const callsBefore = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length
+
+    await user.click(screen.getByRole("button", { name: /view full details/i }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/booth/b1"))
+
+    const patchCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call: any[]) => call[1]?.method === "PATCH"
+    )
+    expect(patchCalls).toHaveLength(0)
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore)
+  })
+
   it("does not send PATCH when invitation status is already viewed", async () => {
     const viewedInvitation = { ...mockInvitation, status: "viewed" as const }
 
@@ -427,6 +694,7 @@ describe("JobInvitations — handleViewJob error case", () => {
 describe("JobInvitations — misc rendering", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(authUtils.getIdToken).mockResolvedValue("mock-token")
     globalThis.fetch = vi.fn()
     vi.mocked(authUtils.getCurrentUser).mockReturnValue({ uid: "student-1", role: "student" as const, email: "s@s.com" } as any)
   })

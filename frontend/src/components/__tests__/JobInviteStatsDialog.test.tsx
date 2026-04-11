@@ -8,7 +8,12 @@ import { authUtils } from "../../utils/auth";
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
+    getIdToken: vi.fn(),
   },
+}));
+
+vi.mock("../../config", () => ({
+  API_URL: "http://localhost:5000",
 }));
 
 // Mock fetch
@@ -72,6 +77,7 @@ describe("JobInviteStatsDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (authUtils.getCurrentUser as any).mockReturnValue(mockUser);
+    (authUtils.getIdToken as any).mockResolvedValue("mock-id-token");
     (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ invitations: mockInvitations }),
@@ -118,6 +124,23 @@ describe("JobInviteStatsDialog", () => {
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
 
+  it("shows Not authenticated when getIdToken returns null", async () => {
+    (authUtils.getIdToken as any).mockResolvedValue(null);
+
+    render(
+      <JobInviteStatsDialog
+        open={true}
+        onClose={mockOnClose}
+        jobId="job-1"
+        jobTitle="Software Engineer"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Not authenticated")).toBeInTheDocument();
+    });
+  });
+
   it("fetches invitation details when opened", async () => {
     render(
       <JobInviteStatsDialog
@@ -133,7 +156,10 @@ describe("JobInviteStatsDialog", () => {
         "http://localhost:5000/api/job-invitations/details/job-1?userId=user-1",
         expect.objectContaining({
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+            Authorization: "Bearer mock-id-token",
+          }),
         })
       );
     });
@@ -475,6 +501,50 @@ describe("JobInviteStatsDialog", () => {
 
     await waitFor(() => {
       expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  it("formats sentAt older than 7 days as a locale date string", async () => {
+    const oldSent = new Date("2020-01-15T12:00:00.000Z").getTime();
+    const expectedDateLabel = new Date(oldSent).toLocaleDateString();
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        invitations: [
+          {
+            id: "inv-old",
+            studentId: "s1",
+            student: {
+              id: "s1",
+              firstName: "Test",
+              lastName: "User",
+              email: "test@test.com",
+              major: "CS",
+            },
+            status: "sent",
+            sentAt: oldSent,
+            viewedAt: null,
+            clickedAt: null,
+            message: null,
+          },
+        ],
+      }),
+    });
+
+    render(
+      <JobInviteStatsDialog
+        open={true}
+        onClose={mockOnClose}
+        jobId="job-1"
+        jobTitle="Software Engineer"
+      />
+    );
+
+    await waitFor(() => {
+      const sentLabels = screen.getAllByText((_content, node) =>
+        Boolean(node?.textContent?.includes(`Sent: ${expectedDateLabel}`))
+      );
+      expect(sentLabels.length).toBeGreaterThan(0);
     });
   });
 

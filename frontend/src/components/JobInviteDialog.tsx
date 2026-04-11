@@ -23,6 +23,7 @@ import {
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 import { authUtils } from "../utils/auth";
+import { API_URL } from "../config";
 
 interface Student {
   id: string;
@@ -127,13 +128,19 @@ export default function JobInviteDialog({
         params.append("boothId", boothId);
       }
 
-      const response = await fetch(
-        `http://localhost:5000/api/students?${params}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      const token = await authUtils.getIdToken();
+      if (!token) {
+        setError("Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/students?${params}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (response.ok) {
         const data = await response.json();
@@ -186,9 +193,17 @@ export default function JobInviteDialog({
         throw new Error("You must be logged in");
       }
 
-      const response = await fetch("http://localhost:5000/api/job-invitations/send", {
+      const token = await authUtils.getIdToken();
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await fetch(`${API_URL}/api/job-invitations/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           jobId,
           studentIds: Array.from(selectedStudents),

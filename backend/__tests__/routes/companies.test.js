@@ -281,7 +281,7 @@ describe("GET /api/companies/:companyId/invite-code", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns 403 when user is not owner or admin", async () => {
+  it("returns 403 when user is not owner, representative, or admin", async () => {
     let callCount = 0;
     db.collection.mockImplementation(() => {
       callCount++;
@@ -305,6 +305,40 @@ describe("GET /api/companies/:companyId/invite-code", () => {
       .get("/api/companies/comp-1/invite-code")
       .set("Authorization", authHeader());
     expect(res.status).toBe(403);
+  });
+
+  it("returns invite code for company representative", async () => {
+    let callCount = 0;
+    db.collection.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                {
+                  ownerId: "other-uid",
+                  inviteCode: "REP123",
+                  representativeIDs: ["test-uid"],
+                },
+                true
+              )
+            ),
+          })),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({
+          get: jest.fn().mockResolvedValue(mockDocSnap({ role: "representative" }, true)),
+        })),
+      };
+    });
+
+    const res = await request(app)
+      .get("/api/companies/comp-1/invite-code")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.inviteCode).toBe("REP123");
   });
 
   it("returns invite code for company owner", async () => {

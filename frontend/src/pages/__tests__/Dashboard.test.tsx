@@ -10,6 +10,7 @@ const mockGetCurrentUser = vi.fn()
 const mockIsAuthenticated = vi.fn()
 const mockLinkRepresentativeToCompany = vi.fn()
 const mockParseMyResume = vi.fn().mockResolvedValue(undefined)
+const mockAuthGetIdToken = vi.hoisted(() => vi.fn().mockResolvedValue("mock-token"))
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom")
@@ -21,6 +22,7 @@ vi.mock("../../utils/auth", () => ({
     getCurrentUser: () => mockGetCurrentUser(),
     isAuthenticated: () => mockIsAuthenticated(),
     linkRepresentativeToCompany: (...args: any[]) => mockLinkRepresentativeToCompany(...args),
+    getIdToken: () => mockAuthGetIdToken(),
   },
   parseMyResume: () => mockParseMyResume(),
 }))
@@ -77,6 +79,7 @@ beforeEach(() => {
   mockIsAuthenticated.mockReturnValue(true)
   mockNavigate.mockClear()
   mockParseMyResume.mockResolvedValue(undefined)
+  mockAuthGetIdToken.mockResolvedValue("mock-token")
 
   // Mock getDocs for stats
   vi.mocked(firestore.getDocs).mockResolvedValue({
@@ -203,6 +206,39 @@ describe("Dashboard", () => {
 
       // Note: button is disabled when fair not live, so this just verifies it exists
       expect(screen.getByRole("button", { name: /browse all fairs/i })).toBeInTheDocument()
+    })
+
+    it("does not fetch job invitations when getIdToken returns null", async () => {
+      mockAuthGetIdToken.mockResolvedValue(null as unknown as string)
+      mockGetCurrentUser.mockReturnValue({
+        uid: "u1",
+        email: "student@test.com",
+        role: "student",
+      })
+      const fetchSpy = vi.fn().mockImplementation((input: string | Request | URL) => {
+        const url = getFetchUrl(input)
+        if (url.includes("/api/job-invitations/received")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ invitations: [] }),
+          }) as Promise<Response>
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }) as Promise<Response>
+      })
+      globalThis.fetch = fetchSpy
+
+      render(
+        <MemoryRouter>
+          <Dashboard />
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText("Job Invitations")).toBeInTheDocument()
+      })
+
+      const statsCalls = fetchSpy.mock.calls.filter((c) => getFetchUrl(c[0] as string).includes("/api/job-invitations/received"))
+      expect(statsCalls).toHaveLength(0)
     })
 
     it("displays Job Invitations card and navigates to job-invitations when View Invitations clicked", async () => {

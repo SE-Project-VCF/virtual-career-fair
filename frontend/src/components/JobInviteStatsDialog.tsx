@@ -17,6 +17,7 @@ import {
   Divider,
 } from "@mui/material";
 import { authUtils } from "../utils/auth";
+import { API_URL } from "../config";
 import PersonIcon from "@mui/icons-material/Person";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import LaunchIcon from "@mui/icons-material/Launch";
@@ -79,11 +80,20 @@ export default function JobInviteStatsDialog({
       setLoading(true);
       setError("");
 
+      const token = await authUtils.getIdToken();
+      if (!token) {
+        setError("Not authenticated");
+        return;
+      }
+
       const response = await fetch(
-        `http://localhost:5000/api/job-invitations/details/${jobId}?userId=${user.uid}`,
+        `${API_URL}/api/job-invitations/details/${jobId}?userId=${user.uid}`,
         {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 
