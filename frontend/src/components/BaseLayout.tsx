@@ -31,6 +31,7 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings"
 import ApartmentIcon from "@mui/icons-material/Apartment"
 import PresentationIcon from "@mui/icons-material/Slideshow"
 import PeopleIcon from "@mui/icons-material/People"
+import WorkIcon from "@mui/icons-material/Work"
 import NotificationBell from "./NotificationBell"
 import ProfileMenu from "../pages/ProfileMenu"
 import { authUtils, type User } from "../utils/auth"
@@ -52,6 +53,7 @@ function getNavItems(user: User | null): NavItem[] {
   ]
 
   const studentItems: NavItem[] = [
+    { label: "Search Jobs", path: "/dashboard/job-search", icon: <WorkIcon /> },
     { label: "Job Invitations", path: "/dashboard/job-invitations", icon: <MailIcon /> },
     { label: "Call Invitations", path: "/dashboard/call-invitations", icon: <VideoCallIcon /> },
     { label: "Tailored Resumes", path: "/dashboard/tailored-resumes", icon: <DescriptionIcon /> },

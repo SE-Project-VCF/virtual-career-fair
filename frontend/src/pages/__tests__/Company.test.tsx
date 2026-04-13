@@ -53,6 +53,10 @@ vi.mock("../../firebase", () => ({
 // Import after mocks
 import { authUtils } from "../../utils/auth";
 
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => ({ options: [], loading: false }),
+}));
+
 vi.mock("../../components/BaseLayout", () => ({
   default: ({ children, pageTitle }: any) => (
     <div data-testid="base-layout">
@@ -95,7 +99,57 @@ const mockJobData = {
   majorsAssociated: "Computer Science",
   applicationLink: "https://example.com/apply",
   createdAt: { toMillis: () => 1234567890 },
+  locationIsRemote: true,
 };
+
+function defaultFetchImpl(url: string | URL, init?: RequestInit) {
+  const u = typeof url === "string" ? url : String(url);
+  if (u.includes("/api/companies/") && u.includes("/invite-code")) {
+    return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+  }
+  if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        success: true,
+        jobs: [
+          {
+            id: "job-1",
+            companyId: "company-1",
+            name: "Software Engineer",
+            description: "We are hiring",
+            majorsAssociated: "Computer Science",
+            applicationLink: "https://example.com/apply",
+            createdAt: 1234567890,
+            locationIsRemote: true,
+          },
+        ],
+      }),
+    });
+  }
+  if (u.includes("/api/job-invitations/stats/")) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        totalSent: 0,
+        totalViewed: 0,
+        totalClicked: 0,
+        viewRate: "0",
+        clickRate: "0",
+      }),
+    });
+  }
+  if (u.includes("/api/jobs") && init?.method === "POST") {
+    return Promise.resolve({ ok: true, json: async () => ({ success: true, jobId: "new-job" }) });
+  }
+  if (/\/api\/jobs\/[^/]+$/.test(u) && init?.method === "PUT") {
+    return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+  }
+  if (/\/api\/jobs\/[^/]+$/.test(u) && init?.method === "DELETE") {
+    return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+  }
+  return Promise.resolve({ ok: false, json: async () => ({ error: "Not found" }) });
+}
 
 describe("Company", () => {
   beforeEach(() => {
@@ -140,30 +194,15 @@ describe("Company", () => {
     (deleteDoc as any).mockResolvedValue(undefined);
     (arrayRemove as any).mockImplementation((v: unknown) => v);
 
-    // Mock fetch for invite code API
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ inviteCode: "INVITE123" }),
-        });
-      }
-      // Default for other fetch calls
-      return Promise.resolve({
-        ok: false,
-        json: async () => ({ error: "Not found" }),
-      });
-    });
+    globalThis.fetch = vi.fn().mockImplementation(defaultFetchImpl);
   });
 
   const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
 
   it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
-        return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
-      }
-      if (url.includes('/api/booths/') && url.includes('/ratings')) {
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/booths/") && u.includes("/ratings")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -176,7 +215,7 @@ describe("Company", () => {
           }),
         });
       }
-      return Promise.resolve({ ok: false, json: async () => ({ error: "Not found" }) });
+      return defaultFetchImpl(url, init);
     });
 
     renderComp();
@@ -506,15 +545,20 @@ describe("Company", () => {
 
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
+      const skillsInput = screen.getByLabelText(/required skills/i);
 
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
+      await user.type(skillsInput, "Python");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
         await waitFor(() => {
-          expect(addDoc).toHaveBeenCalled();
+          const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+            (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+          );
+          expect(postCalls.length).toBeGreaterThan(0);
         });
       }
     }
@@ -529,10 +573,13 @@ describe("Company", () => {
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        expect(addDoc).not.toHaveBeenCalled();
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
+        const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+          (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+        );
+        expect(postCalls.length).toBe(0);
       }
     }
   });
@@ -552,10 +599,13 @@ describe("Company", () => {
       await user.type(titleInput, "Job");
       await user.type(linkInput, "not-a-url");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        expect(addDoc).not.toHaveBeenCalled();
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
+        const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+          (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+        );
+        expect(postCalls.length).toBe(0);
       }
     }
   });
@@ -592,10 +642,12 @@ describe("Company", () => {
     }
 
     await waitFor(() => {
-      expect(updateDoc).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "job-1" }),
-        expect.objectContaining({ applicationLink: null })
+      const putCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (c) => c[1]?.method === "PUT" && String(c[0]).includes("/api/jobs/job-1")
       );
+      expect(putCalls.length).toBeGreaterThan(0);
+      const body = JSON.parse((putCalls[0][1] as RequestInit).body as string);
+      expect(body.applicationLink).toBeNull();
     });
   });
 
@@ -613,7 +665,10 @@ describe("Company", () => {
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
         await waitFor(() => {
-          expect(deleteDoc).toHaveBeenCalled();
+          const delCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+            (c) => c[1]?.method === "DELETE" && String(c[0]).includes("/api/jobs/")
+          );
+          expect(delCalls.length).toBeGreaterThan(0);
         });
       }
     }
@@ -621,7 +676,15 @@ describe("Company", () => {
 
   it("shows error when job deletion fails", async () => {
     const user = userEvent.setup();
-    (deleteDoc as any).mockRejectedValueOnce(new Error("delete failed"));
+    let deleteFailOnce = true;
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (deleteFailOnce && init?.method === "DELETE" && u.includes("/api/jobs/")) {
+        deleteFailOnce = false;
+        return Promise.reject(new Error("delete failed"));
+      }
+      return defaultFetchImpl(url, init);
+    });
     renderComp();
     await screen.findByText(/Software Engineer/i);
 
@@ -737,7 +800,13 @@ describe("Company", () => {
   });
 
   it("handles job fetch errors", async () => {
-    (getDocs as any).mockRejectedValue(new Error("Job fetch error"));
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/jobs?") && u.includes("companyId")) {
+        return Promise.reject(new Error("Job fetch error"));
+      }
+      return defaultFetchImpl(url, init);
+    });
     renderComp();
     // Company should still load
     expect(await screen.findByRole('heading', { name: /Tech Corp/i })).toBeInTheDocument();
@@ -762,25 +831,53 @@ describe("Company", () => {
       await user.click(addButtons[0]);
 
       const titleInput = screen.getByLabelText(/job title/i);
+      const descInput = screen.getByLabelText(/description/i);
+      const skillsInput = screen.getByLabelText(/required skills/i);
       await user.type(titleInput, "New Job");
+      await user.type(descInput, "Desc");
+      await user.type(skillsInput, "Go");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
       }
     }
   });
 
   it("sorts jobs by creation date", async () => {
-    const job1 = { ...mockJobData, createdAt: { toMillis: () => 1000 } };
-    const job2 = { ...mockJobData, createdAt: { toMillis: () => 2000 } };
-
-    (getDocs as any).mockResolvedValue({
-      forEach: (cb: any) => {
-        cb({ id: "job-1", data: () => job1 });
-        cb({ id: "job-2", data: () => job2 });
-      },
-      empty: false,
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/jobs?") && u.includes("companyId")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            jobs: [
+              {
+                id: "job-1",
+                companyId: "company-1",
+                name: "Job A",
+                description: "a",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                createdAt: 1000,
+                locationIsRemote: true,
+              },
+              {
+                id: "job-2",
+                companyId: "company-1",
+                name: "Job B",
+                description: "b",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                createdAt: 2000,
+                locationIsRemote: true,
+              },
+            ],
+          }),
+        });
+      }
+      return defaultFetchImpl(url, init);
     });
 
     renderComp();
@@ -789,11 +886,29 @@ describe("Company", () => {
   });
 
   it("handles jobs with no creation date", async () => {
-    const jobNoDate = { ...mockJobData, createdAt: null };
-
-    (getDocs as any).mockResolvedValue({
-      forEach: (cb: any) => cb({ id: "job-1", data: () => jobNoDate }),
-      empty: false,
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/jobs?") && u.includes("companyId")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            jobs: [
+              {
+                id: "job-1",
+                companyId: "company-1",
+                name: "Software Engineer",
+                description: "We are hiring",
+                majorsAssociated: "Computer Science",
+                applicationLink: "https://example.com/apply",
+                createdAt: null,
+                locationIsRemote: true,
+              },
+            ],
+          }),
+        });
+      }
+      return defaultFetchImpl(url, init);
     });
 
     renderComp();
@@ -830,15 +945,20 @@ describe("Company", () => {
 
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
+      const skillsInput = screen.getByLabelText(/required skills/i);
 
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
+      await user.type(skillsInput, "Rust");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
         await waitFor(() => {
-          expect(addDoc).toHaveBeenCalled();
+          const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+            (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+          );
+          expect(postCalls.length).toBeGreaterThan(0);
         });
       }
     }
@@ -846,14 +966,15 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
-      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-        if (url.includes("/ratings")) {
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/ratings")) {
           return Promise.resolve({
             ok: true,
             json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
           });
         }
-        return Promise.resolve({ ok: false, json: async () => ({}) });
+        return defaultFetchImpl(url, init);
       });
     });
 

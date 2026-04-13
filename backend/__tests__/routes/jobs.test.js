@@ -52,6 +52,7 @@ const validJobBody = {
   description: "Build great things.",
   majorsAssociated: "Computer Science",
   applicationLink: "https://example.com/apply",
+  locationIsRemote: true,
 };
 
 // Mocks db so that:
@@ -157,6 +158,15 @@ describe("POST /api/jobs", () => {
       .send({ ...validJobBody, applicationLink: "not-a-url" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Invalid application URL/i);
+  });
+
+  it("returns 400 when locationIsRemote is not set", async () => {
+    const res = await request(app)
+      .post("/api/jobs")
+      .set("Authorization", authHeader())
+      .send({ ...validJobBody, locationIsRemote: undefined });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Job location must be set/i);
   });
 
   it("returns 404 when company does not exist", async () => {
@@ -410,6 +420,158 @@ describe("GET /api/jobs", () => {
 });
 
 /* ============================================================
+   GET /api/jobs/search
+============================================================ */
+describe("GET /api/jobs/search", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("returns 401 without auth header", async () => {
+    const res = await request(app).get("/api/jobs/search");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns filtered jobs with company names", async () => {
+    const jobDocs = [
+      mockDocSnap(
+        {
+          companyId: "c1",
+          name: "Software Engineer",
+          description: "Build APIs with Python",
+          majorsAssociated: "Python, React",
+          locationIsRemote: false,
+          locationCity: "Boston",
+          locationState: "MA",
+        },
+        true,
+        "j1"
+      ),
+      mockDocSnap(
+        {
+          companyId: "c2",
+          name: "Chef",
+          description: "Cook food",
+          majorsAssociated: "Knife skills",
+          locationIsRemote: true,
+        },
+        true,
+        "j2"
+      ),
+    ];
+
+    db.collection.mockImplementation((name) => {
+      if (name === "jobs") {
+        return {
+          get: jest.fn().mockResolvedValue(mockQuerySnap(jobDocs)),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: id === "c1" ? "Acme Corp" : "Kitchen Inc" }, true, id)
+            ),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/jobs/search?q=Software&skill=Python&location=Boston")
+      .set("Authorization", authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.jobs).toHaveLength(1);
+    expect(res.body.total).toBe(1);
+    expect(res.body.page).toBe(1);
+    expect(res.body.pageSize).toBe(20);
+    expect(res.body.jobs[0].id).toBe("j1");
+    expect(res.body.jobs[0].companyName).toBe("Acme Corp");
+  });
+
+  it("paginates results with page and limit", async () => {
+    const jobDocs = Array.from({ length: 5 }, (_, i) =>
+      mockDocSnap(
+        {
+          companyId: "c1",
+          name: `Role ${i}`,
+          description: "D",
+          majorsAssociated: "CS",
+          locationIsRemote: true,
+          createdAt: { toMillis: () => 1000 + i },
+        },
+        true,
+        `j${i}`
+      )
+    );
+
+    db.collection.mockImplementation((name) => {
+      if (name === "jobs") {
+        return {
+          get: jest.fn().mockResolvedValue(mockQuerySnap(jobDocs)),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyName: "Co" }, true, "c1")),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/jobs/search?page=2&limit=2")
+      .set("Authorization", authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(5);
+    expect(res.body.page).toBe(2);
+    expect(res.body.pageSize).toBe(2);
+    expect(res.body.jobs).toHaveLength(2);
+  });
+
+  it("filters remote jobs when location=remote", async () => {
+    const jobDocs = [
+      mockDocSnap(
+        {
+          companyId: "c1",
+          name: "Engineer",
+          description: "Remote work",
+          majorsAssociated: "Go",
+          locationIsRemote: true,
+        },
+        true,
+        "j1"
+      ),
+    ];
+
+    db.collection.mockImplementation((name) => {
+      if (name === "jobs") {
+        return {
+          get: jest.fn().mockResolvedValue(mockQuerySnap(jobDocs)),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyName: "Co" }, true, "c1")),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/jobs/search?location=remote")
+      .set("Authorization", authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toHaveLength(1);
+    expect(res.body.total).toBe(1);
+  });
+});
+
+/* ============================================================
    PUT /api/jobs/:id
 ============================================================ */
 describe("PUT /api/jobs/:id", () => {
@@ -420,6 +582,7 @@ describe("PUT /api/jobs/:id", () => {
     description: "Updated description.",
     majorsAssociated: "Computer Science",
     applicationLink: "https://example.com/apply",
+    locationIsRemote: true,
   };
 
   it("returns 401 without auth header", async () => {

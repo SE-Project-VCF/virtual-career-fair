@@ -449,6 +449,15 @@ function StudentSection({
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <DashboardCard
+            icon={<WorkIcon sx={{ fontSize: 32, color: "#388560" }} />}
+            title="Search Jobs"
+            description="Search company job postings by keyword, skill, or location—including remote roles."
+            buttonLabel="Open job search"
+            buttonOnClick={() => navigate("/dashboard/job-search")}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <DashboardCard
             icon={<MailIcon sx={{ fontSize: 32, color: "#b03a6c" }} />}
             title="Job Invitations"
             statValue={loadingInvitations ? "..." : jobInvitationsCount}

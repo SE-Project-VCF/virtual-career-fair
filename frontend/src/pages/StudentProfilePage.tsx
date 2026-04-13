@@ -18,7 +18,7 @@ import {
   FormControlLabel,
   Checkbox,
 } from "@mui/material"
-import BaseLayout from "../components/BaseLayout"
+import ProfileMenu from "./ProfileMenu"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
@@ -36,7 +36,6 @@ export default function StudentProfilePage() {
   const [major, setMajor] = useState("")
   const [year, setYear] = useState("")
   const [skills, setSkills] = useState("")
-  const [linkedinUrl, setLinkedinUrl] = useState("")
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [resumeUrl, setResumeUrl] = useState<string | null>(null)
   const [resumeVisible, setResumeVisible] = useState(true)
@@ -57,22 +56,20 @@ export default function StudentProfilePage() {
     }
   }, [navigate, isAuthenticated])
 
-  // Load existing profile data once when user is ready (use user.uid to avoid re-fetching on every render)
+  // Load existing profile data once the user is ready
   useEffect(() => {
-    if (!user?.uid) return
+    if (!user) return
 
     const fetchProfile = async () => {
       try {
+        // NOTE: use /users (matches your Firestore rules)
         const docRef = doc(db, "users", user.uid)
         const docSnap = await getDoc(docRef)
         if (docSnap.exists()) {
           const data = docSnap.data()
-          const validYears = ["2023","2024","2025","2026","2027","2028","2029","2030","2031","2032","2033","2034","2035"]
-          const rawYear = data.expectedGradYear == null ? "" : String(data.expectedGradYear) 
           setMajor(data.major || "")
-          setYear(validYears.includes(rawYear) ? rawYear : "")
+          setYear(data.expectedGradYear || "")
           setSkills(data.skills || "")
-          setLinkedinUrl(data.linkedinUrl || "")
           setResumeUrl(data.resumeUrl || null)
           setResumeVisible(data.resumeVisible !== false)
         }
@@ -191,9 +188,8 @@ export default function StudentProfilePage() {
         docRef,
         {
           major,
-          expectedGradYear: year || null,
+          expectedGradYear: year,
           skills,
-          linkedinUrl: linkedinUrl.trim() || null,
           resumeUrl: uploadedUrl || null,
           resumeVisible,
         },
@@ -275,11 +271,41 @@ export default function StudentProfilePage() {
   if (!user) return null
 
   return (
-    <BaseLayout pageTitle="Customize Profile">
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <Card sx={{ p: 4, borderRadius: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
+      {/* Header */}
+      <Box
+        sx={{
+          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+          py: 3,
+          px: 4,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <Container
+          maxWidth="lg"
+          sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+        >
+          <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
+            Job Goblin - Virtual Career Fair
+          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {/* Other buttons can be added here */}
+            <ProfileMenu />
+          </Box>
+        </Container>
+      </Box>
 
-          <form onSubmit={handleSave} autoComplete="off">
+      {/* Profile Form */}
+      <Container maxWidth="sm" sx={{ py: 6 }}>
+        <Card sx={{ p: 4, borderRadius: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+          <Typography variant="h4" sx={{ fontWeight: 700, mb: 3 }}>
+            Customize Profile
+          </Typography>
+
+          <form onSubmit={handleSave}>
             {error && (
               <Typography color="error" sx={{ mb: 2 }}>
                 {error}
@@ -296,22 +322,14 @@ export default function StudentProfilePage() {
             />
 
             <TextField
-              select
               label="Expected Graduation Year"
+              type="number"
+              fullWidth
               value={year}
               onChange={(e) => setYear(e.target.value)}
-              fullWidth
               required
               sx={{ mb: 3 }}
-              slotProps={{ select: { native: true, name: "expectedGradYear" } }}
-            >
-              <option value="">Select year...</option>
-              {[2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035].map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </TextField>
+            />
 
             <TextField
               label="Skills"
@@ -319,15 +337,6 @@ export default function StudentProfilePage() {
               value={skills}
               onChange={(e) => setSkills(e.target.value)}
               placeholder="e.g., Python, React, SQL"
-              sx={{ mb: 3 }}
-            />
-
-            <TextField
-              label="LinkedIn URL"
-              fullWidth
-              value={linkedinUrl}
-              onChange={(e) => setLinkedinUrl(e.target.value)}
-              placeholder="https://linkedin.com/in/your-profile"
               sx={{ mb: 3 }}
             />
 
@@ -487,6 +496,6 @@ export default function StudentProfilePage() {
           <Button onClick={() => setTailoredDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-    </BaseLayout>
+    </Box>
   )
 }

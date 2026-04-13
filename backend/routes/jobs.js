@@ -5,10 +5,134 @@ const admin = require("firebase-admin");
 const {
   verifyFirebaseToken,
   validateJobInput,
+  validateJobLocationFields,
   checkCompanyAuthorization,
   removeUndefined,
   fetchJobAndAuthorizeCompany,
 } = require("../helpers");
+
+function parseSkillTokens(majorsAssociated) {
+  if (!majorsAssociated || typeof majorsAssociated !== "string") return [];
+  return majorsAssociated.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function jobMatchesSkill(majorsAssociated, skill) {
+  if (!skill || !String(skill).trim()) return true;
+  const q = String(skill).trim().toLowerCase();
+  const tokens = parseSkillTokens(majorsAssociated);
+  return tokens.some((t) => t === q || t.includes(q));
+}
+
+function jobMatchesKeyword(name, description, q) {
+  if (!q || !String(q).trim()) return true;
+  const needle = String(q).trim().toLowerCase();
+  const n = (name || "").toLowerCase();
+  const d = (description || "").toLowerCase();
+  return n.includes(needle) || d.includes(needle);
+}
+
+/**
+ * @param {object} job Plain job data object
+ * @param {string} [locationParam] Filter: "remote" or city/state substring
+ */
+function jobMatchesLocationFilter(job, locationParam) {
+  if (!locationParam || !String(locationParam).trim()) return true;
+  const p = String(locationParam).trim().toLowerCase();
+  const remoteTerms = /^(remote|work from home|wfh)$/;
+  if (remoteTerms.test(p) || p === "remote work") {
+    return job.locationIsRemote === true;
+  }
+  if (job.locationIsRemote === true) return false;
+  const hasStructured =
+    job.locationIsRemote === false &&
+    (job.locationCity != null || job.locationState != null || job.location != null);
+  if (!hasStructured) {
+    return false;
+  }
+  const city = (job.locationCity || "").toLowerCase();
+  const state = (job.locationState || "").toLowerCase();
+  const label = (job.location || "").toLowerCase();
+  return city.includes(p) || state.includes(p) || label.includes(p) || `${city} ${state}`.trim().includes(p);
+}
+
+function serializeJobDoc(doc) {
+  const data = doc.data();
+  return {
+    id: doc.id,
+    companyId: data.companyId,
+    name: data.name,
+    description: data.description,
+    majorsAssociated: data.majorsAssociated,
+    applicationLink: data.applicationLink || null,
+    createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+    locationIsRemote: data.locationIsRemote === true,
+    locationCity: data.locationCity ?? null,
+    locationState: data.locationState ?? null,
+    location: data.location ?? null,
+    applicationForm: data.applicationForm || null,
+  };
+}
+
+/* ----------------------------------------------------
+   SEARCH JOBS (global collection, authenticated)
+---------------------------------------------------- */
+router.get("/jobs/search", verifyFirebaseToken, async (req, res) => {
+  try {
+    const q = req.query.q;
+    const skill = req.query.skill;
+    const location = req.query.location;
+
+    const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
+    const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+    let pageSize = parseInt(String(req.query.limit ?? "20"), 10);
+    if (!Number.isFinite(pageSize) || pageSize < 1) pageSize = 20;
+    pageSize = Math.min(50, pageSize);
+
+    const snap = await db.collection("jobs").get();
+    let rows = snap.docs.map((doc) => serializeJobDoc(doc));
+
+    rows = rows.filter((job) => {
+      if (!jobMatchesKeyword(job.name, job.description, q)) return false;
+      if (!jobMatchesSkill(job.majorsAssociated, skill)) return false;
+      if (!jobMatchesLocationFilter(job, location)) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      const ta = a.createdAt ?? 0;
+      const tb = b.createdAt ?? 0;
+      return tb - ta;
+    });
+
+    const total = rows.length;
+    const start = (page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    const companyIds = [...new Set(pageRows.map((j) => j.companyId).filter(Boolean))];
+    const companyNames = {};
+    await Promise.all(
+      companyIds.map(async (cid) => {
+        const cdoc = await db.collection("companies").doc(cid).get();
+        if (cdoc.exists) {
+          const d = cdoc.data();
+          companyNames[cid] = d.companyName || "";
+        } else {
+          companyNames[cid] = "";
+        }
+      })
+    );
+
+    const jobs = pageRows.map((j) => ({
+      ...j,
+      companyName: companyNames[j.companyId] || "",
+    }));
+
+    return res.json({ success: true, jobs, total, page, pageSize });
+  } catch (err) {
+    console.error("GET /jobs/search error:", err);
+    return res.status(500).json({ success: false, error: "Failed to search jobs" });
+  }
+});
 
 /* ----------------------------------------------------
    CREATE JOB POSTING
@@ -21,6 +145,10 @@ router.post("/jobs", verifyFirebaseToken, async (req, res) => {
       description,
       majorsAssociated,
       applicationLink,
+      locationIsRemote,
+      locationCity,
+      locationState,
+      location,
     } = req.body;
 
     // Validate required fields
@@ -44,16 +172,26 @@ router.post("/jobs", verifyFirebaseToken, async (req, res) => {
     const sanitizedMajors = majorsAssociated.trim().replaceAll('\0', '');
     const sanitizedAppLink = applicationLink?.trim().replaceAll('\0', '') || undefined;
 
-    const jobRef = await db.collection("jobs").add(
-      removeUndefined({
-        companyId,
-        name: sanitizedName,
-        description: sanitizedDescription,
-        majorsAssociated: sanitizedMajors,
-        applicationLink: sanitizedAppLink,
-        createdAt: admin.firestore.Timestamp.now(),
-      })
-    );
+    const payload = {
+      companyId,
+      name: sanitizedName,
+      description: sanitizedDescription,
+      majorsAssociated: sanitizedMajors,
+      applicationLink: sanitizedAppLink,
+      createdAt: admin.firestore.Timestamp.now(),
+    };
+
+    if (locationIsRemote === true) {
+      payload.locationIsRemote = true;
+    } else {
+      payload.locationIsRemote = false;
+      payload.locationCity = String(locationCity).trim().replaceAll('\0', '');
+      payload.locationState = String(locationState).trim().replaceAll('\0', '');
+      const label = location?.trim().replaceAll('\0', '');
+      if (label) payload.location = label;
+    }
+
+    const jobRef = await db.collection("jobs").add(removeUndefined(payload));
 
     res.send({ success: true, jobId: jobRef.id });
   } catch (err) {
@@ -90,6 +228,10 @@ router.get("/jobs", async (req, res) => {
         majorsAssociated: data.majorsAssociated,
         applicationLink: data.applicationLink || null,
         createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        locationIsRemote: data.locationIsRemote === true,
+        locationCity: data.locationCity ?? null,
+        locationState: data.locationState ?? null,
+        location: data.location ?? null,
         applicationForm: data.applicationForm || null,
       });
     });
@@ -115,7 +257,16 @@ router.get("/jobs", async (req, res) => {
 router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, majorsAssociated, applicationLink } = req.body;
+    const {
+      name,
+      description,
+      majorsAssociated,
+      applicationLink,
+      locationIsRemote,
+      locationCity,
+      locationState,
+      location,
+    } = req.body;
 
     // Validate required fields
     if (!name?.trim()) {
@@ -128,6 +279,11 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
 
     if (!majorsAssociated?.trim()) {
       return res.status(400).json({ success: false, error: "Skills are required" });
+    }
+
+    const locErr = validateJobLocationFields(req.body);
+    if (locErr) {
+      return res.status(400).json({ success: false, error: locErr });
     }
 
     // Validate application link format if provided
@@ -143,15 +299,37 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
     const result = await fetchJobAndAuthorizeCompany(id, req.user.uid, res);
     if (!result) return;
 
-    await result.jobRef.update(
-      removeUndefined({
-        name: name.trim(),
-        description: description.trim(),
-        majorsAssociated: majorsAssociated.trim(),
-        applicationLink: applicationLink?.trim() || null,
-        updatedAt: admin.firestore.Timestamp.now(),
-      })
-    );
+    const baseUpdate = {
+      name: name.trim(),
+      description: description.trim(),
+      majorsAssociated: majorsAssociated.trim(),
+      applicationLink: applicationLink?.trim() || null,
+      updatedAt: admin.firestore.Timestamp.now(),
+    };
+
+    if (locationIsRemote === true) {
+      await result.jobRef.update({
+        ...baseUpdate,
+        locationIsRemote: true,
+        locationCity: admin.firestore.FieldValue.delete(),
+        locationState: admin.firestore.FieldValue.delete(),
+        location: admin.firestore.FieldValue.delete(),
+      });
+    } else {
+      const labelTrim = location != null ? String(location).trim() : "";
+      const onSiteUpdate = {
+        ...baseUpdate,
+        locationIsRemote: false,
+        locationCity: String(locationCity).trim(),
+        locationState: String(locationState).trim(),
+      };
+      if (labelTrim) {
+        onSiteUpdate.location = labelTrim;
+      } else {
+        onSiteUpdate.location = admin.firestore.FieldValue.delete();
+      }
+      await result.jobRef.update(onSiteUpdate);
+    }
 
     return res.json({ success: true });
   } catch (err) {

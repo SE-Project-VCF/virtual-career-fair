@@ -112,9 +112,36 @@ async function evaluateFairStatusForFair(fairId) {
 }
 
 /**
+ * Validates job location: required remote vs on-site with city/state.
+ * @param {object} body Request body with locationIsRemote, locationCity, locationState, location
+ * @returns {string|null} Error message or null if valid.
+ */
+function validateJobLocationFields(body) {
+  if (typeof body.locationIsRemote !== "boolean") {
+    return "Job location must be set to remote or on-site";
+  }
+  if (body.locationIsRemote === true) {
+    return null;
+  }
+  const city = body.locationCity != null ? String(body.locationCity).trim() : "";
+  const state = body.locationState != null ? String(body.locationState).trim() : "";
+  if (!city || !state) {
+    return "City and state are required for on-site jobs";
+  }
+  if (city.length > 100 || state.length > 100) {
+    return "City and state must be 100 characters or less";
+  }
+  if (body.location != null && String(body.location).trim().length > 200) {
+    return "Location label must be 200 characters or less";
+  }
+  return null;
+}
+
+/**
  * Validate job input fields. Returns an error string or null if valid.
  */
-function validateJobInput({ companyId, name, description, majorsAssociated, applicationLink }) {
+function validateJobInput(body) {
+  const { companyId, name, description, majorsAssociated, applicationLink } = body;
   if (!companyId) return "Company ID is required";
   if (!name?.trim()) return "Job title is required";
   if (name.trim().length > 200) return "Job title must be 200 characters or less";
@@ -130,7 +157,7 @@ function validateJobInput({ companyId, name, description, majorsAssociated, appl
       return "Invalid application URL format";
     }
   }
-  return null;
+  return validateJobLocationFields(body);
 }
 
 // Helper to check if user is company owner or representative
@@ -450,6 +477,7 @@ module.exports = {
   verifyAdmin,
   evaluateFairStatusForFair,
   validateJobInput,
+  validateJobLocationFields,
   verifyFirebaseToken,
   checkCompanyAuthorization,
   resolveBooth,

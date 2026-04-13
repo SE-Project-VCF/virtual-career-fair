@@ -17,6 +17,7 @@ import ChatPage from "./pages/ChatPage"
 import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage"
 import JobInvitations from "./pages/JobInvitations"
+import JobSearchPage from "./pages/JobSearchPage"
 import CallInvitationsPage from "./pages/CallInvitationsPage"
 import FairBoothsPage from "./pages/FairBoothsPage"
 import StudentFairBoothsPage from "./pages/StudentFairBoothsPage"
@@ -96,6 +97,7 @@ function App() {
         <Route path="/dashboard/chat" element={<ChatPage />} />
         <Route path="/dashboard/booth-history" element={<BoothHistoryPage />} />
         <Route path="/dashboard/job-invitations" element={<JobInvitations />} />
+        <Route path="/dashboard/job-search" element={<JobSearchPage />} />
         <Route path="/dashboard/call-invitations" element={<CallInvitationsPage />} />
         <Route path="/dashboard/1x1-calls" element={<StudentCallInvitations />} />
         <Route path="/dashboard/my-calls" element={<EmployerMyCalls />} />
