@@ -710,7 +710,11 @@ export default function BoothEditor() {
         <Container maxWidth="lg">
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)} sx={{ color: "white" }}>
+              <IconButton
+                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
+                sx={{ color: "white" }}
+                aria-label={fairId ? "Back to fairs" : "Back to company profile"}
+              >
                 <ArrowBackIcon />
               </IconButton>
               <BusinessIcon sx={{ fontSize: 32, color: "white" }} />

@@ -170,7 +170,7 @@ router.post("/jobs", verifyFirebaseToken, async (req, res) => {
     const sanitizedName = name.trim().replaceAll('\0', '');
     const sanitizedDescription = description.trim().replaceAll('\0', '');
     const sanitizedMajors = majorsAssociated.trim().replaceAll('\0', '');
-    const sanitizedAppLink = applicationLink?.trim().replaceAll('\0', '') || undefined;
+    const sanitizedAppLink = applicationLink?.trim().replaceAll("\0", "") || undefined;
 
     const payload = {
       companyId,
@@ -185,9 +185,11 @@ router.post("/jobs", verifyFirebaseToken, async (req, res) => {
       payload.locationIsRemote = true;
     } else {
       payload.locationIsRemote = false;
-      payload.locationCity = String(locationCity).trim().replaceAll('\0', '');
-      payload.locationState = String(locationState).trim().replaceAll('\0', '');
-      const label = location?.trim().replaceAll('\0', '');
+      const cityRaw = locationCity != null ? String(locationCity) : "";
+      const stateRaw = locationState != null ? String(locationState) : "";
+      payload.locationCity = cityRaw.trim().replaceAll("\0", "");
+      payload.locationState = stateRaw.trim().replaceAll("\0", "");
+      const label = location?.trim().replaceAll("\0", "");
       if (label) payload.location = label;
     }
 
@@ -307,7 +309,9 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
       updatedAt: admin.firestore.Timestamp.now(),
     };
 
-    if (locationIsRemote === true) {
+    if (locationIsRemote === undefined) {
+      await result.jobRef.update(baseUpdate);
+    } else if (locationIsRemote === true) {
       await result.jobRef.update({
         ...baseUpdate,
         locationIsRemote: true,
@@ -317,11 +321,13 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
       });
     } else {
       const labelTrim = location != null ? String(location).trim() : "";
+      const cityTrim = locationCity != null ? String(locationCity).trim() : "";
+      const stateTrim = locationState != null ? String(locationState).trim() : "";
       const onSiteUpdate = {
         ...baseUpdate,
         locationIsRemote: false,
-        locationCity: String(locationCity).trim(),
-        locationState: String(locationState).trim(),
+        locationCity: cityTrim,
+        locationState: stateTrim,
       };
       if (labelTrim) {
         onSiteUpdate.location = labelTrim;

@@ -117,6 +117,10 @@ async function evaluateFairStatusForFair(fairId) {
  * @returns {string|null} Error message or null if valid.
  */
 function validateJobLocationFields(body) {
+  // Omitting location entirely is allowed (e.g. PUT updates that only change title/link).
+  if (body.locationIsRemote === undefined) {
+    return null;
+  }
   if (typeof body.locationIsRemote !== "boolean") {
     return "Job location must be set to remote or on-site";
   }
@@ -156,6 +160,9 @@ function validateJobInput(body) {
       console.error("Invalid URL provided:", err.message);
       return "Invalid application URL format";
     }
+  }
+  if (typeof body.locationIsRemote !== "boolean") {
+    return "Job location must be set to remote or on-site";
   }
   return validateJobLocationFields(body);
 }

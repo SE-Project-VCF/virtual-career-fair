@@ -134,7 +134,13 @@ describe("POST /api/jobs", () => {
     const res = await request(app)
       .post("/api/jobs")
       .set("Authorization", authHeader())
-      .send({ companyId: "c1", name: "Dev", description: "desc", majorsAssociated: "CS" });
+      .send({
+        companyId: "c1",
+        name: "Dev",
+        description: "desc",
+        majorsAssociated: "CS",
+        locationIsRemote: true,
+      });
     expect(res.status).toBe(404);
   });
 
@@ -146,7 +152,13 @@ describe("POST /api/jobs", () => {
     const res = await request(app)
       .post("/api/jobs")
       .set("Authorization", authHeader())
-      .send({ companyId: "c1", name: "Dev", description: "desc", majorsAssociated: "CS" });
+      .send({
+        companyId: "c1",
+        name: "Dev",
+        description: "desc",
+        majorsAssociated: "CS",
+        locationIsRemote: true,
+      });
     expect(res.status).toBe(403);
   });
 
@@ -203,6 +215,7 @@ describe("POST /api/jobs", () => {
         description: "Build stuff",
         majorsAssociated: "CS",
         applicationLink: "https://example.com/apply",
+        locationIsRemote: true,
       });
 
     expect(res.status).toBe(200);
@@ -219,7 +232,13 @@ describe("POST /api/jobs", () => {
     const res = await request(app)
       .post("/api/jobs")
       .set("Authorization", authHeader())
-      .send({ companyId: "c1", name: "Dev", description: "desc", majorsAssociated: "CS" });
+      .send({
+        companyId: "c1",
+        name: "Dev",
+        description: "desc",
+        majorsAssociated: "CS",
+        locationIsRemote: true,
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -242,7 +261,13 @@ describe("POST /api/jobs", () => {
     const res = await request(app)
       .post("/api/jobs")
       .set("Authorization", authHeader())
-      .send({ companyId: "c1", name: "Dev", description: "desc", majorsAssociated: "CS" });
+      .send({
+        companyId: "c1",
+        name: "Dev",
+        description: "desc",
+        majorsAssociated: "CS",
+        locationIsRemote: true,
+      });
 
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("DB error");
