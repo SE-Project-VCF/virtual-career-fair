@@ -20,6 +20,7 @@ import BaseLayout from "../components/BaseLayout"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
+import { formatJobLocation } from "../utils/jobSearchDisplay"
 
 const PAGE_SIZE = 20
 
@@ -35,15 +36,6 @@ interface SearchJob {
   locationCity?: string | null
   locationState?: string | null
   location?: string | null
-}
-
-function formatJobLocation(job: SearchJob): string {
-  if (job.locationIsRemote === true) return "Remote"
-  if (job.locationCity || job.locationState) {
-    return job.location || [job.locationCity, job.locationState].filter(Boolean).join(", ")
-  }
-  if (job.location) return job.location
-  return "—"
 }
 
 export default function JobSearchPage() {
