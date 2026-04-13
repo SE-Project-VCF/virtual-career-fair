@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom"
 import { Box, Container } from "@mui/material"
-import StudentProfilePage from "./pages/StudentProfilePage"
+import ProfilePage from "./pages/ProfilePage"
 import RoleSelection from "./pages/RoleSelection"
 import Register from "./pages/Register"
 import Login from "./pages/Login"
@@ -121,7 +121,7 @@ function App() {
         <Route path="/qa-session/:boothId" element={<QASessionPage />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/profile" element={<StudentProfilePage />} />
+        <Route path="/profile" element={<ProfilePage />} />
 
         {/* Multi-fair routes */}
         <Route path="/fairs" element={<FairList />} />

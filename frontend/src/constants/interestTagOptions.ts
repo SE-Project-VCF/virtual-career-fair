@@ -70,3 +70,11 @@ export const ACCEPTED_INTEREST_TAGS: readonly string[] = [
   "venture capital",
   "web development",
 ].sort((a, b) => a.localeCompare(b))
+
+/** Title-case words for display (canonical tags are stored lowercase). */
+export function formatInterestTagLabel(tag: string): string {
+  return tag
+    .split(" ")
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(" ")
+}

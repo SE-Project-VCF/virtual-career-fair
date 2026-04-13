@@ -8,6 +8,7 @@ import {
   Button,
   CircularProgress,
   Card,
+  CardContent,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -17,14 +18,17 @@ import {
   Chip,
   FormControlLabel,
   Checkbox,
+  Divider,
+  Stack,
 } from "@mui/material"
 import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete"
-import ProfileMenu from "./ProfileMenu"
+import BaseLayout from "../components/BaseLayout"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
-import { ACCEPTED_INTEREST_TAGS } from "../constants/interestTagOptions"
+import { ACCEPTED_INTEREST_TAGS, formatInterestTagLabel } from "../constants/interestTagOptions"
+import { parseLinkedInProfileUrl } from "../utils/linkedinUrl"
 
 const MAX_INTEREST_TAGS = 15
 
@@ -44,17 +48,10 @@ function normalizeInterestTags(tags: readonly string[]): string[] {
   return out
 }
 
-function formatTagDisplay(tag: string): string {
-  return tag
-    .split(" ")
-    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-    .join(" ")
-}
-
 /** Match typing against both stored value and title-cased label (e.g. "machine" → "machine learning"). */
 const filterInterestOptions = createFilterOptions<string>({
   matchFrom: "any",
-  stringify: (option) => `${option} ${formatTagDisplay(option)}`,
+  stringify: (option) => `${option} ${formatInterestTagLabel(option)}`,
 })
 
 export default function StudentProfilePage() {
@@ -70,6 +67,7 @@ export default function StudentProfilePage() {
   const [year, setYear] = useState("")
   const [skills, setSkills] = useState("")
   const [interestTags, setInterestTags] = useState<string[]>([])
+  const [linkedinUrl, setLinkedinUrl] = useState("")
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [resumeUrl, setResumeUrl] = useState<string | null>(null)
   const [resumeVisible, setResumeVisible] = useState(true)
@@ -110,6 +108,7 @@ export default function StudentProfilePage() {
               ? normalizeInterestTags(rawTags.filter((t: unknown) => typeof t === "string") as string[])
               : []
           )
+          setLinkedinUrl(typeof data.linkedinUrl === "string" ? data.linkedinUrl : "")
           setResumeUrl(data.resumeUrl || null)
           setResumeVisible(data.resumeVisible !== false)
         }
@@ -175,6 +174,12 @@ export default function StudentProfilePage() {
       return
     }
 
+    const linkedinParsed = parseLinkedInProfileUrl(linkedinUrl)
+    if (!linkedinParsed.ok) {
+      setError(linkedinParsed.message)
+      return
+    }
+
     if (!major || !year) {
       setError("Major and Expected Graduation Year are required.")
       return
@@ -233,6 +238,7 @@ export default function StudentProfilePage() {
           expectedGradYear: year,
           skills,
           interestTags: tagsToSave,
+          linkedinUrl: linkedinParsed.href,
           resumeUrl: uploadedUrl || null,
           resumeVisible,
         },
@@ -240,6 +246,8 @@ export default function StudentProfilePage() {
       )
 
       setInterestTags(tagsToSave)
+      if (linkedinParsed.href) setLinkedinUrl(linkedinParsed.href)
+      else setLinkedinUrl("")
 
       setResumeUrl(uploadedUrl || null)
       setResumeFile(null)
@@ -316,106 +324,109 @@ export default function StudentProfilePage() {
   if (!user) return null
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Container
-          maxWidth="lg"
-          sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-        >
-          <Typography variant="h5" sx={{ fontWeight: 700, color: "white" }}>
-            Job Goblin - Virtual Career Fair
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {/* Other buttons can be added here */}
-            <ProfileMenu />
-          </Box>
-        </Container>
-      </Box>
+    <BaseLayout pageTitle="Student profile">
+      <Container maxWidth="md" sx={{ py: { xs: 3, sm: 5 } }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
+          Your profile
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 560 }}>
+          Keep your academics, interests, and resume up to date. Employers use this when you visit booths and receive invitations.
+        </Typography>
 
-      {/* Profile Form */}
-      <Container maxWidth="sm" sx={{ py: 6 }}>
-        <Card sx={{ p: 4, borderRadius: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 3 }}>
-            Customize Profile
-          </Typography>
-
-          <form onSubmit={handleSave}>
-            {error && (
-              <Typography color="error" sx={{ mb: 2 }}>
-                {error}
-              </Typography>
-            )}
-
-            <TextField
-              label="Major"
-              fullWidth
-              value={major}
-              onChange={(e) => setMajor(e.target.value)}
-              required
-              sx={{ mb: 3 }}
-            />
-
-            <TextField
-              label="Expected Graduation Year"
-              type="number"
-              fullWidth
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-              required
-              sx={{ mb: 3 }}
-            />
-
-            <TextField
-              label="Skills"
-              fullWidth
-              value={skills}
-              onChange={(e) => setSkills(e.target.value)}
-              placeholder="e.g., Python, React, SQL"
-              sx={{ mb: 3 }}
-            />
-
-            <Autocomplete
-              multiple
-              options={[...ACCEPTED_INTEREST_TAGS]}
-              value={interestTags}
-              onChange={(_, newValue) => setInterestTags(normalizeInterestTags(newValue))}
-              getOptionLabel={(option) => formatTagDisplay(option)}
-              filterOptions={filterInterestOptions}
-              isOptionEqualToValue={(a, b) => a === b}
-              openOnFocus
-              disableCloseOnSelect
-              renderTags={(value, getTagProps) =>
-                value.map((option, index) => (
-                  <Chip
-                    {...getTagProps({ index })}
-                    key={option}
-                    variant="outlined"
-                    size="small"
-                    label={formatTagDisplay(option)}
-                  />
-                ))
-              }
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Interests"
-                  placeholder="Search interests…"
-                  helperText={`Choose from the list (search as you type). Up to ${MAX_INTEREST_TAGS} tags. Employers can search these.`}
-                  sx={{ mb: 3 }}
-                />
+        <Card elevation={2} sx={{ borderRadius: 2, overflow: "hidden" }}>
+          <CardContent sx={{ p: { xs: 2.5, sm: 4 } }}>
+            <form onSubmit={handleSave}>
+              {error && (
+                <Typography color="error" sx={{ mb: 2 }}>
+                  {error}
+                </Typography>
               )}
-            />
+
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Academic & skills
+              </Typography>
+              <Stack spacing={2.5}>
+                <TextField
+                  label="Major"
+                  fullWidth
+                  value={major}
+                  onChange={(e) => setMajor(e.target.value)}
+                  required
+                />
+
+                <TextField
+                  label="Expected Graduation Year"
+                  type="number"
+                  fullWidth
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                  required
+                />
+
+                <TextField
+                  label="Skills"
+                  fullWidth
+                  value={skills}
+                  onChange={(e) => setSkills(e.target.value)}
+                  placeholder="e.g., Python, React, SQL"
+                />
+              </Stack>
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Career interests
+              </Typography>
+              <Autocomplete
+                multiple
+                options={[...ACCEPTED_INTEREST_TAGS]}
+                value={interestTags}
+                onChange={(_, newValue) => setInterestTags(normalizeInterestTags(newValue))}
+                getOptionLabel={(option) => formatInterestTagLabel(option)}
+                filterOptions={filterInterestOptions}
+                isOptionEqualToValue={(a, b) => a === b}
+                openOnFocus
+                disableCloseOnSelect
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => (
+                    <Chip
+                      {...getTagProps({ index })}
+                      key={option}
+                      variant="outlined"
+                      size="small"
+                      label={formatInterestTagLabel(option)}
+                    />
+                  ))
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Interests"
+                    placeholder="Search interests…"
+                    helperText={`Choose from the list. Up to ${MAX_INTEREST_TAGS} tags. Used when employers search for candidates.`}
+                  />
+                )}
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Professional presence
+              </Typography>
+              <TextField
+                label="LinkedIn URL"
+                fullWidth
+                value={linkedinUrl}
+                onChange={(e) => setLinkedinUrl(e.target.value)}
+                placeholder="https://www.linkedin.com/in/…"
+                helperText="Optional. Shown in the fair networking lounge and to employers where your profile appears."
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Resume
+              </Typography>
 
             {/* Resume Upload */}
             <Box sx={{ mb: 3 }}>
@@ -490,23 +501,17 @@ export default function StudentProfilePage() {
               </Box>
             )}
 
-            <Box
-              sx={{
-                display: "flex",
-                background: "b03a6c",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 2, pt: 2 }}>
               <Button variant="outlined" onClick={() => navigate("/dashboard")} disabled={loading}>
                 Back
               </Button>
 
-              <Button type="submit" variant="contained" disabled={loading}>
-                {loading ? <CircularProgress size={24} color="success" /> : "Save Profile"}
+              <Button type="submit" variant="contained" size="large" disabled={loading}>
+                {loading ? <CircularProgress size={22} color="inherit" /> : "Save profile"}
               </Button>
             </Box>
           </form>
+          </CardContent>
         </Card>
       </Container>
 
@@ -573,6 +578,6 @@ export default function StudentProfilePage() {
           <Button onClick={() => setTailoredDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </BaseLayout>
   )
 }

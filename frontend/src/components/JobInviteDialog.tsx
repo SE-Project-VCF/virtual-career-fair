@@ -214,7 +214,7 @@ export default function JobInviteDialog({
       });
 
       const useBoothPool = Boolean(boothId) && mode === "booth";
-      if (useBoothPool) {
+      if (useBoothPool && boothId) {
         params.append("boothId", boothId);
       }
 

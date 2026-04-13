@@ -30,7 +30,7 @@ vi.mock("../pages/TailoredResumeViewPage", () => ({ default: () => <div>Tailored
 vi.mock("../pages/TailoredResumesPage", () => ({ default: () => <div>TailoredResumesPage</div> }))
 vi.mock("../pages/SubmissionsPage", () => ({ default: () => <div>SubmissionsPage</div> }))
 vi.mock("../pages/NetworkingLounge", () => ({ default: () => <div>NetworkingLounge</div> }))
-vi.mock("../pages/StudentProfilePage", () => ({ default: () => <div>StudentProfilePage</div> }))
+vi.mock("../pages/ProfilePage", () => ({ default: () => <div>ProfilePage</div> }))
 vi.mock("../pages/CallInvitationsPage", () => ({ default: () => <div>CallInvitationsPage</div> }))
 vi.mock("../pages/StudentCallInvitations", () => ({
   StudentCallInvitations: () => <div>StudentCallInvitations</div>,
@@ -143,10 +143,10 @@ describe("App", () => {
     expect(screen.getByText("NetworkingLounge")).toBeInTheDocument()
   })
 
-  it("renders StudentProfilePage at /profile", () => {
+  it("renders ProfilePage at /profile", () => {
     globalThis.history.pushState({}, "", "/profile")
     render(<App />)
-    expect(screen.getByText("StudentProfilePage")).toBeInTheDocument()
+    expect(screen.getByText("ProfilePage")).toBeInTheDocument()
   })
 
   it("renders Register at /register", () => {
