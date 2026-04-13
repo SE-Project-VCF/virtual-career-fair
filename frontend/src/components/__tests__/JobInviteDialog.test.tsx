@@ -7,6 +7,7 @@ import { authUtils } from "../../utils/auth";
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-id-token"),
   },
 }));
 
@@ -63,7 +64,7 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
     expect(screen.getByLabelText(/Personal Message/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Search by name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Quick search/i)).toBeInTheDocument();
   });
 
   it("shows loading spinner while fetching students", () => {
@@ -87,7 +88,7 @@ describe("JobInviteDialog", () => {
       json: async () => ({ students: [] }),
     });
     render(<JobInviteDialog {...defaultProps} />);
-    await waitFor(() => expect(screen.getByText("No students found")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/No students found/i)).toBeInTheDocument());
   });
 
   // -----------------------------------------------------------------------
@@ -124,7 +125,7 @@ describe("JobInviteDialog", () => {
   it("shows generic info alert when boothId is absent", async () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() =>
-      expect(screen.getByText(/students' dashboards as notifications/i)).toBeInTheDocument()
+      expect(screen.getByText(/Invitations are sent to students' dashboards/i)).toBeInTheDocument()
     );
   });
 
@@ -160,7 +161,7 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
 
-    await user.type(screen.getByPlaceholderText(/Search by name/i), "alice");
+    await user.type(screen.getByLabelText(/Quick search/i), "alice");
 
     await waitFor(() => {
       expect(screen.getByText("Alice Smith")).toBeInTheDocument();
@@ -173,7 +174,7 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Bob Jones")).toBeInTheDocument());
 
-    await user.type(screen.getByPlaceholderText(/Search by name/i), "bob@example");
+    await user.type(screen.getByLabelText(/Quick search/i), "bob@example");
 
     await waitFor(() => {
       expect(screen.getByText("Bob Jones")).toBeInTheDocument();
@@ -186,7 +187,7 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Carol White")).toBeInTheDocument());
 
-    await user.type(screen.getByPlaceholderText(/Search by name/i), "Data Science");
+    await user.type(screen.getByLabelText(/Quick search/i), "Data Science");
 
     await waitFor(() => {
       expect(screen.getByText("Carol White")).toBeInTheDocument();
@@ -199,10 +200,10 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
 
-    await user.type(screen.getByPlaceholderText(/Search by name/i), "zzznomatch");
+    await user.type(screen.getByLabelText(/Quick search/i), "zzznomatch");
 
     await waitFor(() =>
-      expect(screen.getByText("No students match your search")).toBeInTheDocument()
+      expect(screen.getByText(/No students match your filters/i)).toBeInTheDocument()
     );
   });
 
@@ -211,7 +212,7 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
 
-    await user.type(screen.getByPlaceholderText(/Search by name/i), "alice");
+    await user.type(screen.getByLabelText(/Quick search/i), "alice");
     await waitFor(() => expect(screen.queryByText("Bob Jones")).not.toBeInTheDocument());
 
     // ClearIcon button appears only when search has text; it's the last icon button
@@ -247,7 +248,7 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: /Select All/i }));
+    await user.click(screen.getByRole("button", { name: /Select all shown/i }));
 
     await waitFor(() =>
       expect(screen.getByText(`${mockStudents.length} selected`)).toBeInTheDocument()
@@ -259,12 +260,12 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: /Select All/i }));
+    await user.click(screen.getByRole("button", { name: /Select all shown/i }));
     await waitFor(() =>
       expect(screen.getByText(`${mockStudents.length} selected`)).toBeInTheDocument()
     );
 
-    await user.click(screen.getByRole("button", { name: /Deselect All/i }));
+    await user.click(screen.getByRole("button", { name: /Deselect all shown/i }));
     await waitFor(() => expect(screen.getByText(/0 selected/)).toBeInTheDocument());
   });
 
@@ -274,8 +275,8 @@ describe("JobInviteDialog", () => {
       json: async () => ({ students: [] }),
     });
     render(<JobInviteDialog {...defaultProps} />);
-    await waitFor(() => expect(screen.getByText("No students found")).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: /Select All/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/No students found/i)).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /Select all shown/i })).not.toBeInTheDocument();
   });
 
   // -----------------------------------------------------------------------
@@ -312,6 +313,9 @@ describe("JobInviteDialog", () => {
         "http://localhost:5000/api/job-invitations/send",
         expect.objectContaining({
           method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer mock-id-token",
+          }),
           body: expect.stringContaining('"jobId":"job-1"'),
         })
       )
@@ -346,7 +350,7 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: /Select All/i }));
+    await user.click(screen.getByRole("button", { name: /Select all shown/i }));
     await user.click(screen.getByRole("button", { name: /Send \(3\)/i }));
 
     await waitFor(() =>

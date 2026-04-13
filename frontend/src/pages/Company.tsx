@@ -733,11 +733,17 @@ export default function Company() {
     if (!userId) return
 
     try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) return
+
       const response = await fetch(
         `${API_URL}/api/job-invitations/stats/${jobId}?userId=${userId}`,
         {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         }
       )
 

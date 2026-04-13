@@ -18,11 +18,44 @@ import {
   FormControlLabel,
   Checkbox,
 } from "@mui/material"
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete"
 import ProfileMenu from "./ProfileMenu"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
+import { ACCEPTED_INTEREST_TAGS } from "../constants/interestTagOptions"
+
+const MAX_INTEREST_TAGS = 15
+
+const acceptedInterestSet = new Set(ACCEPTED_INTEREST_TAGS)
+
+function normalizeInterestTags(tags: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of tags) {
+    const t = raw.trim().toLowerCase().replace(/\s+/g, " ")
+    if (!acceptedInterestSet.has(t)) continue
+    if (seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+    if (out.length >= MAX_INTEREST_TAGS) break
+  }
+  return out
+}
+
+function formatTagDisplay(tag: string): string {
+  return tag
+    .split(" ")
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(" ")
+}
+
+/** Match typing against both stored value and title-cased label (e.g. "machine" → "machine learning"). */
+const filterInterestOptions = createFilterOptions<string>({
+  matchFrom: "any",
+  stringify: (option) => `${option} ${formatTagDisplay(option)}`,
+})
 
 export default function StudentProfilePage() {
   const navigate = useNavigate()
@@ -36,6 +69,7 @@ export default function StudentProfilePage() {
   const [major, setMajor] = useState("")
   const [year, setYear] = useState("")
   const [skills, setSkills] = useState("")
+  const [interestTags, setInterestTags] = useState<string[]>([])
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [resumeUrl, setResumeUrl] = useState<string | null>(null)
   const [resumeVisible, setResumeVisible] = useState(true)
@@ -70,6 +104,12 @@ export default function StudentProfilePage() {
           setMajor(data.major || "")
           setYear(data.expectedGradYear || "")
           setSkills(data.skills || "")
+          const rawTags = data.interestTags
+          setInterestTags(
+            Array.isArray(rawTags)
+              ? normalizeInterestTags(rawTags.filter((t: unknown) => typeof t === "string") as string[])
+              : []
+          )
           setResumeUrl(data.resumeUrl || null)
           setResumeVisible(data.resumeVisible !== false)
         }
@@ -184,17 +224,22 @@ export default function StudentProfilePage() {
         uploadedUrl = result.filePath || null
       }
 
+      const tagsToSave = normalizeInterestTags(interestTags)
+
       await setDoc(
         docRef,
         {
           major,
           expectedGradYear: year,
           skills,
+          interestTags: tagsToSave,
           resumeUrl: uploadedUrl || null,
           resumeVisible,
         },
         { merge: true }
       )
+
+      setInterestTags(tagsToSave)
 
       setResumeUrl(uploadedUrl || null)
       setResumeFile(null)
@@ -338,6 +383,38 @@ export default function StudentProfilePage() {
               onChange={(e) => setSkills(e.target.value)}
               placeholder="e.g., Python, React, SQL"
               sx={{ mb: 3 }}
+            />
+
+            <Autocomplete
+              multiple
+              options={[...ACCEPTED_INTEREST_TAGS]}
+              value={interestTags}
+              onChange={(_, newValue) => setInterestTags(normalizeInterestTags(newValue))}
+              getOptionLabel={(option) => formatTagDisplay(option)}
+              filterOptions={filterInterestOptions}
+              isOptionEqualToValue={(a, b) => a === b}
+              openOnFocus
+              disableCloseOnSelect
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    {...getTagProps({ index })}
+                    key={option}
+                    variant="outlined"
+                    size="small"
+                    label={formatTagDisplay(option)}
+                  />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Interests"
+                  placeholder="Search interests…"
+                  helperText={`Choose from the list (search as you type). Up to ${MAX_INTEREST_TAGS} tags. Employers can search these.`}
+                  sx={{ mb: 3 }}
+                />
+              )}
             />
 
             {/* Resume Upload */}

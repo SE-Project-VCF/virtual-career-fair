@@ -8,6 +8,7 @@ import { authUtils } from "../../utils/auth";
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-id-token"),
   },
 }));
 
@@ -133,7 +134,10 @@ describe("JobInviteStatsDialog", () => {
         "http://localhost:5000/api/job-invitations/details/job-1?userId=user-1",
         expect.objectContaining({
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer mock-id-token",
+          },
         })
       );
     });

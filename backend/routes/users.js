@@ -5,6 +5,118 @@ const admin = require("firebase-admin");
 const { removeUndefined, generateInviteCode, verifyFirebaseToken, verifyRepOrOwner } = require("../helpers");
 const { streamServerClient } = require("../streamServerClient");
 
+function normalizeTagString(t) {
+  if (t == null || typeof t === "object") return "";
+  return String(t).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function interestTagsFromUserData(data) {
+  const out = [];
+  const pushUnique = (arr, v) => {
+    const n = normalizeTagString(v);
+    if (n && !arr.includes(n)) arr.push(n);
+  };
+
+  const addFromArray = (raw) => {
+    if (!Array.isArray(raw)) return;
+    for (const item of raw) {
+      if (typeof item === "string") pushUnique(out, item);
+      else if (item && typeof item === "object") {
+        if (typeof item.name === "string") pushUnique(out, item.name);
+        if (typeof item.tag === "string") pushUnique(out, item.tag);
+        if (typeof item.label === "string") pushUnique(out, item.label);
+      }
+    }
+  };
+
+  addFromArray(data.interestTags);
+  addFromArray(data.interests);
+
+  if (typeof data.interestTags === "string" && data.interestTags.trim()) {
+    data.interestTags
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .forEach((s) => pushUnique(out, s));
+  }
+
+  if (typeof data.interestTag === "string") pushUnique(out, data.interestTag);
+
+  if (typeof data.interests === "string" && data.interests.trim()) {
+    data.interests
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .forEach((s) => pushUnique(out, s));
+  }
+
+  return out;
+}
+
+function skillsFromUserData(data) {
+  const s = data.skills;
+  if (typeof s === "string") return s;
+  if (Array.isArray(s)) {
+    return s.filter((x) => typeof x === "string").join(", ");
+  }
+  if (s == null || s === undefined) return "";
+  return String(s);
+}
+
+function mapStudentRecord(id, data) {
+  return {
+    id,
+    firstName: data.firstName || "",
+    lastName: data.lastName || "",
+    email: data.email || "",
+    major: data.major || "",
+    skills: skillsFromUserData(data),
+    interestTags: interestTagsFromUserData(data),
+  };
+}
+
+function studentMatchesInterestQuery(student, interestTrimmed) {
+  if (!interestTrimmed) return true;
+  const q = interestTrimmed.toLowerCase();
+  const tags = student.interestTags || [];
+  return tags.some((t) => {
+    const tl = t.toLowerCase();
+    return tl === q || tl.includes(q) || q.includes(tl);
+  });
+}
+
+/**
+ * Employer UI passes the company's primary booth id (`companies.boothId` → global `booths/{id}`).
+ * Students may have `users/{uid}/boothHistory/{docId}` keyed by that id, or by a fair-scoped
+ * booth copy id (`fairs/.../booths/{fairBoothId}`) when tracking used the fair URL id.
+ * Fair booth docs store `originalBoothId` pointing at the global booth.
+ */
+async function resolveBoothHistoryDocIdsForLookup(primaryBoothId) {
+  const ids = new Set([primaryBoothId]);
+  try {
+    const snap = await db
+      .collectionGroup("booths")
+      .where("originalBoothId", "==", primaryBoothId)
+      .get();
+    snap.docs.forEach((d) => ids.add(d.id));
+  } catch (err) {
+    console.warn(
+      "[GET /students] Could not resolve linked fair booth ids (index may be required):",
+      err.message
+    );
+  }
+  return [...ids];
+}
+
+async function studentHasBoothHistoryForAnyId(studentId, boothHistoryDocIds) {
+  const snaps = await Promise.all(
+    boothHistoryDocIds.map((bid) =>
+      db.collection("users").doc(studentId).collection("boothHistory").doc(bid).get()
+    )
+  );
+  return snaps.some((d) => d.exists);
+}
+
 /* ----------------------------------------------------
    REGISTER USER (Firestore + Stream upsert)
 ---------------------------------------------------- */
@@ -111,7 +223,7 @@ router.post("/register-user", async (req, res) => {
 ---------------------------------------------------- */
 router.get("/students", verifyFirebaseToken, async (req, res) => {
   try {
-    const { userId, search, major, boothId } = req.query;
+    const { userId, search, major, boothId, interest } = req.query;
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
@@ -126,52 +238,32 @@ router.get("/students", verifyFirebaseToken, async (req, res) => {
     let students = [];
 
     if (boothId) {
-      // Find students who visited this specific booth
+      // Find students who visited this booth (global id and/or linked fair booth instance ids)
+      const boothHistoryDocIds = await resolveBoothHistoryDocIdsForLookup(boothId);
+      console.log(
+        `[GET /students] booth filter doc ids for ${boothId}: ${boothHistoryDocIds.join(", ")}`
+      );
 
-      // Get all students first
       const allStudentsQuery = db.collection("users").where("role", "==", "student");
       const studentsSnapshot = await allStudentsQuery.get();
 
-      // Check each student to see if they have a boothHistory document for this booth
       const studentPromises = studentsSnapshot.docs.map(async (studentDoc) => {
         const studentData = studentDoc.data();
-
-        // Check if this student has visited the booth
-        const boothHistoryDoc = await db.collection("users")
-          .doc(studentDoc.id)
-          .collection("boothHistory")
-          .doc(boothId)
-          .get();
-
-        if (boothHistoryDoc.exists) {
-          return {
-            id: studentDoc.id,
-            firstName: studentData.firstName || "",
-            lastName: studentData.lastName || "",
-            email: studentData.email || "",
-            major: studentData.major || "",
-          };
+        const visited = await studentHasBoothHistoryForAnyId(studentDoc.id, boothHistoryDocIds);
+        if (visited) {
+          return mapStudentRecord(studentDoc.id, studentData);
         }
         return null;
       });
 
-      students = (await Promise.all(studentPromises)).filter(s => s !== null);
+      students = (await Promise.all(studentPromises)).filter((s) => s !== null);
       console.log(`Found ${students.length} students who visited booth`);
     } else {
       // Get all students (existing logic)
       let query = db.collection("users").where("role", "==", "student");
       const studentsSnapshot = await query.get();
 
-      students = studentsSnapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          firstName: data.firstName || "",
-          lastName: data.lastName || "",
-          email: data.email || "",
-          major: data.major || "",
-        };
-      });
+      students = studentsSnapshot.docs.map((doc) => mapStudentRecord(doc.id, doc.data()));
     }
 
     // Apply search filter if provided
@@ -179,9 +271,17 @@ router.get("/students", verifyFirebaseToken, async (req, res) => {
       const searchLower = search.toLowerCase().trim();
       students = students.filter((student) => {
         const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
+        const tagMatch = (student.interestTags || []).some((tag) => {
+          const tl = tag.toLowerCase();
+          return tl.includes(searchLower) || searchLower.includes(tl);
+        });
+        const skillsLower = (student.skills || "").toLowerCase();
         return (
           fullName.includes(searchLower) ||
-          student.email.toLowerCase().includes(searchLower)
+          student.email.toLowerCase().includes(searchLower) ||
+          student.major.toLowerCase().includes(searchLower) ||
+          skillsLower.includes(searchLower) ||
+          tagMatch
         );
       });
     }
@@ -192,6 +292,12 @@ router.get("/students", verifyFirebaseToken, async (req, res) => {
       students = students.filter((student) =>
         student.major.toLowerCase().includes(majorLower)
       );
+    }
+
+    // Apply interest tag filter (e.g. interest=Finance)
+    if (interest?.trim()) {
+      const interestTrimmed = interest.trim();
+      students = students.filter((student) => studentMatchesInterestQuery(student, interestTrimmed));
     }
 
     console.log(`Returning ${students.length} students`);
