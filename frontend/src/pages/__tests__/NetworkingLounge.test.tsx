@@ -719,6 +719,42 @@ describe("NetworkingLounge", () => {
       })
     })
 
+    it("shows error snackbar and reverts switch when Ghost Mode PATCH fails", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ attendees: [] }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          json: async () => ({ error: "server error" }),
+        })
+
+      globalThis.fetch = fetchMock
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => {
+        expect(screen.getByRole("switch", { name: /ghost mode/i })).toBeInTheDocument()
+      })
+
+      const toggle = screen.getByRole("switch", { name: /ghost mode/i })
+      await user.click(toggle)
+
+      expect(await screen.findByText(/failed to update ghost mode/i)).toBeInTheDocument()
+      expect(screen.getByRole("switch", { name: /ghost mode/i })).not.toBeChecked()
+    })
+
     it("fetches attendees only once when tab is clicked multiple times", async () => {
       const user = userEvent.setup()
       setupConnected()

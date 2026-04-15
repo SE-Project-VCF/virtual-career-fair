@@ -16,6 +16,8 @@ import {
   Grid,
   FormControlLabel,
   Switch,
+  Snackbar,
+  Alert,
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ChatIcon from "@mui/icons-material/Chat"
@@ -145,6 +147,7 @@ export default function NetworkingLounge() {
   const [ghostMode, setGhostMode] = useState<boolean>(
     Boolean((user as any)?.ghostMode)
   )
+  const [ghostError, setGhostError] = useState<string | null>(null)
   const attendeesFetched = useRef(false)
 
   useEffect(() => {
@@ -284,6 +287,7 @@ export default function NetworkingLounge() {
     } catch (err) {
       console.error(err)
       setGhostMode(prev)
+      setGhostError("Failed to update Ghost Mode. Please try again.")
     }
   }
 
@@ -448,6 +452,16 @@ export default function NetworkingLounge() {
           </Box>
         )}
       </Box>
+      <Snackbar
+        open={ghostError !== null}
+        autoHideDuration={4000}
+        onClose={() => setGhostError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setGhostError(null)}>
+          {ghostError}
+        </Alert>
+      </Snackbar>
     </BaseLayout>
   )
 }
