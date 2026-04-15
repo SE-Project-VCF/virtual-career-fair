@@ -652,6 +652,73 @@ describe("NetworkingLounge", () => {
       expect(screen.queryByRole("link", { name: /linkedin/i })).not.toBeInTheDocument()
     })
 
+    it("shows Ghost Mode switch on Attendees tab", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ attendees: [] }),
+        })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => {
+        expect(screen.getByRole("switch", { name: /ghost mode/i })).toBeInTheDocument()
+      })
+    })
+
+    it("clicking Ghost Mode switch calls PATCH /api/users/me/ghost-mode", async () => {
+      const user = userEvent.setup()
+      setupConnected()
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ attendees: [] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ ghostMode: true }),
+        })
+
+      globalThis.fetch = fetchMock
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => {
+        expect(screen.getByRole("switch", { name: /ghost mode/i })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole("switch", { name: /ghost mode/i }))
+
+      await waitFor(() => {
+        const ghostCall = fetchMock.mock.calls.find((call) =>
+          typeof call[0] === "string" && call[0].includes("/api/users/me/ghost-mode")
+        )
+        expect(ghostCall).toBeDefined()
+        expect(ghostCall![1]).toMatchObject({
+          method: "PATCH",
+          body: JSON.stringify({ ghostMode: true }),
+        })
+      })
+    })
+
     it("fetches attendees only once when tab is clicked multiple times", async () => {
       const user = userEvent.setup()
       setupConnected()

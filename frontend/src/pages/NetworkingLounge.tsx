@@ -14,6 +14,8 @@ import {
   Chip,
   Container,
   Grid,
+  FormControlLabel,
+  Switch,
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ChatIcon from "@mui/icons-material/Chat"
@@ -140,6 +142,9 @@ export default function NetworkingLounge() {
   const [activeTab, setActiveTab] = useState(0)
   const [attendees, setAttendees] = useState<Attendee[]>([])
   const [loadingAttendees, setLoadingAttendees] = useState(false)
+  const [ghostMode, setGhostMode] = useState<boolean>(
+    Boolean((user as any)?.ghostMode)
+  )
   const attendeesFetched = useRef(false)
 
   useEffect(() => {
@@ -253,6 +258,33 @@ export default function NetworkingLounge() {
 
   const handleMessageAttendee = (attendee: Attendee) => {
     navigate("/dashboard/chat", { state: { repId: attendee.uid } })
+  }
+
+  const handleToggleGhostMode = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.checked
+    const prev = ghostMode
+    setGhostMode(next)
+    try {
+      const idToken = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/users/me/ghost-mode`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ghostMode: next }),
+      })
+      if (!res.ok) throw new Error("Failed to update ghost mode")
+      const stored = localStorage.getItem("currentUser")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        parsed.ghostMode = next
+        localStorage.setItem("currentUser", JSON.stringify(parsed))
+      }
+    } catch (err) {
+      console.error(err)
+      setGhostMode(prev)
+    }
   }
 
   const sendMessage = async () => {
@@ -373,6 +405,18 @@ export default function NetworkingLounge() {
         {activeTab === 1 && (
           <Box sx={{ flex: 1, overflowY: "auto" }}>
             <Container maxWidth="lg" sx={{ py: 4 }}>
+              <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={ghostMode}
+                      onChange={handleToggleGhostMode}
+                      inputProps={{ "aria-label": "Ghost Mode" }}
+                    />
+                  }
+                  label="Ghost Mode — hide my profile from other attendees"
+                />
+              </Box>
               {loadingAttendees && (
                 <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
                   <CircularProgress />
