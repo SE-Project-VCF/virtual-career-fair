@@ -317,4 +317,40 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/failed to fetch/i);
   });
+
+  it("excludes users with ghostMode: true", async () => {
+    mockChannel.query.mockResolvedValueOnce({
+      members: [
+        { user_id: "student-uid" },
+        { user_id: "visible-uid" },
+        { user_id: "ghost-uid" },
+      ],
+    });
+
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              id === "student-uid"
+                ? mockDocSnap({ role: "student" }, true, id)
+                : id === "visible-uid"
+                ? mockDocSnap({ role: "student", firstName: "Vi", ghostMode: false }, true, id)
+                : mockDocSnap({ role: "student", firstName: "Gh", ghostMode: true }, true, id)
+            ),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+    });
+
+    const res = await request(app)
+      .get("/api/fairs/fair1/lounge/attendees")
+      .set("Authorization", VALID_TOKEN);
+
+    expect(res.status).toBe(200);
+    const uids = res.body.attendees.map((a) => a.uid);
+    expect(uids).toContain("visible-uid");
+    expect(uids).not.toContain("ghost-uid");
+  });
 });
