@@ -308,4 +308,21 @@ router.post("/create-admin", async (req, res) => {
   }
 });
 
+/* ----------------------------------------------------
+   PATCH /users/me/ghost-mode - toggle ghost mode
+---------------------------------------------------- */
+router.patch("/users/me/ghost-mode", verifyFirebaseToken, async (req, res) => {
+  const { ghostMode } = req.body;
+  if (typeof ghostMode !== "boolean") {
+    return res.status(400).json({ error: "ghostMode must be a boolean" });
+  }
+  try {
+    await db.collection("users").doc(req.user.uid).update({ ghostMode });
+    return res.json({ ghostMode });
+  } catch (err) {
+    console.error("PATCH /api/users/me/ghost-mode error:", err);
+    return res.status(500).json({ error: "Failed to update ghost mode" });
+  }
+});
+
 module.exports = router;
