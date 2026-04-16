@@ -511,4 +511,98 @@ describe("PUT /api/companies/:companyId/locations", () => {
     expect(update).toHaveBeenCalled();
     expect(Array.isArray(update.mock.calls[0][0].officeLocations)).toBe(true);
   });
+
+  it("returns 400 when officeLocations is not an array", async () => {
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "test-uid", companyName: "Acme" }, true, "c1")
+        ),
+        update: jest.fn(),
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({ remoteEmployer: false, officeLocations: {} });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("array");
+  });
+
+  it("returns 400 when too many office locations are submitted", async () => {
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "test-uid", companyName: "Acme" }, true, "c1")
+        ),
+        update: jest.fn(),
+      })),
+    });
+    const many = Array.from({ length: 41 }, (_, i) => ({
+      id: `id-${i}`,
+      label: `L${i}`,
+      geocodeQuery: `Q${i}`,
+    }));
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({ remoteEmployer: false, officeLocations: many });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/40/);
+  });
+
+  it("returns 400 for a non-object office location entry", async () => {
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "test-uid", companyName: "Acme" }, true, "c1")
+        ),
+        update: jest.fn(),
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({ remoteEmployer: false, officeLocations: ["not-an-object"] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Invalid/);
+  });
+
+  it("returns verifier status when geocoding verification fails", async () => {
+    verifyOfficeLocationInput.mockResolvedValue({ ok: false, status: 400, error: "bad location" });
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "test-uid", companyName: "Acme" }, true, "c1")
+        ),
+        update: jest.fn(),
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({
+        remoteEmployer: false,
+        officeLocations: [{ id: "loc-1", label: "X", geocodeQuery: "X" }],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("bad location");
+  });
+
+  it("returns 500 when Firestore update throws", async () => {
+    const update = jest.fn().mockRejectedValue(new Error("write failed"));
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "test-uid", companyName: "Acme" }, true, "c1")
+        ),
+        update,
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({ remoteEmployer: true });
+    expect(res.status).toBe(500);
+  });
 });
