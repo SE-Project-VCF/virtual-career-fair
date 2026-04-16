@@ -8,6 +8,14 @@ import { getDoc, getDocs, updateDoc, addDoc, deleteDoc, arrayRemove } from "fire
 const mockNavigate = vi.fn();
 const mockUseParams = vi.fn(() => ({ id: "company-1" }));
 
+const geocodeSuggestMocks = vi.hoisted(() => ({
+  state: { options: [] as Array<Record<string, unknown>>, loading: false },
+}));
+
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => geocodeSuggestMocks.state,
+}));
+
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
@@ -102,6 +110,8 @@ describe("Company", () => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
     mockUseParams.mockReturnValue({ id: "company-1" });
+    geocodeSuggestMocks.state.options = [];
+    geocodeSuggestMocks.state.loading = false;
 
     (authUtils.getCurrentUser as any).mockReturnValue({
       uid: "owner-1",
@@ -1387,6 +1397,157 @@ describe("Company", () => {
 
       expect(screen.queryByRole("button", { name: /View Public Booth/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /View Visitors Analytics/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Office locations", () => {
+    const repGetDoc = (companyData: Record<string, unknown>) => (getDoc as any).mockImplementation((docRef: any) => {
+      if (docRef.id === "company-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "company-1",
+          data: () => companyData,
+        });
+      }
+      if (docRef.id === "rep-1") {
+        return Promise.resolve({
+          exists: () => true,
+          id: "rep-1",
+          data: () => mockRepresentativeData,
+        });
+      }
+      return Promise.resolve({ exists: () => false });
+    });
+
+    it("representative sees remote employer read-only state", async () => {
+      (authUtils.getCurrentUser as any).mockReturnValue({ uid: "rep-1", role: "representative" });
+      repGetDoc({
+        ...mockCompanyData,
+        representativeIDs: ["rep-1"],
+        remoteEmployer: true,
+        officeLocations: [],
+      });
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+      expect(screen.getByText("Remote employer")).toBeInTheDocument();
+      expect(screen.getByText(/Only the company owner can edit locations/i)).toBeInTheDocument();
+    });
+
+    it("representative sees empty-office copy when company has no locations", async () => {
+      (authUtils.getCurrentUser as any).mockReturnValue({ uid: "rep-1", role: "representative" });
+      repGetDoc({
+        ...mockCompanyData,
+        representativeIDs: ["rep-1"],
+        remoteEmployer: false,
+        officeLocations: [],
+      });
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+      expect(
+        screen.getByText(/No office locations on file\. The company owner can add verified locations here\./i),
+      ).toBeInTheDocument();
+    });
+
+    it("representative sees saved office rows with city/state secondary", async () => {
+      (authUtils.getCurrentUser as any).mockReturnValue({ uid: "rep-1", role: "representative" });
+      repGetDoc({
+        ...mockCompanyData,
+        representativeIDs: ["rep-1"],
+        remoteEmployer: false,
+        officeLocations: [
+          { id: "loc-1", label: "HQ", city: "Austin", state: "TX" },
+          { id: "loc-2", label: "", city: "Denver", state: "CO" },
+        ],
+      });
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+      expect(screen.getByText("HQ")).toBeInTheDocument();
+      expect(screen.getAllByText("Denver, CO").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Austin, TX")).toBeInTheDocument();
+    });
+
+    it("owner loads normalized office rows from mixed Firestore shapes", async () => {
+      repGetDoc({
+        ...mockCompanyData,
+        remoteEmployer: false,
+        officeLocations: [
+          null,
+          { id: "", label: "Skip" },
+          { id: "loc-1", label: "  Trimmed  ", city: "Austin", state: "TX", zip: 78701 },
+          { id: "loc-2", label: "", city: "Denver", state: "CO" },
+        ],
+      });
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+      expect(screen.getByText("Trimmed")).toBeInTheDocument();
+      expect(screen.getByText("Denver, CO")).toBeInTheDocument();
+      expect(screen.queryByText("Skip")).not.toBeInTheDocument();
+    });
+
+    it("owner marks locations dirty when toggling remote employer", async () => {
+      const user = userEvent.setup();
+      repGetDoc({
+        ...mockCompanyData,
+        remoteEmployer: false,
+        officeLocations: [{ id: "loc-1", label: "Austin, TX", city: "Austin", state: "TX" }],
+      });
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+      const saveBtn = screen.getByRole("button", { name: /Save locations/i });
+      expect(saveBtn).toBeDisabled();
+      await user.click(screen.getByRole("checkbox", { name: /Remote employer/i }));
+      expect(saveBtn).not.toBeDisabled();
+    });
+
+    it("owner adds a suggestion once and ignores duplicate label adds", async () => {
+      const user = userEvent.setup();
+      geocodeSuggestMocks.state.options = [
+        { id: "s1", label: "Portland, OR", lat: 45.5, lng: -122.6, city: "Portland", state: "OR", zip: null },
+      ];
+      repGetDoc({
+        ...mockCompanyData,
+        remoteEmployer: false,
+        officeLocations: [],
+      });
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+      const combo = screen.getByRole("combobox", { name: /Search places to add/i });
+      await user.click(combo);
+      await user.keyboard("Po");
+      const opt = await screen.findByRole("option", { name: /Portland, OR/i });
+      await user.click(opt);
+      expect(screen.getAllByText("Portland, OR").length).toBeGreaterThanOrEqual(1);
+      await user.click(combo);
+      await user.keyboard("Po");
+      const opt2 = await screen.findByRole("option", { name: /Portland, OR/i });
+      await user.click(opt2);
+      const officeCard = screen.getByRole("button", { name: /Save locations/i }).closest(".MuiCard-root");
+      expect(officeCard).toBeTruthy();
+      expect(within(officeCard as HTMLElement).getAllByText("Portland, OR")).toHaveLength(1);
+    });
+
+    it("owner uses fallback id when crypto.randomUUID is unavailable", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("crypto", { randomUUID: undefined } as unknown as Crypto);
+      geocodeSuggestMocks.state.options = [
+        { id: "s2", label: "Seattle, WA", lat: 47.6, lng: -122.3, city: "Seattle", state: "WA", zip: null },
+      ];
+      repGetDoc({
+        ...mockCompanyData,
+        remoteEmployer: false,
+        officeLocations: [],
+      });
+      try {
+        renderComp();
+        await screen.findByRole("heading", { name: /Tech Corp/i });
+        const combo = screen.getByRole("combobox", { name: /Search places to add/i });
+        await user.click(combo);
+        await user.keyboard("Se");
+        await user.click(await screen.findByRole("option", { name: /Seattle, WA/i }));
+        expect(screen.getByText("Seattle, WA")).toBeInTheDocument();
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 });
