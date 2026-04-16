@@ -341,8 +341,10 @@ describe("BoothEditor – fair-scoped", () => {
         await screen.findByRole("option", { name: /51-200 employees/i })
       )
 
-      await user.type(screen.getByRole("textbox", { name: /^city$/i }), "San Francisco")
-      await user.type(screen.getByRole("textbox", { name: /state \/ region/i }), "CA")
+      await user.click(screen.getByRole("combobox", { name: /industry/i }))
+      await user.click(await screen.findByRole("option", { name: /software development/i }))
+      await user.click(screen.getByRole("combobox", { name: /company size/i }))
+      await user.click(await screen.findByRole("option", { name: /51-200 employees/i }))
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test")
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe")
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com")

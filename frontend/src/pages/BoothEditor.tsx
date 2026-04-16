@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   Container,
   Box,
@@ -17,8 +17,7 @@ import {
   InputLabel,
   Divider,
   Grid,
-  FormControlLabel,
-  Checkbox,
+  Link,
 } from "@mui/material"
 
 import { authUtils } from "../utils/auth"
@@ -38,6 +37,7 @@ import { API_URL } from "../config"
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
+import LocationOnIcon from "@mui/icons-material/LocationOn"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import RestartAltIcon from "@mui/icons-material/RestartAlt"
@@ -47,10 +47,6 @@ interface BoothData {
   companyName: string
   industry: string
   companySize: string
-  location: string
-  locationIsRemote: boolean
-  locationCity: string
-  locationState: string
   description: string
   logoUrl?: string
   website?: string
@@ -110,10 +106,6 @@ export default function BoothEditor() {
     companyName: "",
     industry: "",
     companySize: "",
-    location: "",
-    locationIsRemote: false,
-    locationCity: "",
-    locationState: "",
     description: "",
     website: "",
     careersPage: "",
@@ -281,10 +273,6 @@ export default function BoothEditor() {
         companyName: boothData.companyName || fallbackCompanyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
-        location: boothData.location || "",
-        locationIsRemote: boothData.locationIsRemote === true,
-        locationCity: boothData.locationCity ?? "",
-        locationState: boothData.locationState ?? "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -345,10 +333,6 @@ export default function BoothEditor() {
         companyName: boothData.companyName || companyInfo.companyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
-        location: boothData.location || "",
-        locationIsRemote: boothData.locationIsRemote === true,
-        locationCity: boothData.locationCity ?? "",
-        locationState: boothData.locationState ?? "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -472,15 +456,6 @@ export default function BoothEditor() {
       setError("")
       setSuccess("")
 
-      if (!formData.locationIsRemote) {
-        if (!formData.locationCity.trim() || !formData.locationState.trim()) {
-          setError("City and state are required unless you mark the booth as Remote.")
-          scrollToTop()
-          setSaving(false)
-          return
-        }
-      }
-
       // Validate contact rep is a real Firestore user
       const normalizedEmail = formData.contactEmail.trim().toLowerCase()
       const usersRef = collection(db, "users")
@@ -525,23 +500,12 @@ export default function BoothEditor() {
         }
       }
 
-      const isRemote = formData.locationIsRemote
-      const city = formData.locationCity.trim()
-      const state = formData.locationState.trim()
-      const locLine = formData.location.trim()
-      const composedLocation =
-        locLine || (isRemote ? "" : [city, state].filter(Boolean).join(", "))
-
-      // Booth document payload
+      // Booth document payload (office locations live on companies/{id})
       const boothData = {
         companyId: company.id,
         companyName: formData.companyName,
         industry: formData.industry,
         companySize: formData.companySize,
-        location: isRemote ? null : (composedLocation || null),
-        locationIsRemote: isRemote,
-        locationCity: isRemote ? null : (city || null),
-        locationState: isRemote ? null : (state || null),
         description: formData.description,
         logoUrl: logoUrlToSave,
         website: formData.website || null,
@@ -616,10 +580,6 @@ export default function BoothEditor() {
       companyName: company?.companyName ?? "",
       industry: "",
       companySize: "",
-      location: "",
-      locationIsRemote: false,
-      locationCity: "",
-      locationState: "",
       description: "",
       website: "",
       careersPage: "",
@@ -857,60 +817,21 @@ export default function BoothEditor() {
                 </Grid>
 
                 <Grid size={{ xs: 12 }}>
-                  <FormControlLabel
-                    control={(
-                      <Checkbox
-                        checked={formData.locationIsRemote}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          locationIsRemote: e.target.checked,
-                          ...(e.target.checked
-                            ? { locationCity: "", locationState: "", location: "" }
-                            : {}),
-                        })}
-                      />
+                  <Alert severity="info" icon={<LocationOnIcon />} sx={{ alignItems: "flex-start" }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                      Office locations and the remote-employer setting are managed on your{" "}
+                      <Link component={RouterLink} to={`/company/${companyId}`} fontWeight={600}>
+                        company page
+                      </Link>
+                      . They show automatically on this booth.
+                    </Typography>
+                    {userRole === "representative" && (
+                      <Typography variant="caption" color="text.secondary">
+                        Only the company owner can edit locations; ask them to update the company page if needed.
+                      </Typography>
                     )}
-                    label="Remote employer (nationwide — not tied to a city)"
-                  />
+                  </Alert>
                 </Grid>
-
-                {!formData.locationIsRemote && (
-                  <>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        id="booth-location-city"
-                        name="locationCity"
-                        label="City"
-                        value={formData.locationCity}
-                        onChange={(e) => setFormData({ ...formData, locationCity: e.target.value })}
-                        required
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        id="booth-location-state"
-                        name="locationState"
-                        label="State / region"
-                        value={formData.locationState}
-                        onChange={(e) => setFormData({ ...formData, locationState: e.target.value })}
-                        required
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12 }}>
-                      <TextField
-                        fullWidth
-                        id="company-location"
-                        name="location"
-                        label="Location details (optional)"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        placeholder="e.g. HQ neighborhood or metro area"
-                      />
-                    </Grid>
-                  </>
-                )}
 
                 <Grid size={{ xs: 12 }}>
                   <TextField

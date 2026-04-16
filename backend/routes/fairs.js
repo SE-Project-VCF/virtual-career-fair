@@ -14,6 +14,18 @@ const {
 const { streamServerClient } = require("../streamServerClient");
 const { forwardGeocode } = require("../services/mapboxGeocode");
 const { haversineMiles, venueFieldsFromDoc } = require("../services/geo");
+const { mergeFairBoothPayloadWithCompany } = require("../services/mergeFairBoothCompanyLocation");
+
+async function companyDataMapForBoothCompanyIds(boothRows) {
+  const ids = [...new Set(boothRows.map((b) => b.companyId).filter(Boolean))];
+  if (ids.length === 0) return new Map();
+  const snaps = await Promise.all(ids.map((id) => db.collection("companies").doc(id).get()));
+  const m = new Map();
+  snaps.forEach((s) => {
+    if (s.exists) m.set(s.id, s.data());
+  });
+  return m;
+}
 
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
 const enrollmentLimiter = rateLimit({
@@ -956,7 +968,11 @@ router.get("/fairs/:fairId/booths", async (req, res) => {
     }
 
     const booths = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    return res.json({ booths });
+    const companyMap = await companyDataMapForBoothCompanyIds(booths);
+    const merged = booths.map((b) =>
+      mergeFairBoothPayloadWithCompany(b, b.companyId ? companyMap.get(b.companyId) : null),
+    );
+    return res.json({ booths: merged });
   } catch (err) {
     if (err.message === "Fair not found") return res.status(404).json({ error: "Fair not found" });
     console.error("GET /api/fairs/:fairId/booths error:", err);
@@ -985,7 +1001,14 @@ router.get("/fairs/:fairId/booths/:boothId", async (req, res) => {
       .get();
     if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
 
-    return res.json({ id: boothDoc.id, ...boothDoc.data() });
+    const raw = boothDoc.data();
+    let companyData = null;
+    if (raw.companyId) {
+      const cDoc = await db.collection("companies").doc(raw.companyId).get();
+      if (cDoc.exists) companyData = cDoc.data();
+    }
+    const payload = mergeFairBoothPayloadWithCompany({ id: boothDoc.id, ...raw }, companyData);
+    return res.json(payload);
   } catch (err) {
     if (err.message === "Fair not found") return res.status(404).json({ error: "Fair not found" });
     console.error("GET /api/fairs/:fairId/booths/:boothId error:", err);
@@ -1017,23 +1040,13 @@ router.put("/fairs/:fairId/booths/:boothId", verifyFirebaseToken, async (req, re
     }
 
     const allowedFields = [
-      "companyName", "industry", "companySize", "location", "description",
+      "companyName", "industry", "companySize", "description",
       "logoUrl", "website", "careersPage", "contactName", "contactEmail",
-      "contactPhone", "hiringFor", "locationIsRemote", "locationCity", "locationState",
+      "contactPhone", "hiringFor",
     ];
     const updates = {};
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
-    }
-    if (updates.locationIsRemote === true) {
-      updates.locationCity = null;
-      updates.locationState = null;
-    }
-    if (updates.locationCity != null && String(updates.locationCity).length > 100) {
-      return res.status(400).json({ error: "City must be 100 characters or less" });
-    }
-    if (updates.locationState != null && String(updates.locationState).length > 100) {
-      return res.status(400).json({ error: "State must be 100 characters or less" });
     }
     updates.updatedAt = admin.firestore.Timestamp.now();
 
@@ -1343,7 +1356,10 @@ router.get("/fairs/:fairId/company/:companyId/booth", verifyFirebaseToken, async
       return res.status(404).json({ error: "Booth not found" });
     }
 
-    return res.json({ boothId, ...boothDoc.data() });
+    const raw = boothDoc.data();
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    const companyData = companyDoc.exists ? companyDoc.data() : null;
+    return res.json(mergeFairBoothPayloadWithCompany({ boothId, ...raw }, companyData));
   } catch (err) {
     console.error("GET /api/fairs/:fairId/company/:companyId/booth error:", err);
     return res.status(500).json({ error: "Failed to load fair booth" });

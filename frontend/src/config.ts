@@ -1,4 +1,6 @@
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const rawApiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").trim();
+/** Origin only: no trailing slash, no trailing `/api` (URLs are built as `${API_URL}/api/...`). */
+export const API_URL = rawApiBase.replaceAll(/\/+$/g, "").replace(/\/api$/i, "");
 
 function normalizeMapboxToken(raw: string): string {
   let t = raw.replace(/\r/g, "").replace(/^\uFEFF/, "").trim()

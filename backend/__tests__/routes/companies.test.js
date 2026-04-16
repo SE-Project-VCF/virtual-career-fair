@@ -5,8 +5,14 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
+  class GeoPoint {
+    constructor(lat, lng) {
+      this.latitude = lat;
+      this.longitude = lng;
+    }
+  }
   return {
-    firestore: Object.assign(jest.fn(), { Timestamp }),
+    firestore: Object.assign(jest.fn(), { Timestamp, GeoPoint }),
     credential: { cert: jest.fn() },
     initializeApp: jest.fn(),
     auth: jest.fn(),
@@ -33,8 +39,13 @@ jest.mock("../../helpers", () => {
   return { ...actual, verifyAdmin: jest.fn() };
 });
 
+jest.mock("../../services/verifiedOfficeLocation", () => ({
+  verifyOfficeLocationInput: jest.fn(),
+}));
+
 const request = require("supertest");
 const companiesRouter = require("../../routes/companies");
+const { verifyOfficeLocationInput } = require("../../services/verifiedOfficeLocation");
 const { db, auth } = require("../../firebase");
 const app = createTestApp(companiesRouter);
 
@@ -399,5 +410,105 @@ describe("GET /api/companies/:companyId/invite-code", () => {
       .get("/api/companies/comp-1/invite-code")
       .set("Authorization", authHeader());
     expect(res.status).toBe(500);
+  });
+});
+
+describe("PUT /api/companies/:companyId/locations", () => {
+  const verifiedLoc = {
+    id: "loc-1",
+    label: "Austin, TX",
+    city: "Austin",
+    state: "TX",
+    zip: null,
+    country: "US",
+    lat: 30,
+    lng: -97,
+    mapboxId: "mbx1",
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    verifyOfficeLocationInput.mockResolvedValue({ ok: true, value: verifiedLoc });
+  });
+
+  it("returns 401 without auth header", async () => {
+    const res = await request(app).put("/api/companies/c1/locations").send({ remoteEmployer: true });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when company not found", async () => {
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+        update: jest.fn(),
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/missing/locations")
+      .set("Authorization", authHeader())
+      .send({ remoteEmployer: true });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 403 when user is not the company owner", async () => {
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "other-owner", companyName: "Acme" }, true)
+        ),
+        update: jest.fn(),
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({ remoteEmployer: false, officeLocations: [] });
+    expect(res.status).toBe(403);
+  });
+
+  it("sets remote employer and clears locations", async () => {
+    const update = jest.fn().mockResolvedValue({});
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "test-uid", companyName: "Acme" }, true, "c1")
+        ),
+        update,
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({ remoteEmployer: true });
+    expect(res.status).toBe(200);
+    expect(res.body.remoteEmployer).toBe(true);
+    expect(res.body.officeLocations).toEqual([]);
+    expect(update).toHaveBeenCalled();
+    const payload = update.mock.calls[0][0];
+    expect(payload.remoteEmployer).toBe(true);
+    expect(payload.officeLocations).toEqual([]);
+  });
+
+  it("verifies and saves office locations for owner", async () => {
+    const update = jest.fn().mockResolvedValue({});
+    db.collection.mockReturnValue({
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue(
+          mockDocSnap({ ownerId: "test-uid", companyName: "Acme" }, true, "c1")
+        ),
+        update,
+      })),
+    });
+    const res = await request(app)
+      .put("/api/companies/c1/locations")
+      .set("Authorization", authHeader())
+      .send({
+        remoteEmployer: false,
+        officeLocations: [{ id: "loc-1", label: "Austin, TX", geocodeQuery: "Austin, TX" }],
+      });
+    expect(res.status).toBe(200);
+    expect(verifyOfficeLocationInput).toHaveBeenCalled();
+    expect(update).toHaveBeenCalled();
+    expect(Array.isArray(update.mock.calls[0][0].officeLocations)).toBe(true);
   });
 });

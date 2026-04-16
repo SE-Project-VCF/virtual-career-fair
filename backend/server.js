@@ -79,6 +79,9 @@ app.post("/test-endpoint", (req, res) => {
   res.json({ success: true, message: "Direct endpoint works!" });
 });
 
+// Company routes before fairs so /companies/* is owned by one router (clearer + avoids edge cases).
+app.use("/api", require("./routes/companies"));
+
 // Mount fair routes (multi-fair support)
 app.use("/api", fairsRouter);
 app.use("/api", shortlistRouter);
@@ -89,7 +92,6 @@ app.use("/api", require("./routes/jobs"));
 app.use("/api", require("./routes/users"));
 app.use("/api", require("./routes/fairStatus"));
 app.use("/api", require("./routes/resume"));
-app.use("/api", require("./routes/companies"));
 app.use("/api", require("./routes/booths"));
 app.use("/api", require("./routes/jobInvitations"));
 app.use("/api", require("./routes/calls"));
