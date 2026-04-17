@@ -29,82 +29,18 @@ import ClearIcon from "@mui/icons-material/Clear";
 import { authUtils } from "../utils/auth";
 import { API_URL } from "../config";
 import { ACCEPTED_INTEREST_TAGS } from "../constants/interestTagOptions";
-
-interface Student {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  major: string;
-  skills?: string;
-  interestTags?: string[];
-}
-
-/** Coerce API rows so filters always see string skills and string[] tags. */
-function normalizeStudentFromApi(raw: unknown): Student {
-  const s = raw as Record<string, unknown>;
-  let skills = "";
-  if (typeof s.skills === "string") skills = s.skills;
-  else if (Array.isArray(s.skills)) {
-    skills = s.skills.filter((x) => typeof x === "string").join(", ");
-  } else if (s.skills != null) skills = String(s.skills);
-
-  let interestTags: string[] = [];
-  if (Array.isArray(s.interestTags)) {
-    interestTags = s.interestTags
-      .map((t) => {
-        if (typeof t === "string") return t.trim().toLowerCase().replace(/\s+/g, " ");
-        if (t && typeof t === "object") {
-          const o = t as Record<string, unknown>;
-          const from = o.name ?? o.tag ?? o.label;
-          if (typeof from === "string") return from.trim().toLowerCase().replace(/\s+/g, " ");
-        }
-        return "";
-      })
-      .filter(Boolean);
-  }
-
-  return {
-    id: String(s.id ?? ""),
-    firstName: String(s.firstName ?? ""),
-    lastName: String(s.lastName ?? ""),
-    email: String(s.email ?? ""),
-    major: String(s.major ?? ""),
-    skills,
-    interestTags,
-  };
-}
-
-function normalizeInterestFilterToken(tag: string): string {
-  return tag.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function studentSkillsMatchFilter(skills: string | undefined, filterRaw: string): boolean {
-  const sk = filterRaw.trim().toLowerCase();
-  if (!sk) return true;
-  const blob = (skills ?? "")
-    .toLowerCase()
-    .replace(/\s*,\s*/g, " ")
-    .replace(/[;\n]+/g, " ")
-    .replace(/\s+/g, " ");
-  return blob.includes(sk);
-}
-
-function studentHasInterestTag(student: Student, selectedTag: string): boolean {
-  const t = normalizeInterestFilterToken(selectedTag);
-  if (!t) return true;
-  return (student.interestTags ?? []).some((tag) => {
-    const nt = normalizeInterestFilterToken(String(tag));
-    return nt === t || nt.includes(t) || t.includes(nt);
-  });
-}
-
-function formatInterestChipLabel(tag: string): string {
-  return tag
-    .split(" ")
-    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-    .join(" ");
-}
+import {
+  buildInfoMessage,
+  buildSendButtonLabel,
+  emptyInviteListHint,
+  formatInterestChipLabel,
+  formatTagDisplay,
+  getFilteredStudents,
+  normalizeStudentFromApi,
+  studentHasInterestTag,
+  studentSkillsMatchFilter,
+  type InviteStudentRow,
+} from "../utils/jobInviteDialogHelpers";
 
 interface JobInviteDialogProps {
   open: boolean;
@@ -115,62 +51,6 @@ interface JobInviteDialogProps {
   onSuccess?: () => void;
 }
 
-function formatTagDisplay(tag: string): string {
-  return tag
-    .split(" ")
-    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-    .join(" ");
-}
-
-const getFilteredStudents = (students: Student[], searchTerm: string) => {
-  const trimmedSearch = searchTerm.trim();
-  if (trimmedSearch.length === 0) return students;
-
-  const searchLower = trimmedSearch.toLowerCase();
-  return students.filter((student) => {
-    const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
-    const tagMatch = (student.interestTags ?? []).some((tag) => {
-      const tl = tag.toLowerCase();
-      return tl.includes(searchLower) || searchLower.includes(tl);
-    });
-    const skillsLower = (student.skills ?? "").toLowerCase();
-    return (
-      fullName.includes(searchLower) ||
-      student.email.toLowerCase().includes(searchLower) ||
-      student.major.toLowerCase().includes(searchLower) ||
-      skillsLower.includes(searchLower) ||
-      tagMatch
-    );
-  });
-};
-
-const getStudentCountLabel = (count: number) => (count === 1 ? "student" : "students");
-
-function buildInfoMessage(
-  poolMode: "booth" | "all",
-  boothId: string | undefined,
-  loadedCount: number,
-  filteredCount: number
-) {
-  const poolHint =
-    boothId && poolMode === "booth"
-      ? `Loaded ${loadedCount} ${getStudentCountLabel(loadedCount)} who visited your booth.`
-      : `Loaded ${loadedCount} ${getStudentCountLabel(loadedCount)} from the full student list.`;
-
-  const filterHint =
-    filteredCount !== loadedCount
-      ? ` ${filteredCount} match your filters below.`
-      : " Use filters or search to narrow the list, then use Select all to invite everyone shown.";
-
-  return `${poolHint}${filterHint} Invitations are sent to students' dashboards.`;
-}
-
-const buildSendButtonLabel = (isLoading: boolean, selectedCount: number) => {
-  if (isLoading) return "Sending...";
-  if (selectedCount === 0) return "Send";
-  return `Send (${selectedCount})`;
-};
-
 export default function JobInviteDialog({
   open,
   onClose,
@@ -179,7 +59,7 @@ export default function JobInviteDialog({
   boothId,
   onSuccess,
 }: Readonly<JobInviteDialogProps>) {
-  const [students, setStudents] = useState<Student[]>([]);
+  const [students, setStudents] = useState<InviteStudentRow[]>([]);
   const [poolMode, setPoolMode] = useState<"booth" | "all">("all");
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
@@ -235,7 +115,7 @@ export default function JobInviteDialog({
         throw new Error(errorData.error || "Failed to fetch students");
       }
     } catch (err: unknown) {
-      console.error("Error fetching students:", err);
+      console.error("Error fetching students");
       setError(err instanceof Error ? err.message : "Failed to load students");
     } finally {
       setLoadingStudents(false);
@@ -254,7 +134,9 @@ export default function JobInviteDialog({
     setMessage("");
     setError("");
     setSuccess(false);
-    void fetchStudents(mode);
+    fetchStudents(mode).catch(() => {
+      /* handled in fetchStudents */
+    });
   }, [open, boothId, fetchStudents]);
 
   const filteredStudents = useMemo(() => {
@@ -276,7 +158,9 @@ export default function JobInviteDialog({
     if (value === null) return;
     setPoolMode(value);
     setSelectedStudents(new Set());
-    void fetchStudents(value);
+    fetchStudents(value).catch(() => {
+      /* handled in fetchStudents */
+    });
   };
 
   const clearFilters = () => {
@@ -298,10 +182,8 @@ export default function JobInviteDialog({
 
   const handleSelectAll = () => {
     if (selectedStudents.size === filteredStudents.length) {
-      // Deselect all
       setSelectedStudents(new Set());
     } else {
-      // Select all filtered students
       setSelectedStudents(new Set(filteredStudents.map((s) => s.id)));
     }
   };
@@ -348,15 +230,14 @@ export default function JobInviteDialog({
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to send invitations");
       }
-      
-      // Show success message briefly, then close
+
       setTimeout(() => {
         if (onSuccess) onSuccess();
         handleClose();
       }, 1500);
-    } catch (err: any) {
-      console.error("Error sending invitations:", err);
-      setError(err.message || "Failed to send invitations");
+    } catch (err: unknown) {
+      console.error("Error sending invitations");
+      setError(err instanceof Error ? err.message : "Failed to send invitations");
     } finally {
       setLoading(false);
     }
@@ -386,12 +267,8 @@ export default function JobInviteDialog({
     if (filteredStudents.length === 0) {
       return (
         <Box sx={{ p: 3, textAlign: "center" }}>
-            <Typography color="text.secondary">
-            {students.length === 0
-              ? poolMode === "booth" && boothId
-                ? "No students have visited this booth yet, or try “All students” above."
-                : "No students found."
-              : "No students match your filters and search. Try clearing filters."}
+          <Typography color="text.secondary">
+            {emptyInviteListHint(students.length, poolMode, boothId)}
           </Typography>
         </Box>
       );
@@ -407,17 +284,8 @@ export default function JobInviteDialog({
               sx={{ alignItems: "flex-start", py: 1 }}
             >
               <ListItemIcon sx={{ minWidth: 42, mt: 0.25 }}>
-                <Checkbox
-                  edge="start"
-                  checked={selectedStudents.has(student.id)}
-                  tabIndex={-1}
-                  disableRipple
-                />
+                <Checkbox edge="start" checked={selectedStudents.has(student.id)} tabIndex={-1} disableRipple />
               </ListItemIcon>
-              {/*
-                ListItemText defaults secondary to <p>, which cannot contain divs/Chips (invalid HTML).
-                Use component="div" so skills + interest chips render reliably.
-              */}
               <ListItemText
                 primary={`${student.firstName} ${student.lastName}`}
                 primaryTypographyProps={{ component: "span", variant: "body2", fontWeight: 600 }}
@@ -496,7 +364,7 @@ export default function JobInviteDialog({
     return (
       <>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}> 
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError("")}>
             {error}
           </Alert>
         )}
@@ -551,20 +419,21 @@ export default function JobInviteDialog({
               onChange={(_, v) => setInterestTagFilter(v)}
               getOptionLabel={(o) => (o == null ? "" : formatTagDisplay(o))}
               isOptionEqualToValue={(a, b) => (a ?? "") === (b ?? "")}
-              renderInput={(params) => (
-                <TextField {...params} label="Interest tag" placeholder="Any" />
-              )}
+              renderInput={(params) => <TextField {...params} label="Interest tag" placeholder="Any" />}
               sx={{ flex: "1 1 200px", minWidth: 180 }}
             />
           </Stack>
           <Box>
-            <Button size="small" onClick={clearFilters} disabled={!majorFilter && !skillFilter && !interestTagFilter && !searchTerm}>
+            <Button
+              size="small"
+              onClick={clearFilters}
+              disabled={!majorFilter && !skillFilter && !interestTagFilter && !searchTerm}
+            >
               Clear search & filters
             </Button>
           </Box>
         </Stack>
 
-        {/* Optional Message */}
         <TextField
           fullWidth
           multiline
@@ -576,7 +445,6 @@ export default function JobInviteDialog({
           sx={{ mb: 3 }}
         />
 
-        {/* Student Selection */}
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="subtitle1" fontWeight="bold">
@@ -589,7 +457,6 @@ export default function JobInviteDialog({
             />
           </Box>
 
-          {/* Text search (applies on top of filters) */}
           <TextField
             fullWidth
             size="small"
@@ -616,7 +483,6 @@ export default function JobInviteDialog({
             sx={{ mb: 1 }}
           />
 
-          {/* Select all in current filtered list */}
           {filteredStudents.length > 0 && (
             <Button size="small" onClick={handleSelectAll} sx={{ mb: 1 }}>
               {allSelected ? "Deselect all shown" : `Select all shown (${filteredStudents.length})`}
@@ -624,7 +490,6 @@ export default function JobInviteDialog({
             </Button>
           )}
 
-          {/* Students List */}
           <Box
             sx={{
               border: "1px solid",

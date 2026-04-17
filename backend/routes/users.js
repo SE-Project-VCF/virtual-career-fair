@@ -4,86 +4,7 @@ const { db, auth } = require("../firebase");
 const admin = require("firebase-admin");
 const { removeUndefined, generateInviteCode, verifyFirebaseToken, verifyRepOrOwner } = require("../helpers");
 const { streamServerClient } = require("../streamServerClient");
-
-function normalizeTagString(t) {
-  if (t == null || typeof t === "object") return "";
-  return String(t).trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function interestTagsFromUserData(data) {
-  const out = [];
-  const pushUnique = (arr, v) => {
-    const n = normalizeTagString(v);
-    if (n && !arr.includes(n)) arr.push(n);
-  };
-
-  const addFromArray = (raw) => {
-    if (!Array.isArray(raw)) return;
-    for (const item of raw) {
-      if (typeof item === "string") pushUnique(out, item);
-      else if (item && typeof item === "object") {
-        if (typeof item.name === "string") pushUnique(out, item.name);
-        if (typeof item.tag === "string") pushUnique(out, item.tag);
-        if (typeof item.label === "string") pushUnique(out, item.label);
-      }
-    }
-  };
-
-  addFromArray(data.interestTags);
-  addFromArray(data.interests);
-
-  if (typeof data.interestTags === "string" && data.interestTags.trim()) {
-    data.interestTags
-      .split(/[,;]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .forEach((s) => pushUnique(out, s));
-  }
-
-  if (typeof data.interestTag === "string") pushUnique(out, data.interestTag);
-
-  if (typeof data.interests === "string" && data.interests.trim()) {
-    data.interests
-      .split(/[,;]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .forEach((s) => pushUnique(out, s));
-  }
-
-  return out;
-}
-
-function skillsFromUserData(data) {
-  const s = data.skills;
-  if (typeof s === "string") return s;
-  if (Array.isArray(s)) {
-    return s.filter((x) => typeof x === "string").join(", ");
-  }
-  if (s == null || s === undefined) return "";
-  return String(s);
-}
-
-function mapStudentRecord(id, data) {
-  return {
-    id,
-    firstName: data.firstName || "",
-    lastName: data.lastName || "",
-    email: data.email || "",
-    major: data.major || "",
-    skills: skillsFromUserData(data),
-    interestTags: interestTagsFromUserData(data),
-  };
-}
-
-function studentMatchesInterestQuery(student, interestTrimmed) {
-  if (!interestTrimmed) return true;
-  const q = interestTrimmed.toLowerCase();
-  const tags = student.interestTags || [];
-  return tags.some((t) => {
-    const tl = t.toLowerCase();
-    return tl === q || tl.includes(q) || q.includes(tl);
-  });
-}
+const { mapStudentRecord, studentMatchesInterestQuery } = require("../helpers/studentUserMapping");
 
 /**
  * Employer UI passes the company's primary booth id (`companies.boothId` → global `booths/{id}`).
@@ -99,10 +20,9 @@ async function resolveBoothHistoryDocIdsForLookup(primaryBoothId) {
       .where("originalBoothId", "==", primaryBoothId)
       .get();
     snap.docs.forEach((d) => ids.add(d.id));
-  } catch (err) {
+  } catch {
     console.warn(
-      "[GET /students] Could not resolve linked fair booth ids (index may be required):",
-      err.message
+      "[GET /students] Could not resolve linked fair booth ids (index may be required)"
     );
   }
   return [...ids];
@@ -241,7 +161,7 @@ router.get("/students", verifyFirebaseToken, async (req, res) => {
       // Find students who visited this booth (global id and/or linked fair booth instance ids)
       const boothHistoryDocIds = await resolveBoothHistoryDocIdsForLookup(boothId);
       console.log(
-        `[GET /students] booth filter doc ids for ${boothId}: ${boothHistoryDocIds.join(", ")}`
+        `[GET /students] booth filter: ${boothHistoryDocIds.length} resolved doc id(s)`
       );
 
       const allStudentsQuery = db.collection("users").where("role", "==", "student");

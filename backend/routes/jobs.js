@@ -10,68 +10,12 @@ const {
   removeUndefined,
   fetchJobAndAuthorizeCompany,
 } = require("../helpers");
-
-function parseSkillTokens(majorsAssociated) {
-  if (!majorsAssociated || typeof majorsAssociated !== "string") return [];
-  return majorsAssociated.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-}
-
-function jobMatchesSkill(majorsAssociated, skill) {
-  if (!skill || !String(skill).trim()) return true;
-  const q = String(skill).trim().toLowerCase();
-  const tokens = parseSkillTokens(majorsAssociated);
-  return tokens.some((t) => t === q || t.includes(q));
-}
-
-function jobMatchesKeyword(name, description, q) {
-  if (!q || !String(q).trim()) return true;
-  const needle = String(q).trim().toLowerCase();
-  const n = (name || "").toLowerCase();
-  const d = (description || "").toLowerCase();
-  return n.includes(needle) || d.includes(needle);
-}
-
-/**
- * @param {object} job Plain job data object
- * @param {string} [locationParam] Filter: "remote" or city/state substring
- */
-function jobMatchesLocationFilter(job, locationParam) {
-  if (!locationParam || !String(locationParam).trim()) return true;
-  const p = String(locationParam).trim().toLowerCase();
-  const remoteTerms = /^(remote|work from home|wfh)$/;
-  if (remoteTerms.test(p) || p === "remote work") {
-    return job.locationIsRemote === true;
-  }
-  if (job.locationIsRemote === true) return false;
-  const hasStructured =
-    job.locationIsRemote === false &&
-    (job.locationCity != null || job.locationState != null || job.location != null);
-  if (!hasStructured) {
-    return false;
-  }
-  const city = (job.locationCity || "").toLowerCase();
-  const state = (job.locationState || "").toLowerCase();
-  const label = (job.location || "").toLowerCase();
-  return city.includes(p) || state.includes(p) || label.includes(p) || `${city} ${state}`.trim().includes(p);
-}
-
-function serializeJobDoc(doc) {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    companyId: data.companyId,
-    name: data.name,
-    description: data.description,
-    majorsAssociated: data.majorsAssociated,
-    applicationLink: data.applicationLink || null,
-    createdAt: data.createdAt ? data.createdAt.toMillis() : null,
-    locationIsRemote: data.locationIsRemote === true,
-    locationCity: data.locationCity ?? null,
-    locationState: data.locationState ?? null,
-    location: data.location ?? null,
-    applicationForm: data.applicationForm || null,
-  };
-}
+const {
+  serializeJobDoc,
+  jobMatchesSkill,
+  jobMatchesKeyword,
+  jobMatchesLocationFilter,
+} = require("../helpers/jobSearchHelpers");
 
 /* ----------------------------------------------------
    SEARCH JOBS (global collection, authenticated)
@@ -82,9 +26,9 @@ router.get("/jobs/search", verifyFirebaseToken, async (req, res) => {
     const skill = req.query.skill;
     const location = req.query.location;
 
-    const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
+    const pageRaw = Number.parseInt(String(req.query.page ?? "1"), 10);
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
-    let pageSize = parseInt(String(req.query.limit ?? "20"), 10);
+    let pageSize = Number.parseInt(String(req.query.limit ?? "20"), 10);
     if (!Number.isFinite(pageSize) || pageSize < 1) pageSize = 20;
     pageSize = Math.min(50, pageSize);
 

@@ -30,6 +30,11 @@ import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
 import type { ApplicationForm } from "../types/applicationForm"
+import {
+  compareJobsByDate,
+  formatJobLocationLine,
+  getSaveButtonLabel,
+} from "../utils/companyJobHelpers"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -74,30 +79,6 @@ interface JobInvitationStats {
   totalClicked: number
   viewRate: string
   clickRate: string
-}
-
-// Helper function to compare jobs by creation date (descending)
-function formatJobLocationLine(job: Job): string {
-  if (job.locationIsRemote === true) return "Remote"
-  if (job.locationCity || job.locationState) {
-    return job.location || [job.locationCity, job.locationState].filter(Boolean).join(", ")
-  }
-  if (job.location) return job.location
-  return "Location not set"
-}
-
-function compareJobsByDate(a: Job, b: Job): number {
-  if (!a.createdAt && !b.createdAt) return 0
-  if (!a.createdAt) return 1
-  if (!b.createdAt) return -1
-  return b.createdAt - a.createdAt
-}
-
-// Helper function to get save button label
-function getSaveButtonLabel(savingJob: boolean, editingJob: Job | null): string {
-  if (savingJob) return "Saving..."
-  if (editingJob) return "Update Job"
-  return "Publish Job"
 }
 
 function CompanyInfoCard({
@@ -638,7 +619,7 @@ export default function Company() {
       fetchJobs(companyInfo.id)
       fetchInviteCode(companyInfo.id)
     } catch (err) {
-      console.error("Error fetching company:", err)
+      console.error("Error fetching company")
       setError("Failed to load company")
     } finally {
       setLoading(false)
@@ -657,7 +638,7 @@ export default function Company() {
         setInviteCode(data.inviteCode ?? "")
       }
     } catch (err) {
-      console.error("Error fetching invite code:", err)
+      console.error("Error fetching invite code")
     }
   }
 
@@ -681,7 +662,7 @@ export default function Company() {
       const reps = (await Promise.all(repPromises)).filter((rep): rep is Representative => rep !== null)
       setRepresentatives(reps)
     } catch (err) {
-      console.error("Error fetching representatives:", err)
+      console.error("Error fetching representatives")
     } finally {
       setLoadingRepresentatives(false)
     }
@@ -722,7 +703,7 @@ export default function Company() {
         })
       }
     } catch (err) {
-      console.error("Error fetching jobs:", err)
+      console.error("Error fetching jobs")
       setError(`Failed to load job postings: ${err instanceof Error ? err.message : "Unknown error"}`)
     } finally {
       setLoadingJobs(false)
@@ -752,7 +733,7 @@ export default function Company() {
         setJobStats((prev) => ({ ...prev, [jobId]: stats }))
       }
     } catch (err) {
-      console.error(`Error fetching stats for job ${jobId}:`, err)
+      console.error("Error fetching job invitation stats")
     }
   }
 
@@ -834,7 +815,7 @@ export default function Company() {
       setDeleteFormDialogOpen(false)
       setJobToDeleteForm(null)
     } catch (err: any) {
-      console.error("Error deleting form:", err)
+      console.error("Error deleting application form")
       setError(err?.message || "Failed to delete application form.")
     } finally {
       setDeletingForm(false)
@@ -1008,7 +989,7 @@ export default function Company() {
       fetchJobs(company.id)
       setJobDialogOpen(false)
     } catch (err) {
-      console.error("Error saving job:", err)
+      console.error("Error saving job")
       setError("Failed to save job posting. Please try again.")
     } finally {
       setSavingJob(false)
@@ -1046,7 +1027,7 @@ export default function Company() {
       setDeleteJobDialogOpen(false)
       setJobToDelete(null)
     } catch (err) {
-      console.error("Error deleting job:", err)
+      console.error("Error deleting job")
       setError("Failed to delete job posting")
     } finally {
       setDeletingJob(false)
@@ -1098,7 +1079,7 @@ export default function Company() {
       setDeleteDialogOpen(false)
       setRepresentativeToDelete(null)
     } catch (err) {
-      console.error("Error deleting representative:", err)
+      console.error("Error deleting representative")
       setError("Failed to remove representative")
     } finally {
       setDeleting(false)
@@ -1133,7 +1114,7 @@ export default function Company() {
         setError(result.error || "Failed to delete company")
       }
     } catch (err) {
-      console.error("Error deleting company:", err)
+      console.error("Error deleting company")
       setError("Failed to delete company")
     } finally {
       setDeletingCompany(false)
@@ -1146,7 +1127,7 @@ export default function Company() {
       setSuccess("Invite code copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
     } catch (err) {
-      console.error("Failed to copy to clipboard", err)
+      console.error("Failed to copy to clipboard")
       setError("Failed to copy to clipboard")
     }
   }
@@ -1177,7 +1158,7 @@ export default function Company() {
         setError(result.error || "Failed to regenerate invite code")
       }
     } catch (err) {
-      console.error("Error regenerating invite code:", err)
+      console.error("Error regenerating invite code")
       setError("Failed to regenerate invite code")
     } finally {
       setUpdatingInviteCode(false)
@@ -1218,7 +1199,7 @@ export default function Company() {
         setError(result.error || "Failed to update invite code")
       }
     } catch (err) {
-      console.error("Error updating invite code:", err)
+      console.error("Error updating invite code")
       setError("Failed to update invite code")
     } finally {
       setUpdatingInviteCode(false)

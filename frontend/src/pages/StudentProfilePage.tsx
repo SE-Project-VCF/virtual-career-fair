@@ -29,24 +29,11 @@ import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { ACCEPTED_INTEREST_TAGS, formatInterestTagLabel } from "../constants/interestTagOptions"
 import { parseLinkedInProfileUrl } from "../utils/linkedinUrl"
-
-const MAX_INTEREST_TAGS = 15
-
-const acceptedInterestSet = new Set(ACCEPTED_INTEREST_TAGS)
-
-function normalizeInterestTags(tags: readonly string[]): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const raw of tags) {
-    const t = raw.trim().toLowerCase().replace(/\s+/g, " ")
-    if (!acceptedInterestSet.has(t)) continue
-    if (seen.has(t)) continue
-    seen.add(t)
-    out.push(t)
-    if (out.length >= MAX_INTEREST_TAGS) break
-  }
-  return out
-}
+import {
+  MAX_INTEREST_TAGS,
+  normalizeInterestTags,
+  stringFieldFromFirestore,
+} from "../utils/studentProfileHelpers"
 
 /** Match typing against both stored value and title-cased label (e.g. "machine" → "machine learning"). */
 const filterInterestOptions = createFilterOptions<string>({
@@ -99,9 +86,9 @@ export default function StudentProfilePage() {
         const docSnap = await getDoc(docRef)
         if (docSnap.exists()) {
           const data = docSnap.data()
-          setMajor(data.major || "")
-          setYear(data.expectedGradYear || "")
-          setSkills(data.skills || "")
+          setMajor(stringFieldFromFirestore(data.major))
+          setYear(stringFieldFromFirestore(data.expectedGradYear))
+          setSkills(stringFieldFromFirestore(data.skills))
           const rawTags = data.interestTags
           setInterestTags(
             Array.isArray(rawTags)
@@ -112,9 +99,9 @@ export default function StudentProfilePage() {
           setResumeUrl(data.resumeUrl || null)
           setResumeVisible(data.resumeVisible !== false)
         }
-      } catch (err: any) {
-        console.error("Error fetching profile:", err)
-        setError(err?.message || "Failed to load profile.")
+      } catch (err: unknown) {
+        console.error("Error fetching profile")
+        setError(err instanceof Error ? err.message : "Failed to load profile.")
       }
     }
 
@@ -146,9 +133,9 @@ export default function StudentProfilePage() {
 
       const data = await response.json()
       setTailoredResumes(data.resumes || [])
-    } catch (err: any) {
-      console.error("Error loading tailored resumes:", err)
-      setError(err?.message || "Failed to load tailored resumes")
+    } catch (err: unknown) {
+      console.error("Error loading tailored resumes")
+      setError(err instanceof Error ? err.message : "Failed to load tailored resumes")
     } finally {
       setLoadingTailored(false)
     }
@@ -252,9 +239,9 @@ export default function StudentProfilePage() {
       setResumeUrl(uploadedUrl || null)
       setResumeFile(null)
       alert("Profile saved successfully!")
-    } catch (err: any) {
-      console.error("Failed to save profile:", err)
-      setError(err?.message || "Failed to save profile. Try again.")
+    } catch (err: unknown) {
+      console.error("Failed to save profile")
+      setError(err instanceof Error ? err.message : "Failed to save profile. Try again.")
     } finally {
       setLoading(false)
       setUploadPct(null)
@@ -298,8 +285,8 @@ export default function StudentProfilePage() {
 
       const result = await response.json()
       window.open(result.resumeUrl, "_blank")
-    } catch (err: any) {
-      setError(err?.message || "Failed to view resume")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to view resume")
     }
   }
 
@@ -315,8 +302,8 @@ export default function StudentProfilePage() {
         { resumeVisible: checked },
         { merge: true }
       )
-    } catch (err: any) {
-      console.error("Error saving resume visibility:", err)
+    } catch (err: unknown) {
+      console.error("Error saving resume visibility")
       setError("Failed to save resume visibility")
     }
   }
