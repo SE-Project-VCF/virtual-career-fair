@@ -99,7 +99,7 @@ async function ensureAdminOrCompanyAccess(requestingUid, companyId) {
   return { error: "Unauthorized: must be admin or company owner/rep", status: 403 };
 }
 
-async function getCompanyAndBoothSnapshot(companyId) {
+async function getCompanyAndBoothSnapshot(companyId, boothId) {
   const companyDoc = await db.collection("companies").doc(companyId).get();
   if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
 
@@ -123,13 +123,15 @@ async function getCompanyAndBoothSnapshot(companyId) {
     hiringFor: null,
   };
 
-  if (company.boothId) {
-    const boothDoc = await db.collection("booths").doc(company.boothId).get();
+  // Use explicit boothId if provided, otherwise fall back to company.boothId
+  const resolvedBoothId = boothId || company.boothId;
+  if (resolvedBoothId) {
+    const boothDoc = await db.collection("booths").doc(resolvedBoothId).get();
     if (boothDoc.exists) {
       const bData = boothDoc.data();
       boothSnapshot = {
         companyId,
-        originalBoothId: company.boothId,
+        originalBoothId: resolvedBoothId,
         companyName: bData.companyName || company.companyName || "",
         industry: bData.industry || null,
         companySize: bData.companySize || null,
@@ -152,22 +154,26 @@ async function getCompanyAndBoothSnapshot(companyId) {
   return { company, boothSnapshot };
 }
 
-async function createEnrollmentWithBooth({
+async function createEnrollmentWithBooths({
   fairId,
   companyId,
   companyName,
-  boothSnapshot,
+  boothSnapshots,
   enrolledBy,
   enrollmentMethod,
 }) {
-  const fairBoothRef = db.collection("fairs").doc(fairId).collection("booths").doc();
   const batch = db.batch();
+  const fairBoothIds = [];
 
-  batch.set(fairBoothRef, {
-    ...removeUndefined(boothSnapshot),
-    enrolledAt: admin.firestore.Timestamp.now(),
-    enrolledBy,
-  });
+  for (const snapshot of boothSnapshots) {
+    const fairBoothRef = db.collection("fairs").doc(fairId).collection("booths").doc();
+    batch.set(fairBoothRef, {
+      ...removeUndefined(snapshot),
+      enrolledAt: admin.firestore.Timestamp.now(),
+      enrolledBy,
+    });
+    fairBoothIds.push(fairBoothRef.id);
+  }
 
   batch.set(db.collection("fairs").doc(fairId).collection("enrollments").doc(companyId), {
     companyId,
@@ -175,11 +181,11 @@ async function createEnrollmentWithBooth({
     enrolledAt: admin.firestore.Timestamp.now(),
     enrolledBy,
     enrollmentMethod,
-    boothId: fairBoothRef.id,
+    boothIds: fairBoothIds,
   });
 
   await batch.commit();
-  return fairBoothRef.id;
+  return fairBoothIds;
 }
 
 async function snapshotCompanyJobsToFair(fairId, companyId) {
@@ -753,11 +759,18 @@ router.post("/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (re
 /* POST /api/fairs/:fairId/enroll - enroll company in fair */
 router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
-  const { companyId, inviteCode } = req.body;
+  const { companyId, inviteCode, boothIds } = req.body;
   const requestingUid = req.user.uid;
 
   if (!companyId && !inviteCode) {
     return res.status(400).json({ error: "Either companyId or inviteCode is required" });
+  }
+
+  // Validate boothIds if provided
+  if (boothIds !== undefined) {
+    if (!Array.isArray(boothIds) || boothIds.length === 0) {
+      return res.status(400).json({ error: "boothIds must be a non-empty array" });
+    }
   }
 
   try {
@@ -777,21 +790,44 @@ router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, asy
       .get();
     if (enrollmentDoc.exists) return res.status(400).json({ error: "Company is already enrolled in this fair" });
 
-    const { company, boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId);
-    const enrollmentMethod = inviteCode ? "inviteCode" : "admin";
+    const companyDoc = await db.collection("companies").doc(resolvedCompanyId).get();
+    if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
+    const company = companyDoc.data();
 
-    const boothId = await createEnrollmentWithBooth({
+    const enrollmentMethod = inviteCode ? "inviteCode" : "admin";
+    let boothSnapshots = [];
+
+    if (boothIds && boothIds.length > 0) {
+      // Multi-booth: validate and snapshot each selected booth
+      for (const bid of boothIds) {
+        const boothDoc = await db.collection("booths").doc(bid).get();
+        if (!boothDoc.exists) {
+          return res.status(400).json({ error: `Booth ${bid} not found` });
+        }
+        if (boothDoc.data().companyId !== resolvedCompanyId) {
+          return res.status(403).json({ error: `Booth ${bid} does not belong to this company` });
+        }
+        const { boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId, bid);
+        boothSnapshots.push(boothSnapshot);
+      }
+    } else {
+      // Legacy single-booth: use company.boothId fallback
+      const { boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId);
+      boothSnapshots.push(boothSnapshot);
+    }
+
+    const fairBoothIds = await createEnrollmentWithBooths({
       fairId: resolvedFairId,
       companyId: resolvedCompanyId,
       companyName: company.companyName || "",
-      boothSnapshot,
+      boothSnapshots,
       enrolledBy: requestingUid,
       enrollmentMethod,
     });
 
     await snapshotCompanyJobsToFair(resolvedFairId, resolvedCompanyId);
 
-    return res.status(201).json({ boothId, fairId: resolvedFairId });
+    return res.status(201).json({ boothIds: fairBoothIds, fairId: resolvedFairId });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error("POST /api/fairs/:fairId/enroll error:", err);
