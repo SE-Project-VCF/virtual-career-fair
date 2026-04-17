@@ -113,6 +113,7 @@ function App() {
         <Route path="/companies" element={<CompanyManagement />} />
         <Route path="/company/:id" element={<Company />} />
         <Route path="/company/:companyId/booth" element={<BoothEditor />} />
+        <Route path="/company/:companyId/booth/:boothId" element={<BoothEditor />} />
         <Route path="/company/:companyId/submissions" element={<SubmissionsPage />} />
         <Route path="/booths" element={<Booths />} />
         <Route path="/fairs/:fairId/booths" element={<StudentFairBoothsPage />} />
