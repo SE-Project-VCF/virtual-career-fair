@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import {
+  Autocomplete,
   Container,
   Box,
   Typography,
@@ -20,7 +21,8 @@ import BaseLayout from "../components/BaseLayout"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
-import { formatJobLocation } from "../utils/jobSearchDisplay"
+import { formatJobLocation, locationQueryParamFromSuggest } from "../utils/jobSearchDisplay"
+import { useGeocodeSuggest, type LocationSuggestOption } from "../hooks/useGeocodeSuggest"
 
 const PAGE_SIZE = 20
 
@@ -42,7 +44,8 @@ export default function JobSearchPage() {
   const navigate = useNavigate()
   const [q, setQ] = useState("")
   const [skill, setSkill] = useState("")
-  const [location, setLocation] = useState("")
+  const [locationInput, setLocationInput] = useState("")
+  const [locationPick, setLocationPick] = useState<LocationSuggestOption | null>(null)
   const [jobs, setJobs] = useState<SearchJob[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -50,6 +53,16 @@ export default function JobSearchPage() {
   const [total, setTotal] = useState(0)
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const fetchJobsRef = useRef<(pageNum: number) => Promise<void>>(async () => {})
+
+  const { options: locationOptions, loading: locationSuggestLoading } = useGeocodeSuggest(
+    locationInput,
+    true,
+  )
+
+  const locationParam = useMemo(() => {
+    if (locationPick) return locationQueryParamFromSuggest(locationPick)
+    return locationInput.trim()
+  }, [locationPick, locationInput])
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -70,7 +83,7 @@ export default function JobSearchPage() {
         const params = new URLSearchParams()
         if (q.trim()) params.set("q", q.trim())
         if (skill.trim()) params.set("skill", skill.trim())
-        if (location.trim()) params.set("location", location.trim())
+        if (locationParam) params.set("location", locationParam)
         params.set("page", String(pageNum))
         params.set("limit", String(PAGE_SIZE))
         const url = `${API_URL}/api/jobs/search?${params.toString()}`
@@ -99,7 +112,7 @@ export default function JobSearchPage() {
         setLoading(false)
       }
     },
-    [q, skill, location]
+    [q, skill, locationParam]
   )
 
   fetchJobsRef.current = fetchJobs
@@ -144,7 +157,7 @@ export default function JobSearchPage() {
     void fetchJobs(value)
   }
 
-  const hasActiveFilters = Boolean(q.trim() || skill.trim() || location.trim())
+  const hasActiveFilters = Boolean(q.trim() || skill.trim() || locationParam)
   const totalPages = Math.max(1, Math.ceil(total / (pageSize || PAGE_SIZE)))
 
   return (
@@ -155,8 +168,9 @@ export default function JobSearchPage() {
           Search jobs
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Browse all company postings below (newest first). Use keyword, skill, or location to narrow results—try
-          &quot;remote&quot; in the location field for remote roles.
+          Browse all company postings below (newest first). Use keyword, skill, or location to narrow results. For
+          location, pick a suggested place or type freely—use &quot;remote&quot;, &quot;wfh&quot;, or &quot;work from
+          home&quot; to find remote roles.
         </Typography>
 
         <Card sx={{ mb: 3, border: "1px solid rgba(56, 133, 96, 0.25)" }}>
@@ -185,13 +199,57 @@ export default function JobSearchPage() {
                 value={skill}
                 onChange={(e) => setSkill(e.target.value)}
               />
-              <TextField
+              <Autocomplete
+                freeSolo
                 fullWidth
                 size="small"
-                label="Location"
-                placeholder="City, state, or remote"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                options={locationOptions}
+                loading={locationSuggestLoading}
+                filterOptions={(opts) => opts}
+                value={locationPick}
+                inputValue={locationInput}
+                onInputChange={(_, newInputValue, reason) => {
+                  setLocationInput(newInputValue)
+                  if (reason === "input" || reason === "clear") {
+                    setLocationPick(null)
+                  }
+                }}
+                onChange={(_, newValue) => {
+                  if (newValue === null) {
+                    setLocationPick(null)
+                    setLocationInput("")
+                    return
+                  }
+                  if (typeof newValue === "object" && "lat" in newValue) {
+                    setLocationPick(newValue)
+                    setLocationInput(newValue.label)
+                  } else if (typeof newValue === "string") {
+                    setLocationPick(null)
+                    setLocationInput(newValue)
+                  } else {
+                    setLocationPick(null)
+                  }
+                }}
+                getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+                isOptionEqualToValue={(a, b) =>
+                  typeof a === "object" && typeof b === "object" && Boolean(a.id && b.id && a.id === b.id)
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Location"
+                    placeholder="Start typing for place suggestions, or remote"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {locationSuggestLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
               />
               <Button
                 variant="contained"

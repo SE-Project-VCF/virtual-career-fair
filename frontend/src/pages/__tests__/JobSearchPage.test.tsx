@@ -34,6 +34,10 @@ vi.mock("../../components/BaseLayout", () => ({
   ),
 }))
 
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => ({ options: [], loading: false }),
+}))
+
 import { authUtils } from "../../utils/auth"
 
 const defaultListResponse = {
