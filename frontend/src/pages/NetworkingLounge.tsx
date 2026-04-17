@@ -248,7 +248,14 @@ export default function NetworkingLounge() {
         })
         if (!res.ok) throw new Error("Failed to fetch attendees")
         const data = await res.json()
-        setAttendees(data.attendees || [])
+        const list: Attendee[] = data.attendees || []
+        const myUid = client?.userID || user?.uid
+        list.sort((a, b) => {
+          if (a.uid === myUid) return -1
+          if (b.uid === myUid) return 1
+          return (a.firstName || "").localeCompare(b.firstName || "")
+        })
+        setAttendees(list)
       } catch (err) {
         console.error("Attendees fetch error:", err)
       } finally {
