@@ -39,15 +39,22 @@ vi.mock("firebase/firestore", () => ({
   where: vi.fn(() => ({})),
 }));
 
+/** Mutable auth for tests that need null user or custom getIdToken behavior. */
+const mockFirebaseAuth = vi.hoisted(() => ({
+  currentUser: {
+    getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+    uid: "owner-1",
+  } as { getIdToken: ReturnType<typeof vi.fn>; uid: string } | null,
+}))
+
 vi.mock("../../firebase", () => ({
   db: {},
+  storage: {},
   auth: {
-    currentUser: {
-      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
-      uid: "owner-1",
+    get currentUser() {
+      return mockFirebaseAuth.currentUser
     },
   },
-  storage: {},
 }));
 
 // Import after mocks
@@ -62,6 +69,31 @@ const mockJobGeocodeState = vi.hoisted(() => ({
 vi.mock("../../hooks/useGeocodeSuggest", () => ({
   useGeocodeSuggest: () => mockJobGeocodeState,
 }));
+
+vi.mock("../../components/JobInviteDialog", () => ({
+  default: ({
+    open,
+    onClose,
+    onSuccess,
+    jobTitle,
+  }: {
+    open: boolean
+    onClose: () => void
+    onSuccess?: () => void
+    jobTitle: string
+  }) =>
+    open ? (
+      <div data-testid="mock-job-invite-dialog">
+        <span data-testid="mock-invite-job-title">{jobTitle}</span>
+        <button type="button" data-testid="mock-invite-success" onClick={() => onSuccess?.()}>
+          mock-invite-success
+        </button>
+        <button type="button" data-testid="mock-invite-close" onClick={onClose}>
+          mock-invite-close
+        </button>
+      </div>
+    ) : null,
+}))
 
 vi.mock("../../components/BaseLayout", () => ({
   default: ({ children, pageTitle }: any) => (
@@ -204,6 +236,11 @@ describe("Company", () => {
 
     mockJobGeocodeState.options = []
     mockJobGeocodeState.loading = false
+
+    mockFirebaseAuth.currentUser = {
+      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+      uid: "owner-1",
+    }
   });
 
   const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
@@ -1813,4 +1850,494 @@ describe("Company", () => {
       ).toBeInTheDocument();
     });
   });
-});
+
+  describe("Job invitations, stats, CRUD edge cases and job dialog UX", () => {
+    const onsiteJobApiRow = {
+      id: "job-1",
+      companyId: "company-1",
+      name: "Onsite Lead",
+      description: "Office work",
+      majorsAssociated: "Python",
+      applicationLink: "https://example.com/apply",
+      createdAt: 1234567890,
+      locationIsRemote: false,
+      locationCity: "Seattle",
+      locationState: "WA",
+      location: null as string | null,
+    }
+
+    function jobCardRoot() {
+      const el = screen.getByText(/Onsite Lead|Software Engineer/i)
+      const card = el.closest(".MuiCard-root")
+      if (!card) throw new Error("expected MuiCard-root")
+      return card as HTMLElement
+    }
+
+    it("logs when fetchJobStats rejects (per-job stats fetch)", async () => {
+      const logSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.reject(new Error("stats network fail"))
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await waitFor(() => {
+        expect(logSpy).toHaveBeenCalled()
+      })
+      logSpy.mockRestore()
+    })
+
+    it("opens invite dialog when Send is clicked and titles the mock dialog", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      const inviteBtn = within(jobCardRoot()).getAllByRole("button")[0]
+      await user.click(inviteBtn)
+
+      expect(screen.getByTestId("mock-job-invite-dialog")).toBeInTheDocument()
+      expect(screen.getByTestId("mock-invite-job-title")).toHaveTextContent("Software Engineer")
+    })
+
+    it("onInviteSuccess refreshes stats for the selected job", async () => {
+      const user = userEvent.setup()
+      const statsCalls: string[] = []
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/job-invitations/stats/")) {
+          statsCalls.push(u)
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 1,
+              totalViewed: 0,
+              totalClicked: 0,
+              viewRate: "0",
+              clickRate: "0",
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      await user.click(within(jobCardRoot()).getAllByRole("button")[0])
+      await user.click(screen.getByTestId("mock-invite-success"))
+
+      await waitFor(() => {
+        expect(statsCalls.filter((u) => u.includes("job-1")).length).toBeGreaterThanOrEqual(2)
+      })
+    })
+
+    it("fetchJobStats returns early when getIdToken yields no token on refresh", async () => {
+      const user = userEvent.setup()
+      const noToken = {
+        getIdToken: vi.fn(() => Promise.resolve(undefined as unknown as string)),
+        uid: "owner-1",
+      }
+      mockFirebaseAuth.currentUser = noToken
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      await user.click(within(jobCardRoot()).getAllByRole("button")[0])
+      await user.click(screen.getByTestId("mock-invite-success"))
+
+      await waitFor(() => {
+        expect(noToken.getIdToken.mock.calls.length).toBeGreaterThan(0)
+      })
+    })
+
+    it("resetJobForm clears the job dialog when Cancel is clicked", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      const dlg = await screen.findByRole("dialog")
+
+      await user.click(within(dlg).getByRole("button", { name: /^cancel$/i }))
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      })
+    })
+
+    it("loads on-site job using custom location label when API provides location string", async () => {
+      const user = userEvent.setup()
+      const row = {
+        ...onsiteJobApiRow,
+        location: "HQ — Floor 3",
+        locationCity: "Seattle",
+        locationState: "WA",
+      }
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [row],
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => ({ ...mockJobData, name: "Onsite Lead" }) }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Onsite Lead/i)
+
+      await user.click(screen.queryAllByTestId("EditIcon").at(-1)!.closest("button")!)
+
+      expect(screen.getByDisplayValue("HQ — Floor 3")).toBeInTheDocument()
+    })
+
+    it("loads on-site job into edit form with derived location label from city and state", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [onsiteJobApiRow],
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => ({ ...mockJobData, name: "Onsite Lead" }) }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Onsite Lead/i)
+
+      const editBtns = screen.queryAllByTestId("EditIcon")
+      await user.click(editBtns.at(-1)!.closest("button")!)
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument()
+      expect(screen.getByDisplayValue("Seattle, WA")).toBeInTheDocument()
+      const remoteCb = screen.getByRole("checkbox", { name: /remote position/i })
+      expect(remoteCb).not.toBeChecked()
+    })
+
+    it("PUT updates an on-site job preserving location payload", async () => {
+      const user = userEvent.setup()
+      mockJobGeocodeState.options = [
+        { id: "loc1", label: "Seattle, WA", lat: 0, lng: 0, city: "Seattle", state: "WA" },
+      ]
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true, jobs: [onsiteJobApiRow] }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => ({ ...mockJobData, name: "Onsite Lead" }) }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Onsite Lead/i)
+
+      await user.click(screen.queryAllByTestId("EditIcon").at(-1)!.closest("button")!)
+
+      const titleInput = screen.getByLabelText(/job title/i)
+      await user.clear(titleInput)
+      await user.type(titleInput, "Onsite Lead Updated")
+
+      await user.click(screen.getByRole("button", { name: /^update job$/i }))
+
+      await waitFor(() => {
+        const puts = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+          (c) => c[1]?.method === "PUT" && String(c[0]).includes("/api/jobs/job-1")
+        )
+        expect(puts.length).toBeGreaterThan(0)
+        const body = JSON.parse((puts[0][1] as RequestInit).body as string)
+        expect(body.locationIsRemote).toBe(false)
+        expect(body.locationCity).toBe("Seattle")
+        expect(body.locationState).toBe("WA")
+      })
+    })
+
+    it("shows save error when POST create job returns non-OK", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        const path = new URL(u, "http://localhost").pathname
+        if (init?.method === "POST" && path === "/api/jobs") {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "duplicate title" }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.type(screen.getByLabelText(/job title/i), "X")
+      await user.type(screen.getByLabelText(/description/i), "Y")
+      await user.type(screen.getByLabelText(/required skills/i), "Z")
+      await user.click(screen.getByRole("button", { name: /^publish job$/i }))
+
+      expect(await screen.findByText(/failed to save job posting/i)).toBeInTheDocument()
+    })
+
+    it("shows save error when Firebase returns no id token during save", async () => {
+      const user = userEvent.setup()
+      mockFirebaseAuth.currentUser = {
+        getIdToken: vi.fn(() => Promise.resolve(undefined as unknown as string)),
+        uid: "owner-1",
+      }
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.type(screen.getByLabelText(/job title/i), "T")
+      await user.type(screen.getByLabelText(/description/i), "D")
+      await user.type(screen.getByLabelText(/required skills/i), "S")
+      await user.click(screen.getByRole("button", { name: /^publish job$/i }))
+
+      expect(await screen.findByText(/failed to save job posting/i)).toBeInTheDocument()
+    })
+
+    it("shows save error when PUT update returns non-OK", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (/\/api\/jobs\/job-1/.test(u) && init?.method === "PUT") {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "cannot update" }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      await user.click(screen.queryAllByTestId("EditIcon").at(-1)!.closest("button")!)
+      await user.click(screen.getByRole("button", { name: /^update job$/i }))
+
+      expect(await screen.findByText(/failed to save job posting/i)).toBeInTheDocument()
+    })
+
+    it("blocks save when session expired (no Firebase user) and schedules login redirect", async () => {
+      const user = userEvent.setup()
+      mockFirebaseAuth.currentUser = null
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.type(screen.getByLabelText(/job title/i), "T")
+      await user.type(screen.getByLabelText(/description/i), "D")
+      await user.type(screen.getByLabelText(/required skills/i), "S")
+      await user.click(screen.getByRole("button", { name: /^publish job$/i }))
+
+      expect(await screen.findByText(/session has expired/i)).toBeInTheDocument()
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/login")
+        },
+        { timeout: 4000 }
+      )
+    })
+
+    it("blocks delete job when session expired", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      const delIcons = screen.queryAllByTestId("DeleteIcon")
+      const jobRowDelete = delIcons.length >= 2 ? delIcons[1]! : delIcons[0]!
+      await user.click(jobRowDelete.closest("button")!)
+
+      const jobDelDlg = await screen.findByRole("dialog", { name: /delete job posting/i })
+      mockFirebaseAuth.currentUser = null
+      await user.click(within(jobDelDlg).getByRole("button", { name: /^delete$/i }))
+
+      expect(await screen.findByText(/session has expired/i)).toBeInTheDocument()
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/login")
+        },
+        { timeout: 4000 }
+      )
+    })
+
+    it("shows API error when delete job returns non-OK", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (init?.method === "DELETE" && u.includes("/api/jobs/job-1")) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "locked" }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      const delIcons = screen.queryAllByTestId("DeleteIcon")
+      const jobRowDelete = delIcons.length >= 2 ? delIcons[1]! : delIcons[0]!
+      await user.click(jobRowDelete.closest("button")!)
+      const jobDelDlg = await screen.findByRole("dialog", { name: /delete job posting/i })
+      await user.click(within(jobDelDlg).getByRole("button", { name: /^delete$/i }))
+
+      expect(await screen.findByText(/failed to delete job posting/i)).toBeInTheDocument()
+    })
+
+    it("checking Remote again clears on-site location fields", async () => {
+      const user = userEvent.setup()
+      mockJobGeocodeState.options = [
+        { id: "loc1", label: "Denver, CO", lat: 0, lng: 0, city: "Denver", state: "CO" },
+      ]
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.click(screen.getByRole("checkbox", { name: /remote position/i }))
+      const combo = screen.getByRole("combobox", { name: /job location/i })
+      await user.click(combo)
+      await user.click(await screen.findByRole("option", { name: /denver/i }))
+      await user.click(screen.getByRole("checkbox", { name: /remote position/i }))
+
+      expect(screen.queryByRole("combobox", { name: /job location/i })).not.toBeInTheDocument()
+    })
+
+    it("typing in location combobox clears the selected pick (input path)", async () => {
+      const user = userEvent.setup()
+      mockJobGeocodeState.options = [
+        { id: "loc1", label: "Denver, CO", lat: 0, lng: 0, city: "Denver", state: "CO" },
+      ]
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.click(screen.getByRole("checkbox", { name: /remote position/i }))
+      const combo = screen.getByRole("combobox", { name: /job location/i })
+      await user.click(combo)
+      await user.click(await screen.findByRole("option", { name: /denver/i }))
+      await user.type(combo, "x")
+
+      await waitFor(() => {
+        expect(screen.queryByDisplayValue("Denver, CO")).not.toBeInTheDocument()
+      })
+    })
+
+    it("closes job dialog via Escape (resetJobForm)", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await screen.findByRole("dialog")
+      await user.keyboard("{Escape}")
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  describe("Application form delete — session handling", () => {
+    const publishedForm = {
+      title: "Apply Here",
+      status: "published",
+      fields: [{ id: "f1", type: "shortText", label: "Name", required: true }],
+    }
+
+    const apiJobBase = {
+      id: "job-1",
+      companyId: "company-1",
+      name: "Software Engineer",
+      description: "We are hiring",
+      majorsAssociated: "Computer Science",
+      applicationLink: "https://example.com/apply",
+      createdAt: 1234567890,
+      locationIsRemote: true,
+    }
+
+    it("blocks delete application form when session expired", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [{ ...apiJobBase, applicationForm: publishedForm }],
+            }),
+          })
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 0,
+              totalViewed: 0,
+              totalClicked: 0,
+              viewRate: "0",
+              clickRate: "0",
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) =>
+          cb({
+            id: "job-1",
+            data: () => ({ ...mockJobData, applicationForm: publishedForm }),
+          }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 5000 })
+
+      await user.click(screen.queryAllByTestId("DeleteSweepIcon")[0]!.closest("button")!)
+      await screen.findByText(/Delete Application Form/i)
+
+      const formDlg = screen.getByRole("dialog", { name: /delete application form/i })
+      mockFirebaseAuth.currentUser = null
+      await user.click(within(formDlg).getByRole("button", { name: /delete form/i }))
+
+      expect(await screen.findByText(/session has expired/i)).toBeInTheDocument()
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/login")
+        },
+        { timeout: 4000 }
+      )
+    })
+  })
+})
