@@ -3,6 +3,8 @@ import {
   buildInfoMessage,
   buildSendButtonLabel,
   emptyInviteListHint,
+  formatInterestChipLabel,
+  formatTagDisplay,
   getFilteredStudents,
   getStudentCountLabel,
   normalizeStudentFromApi,
@@ -110,6 +112,41 @@ describe("getFilteredStudents", () => {
   it("filters by email", () => {
     expect(getFilteredStudents(rows, "b@x").length).toBe(1)
   })
+
+  it("filters by interest tag substring", () => {
+    expect(getFilteredStudents(rows, "ai").map((r) => r.id)).toEqual(["1"])
+  })
+
+  it("filters by major", () => {
+    expect(getFilteredStudents(rows, "ee").map((r) => r.id)).toEqual(["2"])
+  })
+
+  it("filters by skills substring", () => {
+    const withSkills = [
+      ...rows,
+      {
+        id: "3",
+        firstName: "C",
+        lastName: "D",
+        email: "c@x.com",
+        major: "CS",
+        skills: "kubernetes, docker",
+        interestTags: [] as string[],
+      },
+    ]
+    expect(getFilteredStudents(withSkills, "kube").map((r) => r.id)).toEqual(["3"])
+  })
+})
+
+describe("formatInterestChipLabel and formatTagDisplay", () => {
+  it("title-cases words and preserves empty token segments", () => {
+    expect(formatInterestChipLabel("machine learning")).toBe("Machine Learning")
+    expect(formatInterestChipLabel("  hi  world ")).toBe("  Hi  World ")
+  })
+
+  it("formatTagDisplay delegates to chip label", () => {
+    expect(formatTagDisplay("finance")).toBe("Finance")
+  })
 })
 
 describe("buildInfoMessage", () => {
@@ -127,11 +164,25 @@ describe("buildInfoMessage", () => {
     const m = buildInfoMessage("all", undefined, 10, 2)
     expect(m).toContain("2 match your filters")
   })
+
+  it("adds filter hint in booth mode when filtered differs from loaded", () => {
+    const m = buildInfoMessage("booth", "b1", 10, 2)
+    expect(m).toContain("visited your booth")
+    expect(m).toContain("2 match your filters")
+  })
 })
 
 describe("buildSendButtonLabel", () => {
   it("shows count when selections", () => {
     expect(buildSendButtonLabel(false, 3)).toBe("Send (3)")
+  })
+
+  it("shows Sending when loading", () => {
+    expect(buildSendButtonLabel(true, 5)).toBe("Sending...")
+  })
+
+  it("shows plain Send when none selected", () => {
+    expect(buildSendButtonLabel(false, 0)).toBe("Send")
   })
 })
 

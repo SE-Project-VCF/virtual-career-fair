@@ -680,9 +680,9 @@ export default function Dashboard() {
         const errorMessage = e instanceof Error ? e.message : String(e);
         // Only log as error if not a login/auth issue - these are expected during app initialization
         if (errorMessage.includes("Not logged in") || errorMessage.includes("No resumePath")) {
-          console.debug("⏭️  Resume parsing skipped:", errorMessage);
+          console.debug("⏭️  Resume parsing skipped (expected during init)");
         } else {
-          console.error("❌ Resume parsing failed:", errorMessage);
+          console.error("❌ Resume parsing failed");
         }
       }
     })();

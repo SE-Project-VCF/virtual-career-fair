@@ -53,8 +53,14 @@ vi.mock("../../firebase", () => ({
 // Import after mocks
 import { authUtils } from "../../utils/auth";
 
+/** Mutable return for job dialog location Autocomplete (on-site jobs). */
+const mockJobGeocodeState = vi.hoisted(() => ({
+  options: [] as Array<{ id: string; label: string; lat: number; lng: number; city: string; state: string }>,
+  loading: false,
+}))
+
 vi.mock("../../hooks/useGeocodeSuggest", () => ({
-  useGeocodeSuggest: () => ({ options: [], loading: false }),
+  useGeocodeSuggest: () => mockJobGeocodeState,
 }));
 
 vi.mock("../../components/BaseLayout", () => ({
@@ -195,9 +201,33 @@ describe("Company", () => {
     (arrayRemove as any).mockImplementation((v: unknown) => v);
 
     globalThis.fetch = vi.fn().mockImplementation(defaultFetchImpl);
+
+    mockJobGeocodeState.options = []
+    mockJobGeocodeState.loading = false
   });
 
   const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
+
+  it("BoothReviewsSection shows no reviews when ratings HTTP response is not ok", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/booths/") && u.includes("/ratings")) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "bad" }),
+        });
+      }
+      return defaultFetchImpl(url, init);
+    });
+
+    renderComp();
+
+    await waitFor(() => {
+      expect(screen.getByText("Booth Reviews")).toBeInTheDocument();
+      expect(screen.getByText("No reviews yet.")).toBeInTheDocument();
+    });
+  });
 
   it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
     globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
@@ -608,6 +638,77 @@ describe("Company", () => {
         expect(postCalls.length).toBe(0);
       }
     }
+  });
+
+  it("validates on-site location when remote is unchecked", async () => {
+    const user = userEvent.setup();
+    mockJobGeocodeState.options = [];
+    renderComp();
+    await screen.findByRole("heading", { name: /Tech Corp/i });
+
+    const addButtons = screen.queryAllByRole("button").filter((b) => b.textContent?.includes("Add"));
+    if (addButtons.length === 0) return;
+    await user.click(addButtons[0]);
+
+    await user.type(screen.getByLabelText(/job title/i), "Onsite Job");
+    await user.type(screen.getByLabelText(/description/i), "Desc");
+    await user.type(screen.getByLabelText(/required skills/i), "Go");
+
+    const remoteCb = screen.getByRole("checkbox", { name: /remote position/i });
+    await user.click(remoteCb);
+    expect(remoteCb).not.toBeChecked();
+
+    const publishButtons = screen.queryAllByRole("button").filter((b) => b.textContent === "Publish Job");
+    if (publishButtons.length === 0) return;
+    await user.click(publishButtons[0]);
+
+    expect(
+      await screen.findByText(/select a location from the suggestions for on-site jobs/i)
+    ).toBeInTheDocument();
+    const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+    );
+    expect(postCalls.length).toBe(0);
+  });
+
+  it("creates on-site job with location pick from suggestions", async () => {
+    const user = userEvent.setup();
+    mockJobGeocodeState.options = [
+      { id: "loc1", label: "Austin, TX", lat: 30, lng: -97, city: "Austin", state: "TX" },
+    ];
+    renderComp();
+    await screen.findByRole("heading", { name: /Tech Corp/i });
+
+    const addButtons = screen.queryAllByRole("button").filter((b) => b.textContent?.includes("Add"));
+    if (addButtons.length === 0) return;
+    await user.click(addButtons[0]);
+
+    await user.type(screen.getByLabelText(/job title/i), "Onsite Role");
+    await user.type(screen.getByLabelText(/description/i), "Work in office");
+    await user.type(screen.getByLabelText(/required skills/i), "TypeScript");
+
+    await user.click(screen.getByRole("checkbox", { name: /remote position/i }));
+
+    const combo = screen.getByRole("combobox", { name: /job location/i });
+    await user.click(combo);
+    const opt = await screen.findByRole("option", { name: /austin/i });
+    await user.click(opt);
+
+    const publishButtons = screen.queryAllByRole("button").filter((b) => b.textContent === "Publish Job");
+    if (publishButtons.length === 0) return;
+    await user.click(publishButtons[0]);
+
+    await waitFor(() => {
+      const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+      );
+      expect(postCalls.length).toBeGreaterThan(0);
+      const body = JSON.parse((postCalls[0][1] as RequestInit).body as string);
+      expect(body.locationIsRemote).toBe(false);
+      expect(body.locationCity).toBe("Austin");
+      expect(body.locationState).toBe("TX");
+      expect(body.location).toBe("Austin, TX");
+    });
   });
 
   it("edits existing job", async () => {

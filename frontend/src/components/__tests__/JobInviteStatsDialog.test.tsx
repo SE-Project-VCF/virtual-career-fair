@@ -92,6 +92,20 @@ describe("JobInviteStatsDialog", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it("does not fetch when dialog is open but user is null", () => {
+    (authUtils.getCurrentUser as any).mockReturnValue(null);
+    render(
+      <JobInviteStatsDialog
+        open={true}
+        onClose={mockOnClose}
+        jobId="job-1"
+        jobTitle="Software Engineer"
+      />
+    );
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it("renders dialog title with job title", async () => {
     render(
       <JobInviteStatsDialog

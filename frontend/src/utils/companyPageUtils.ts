@@ -1,6 +1,52 @@
 import type { NavigateFunction } from "react-router-dom"
 import type { ApplicationForm } from "../types/applicationForm"
 
+/** Geocode/autocomplete selection for an on-site job (structurally matches LocationSuggestOption). */
+export interface CompanyJobLocationPick {
+  city?: string | null
+  state?: string | null
+}
+
+/** Job posting form slice validated before create/update from the Company page. */
+export interface CompanyJobFormForValidation {
+  title: string
+  description: string
+  skills: string
+  applicationLink: string
+  locationIsRemote: boolean
+  locationPick: CompanyJobLocationPick | null
+}
+
+export type CompanyJobFormValidationErrors = {
+  title?: string
+  description?: string
+  skills?: string
+  applicationLink?: string
+  location?: string
+}
+
+/** Client-side validation for publish/update job posting (matches Company.tsx rules). */
+export function validateCompanyJobForm(jobForm: CompanyJobFormForValidation): CompanyJobFormValidationErrors {
+  const errors: CompanyJobFormValidationErrors = {}
+  if (!jobForm.title.trim()) errors.title = "Title is required"
+  if (!jobForm.description.trim()) errors.description = "Description is required"
+  if (!jobForm.skills.trim()) errors.skills = "Skills are required"
+  if (jobForm.applicationLink.trim()) {
+    try {
+      new URL(jobForm.applicationLink.trim())
+    } catch {
+      errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)"
+    }
+  }
+  if (!jobForm.locationIsRemote) {
+    const pick = jobForm.locationPick
+    if (!pick?.city?.trim() || !pick?.state?.trim()) {
+      errors.location = "Select a location from the suggestions for on-site jobs"
+    }
+  }
+  return errors
+}
+
 /** Minimal company fields used for access checks (matches Company page model). */
 export interface CompanyAccessTarget {
   ownerId: string

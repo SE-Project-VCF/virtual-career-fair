@@ -39,6 +39,7 @@ import {
   ensureCompanyViewerAccess,
   logClientError,
   mapApiRecordToJob,
+  validateCompanyJobForm,
 } from "../utils/companyPageUtils"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
@@ -852,39 +853,6 @@ export default function Company() {
     setDeleteJobDialogOpen(true)
   }
 
-  const validateJobForm = (): {
-    title?: string
-    description?: string
-    skills?: string
-    applicationLink?: string
-    location?: string
-  } => {
-    const errors: {
-      title?: string
-      description?: string
-      skills?: string
-      applicationLink?: string
-      location?: string
-    } = {}
-    if (!jobForm.title.trim()) errors.title = "Title is required"
-    if (!jobForm.description.trim()) errors.description = "Description is required"
-    if (!jobForm.skills.trim()) errors.skills = "Skills are required"
-    if (jobForm.applicationLink.trim()) {
-      try {
-        new URL(jobForm.applicationLink.trim())
-      } catch {
-        errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)"
-      }
-    }
-    if (!jobForm.locationIsRemote) {
-      const pick = jobForm.locationPick
-      if (!pick?.city?.trim() || !pick?.state?.trim()) {
-        errors.location = "Select a location from the suggestions for on-site jobs"
-      }
-    }
-    return errors
-  }
-
   const saveJobToDatabase = async (companyId: string, applicationLink: string | null) => {
     const token = await auth.currentUser?.getIdToken()
     if (!token) throw new Error("Not authenticated")
@@ -948,7 +916,7 @@ export default function Company() {
 
     // Reset errors
     setJobErrors({})
-    const errors = validateJobForm()
+    const errors = validateCompanyJobForm(jobForm)
 
     if (Object.keys(errors).length > 0) {
       setJobErrors(errors)

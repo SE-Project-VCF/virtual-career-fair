@@ -3,6 +3,7 @@ import {
   ensureCompanyViewerAccess,
   logClientError,
   mapApiRecordToJob,
+  validateCompanyJobForm,
 } from "../companyPageUtils"
 
 describe("logClientError", () => {
@@ -66,6 +67,53 @@ describe("mapApiRecordToJob", () => {
       locationIsRemote: false,
     })
     expect(j.locationIsRemote).toBe(false)
+  })
+})
+
+describe("validateCompanyJobForm", () => {
+  const base = () => ({
+    title: "T",
+    description: "D",
+    skills: "S",
+    applicationLink: "",
+    locationIsRemote: true,
+    locationPick: null as null,
+  })
+
+  it("returns empty object when valid (remote)", () => {
+    expect(validateCompanyJobForm(base())).toEqual({})
+  })
+
+  it("requires title, description, skills", () => {
+    const f = base()
+    f.title = "  "
+    expect(validateCompanyJobForm(f).title).toMatch(/required/i)
+  })
+
+  it("rejects bad application URL", () => {
+    const f = { ...base(), applicationLink: "not-url" }
+    expect(validateCompanyJobForm(f).applicationLink).toBeDefined()
+  })
+
+  it("requires location pick for on-site jobs", () => {
+    const f = { ...base(), locationIsRemote: false, locationPick: null }
+    expect(validateCompanyJobForm(f).location).toMatch(/on-site/i)
+  })
+
+  it("accepts on-site when pick has city and state", () => {
+    const f = {
+      ...base(),
+      locationIsRemote: false,
+      locationPick: {
+        id: "1",
+        label: "Austin, TX",
+        lat: 0,
+        lng: 0,
+        city: "Austin",
+        state: "TX",
+      },
+    }
+    expect(validateCompanyJobForm(f)).toEqual({})
   })
 })
 

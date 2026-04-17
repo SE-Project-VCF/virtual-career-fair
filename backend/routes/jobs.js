@@ -197,6 +197,80 @@ router.get("/jobs", async (req, res) => {
   }
 });
 
+/**
+ * @returns {null | { status: number, json: object, logInvalidAppUrl?: boolean }}
+ */
+function getPutJobValidationResponse(body) {
+  const { name, description, majorsAssociated, applicationLink } = body;
+  if (!name?.trim()) {
+    return { status: 400, json: { success: false, error: "Job title is required" } };
+  }
+  if (!description?.trim()) {
+    return { status: 400, json: { success: false, error: "Job description is required" } };
+  }
+  if (!majorsAssociated?.trim()) {
+    return { status: 400, json: { success: false, error: "Skills are required" } };
+  }
+  const locErr = validateJobLocationFields(body);
+  if (locErr) {
+    return { status: 400, json: { success: false, error: locErr } };
+  }
+  if (applicationLink?.trim()) {
+    try {
+      new URL(applicationLink.trim());
+    } catch {
+      return {
+        status: 400,
+        json: { success: false, error: "Invalid application URL format" },
+        logInvalidAppUrl: true,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Persists core job fields plus optional location (remote clears location fields).
+ */
+async function updateJobWithLocationFields(
+  jobRef,
+  locationIsRemote,
+  location,
+  locationCity,
+  locationState,
+  baseUpdate
+) {
+  if (locationIsRemote === undefined) {
+    await jobRef.update(baseUpdate);
+    return;
+  }
+  if (locationIsRemote === true) {
+    await jobRef.update({
+      ...baseUpdate,
+      locationIsRemote: true,
+      locationCity: admin.firestore.FieldValue.delete(),
+      locationState: admin.firestore.FieldValue.delete(),
+      location: admin.firestore.FieldValue.delete(),
+    });
+    return;
+  }
+  const labelTrim = location == null ? "" : String(location).trim();
+  const cityTrim = locationCity == null ? "" : String(locationCity).trim();
+  const stateTrim = locationState == null ? "" : String(locationState).trim();
+  const onSiteUpdate = {
+    ...baseUpdate,
+    locationIsRemote: false,
+    locationCity: cityTrim,
+    locationState: stateTrim,
+  };
+  if (labelTrim) {
+    onSiteUpdate.location = labelTrim;
+  } else {
+    onSiteUpdate.location = admin.firestore.FieldValue.delete();
+  }
+  await jobRef.update(onSiteUpdate);
+}
+
 /* ----------------------------------------------------
    UPDATE JOB
 ---------------------------------------------------- */
@@ -214,32 +288,12 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
       location,
     } = req.body;
 
-    // Validate required fields
-    if (!name?.trim()) {
-      return res.status(400).json({ success: false, error: "Job title is required" });
-    }
-
-    if (!description?.trim()) {
-      return res.status(400).json({ success: false, error: "Job description is required" });
-    }
-
-    if (!majorsAssociated?.trim()) {
-      return res.status(400).json({ success: false, error: "Skills are required" });
-    }
-
-    const locErr = validateJobLocationFields(req.body);
-    if (locErr) {
-      return res.status(400).json({ success: false, error: locErr });
-    }
-
-    // Validate application link format if provided
-    if (applicationLink?.trim()) {
-      try {
-        new URL(applicationLink.trim());
-      } catch {
+    const validation = getPutJobValidationResponse(req.body);
+    if (validation) {
+      if (validation.logInvalidAppUrl) {
         console.error("Invalid application URL provided");
-        return res.status(400).json({ success: false, error: "Invalid application URL format" });
       }
+      return res.status(validation.status).json(validation.json);
     }
 
     const result = await fetchJobAndAuthorizeCompany(id, req.user.uid, res);
@@ -253,33 +307,14 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
       updatedAt: admin.firestore.Timestamp.now(),
     };
 
-    if (locationIsRemote === undefined) {
-      await result.jobRef.update(baseUpdate);
-    } else if (locationIsRemote === true) {
-      await result.jobRef.update({
-        ...baseUpdate,
-        locationIsRemote: true,
-        locationCity: admin.firestore.FieldValue.delete(),
-        locationState: admin.firestore.FieldValue.delete(),
-        location: admin.firestore.FieldValue.delete(),
-      });
-    } else {
-      const labelTrim = location == null ? "" : String(location).trim();
-      const cityTrim = locationCity == null ? "" : String(locationCity).trim();
-      const stateTrim = locationState == null ? "" : String(locationState).trim();
-      const onSiteUpdate = {
-        ...baseUpdate,
-        locationIsRemote: false,
-        locationCity: cityTrim,
-        locationState: stateTrim,
-      };
-      if (labelTrim) {
-        onSiteUpdate.location = labelTrim;
-      } else {
-        onSiteUpdate.location = admin.firestore.FieldValue.delete();
-      }
-      await result.jobRef.update(onSiteUpdate);
-    }
+    await updateJobWithLocationFields(
+      result.jobRef,
+      locationIsRemote,
+      location,
+      locationCity,
+      locationState,
+      baseUpdate
+    );
 
     return res.json({ success: true });
   } catch (err) {

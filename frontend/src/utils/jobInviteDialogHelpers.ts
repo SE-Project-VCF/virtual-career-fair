@@ -20,17 +20,21 @@ function coerceApiPrimitiveString(value: unknown): string {
 function collapseAsciiWhitespace(s: string): string {
   const parts: string[] = []
   let cur = ""
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
-    const isWs = c === 32 || c === 9 || c === 10 || c === 13
+  let i = 0
+  while (i < s.length) {
+    const cp = s.codePointAt(i)
+    if (cp === undefined) break
+    const chSize = cp > 0xffff ? 2 : 1
+    const isWs = cp === 32 || cp === 9 || cp === 10 || cp === 13
     if (isWs) {
       if (cur.length > 0) {
         parts.push(cur)
         cur = ""
       }
     } else {
-      cur += s[i]
+      cur += String.fromCodePoint(cp)
     }
+    i += chSize
   }
   if (cur.length > 0) parts.push(cur)
   return parts.join(" ")
@@ -162,11 +166,11 @@ export function buildInfoMessage(
   }
 
   let filterHint: string
-  if (filteredCount !== loadedCount) {
-    filterHint = ` ${filteredCount} match your filters below.`
-  } else {
+  if (filteredCount === loadedCount) {
     filterHint =
       " Use filters or search to narrow the list, then use Select all to invite everyone shown."
+  } else {
+    filterHint = ` ${filteredCount} match your filters below.`
   }
 
   return `${poolHint}${filterHint} Invitations are sent to students' dashboards.`
