@@ -76,6 +76,33 @@ router.post("/booths", verifyFirebaseToken, async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   LIST BOOTHS FOR A COMPANY
+---------------------------------------------------- */
+router.get("/booths", verifyFirebaseToken, async (req, res) => {
+  const { companyId } = req.query;
+
+  if (!companyId) {
+    return res.status(400).json({ error: "companyId query parameter is required" });
+  }
+
+  try {
+    const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403)
+        .json({ error: authResult.error });
+    }
+
+    const boothsSnap = await db.collection("booths").where("companyId", "==", companyId).get();
+    const booths = boothsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    return res.json({ booths });
+  } catch (err) {
+    console.error("GET /api/booths error:", err);
+    return res.status(500).json({ error: "Failed to fetch booths" });
+  }
+});
+
+/* ----------------------------------------------------
    UPLOAD BOOTH LOGO TO FIREBASE STORAGE (via backend)
    Uses Firebase Admin SDK to bypass client-side CORS issues
 ---------------------------------------------------- */
