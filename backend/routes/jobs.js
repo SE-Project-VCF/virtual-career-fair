@@ -129,8 +129,8 @@ router.post("/jobs", verifyFirebaseToken, async (req, res) => {
       payload.locationIsRemote = true;
     } else {
       payload.locationIsRemote = false;
-      const cityRaw = locationCity != null ? String(locationCity) : "";
-      const stateRaw = locationState != null ? String(locationState) : "";
+      const cityRaw = locationCity == null ? "" : String(locationCity);
+      const stateRaw = locationState == null ? "" : String(locationState);
       payload.locationCity = cityRaw.trim().replaceAll("\0", "");
       payload.locationState = stateRaw.trim().replaceAll("\0", "");
       const label = location?.trim().replaceAll("\0", "");
@@ -264,9 +264,9 @@ router.put("/jobs/:id", verifyFirebaseToken, async (req, res) => {
         location: admin.firestore.FieldValue.delete(),
       });
     } else {
-      const labelTrim = location != null ? String(location).trim() : "";
-      const cityTrim = locationCity != null ? String(locationCity).trim() : "";
-      const stateTrim = locationState != null ? String(locationState).trim() : "";
+      const labelTrim = location == null ? "" : String(location).trim();
+      const cityTrim = locationCity == null ? "" : String(locationCity).trim();
+      const stateTrim = locationState == null ? "" : String(locationState).trim();
       const onSiteUpdate = {
         ...baseUpdate,
         locationIsRemote: false,

@@ -35,6 +35,11 @@ import {
   formatJobLocationLine,
   getSaveButtonLabel,
 } from "../utils/companyJobHelpers"
+import {
+  ensureCompanyViewerAccess,
+  logClientError,
+  mapApiRecordToJob,
+} from "../utils/companyPageUtils"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -568,26 +573,8 @@ export default function Company() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, id, userId, userRole])
 
-  const validateUserAccess = async (companyInfo: Company): Promise<boolean> => {
-    if (userRole === "companyOwner" && companyInfo.ownerId !== userId) {
-      setError("You don't have access to this company")
-      navigate("/companies")
-      return false
-    }
-
-    if (userRole === "representative" && !companyInfo.representativeIDs?.includes(userId ?? "")) {
-      setError("You don't have access to this company")
-      navigate("/dashboard")
-      return false
-    }
-
-    if (userRole !== "companyOwner" && userRole !== "representative") {
-      navigate("/dashboard")
-      return false
-    }
-
-    return true
-  }
+  const validateUserAccess = (companyInfo: Company): boolean =>
+    ensureCompanyViewerAccess(companyInfo, userId, userRole, { setError, navigate })
 
   const fetchCompany = async () => {
     if (!id) return
@@ -610,7 +597,7 @@ export default function Company() {
         ...companyData
       }
 
-      const hasAccess = await validateUserAccess(companyInfo)
+      const hasAccess = validateUserAccess(companyInfo)
       if (!hasAccess) return
 
       setCompany(companyInfo)
@@ -618,8 +605,8 @@ export default function Company() {
       fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
       fetchInviteCode(companyInfo.id)
-    } catch (err) {
-      console.error("Error fetching company")
+    } catch (error: unknown) {
+      logClientError("Error fetching company", error)
       setError("Failed to load company")
     } finally {
       setLoading(false)
@@ -637,8 +624,8 @@ export default function Company() {
         const data = await response.json()
         setInviteCode(data.inviteCode ?? "")
       }
-    } catch (err) {
-      console.error("Error fetching invite code")
+    } catch (error: unknown) {
+      logClientError("Error fetching invite code", error)
     }
   }
 
@@ -661,8 +648,8 @@ export default function Company() {
 
       const reps = (await Promise.all(repPromises)).filter((rep): rep is Representative => rep !== null)
       setRepresentatives(reps)
-    } catch (err) {
-      console.error("Error fetching representatives")
+    } catch (error: unknown) {
+      logClientError("Error fetching representatives", error)
     } finally {
       setLoadingRepresentatives(false)
     }
@@ -678,20 +665,7 @@ export default function Company() {
       }
       const data = await response.json()
       const raw = data.jobs || []
-      const jobsList: Job[] = raw.map((j: Record<string, unknown>) => ({
-        id: j.id as string,
-        companyId: j.companyId as string,
-        name: j.name as string,
-        description: j.description as string,
-        majorsAssociated: j.majorsAssociated as string,
-        applicationLink: (j.applicationLink as string | null) ?? null,
-        createdAt: (j.createdAt as number | null) ?? null,
-        locationIsRemote: j.locationIsRemote === true,
-        locationCity: (j.locationCity as string | null) ?? null,
-        locationState: (j.locationState as string | null) ?? null,
-        location: (j.location as string | null) ?? null,
-        applicationForm: j.applicationForm as ApplicationForm | undefined,
-      }))
+      const jobsList: Job[] = raw.map((j: Record<string, unknown>) => mapApiRecordToJob(j))
 
       jobsList.sort(compareJobsByDate)
 
@@ -702,9 +676,9 @@ export default function Company() {
           fetchJobStats(job.id)
         })
       }
-    } catch (err) {
-      console.error("Error fetching jobs")
-      setError(`Failed to load job postings: ${err instanceof Error ? err.message : "Unknown error"}`)
+    } catch (error: unknown) {
+      logClientError("Error fetching jobs", error)
+      setError(`Failed to load job postings: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setLoadingJobs(false)
     }
@@ -732,8 +706,8 @@ export default function Company() {
         const stats = await response.json()
         setJobStats((prev) => ({ ...prev, [jobId]: stats }))
       }
-    } catch (err) {
-      console.error("Error fetching job invitation stats")
+    } catch (error: unknown) {
+      logClientError("Error fetching job invitation stats", error)
     }
   }
 
@@ -814,9 +788,9 @@ export default function Company() {
       setSuccess("Application form deleted.")
       setDeleteFormDialogOpen(false)
       setJobToDeleteForm(null)
-    } catch (err: any) {
-      console.error("Error deleting application form")
-      setError(err?.message || "Failed to delete application form.")
+    } catch (error: unknown) {
+      logClientError("Error deleting application form", error)
+      setError(error instanceof Error ? error.message : "Failed to delete application form.")
     } finally {
       setDeletingForm(false)
     }
@@ -988,8 +962,8 @@ export default function Company() {
       await saveJobToDatabase(company.id, applicationLink)
       fetchJobs(company.id)
       setJobDialogOpen(false)
-    } catch (err) {
-      console.error("Error saving job")
+    } catch (error: unknown) {
+      logClientError("Error saving job", error)
       setError("Failed to save job posting. Please try again.")
     } finally {
       setSavingJob(false)
@@ -1026,8 +1000,8 @@ export default function Company() {
       fetchJobs(company.id)
       setDeleteJobDialogOpen(false)
       setJobToDelete(null)
-    } catch (err) {
-      console.error("Error deleting job")
+    } catch (error: unknown) {
+      logClientError("Error deleting job", error)
       setError("Failed to delete job posting")
     } finally {
       setDeletingJob(false)
@@ -1078,8 +1052,8 @@ export default function Company() {
       setTimeout(() => setSuccess(""), 3000)
       setDeleteDialogOpen(false)
       setRepresentativeToDelete(null)
-    } catch (err) {
-      console.error("Error deleting representative")
+    } catch (error: unknown) {
+      logClientError("Error deleting representative", error)
       setError("Failed to remove representative")
     } finally {
       setDeleting(false)
@@ -1113,8 +1087,8 @@ export default function Company() {
       } else {
         setError(result.error || "Failed to delete company")
       }
-    } catch (err) {
-      console.error("Error deleting company")
+    } catch (error: unknown) {
+      logClientError("Error deleting company", error)
       setError("Failed to delete company")
     } finally {
       setDeletingCompany(false)
@@ -1126,8 +1100,8 @@ export default function Company() {
       await navigator.clipboard.writeText(text)
       setSuccess("Invite code copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
-    } catch (err) {
-      console.error("Failed to copy to clipboard")
+    } catch (error: unknown) {
+      logClientError("Failed to copy to clipboard", error)
       setError("Failed to copy to clipboard")
     }
   }
@@ -1157,8 +1131,8 @@ export default function Company() {
       } else {
         setError(result.error || "Failed to regenerate invite code")
       }
-    } catch (err) {
-      console.error("Error regenerating invite code")
+    } catch (error: unknown) {
+      logClientError("Error regenerating invite code", error)
       setError("Failed to regenerate invite code")
     } finally {
       setUpdatingInviteCode(false)
@@ -1198,8 +1172,8 @@ export default function Company() {
       } else {
         setError(result.error || "Failed to update invite code")
       }
-    } catch (err) {
-      console.error("Error updating invite code")
+    } catch (error: unknown) {
+      logClientError("Error updating invite code", error)
       setError("Failed to update invite code")
     } finally {
       setUpdatingInviteCode(false)
@@ -1214,7 +1188,7 @@ export default function Company() {
     )
   }
 
-  if (error &&!company) {
+  if (error && !company) {
     return (
       <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Card sx={{ p: 4, maxWidth: 500 }}>

@@ -127,15 +127,16 @@ function validateJobLocationFields(body) {
   if (body.locationIsRemote === true) {
     return null;
   }
-  const city = body.locationCity != null ? String(body.locationCity).trim() : "";
-  const state = body.locationState != null ? String(body.locationState).trim() : "";
+  const city = body.locationCity == null ? "" : String(body.locationCity).trim();
+  const state = body.locationState == null ? "" : String(body.locationState).trim();
   if (!city || !state) {
     return "City and state are required for on-site jobs";
   }
   if (city.length > 100 || state.length > 100) {
     return "City and state must be 100 characters or less";
   }
-  if (body.location != null && String(body.location).trim().length > 200) {
+  const locationProvided = body.location !== null && body.location !== undefined;
+  if (locationProvided && String(body.location).trim().length > 200) {
     return "Location label must be 200 characters or less";
   }
   return null;

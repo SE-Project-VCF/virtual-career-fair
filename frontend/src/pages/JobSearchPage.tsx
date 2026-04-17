@@ -26,6 +26,17 @@ import { useGeocodeSuggest, type LocationSuggestOption } from "../hooks/useGeoco
 
 const PAGE_SIZE = 20
 
+async function waitForFirebaseUserReady(): Promise<void> {
+  if (auth.currentUser) return
+  await new Promise<void>((resolve) => {
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user === null || user === undefined) return
+      unsub()
+      resolve()
+    })
+  })
+}
+
 interface SearchJob {
   id: string
   companyId: string
@@ -122,25 +133,15 @@ export default function JobSearchPage() {
 
     let cancelled = false
 
-    const waitForUser = () =>
-      new Promise<void>((resolve) => {
-        if (auth.currentUser) {
-          resolve()
-          return
-        }
-        const unsub = auth.onAuthStateChanged((u) => {
-          if (u) {
-            unsub()
-            resolve()
-          }
-        })
-      })
-
-    void (async () => {
-      await waitForUser()
+    const run = async () => {
+      await waitForFirebaseUserReady()
       if (cancelled || !auth.currentUser) return
       await fetchJobsRef.current(1)
-    })()
+    }
+
+    run().catch(() => {
+      /* fetchJobs sets error state */
+    })
 
     return () => {
       cancelled = true
@@ -149,12 +150,16 @@ export default function JobSearchPage() {
 
   const handleSearch = () => {
     setPage(1)
-    void fetchJobs(1)
+    fetchJobs(1).catch(() => {
+      /* error state set in fetchJobs */
+    })
   }
 
   const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
     setPage(value)
-    void fetchJobs(value)
+    fetchJobs(value).catch(() => {
+      /* error state set in fetchJobs */
+    })
   }
 
   const hasActiveFilters = Boolean(q.trim() || skill.trim() || locationParam)

@@ -8,6 +8,51 @@ export interface InviteStudentRow {
   interestTags?: string[]
 }
 
+/** Safe string for student fields from untyped API / Firestore (avoids `[object Object]`). */
+function coerceApiPrimitiveString(value: unknown): string {
+  if (value == null) return ""
+  if (typeof value === "string") return value
+  if (typeof value === "number" || typeof value === "boolean") return String(value)
+  return ""
+}
+
+/** Collapses runs of ASCII whitespace to single spaces — O(n), no backtracking. */
+function collapseAsciiWhitespace(s: string): string {
+  const parts: string[] = []
+  let cur = ""
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    const isWs = c === 32 || c === 9 || c === 10 || c === 13
+    if (isWs) {
+      if (cur.length > 0) {
+        parts.push(cur)
+        cur = ""
+      }
+    } else {
+      cur += s[i]
+    }
+  }
+  if (cur.length > 0) parts.push(cur)
+  return parts.join(" ")
+}
+
+/**
+ * Normalizes skills text for substring search: same intent as the old regex chain
+ * (commas, semicolons, newlines as delimiters; collapse whitespace) without regex.
+ */
+function normalizeSkillsBlobForFilter(raw: string): string {
+  let s = raw.toLowerCase()
+  s = s.split("\r\n").join("\n")
+  s = s.split("\r").join("\n")
+  s = s.split("\n").join(",")
+  s = s.split(";").join(",")
+  const segments = s
+    .split(",")
+    .map((p) => collapseAsciiWhitespace(p.trim()))
+    .filter((p) => p.length > 0)
+  return collapseAsciiWhitespace(segments.join(" "))
+}
+
 /** Coerce API rows so filters always see string skills and string[] tags. */
 export function normalizeStudentFromApi(raw: unknown): InviteStudentRow {
   const s = raw as Record<string, unknown>
@@ -15,17 +60,19 @@ export function normalizeStudentFromApi(raw: unknown): InviteStudentRow {
   if (typeof s.skills === "string") skills = s.skills
   else if (Array.isArray(s.skills)) {
     skills = s.skills.filter((x) => typeof x === "string").join(", ")
-  } else if (s.skills != null) skills = String(s.skills)
+  } else {
+    skills = coerceApiPrimitiveString(s.skills)
+  }
 
   let interestTags: string[] = []
   if (Array.isArray(s.interestTags)) {
     interestTags = s.interestTags
       .map((t) => {
-        if (typeof t === "string") return t.trim().toLowerCase().replaceAll(/\s+/g, " ")
+        if (typeof t === "string") return collapseAsciiWhitespace(t.trim().toLowerCase())
         if (t && typeof t === "object") {
           const o = t as Record<string, unknown>
           const from = o.name ?? o.tag ?? o.label
-          if (typeof from === "string") return from.trim().toLowerCase().replaceAll(/\s+/g, " ")
+          if (typeof from === "string") return collapseAsciiWhitespace(from.trim().toLowerCase())
         }
         return ""
       })
@@ -33,28 +80,24 @@ export function normalizeStudentFromApi(raw: unknown): InviteStudentRow {
   }
 
   return {
-    id: String(s.id ?? ""),
-    firstName: String(s.firstName ?? ""),
-    lastName: String(s.lastName ?? ""),
-    email: String(s.email ?? ""),
-    major: String(s.major ?? ""),
+    id: coerceApiPrimitiveString(s.id),
+    firstName: coerceApiPrimitiveString(s.firstName),
+    lastName: coerceApiPrimitiveString(s.lastName),
+    email: coerceApiPrimitiveString(s.email),
+    major: coerceApiPrimitiveString(s.major),
     skills,
     interestTags,
   }
 }
 
 export function normalizeInterestFilterToken(tag: string): string {
-  return tag.trim().toLowerCase().replaceAll(/\s+/g, " ")
+  return collapseAsciiWhitespace(tag.trim().toLowerCase())
 }
 
 export function studentSkillsMatchFilter(skills: string | undefined, filterRaw: string): boolean {
   const sk = filterRaw.trim().toLowerCase()
   if (!sk) return true
-  const blob = (skills ?? "")
-    .toLowerCase()
-    .replaceAll(/\s*,\s*/g, " ")
-    .replaceAll(/[;\n]+/g, " ")
-    .replaceAll(/\s+/g, " ")
+  const blob = normalizeSkillsBlobForFilter(skills ?? "")
   return blob.includes(sk)
 }
 
@@ -80,24 +123,25 @@ export function formatTagDisplay(tag: string): string {
 
 export function getFilteredStudents(students: InviteStudentRow[], searchTerm: string): InviteStudentRow[] {
   const trimmedSearch = searchTerm.trim()
-  if (trimmedSearch.length === 0) return students
-
-  const searchLower = trimmedSearch.toLowerCase()
-  return students.filter((student) => {
-    const fullName = `${student.firstName} ${student.lastName}`.toLowerCase()
-    const tagMatch = (student.interestTags ?? []).some((tag) => {
-      const tl = tag.toLowerCase()
-      return tl.includes(searchLower) || searchLower.includes(tl)
+  if (trimmedSearch.length > 0) {
+    const searchLower = trimmedSearch.toLowerCase()
+    return students.filter((student) => {
+      const fullName = `${student.firstName} ${student.lastName}`.toLowerCase()
+      const tagMatch = (student.interestTags ?? []).some((tag) => {
+        const tl = tag.toLowerCase()
+        return tl.includes(searchLower) || searchLower.includes(tl)
+      })
+      const skillsLower = (student.skills ?? "").toLowerCase()
+      return (
+        fullName.includes(searchLower) ||
+        student.email.toLowerCase().includes(searchLower) ||
+        student.major.toLowerCase().includes(searchLower) ||
+        skillsLower.includes(searchLower) ||
+        tagMatch
+      )
     })
-    const skillsLower = (student.skills ?? "").toLowerCase()
-    return (
-      fullName.includes(searchLower) ||
-      student.email.toLowerCase().includes(searchLower) ||
-      student.major.toLowerCase().includes(searchLower) ||
-      skillsLower.includes(searchLower) ||
-      tagMatch
-    )
-  })
+  }
+  return students
 }
 
 export function getStudentCountLabel(count: number): string {

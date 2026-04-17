@@ -51,6 +51,11 @@ describe("studentSkillsMatchFilter", () => {
     expect(studentSkillsMatchFilter(undefined, "")).toBe(true)
     expect(studentSkillsMatchFilter("Java", "py")).toBe(false)
   })
+
+  it("treats semicolons and newlines like commas (no regex normalization)", () => {
+    expect(studentSkillsMatchFilter("Java; Python\nRust", "python")).toBe(true)
+    expect(studentSkillsMatchFilter("a  ,  b", "a b")).toBe(true)
+  })
 })
 
 describe("studentHasInterestTag", () => {

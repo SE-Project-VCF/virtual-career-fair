@@ -302,8 +302,9 @@ export default function StudentProfilePage() {
         { resumeVisible: checked },
         { merge: true }
       )
-    } catch (err: unknown) {
-      console.error("Error saving resume visibility")
+    } catch (error: unknown) {
+      const kind = error instanceof Error ? error.name : typeof error
+      console.error("Error saving resume visibility", kind)
       setError("Failed to save resume visibility")
     }
   }

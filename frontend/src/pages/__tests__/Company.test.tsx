@@ -1652,4 +1652,64 @@ describe("Company", () => {
       expect(screen.queryByRole("button", { name: /View Visitors Analytics/i })).not.toBeInTheDocument();
     });
   });
+
+  describe("Access control and fetch errors", () => {
+    it("shows company not found when Firestore has no company doc", async () => {
+      (getDoc as any).mockResolvedValue({
+        exists: () => false,
+      });
+      renderComp();
+      expect(
+        await screen.findByText(/Company not found/i, {}, { timeout: 5000 })
+      ).toBeInTheDocument();
+    });
+
+    it("redirects student users to dashboard", async () => {
+      (getDoc as any).mockImplementation((docRef: { id?: string }) => {
+        if (docRef.id === "company-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "company-1",
+            data: () => mockCompanyData,
+          });
+        }
+        if (docRef.id === "rep-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "rep-1",
+            data: () => mockRepresentativeData,
+          });
+        }
+        return Promise.resolve({ exists: () => false });
+      });
+      (authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "student-1",
+        role: "student",
+      });
+      renderComp();
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+        },
+        { timeout: 5000 }
+      );
+    });
+
+    it("surfaces error when jobs list fetch fails", async () => {
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/jobs?") && u.includes("companyId")) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "server" }),
+          });
+        }
+        return defaultFetchImpl(u, init);
+      });
+      renderComp();
+      expect(
+        await screen.findByText(/Failed to load job postings/i, {}, { timeout: 5000 })
+      ).toBeInTheDocument();
+    });
+  });
 });

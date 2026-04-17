@@ -18,6 +18,13 @@ import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
 import { parseLinkedInProfileUrl } from "../utils/linkedinUrl"
 
+function employerRoleLabel(role: string | undefined): string {
+  if (role === "companyOwner") return "Company owner"
+  if (role === "representative") return "Company representative"
+  if (role === "administrator") return "Administrator"
+  return "Employer"
+}
+
 export default function EmployerProfilePage() {
   const navigate = useNavigate()
   const user = authUtils.getCurrentUser()
@@ -55,7 +62,9 @@ export default function EmployerProfilePage() {
         setPageLoading(false)
       }
     }
-    void load()
+    load().catch(() => {
+      /* errors handled inside load */
+    })
   }, [user?.uid])
 
   const handleSave = async (e: React.FormEvent) => {
@@ -91,14 +100,7 @@ export default function EmployerProfilePage() {
   }
 
   const companyId = user?.companyId as string | undefined
-  const roleLabel =
-    user?.role === "companyOwner"
-      ? "Company owner"
-      : user?.role === "representative"
-        ? "Company representative"
-        : user?.role === "administrator"
-          ? "Administrator"
-          : "Employer"
+  const roleLabel = employerRoleLabel(user?.role)
 
   if (!user) return null
 

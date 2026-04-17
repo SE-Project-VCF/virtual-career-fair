@@ -7,6 +7,12 @@ import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { formatInterestTagLabel } from "../constants/interestTagOptions"
 
+function linkedinHrefForDisplay(trimmed: string): string | null {
+  if (trimmed.length === 0) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
+}
+
 interface StudentProfile {
   uid: string
   firstName?: string
@@ -164,8 +170,7 @@ export default function StudentProfileCard({ studentId }: Props) {
     typeof profile.linkedinUrl === "string" && profile.linkedinUrl.trim()
       ? profile.linkedinUrl.trim()
       : null
-  const linkedinHref =
-    linkedin && /^https?:\/\//i.test(linkedin) ? linkedin : linkedin ? `https://${linkedin}` : null
+  const linkedinHref = linkedin ? linkedinHrefForDisplay(linkedin) : null
 
   return (
     <Box sx={{ py: 2 }}>

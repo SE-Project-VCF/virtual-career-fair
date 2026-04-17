@@ -15,6 +15,10 @@ describe("normalizeTagString", () => {
   it("trims and lowercases", () => {
     expect(normalizeTagString("  AI  ")).toBe("ai");
   });
+
+  it("stringifies primitives", () => {
+    expect(normalizeTagString(42)).toBe("42");
+  });
 });
 
 describe("skillsFromUserData", () => {
@@ -50,6 +54,33 @@ describe("interestTagsFromUserData", () => {
       interestTags: "a;b",
     });
     expect(tags.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("merges interests array and dedupes", () => {
+    const tags = interestTagsFromUserData({
+      interests: ["a", "a", { label: "B" }],
+    });
+    expect(tags).toContain("a");
+    expect(tags).toContain("b");
+  });
+
+  it("parses interestTag singular string", () => {
+    const tags = interestTagsFromUserData({
+      interestTag: "solo",
+    });
+    expect(tags).toContain("solo");
+  });
+
+  it("parses interests as delimited string", () => {
+    const tags = interestTagsFromUserData({
+      interests: "x,y",
+    });
+    expect(tags).toContain("x");
+    expect(tags).toContain("y");
+  });
+
+  it("ignores empty interestTags string", () => {
+    expect(interestTagsFromUserData({ interestTags: "   " })).toEqual([]);
   });
 });
 
