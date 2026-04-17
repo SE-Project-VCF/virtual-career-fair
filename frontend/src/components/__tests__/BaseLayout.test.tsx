@@ -219,6 +219,7 @@ describe("BaseLayout", () => {
     it("shows student-specific items for student role", async () => {
       vi.mocked(authModule.authUtils.getCurrentUser).mockReturnValue(makeUser({ role: "student" }))
       await openDrawer()
+      expect(screen.getByText("Search Jobs")).toBeInTheDocument()
       expect(screen.getByText("Job Invitations")).toBeInTheDocument()
       expect(screen.getByText("Tailored Resumes")).toBeInTheDocument()
       expect(screen.getByText("Booth History")).toBeInTheDocument()

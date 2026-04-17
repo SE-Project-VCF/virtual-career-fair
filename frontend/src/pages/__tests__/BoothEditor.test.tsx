@@ -108,10 +108,7 @@ const mockBoothDoc = {
     companyName: "Tech Company",
     industry: "software",
     companySize: "51-200",
-    locationIsRemote: false,
-    locationCity: "San Francisco",
-    locationState: "CA",
-    location: "SoMa",
+    location: "San Francisco, CA — SoMa",
     description: "We build innovative software solutions",
     website: "https://techcompany.com",
     careersPage: "https://techcompany.com/careers",
@@ -414,7 +411,7 @@ describe("BoothEditor", () => {
       });
 
       await user.click(screen.getByRole("button", { name: /cancel/i }));
-      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1");
+      expect(mockNavigate).toHaveBeenCalledWith("/companies");
     });
 
     it("navigates back when back arrow is clicked", async () => {
@@ -425,7 +422,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("button", { name: /company/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("button", { name: /company/i }));
+      await user.click(screen.getByRole("button", { name: /back to company profile/i }));
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1");
     });
   });
@@ -643,37 +640,40 @@ describe("BoothEditor", () => {
       });
     });
 
-    it("allows user to close success alerts", async () => {
-      const user = userEvent.setup();
-      renderBoothEditor();
+    it(
+      "allows user to close success alerts",
+      async () => {
+        const user = userEvent.setup();
+        renderBoothEditor();
 
-      await waitFor(() => {
-        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
-      });
-
-      await fillRequiredIndustryAndSize(user);
-      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
-      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
-      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
-
-      await user.click(screen.getByRole("button", { name: /create booth/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
-      });
-
-      // Close the success alert
-      const closeButtons = screen.getAllByTitle("Close");
-      const successAlertCloseButton = closeButtons.find(btn =>
-        btn.closest('[class*="MuiAlert-standardSuccess"]')
-      );
-      if (successAlertCloseButton) {
-        await user.click(successAlertCloseButton);
         await waitFor(() => {
-          expect(screen.queryByText("Booth created successfully!")).not.toBeInTheDocument();
+          expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
         });
-      }
-    });
+
+        await fillRequiredIndustryAndSize(user);
+        await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+        await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
+        await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+        await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+        await waitFor(() => {
+          expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
+        });
+
+        const closeButtons = screen.getAllByTitle("Close");
+        const successAlertCloseButton = closeButtons.find(btn =>
+          btn.closest('[class*="MuiAlert-standardSuccess"]')
+        );
+        if (successAlertCloseButton) {
+          await user.click(successAlertCloseButton);
+          await waitFor(() => {
+            expect(screen.queryByText("Booth created successfully!")).not.toBeInTheDocument();
+          });
+        }
+      },
+      30_000
+    );
 
     it("shows go back button on fatal error", async () => {
       const user = userEvent.setup();

@@ -11,6 +11,7 @@ import {
   TextField,
   Alert,
   CircularProgress,
+  IconButton,
   Select,
   MenuItem,
   FormControl,
@@ -41,7 +42,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import RestartAltIcon from "@mui/icons-material/RestartAlt"
-import BaseLayout from "../components/BaseLayout"
+import ProfileMenu from "./ProfileMenu"
 
 interface BoothData {
   companyName: string
@@ -517,8 +518,9 @@ export default function BoothEditor() {
         updatedAt: new Date().toISOString(),
       }
 
+      // Remove undefined/null fields (keeps your existing behavior)
       const cleanedData = Object.fromEntries(
-        Object.entries(boothData).filter(([_, value]) => value !== undefined),
+        Object.entries(boothData).filter(([_, value]) => value !== undefined && value !== null)
       )
 
       // Fair-scoped booth: save via API
@@ -691,17 +693,44 @@ export default function BoothEditor() {
   const boothPageTitle = resolvedBoothId ? "Edit Booth" : "Create Booth"
 
   return (
-    <BaseLayout pageTitle={boothPageTitle}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
+      {/* Header */}
+      <Box
+        sx={{
+          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+          py: 3,
+          px: 4,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+              <IconButton
+                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
+                sx={{ color: "white" }}
+                aria-label={fairId ? "Back to fairs" : "Back to company profile"}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
+              <Box>
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: "white" }}>
+                  {boothPageTitle}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
+                  Set up your company presence at the virtual career fair
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <ProfileMenu />
+            </Box>
+          </Box>
+        </Container>
+      </Box>
+
       <Container maxWidth="md" sx={{ py: 4 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}>
-            {fairId ? "Fairs" : "Company"}
-          </Button>
-          <BusinessIcon sx={{ color: "#388560" }} />
-          <Typography variant="body2" color="text.secondary">
-            Set up your company presence at the virtual career fair
-          </Typography>
-        </Box>
         {error && (
           <Alert 
             severity="error" 
@@ -752,7 +781,7 @@ export default function BoothEditor() {
         )}
 
         <Card sx={{ p: 4 }}>
-          <form noValidate onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
             {/* Company Information Section */}
             <Box sx={{ mb: 4 }}>
               <Typography
@@ -1028,7 +1057,7 @@ export default function BoothEditor() {
               <Box sx={{ display: "flex", gap: 2 }}>
                 <Button
                   variant="outlined"
-                  onClick={() => navigate(fairId ? "/fairs" : `/company/${company.id}`)}
+                  onClick={() => (fairId ? navigate("/fairs") : navigate("/companies"))}
                   disabled={saving}
                   sx={{
                     borderColor: "#388560",
@@ -1087,6 +1116,6 @@ export default function BoothEditor() {
           </Typography>
         </Box>
       </Container>
-    </BaseLayout>
-  )
+    </Box>
+  );
 }

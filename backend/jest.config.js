@@ -7,6 +7,8 @@ module.exports = {
   collectCoverageFrom: [
     "server.js",
     "helpers.js",
+    "helpers/jobSearchHelpers.js",
+    "helpers/studentUserMapping.js",
     "console.js",
     "resumeParser.js",
     "resumeTailorSimple.js",
