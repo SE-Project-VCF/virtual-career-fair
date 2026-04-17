@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import {
   Container,
   Box,
@@ -91,9 +91,7 @@ const COMPANY_SIZES = [
 
 export default function BoothEditor() {
   const navigate = useNavigate()
-  const { companyId } = useParams<{ companyId: string }>()
-  const [searchParams] = useSearchParams()
-  const urlBoothId = searchParams.get("bid")
+  const { companyId, boothId: urlBoothId } = useParams<{ companyId: string; fairId?: string; boothId?: string }>()
   const user = authUtils.getCurrentUser()
   const { fairId } = useFair()
 
@@ -254,6 +252,8 @@ export default function BoothEditor() {
       // Load existing booth if it exists; otherwise prefill company name.
       if (fairId) {
         await loadFairBooth(companyInfo)
+      } else if (urlBoothId) {
+        await loadBooth(urlBoothId, companyInfo.companyName)
       } else if (companyInfo.boothId) {
         await loadBooth(companyInfo.boothId, companyInfo.companyName)
       } else {
@@ -579,22 +579,18 @@ export default function BoothEditor() {
         return
       }
 
-      let boothId = company.boothId
+      const editBoothId = urlBoothId || company.boothId
 
-      if (boothId) {
+      if (editBoothId) {
         // Update existing booth
-        await updateDoc(doc(db, "booths", boothId), cleanedData)
+        await updateDoc(doc(db, "booths", editBoothId), cleanedData)
         setSuccess("Booth updated successfully!")
       } else {
-        // Create new booth
-        const boothRef = await addDoc(collection(db, "booths"), {
+        // Create new booth — do NOT link to company.boothId
+        await addDoc(collection(db, "booths"), {
           ...cleanedData,
           createdAt: new Date().toISOString(),
         })
-        boothId = boothRef.id
-
-        // Link company to booth
-        await updateDoc(doc(db, "companies", company.id), { boothId })
         setSuccess("Booth created successfully!")
       }
 
