@@ -103,6 +103,36 @@ router.get("/booths", verifyFirebaseToken, async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   DELETE A BOOTH
+---------------------------------------------------- */
+router.delete("/booths/:boothId", verifyFirebaseToken, async (req, res) => {
+  const { boothId } = req.params;
+
+  try {
+    const boothDoc = await db.collection("booths").doc(boothId).get();
+    if (!boothDoc.exists) {
+      return res.status(404).json({ error: "Booth not found" });
+    }
+
+    const boothData = boothDoc.data();
+    if (!boothData.companyId) {
+      return res.status(400).json({ error: "Booth has no associated company" });
+    }
+
+    const authResult = await checkCompanyAuthorization(boothData.companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).json({ error: authResult.error });
+    }
+
+    await db.collection("booths").doc(boothId).delete();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /api/booths/:boothId error:", err);
+    return res.status(500).json({ error: err.message || "Failed to delete booth" });
+  }
+});
+
+/* ----------------------------------------------------
    UPLOAD BOOTH LOGO TO FIREBASE STORAGE (via backend)
    Uses Firebase Admin SDK to bypass client-side CORS issues
 ---------------------------------------------------- */

@@ -311,6 +311,34 @@ function BoothManagementCard({ companyId, navigate }: Readonly<{
 }>) {
   const [booths, setBooths] = useState<{ id: string; boothName?: string; industry?: string }[]>([])
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  const handleDeleteBooth = async (boothId: string) => {
+    if (!globalThis.confirm("Are you sure you want to delete this booth?")) return
+    setDeleting(boothId)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        alert("Session expired. Please log in again.")
+        return
+      }
+      const res = await fetch(`${API_URL}/api/booths/${boothId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        setBooths((prev) => prev.filter((b) => b.id !== boothId))
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || "Failed to delete booth")
+      }
+    } catch (err) {
+      console.error("Error deleting booth:", err)
+      alert("Failed to delete booth. Please try again.")
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   useEffect(() => {
     const fetchBooths = async () => {
@@ -349,6 +377,7 @@ function BoothManagementCard({ companyId, navigate }: Readonly<{
             </Typography>
           )}
 
+          <Box sx={{ maxHeight: 210, overflowY: "auto" }}>
           {!loading && booths.map((booth) => (
             <Box
               key={booth.id}
@@ -372,16 +401,28 @@ function BoothManagementCard({ companyId, navigate }: Readonly<{
                   </Typography>
                 )}
               </Box>
-              <Button
-                size="small"
-                startIcon={<EditIcon />}
-                onClick={() => navigate(`/company/${companyId}/booth/${booth.id}`)}
-                sx={{ color: "#388560" }}
-              >
-                Edit
-              </Button>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Button
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => navigate(`/company/${companyId}/booth/${booth.id}`)}
+                  sx={{ color: "#388560" }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => handleDeleteBooth(booth.id)}
+                  disabled={deleting === booth.id}
+                  sx={{ color: "#d32f2f" }}
+                >
+                  {deleting === booth.id ? "..." : "Delete"}
+                </Button>
+              </Box>
             </Box>
           ))}
+          </Box>
 
           <Button
             variant="contained"
@@ -628,7 +669,9 @@ export default function Company() {
 
       fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
-      fetchInviteCode(companyInfo.id)
+      if (userRole === "companyOwner" && companyInfo.ownerId === userId) {
+        fetchInviteCode(companyInfo.id)
+      }
     } catch (err) {
       console.error("Error fetching company:", err)
       setError("Failed to load company")

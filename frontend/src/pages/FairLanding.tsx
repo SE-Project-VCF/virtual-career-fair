@@ -279,7 +279,7 @@ export default function FairLanding() {
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
             fullWidth
-            slotProps={{ htmlInput: { maxLength: 8 } }}
+            slotProps={{ htmlInput: { maxLength: 20 } }}
           />
           {joinError && <Alert severity="error" sx={{ mt: 2 }}>{joinError}</Alert>}
           {companyBooths.length > 0 && (

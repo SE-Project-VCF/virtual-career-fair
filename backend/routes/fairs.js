@@ -132,6 +132,7 @@ async function getCompanyAndBoothSnapshot(companyId, boothId) {
       boothSnapshot = {
         companyId,
         originalBoothId: resolvedBoothId,
+        boothName: bData.boothName || null,
         companyName: bData.companyName || company.companyName || "",
         industry: bData.industry || null,
         companySize: bData.companySize || null,

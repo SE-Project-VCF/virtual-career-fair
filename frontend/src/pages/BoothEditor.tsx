@@ -44,6 +44,7 @@ import RestartAltIcon from "@mui/icons-material/RestartAlt"
 import BaseLayout from "../components/BaseLayout"
 
 interface BoothData {
+  boothName: string
   companyName: string
   industry: string
   companySize: string
@@ -105,6 +106,7 @@ export default function BoothEditor() {
 
   // Booth form fields that are saved to Firestore
   const [formData, setFormData] = useState<BoothData>({
+    boothName: "",
     companyName: "",
     industry: "",
     companySize: "",
@@ -254,8 +256,6 @@ export default function BoothEditor() {
         await loadFairBooth(companyInfo)
       } else if (urlBoothId) {
         await loadBooth(urlBoothId, companyInfo.companyName)
-      } else if (companyInfo.boothId) {
-        await loadBooth(companyInfo.boothId, companyInfo.companyName)
       } else {
         setFormData((prev) => ({ ...prev, companyName: companyInfo.companyName }))
       }
@@ -278,6 +278,7 @@ export default function BoothEditor() {
 
       const boothData = boothDoc.data()
       setFormData({
+        boothName: boothData.boothName || "",
         companyName: boothData.companyName || fallbackCompanyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
@@ -342,6 +343,7 @@ export default function BoothEditor() {
       const hasExistingData = !!(boothData.industry || boothData.description || boothData.contactName)
       setFairBoothHasData(hasExistingData)
       setFormData({
+        boothName: boothData.boothName || "",
         companyName: boothData.companyName || companyInfo.companyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
@@ -535,6 +537,7 @@ export default function BoothEditor() {
       // Booth document payload
       const boothData = {
         companyId: company.id,
+        boothName: formData.boothName,
         companyName: formData.companyName,
         industry: formData.industry,
         companySize: formData.companySize,
@@ -579,7 +582,7 @@ export default function BoothEditor() {
         return
       }
 
-      const editBoothId = urlBoothId || company.boothId
+      const editBoothId = urlBoothId
 
       if (editBoothId) {
         // Update existing booth
@@ -800,6 +803,20 @@ export default function BoothEditor() {
               </Typography>
 
               <Grid container spacing={3}>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    id="booth-name"
+                    name="boothName"
+                    label="Booth Name"
+                    placeholder="e.g., Engineering, Marketing, Sales"
+                    value={formData.boothName}
+                    onChange={(e) => setFormData({ ...formData, boothName: e.target.value })}
+                    required
+                    helperText="A name to distinguish this booth from others"
+                  />
+                </Grid>
+
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
