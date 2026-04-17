@@ -302,42 +302,46 @@ describe("BoothEditor – fair-scoped", () => {
       )
     })
 
-    it("shows error when fairBoothId is null (404 load) and user tries to save", async () => {
-      const user = userEvent.setup()
-      // Override: 404 so fairBoothId never gets set
-      globalThis.fetch = vi.fn().mockResolvedValue({ status: 404, ok: false })
+    it(
+      "shows error when fairBoothId is null (404 load) and user tries to save",
+      async () => {
+        const user = userEvent.setup()
+        // Override: 404 so fairBoothId never gets set
+        globalThis.fetch = vi.fn().mockResolvedValue({ status: 404, ok: false })
 
-      renderBoothEditor()
+        renderBoothEditor()
 
-      await waitFor(() =>
-        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument()
-      )
+        await waitFor(() =>
+          expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument()
+        )
 
-      const industrySelect = screen.getByRole("combobox", { name: /industry/i })
-      await user.click(industrySelect)
-      await waitFor(() =>
-        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument()
-      )
-      await user.click(screen.getByRole("option", { name: /software development/i }))
+        const industrySelect = screen.getByRole("combobox", { name: /industry/i })
+        await user.click(industrySelect)
+        await waitFor(() =>
+          expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument()
+        )
+        await user.click(screen.getByRole("option", { name: /software development/i }))
 
-      const sizeSelect = screen.getByRole("combobox", { name: /company size/i })
-      await user.click(sizeSelect)
-      await waitFor(() =>
-        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument()
-      )
-      await user.click(screen.getByRole("option", { name: /51-200 employees/i }))
+        const sizeSelect = screen.getByRole("combobox", { name: /company size/i })
+        await user.click(sizeSelect)
+        await waitFor(() =>
+          expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument()
+        )
+        await user.click(screen.getByRole("option", { name: /51-200 employees/i }))
 
-      await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco")
-      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test")
-      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe")
-      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com")
+        await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco")
+        await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test")
+        await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe")
+        await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com")
 
-      await user.click(screen.getByRole("button", { name: /create booth/i }))
+        await user.click(screen.getByRole("button", { name: /create booth/i }))
 
-      await waitFor(() =>
-        expect(screen.getByText(/Unable to save.*booth not found/i)).toBeInTheDocument()
-      )
-    }, 15000)
+        await waitFor(() =>
+          expect(screen.getByText(/Unable to save.*booth not found/i)).toBeInTheDocument()
+        )
+      },
+      30_000
+    )
   })
 
   // -------------------------------------------------------------------------

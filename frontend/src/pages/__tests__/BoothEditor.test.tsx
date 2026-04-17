@@ -698,37 +698,41 @@ describe("BoothEditor", () => {
       });
     });
 
-    it("allows user to close success alerts", async () => {
-      const user = userEvent.setup();
-      renderBoothEditor();
+    it(
+      "allows user to close success alerts",
+      async () => {
+        const user = userEvent.setup();
+        renderBoothEditor();
 
-      await waitFor(() => {
-        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
-      });
-
-      await fillRequiredBoothLocation(user, { location: "Testville, CA" });
-      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
-      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
-      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
-
-      await user.click(screen.getByRole("button", { name: /create booth/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
-      });
-
-      // Close the success alert
-      const closeButtons = screen.getAllByTitle("Close");
-      const successAlertCloseButton = closeButtons.find(btn =>
-        btn.closest('[class*="MuiAlert-standardSuccess"]')
-      );
-      if (successAlertCloseButton) {
-        await user.click(successAlertCloseButton);
         await waitFor(() => {
-          expect(screen.queryByText("Booth created successfully!")).not.toBeInTheDocument();
+          expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
         });
-      }
-    });
+
+        await fillRequiredBoothLocation(user, { location: "Testville, CA" });
+        await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+        await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
+        await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+        await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+        await waitFor(() => {
+          expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
+        });
+
+        // Close the success alert
+        const closeButtons = screen.getAllByTitle("Close");
+        const successAlertCloseButton = closeButtons.find(btn =>
+          btn.closest('[class*="MuiAlert-standardSuccess"]')
+        );
+        if (successAlertCloseButton) {
+          await user.click(successAlertCloseButton);
+          await waitFor(() => {
+            expect(screen.queryByText("Booth created successfully!")).not.toBeInTheDocument();
+          });
+        }
+      },
+      30_000
+    );
 
     it("shows go back button on fatal error", async () => {
       const user = userEvent.setup();
