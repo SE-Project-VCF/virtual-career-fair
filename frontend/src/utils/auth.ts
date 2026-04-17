@@ -9,6 +9,7 @@ import {
 import type { User as FirebaseUser } from "firebase/auth";
 import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { API_URL } from "../config";
+import { clearJobmotherTeaserDismissed } from "../constants/jobmother";
 
 /**
  * Wait for Firebase Auth to be fully initialized.
@@ -134,6 +135,7 @@ async function handleLoginSuccess(user: FirebaseUser, userData: any, role?: stri
     };
   }
   const currentUser = { uid: user.uid, email: user.email ?? "", role: role || userData.role, ...userData };
+  clearJobmotherTeaserDismissed();
   localStorage.setItem("currentUser", JSON.stringify(currentUser));
   // Attempt to sync user to Stream Chat, but don't block login if it fails
   await trySyncStreamUser(user.uid, user.email ?? "", userData.firstName, userData.lastName);
@@ -307,6 +309,7 @@ export const authUtils = {
           ...existingData,
         };
 
+        clearJobmotherTeaserDismissed();
         localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
         // Attempt to sync user to Stream Chat, but don't block login if it fails
@@ -380,6 +383,7 @@ export const authUtils = {
 
         const userData = userDoc.data();
         const currentUser = { uid: user.uid, email: user.email ?? "", ...userData };
+        clearJobmotherTeaserDismissed();
         localStorage.setItem("currentUser", JSON.stringify(currentUser));
 
         return { success: true, user: currentUser };

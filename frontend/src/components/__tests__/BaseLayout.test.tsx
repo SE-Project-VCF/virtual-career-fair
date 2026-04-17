@@ -94,23 +94,43 @@ describe("BaseLayout", () => {
     })
   })
 
+  // ─── Fairy Jobmother assistant ───────────────────────────────────────────
+
+  describe("Fairy Jobmother assistant", () => {
+    it("renders the launcher when user is signed in", () => {
+      renderLayout({ children: <div /> })
+      expect(screen.getByRole("button", { name: /Open Fairy Jobmother help/i })).toBeInTheDocument()
+    })
+
+    it("does not render the launcher when user is null", () => {
+      vi.mocked(authModule.authUtils.getCurrentUser).mockReturnValue(null)
+      renderLayout({ children: <div /> })
+      expect(screen.queryByRole("button", { name: /Open Fairy Jobmother help/i })).not.toBeInTheDocument()
+    })
+
+    it("hides the launcher when showJobmotherAssistant is false", () => {
+      renderLayout({ children: <div />, showJobmotherAssistant: false })
+      expect(screen.queryByRole("button", { name: /Open Fairy Jobmother help/i })).not.toBeInTheDocument()
+    })
+  })
+
   // ─── Header actions ────────────────────────────────────────────────────────
 
   describe("Chat button", () => {
     it("renders the Chat button by default", () => {
       renderLayout()
-      expect(screen.getByRole("button", { name: /chat/i })).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Open Chat" })).toBeInTheDocument()
     })
 
     it("hides the Chat button when showChat is false", () => {
       renderLayout({ children: <div />, showChat: false })
-      expect(screen.queryByRole("button", { name: /chat/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: "Open Chat" })).not.toBeInTheDocument()
     })
 
     it("navigates to /dashboard/chat when Chat is clicked", async () => {
       const user = userEvent.setup()
       renderLayout()
-      await user.click(screen.getByRole("button", { name: /chat/i }))
+      await user.click(screen.getByRole("button", { name: "Open Chat" }))
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard/chat")
     })
   })
@@ -139,8 +159,7 @@ describe("BaseLayout", () => {
       const user = userEvent.setup()
       renderLayout()
       await user.click(screen.getByLabelText("Navigation menu"))
-      const closeBtn = screen.getByTestId("CloseIcon").closest("button")!
-      await user.click(closeBtn)
+      await user.click(screen.getByRole("button", { name: "Close navigation menu" }))
       await waitFor(() => {
         expect(screen.queryByText("Signed in as")).not.toBeInTheDocument()
       })
@@ -187,7 +206,7 @@ describe("BaseLayout", () => {
       return user
     }
 
-    const commonItems = ["Dashboard", "Browse Fairs", "Chat", "Profile"]
+    const commonItems = ["Dashboard", "Browse Fairs", "Fairy Jobmother", "Chat", "Profile"]
 
     it("shows common nav items for all roles", async () => {
       await openDrawer()
