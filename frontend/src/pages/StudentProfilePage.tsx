@@ -8,6 +8,7 @@ import {
   Button,
   CircularProgress,
   Card,
+  CardContent,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -17,12 +18,28 @@ import {
   Chip,
   FormControlLabel,
   Checkbox,
+  Divider,
+  Stack,
 } from "@mui/material"
+import Autocomplete, { createFilterOptions } from "@mui/material/Autocomplete"
 import BaseLayout from "../components/BaseLayout"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
+import { ACCEPTED_INTEREST_TAGS, formatInterestTagLabel } from "../constants/interestTagOptions"
+import { parseLinkedInProfileUrl } from "../utils/linkedinUrl"
+import {
+  MAX_INTEREST_TAGS,
+  normalizeInterestTags,
+  stringFieldFromFirestore,
+} from "../utils/studentProfileHelpers"
+
+/** Match typing against both stored value and title-cased label (e.g. "machine" → "machine learning"). */
+const filterInterestOptions = createFilterOptions<string>({
+  matchFrom: "any",
+  stringify: (option) => `${option} ${formatInterestTagLabel(option)}`,
+})
 
 export default function StudentProfilePage() {
   const navigate = useNavigate()
@@ -36,6 +53,7 @@ export default function StudentProfilePage() {
   const [major, setMajor] = useState("")
   const [year, setYear] = useState("")
   const [skills, setSkills] = useState("")
+  const [interestTags, setInterestTags] = useState<string[]>([])
   const [linkedinUrl, setLinkedinUrl] = useState("")
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [resumeUrl, setResumeUrl] = useState<string | null>(null)
@@ -57,28 +75,33 @@ export default function StudentProfilePage() {
     }
   }, [navigate, isAuthenticated])
 
-  // Load existing profile data once when user is ready (use user.uid to avoid re-fetching on every render)
+  // Load existing profile data once the user is ready
   useEffect(() => {
-    if (!user?.uid) return
+    if (!user) return
 
     const fetchProfile = async () => {
       try {
+        // NOTE: use /users (matches your Firestore rules)
         const docRef = doc(db, "users", user.uid)
         const docSnap = await getDoc(docRef)
         if (docSnap.exists()) {
           const data = docSnap.data()
-          const validYears = ["2023","2024","2025","2026","2027","2028","2029","2030","2031","2032","2033","2034","2035"]
-          const rawYear = data.expectedGradYear == null ? "" : String(data.expectedGradYear) 
-          setMajor(data.major || "")
-          setYear(validYears.includes(rawYear) ? rawYear : "")
-          setSkills(data.skills || "")
-          setLinkedinUrl(data.linkedinUrl || "")
+          setMajor(stringFieldFromFirestore(data.major))
+          setYear(stringFieldFromFirestore(data.expectedGradYear))
+          setSkills(stringFieldFromFirestore(data.skills))
+          const rawTags = data.interestTags
+          setInterestTags(
+            Array.isArray(rawTags)
+              ? normalizeInterestTags(rawTags.filter((t: unknown) => typeof t === "string") as string[])
+              : []
+          )
+          setLinkedinUrl(typeof data.linkedinUrl === "string" ? data.linkedinUrl : "")
           setResumeUrl(data.resumeUrl || null)
           setResumeVisible(data.resumeVisible !== false)
         }
-      } catch (err: any) {
-        console.error("Error fetching profile:", err)
-        setError(err?.message || "Failed to load profile.")
+      } catch (err: unknown) {
+        console.error("Error fetching profile")
+        setError(err instanceof Error ? err.message : "Failed to load profile.")
       }
     }
 
@@ -110,9 +133,9 @@ export default function StudentProfilePage() {
 
       const data = await response.json()
       setTailoredResumes(data.resumes || [])
-    } catch (err: any) {
-      console.error("Error loading tailored resumes:", err)
-      setError(err?.message || "Failed to load tailored resumes")
+    } catch (err: unknown) {
+      console.error("Error loading tailored resumes")
+      setError(err instanceof Error ? err.message : "Failed to load tailored resumes")
     } finally {
       setLoadingTailored(false)
     }
@@ -135,6 +158,12 @@ export default function StudentProfilePage() {
 
     if (!user) {
       setError("User not authenticated.")
+      return
+    }
+
+    const linkedinParsed = parseLinkedInProfileUrl(linkedinUrl)
+    if (!linkedinParsed.ok) {
+      setError(linkedinParsed.message)
       return
     }
 
@@ -187,25 +216,32 @@ export default function StudentProfilePage() {
         uploadedUrl = result.filePath || null
       }
 
+      const tagsToSave = normalizeInterestTags(interestTags)
+
       await setDoc(
         docRef,
         {
           major,
-          expectedGradYear: year || null,
+          expectedGradYear: year,
           skills,
-          linkedinUrl: linkedinUrl.trim() || null,
+          interestTags: tagsToSave,
+          linkedinUrl: linkedinParsed.href,
           resumeUrl: uploadedUrl || null,
           resumeVisible,
         },
         { merge: true }
       )
 
+      setInterestTags(tagsToSave)
+      if (linkedinParsed.href) setLinkedinUrl(linkedinParsed.href)
+      else setLinkedinUrl("")
+
       setResumeUrl(uploadedUrl || null)
       setResumeFile(null)
       alert("Profile saved successfully!")
-    } catch (err: any) {
-      console.error("Failed to save profile:", err)
-      setError(err?.message || "Failed to save profile. Try again.")
+    } catch (err: unknown) {
+      console.error("Failed to save profile")
+      setError(err instanceof Error ? err.message : "Failed to save profile. Try again.")
     } finally {
       setLoading(false)
       setUploadPct(null)
@@ -249,8 +285,8 @@ export default function StudentProfilePage() {
 
       const result = await response.json()
       window.open(result.resumeUrl, "_blank")
-    } catch (err: any) {
-      setError(err?.message || "Failed to view resume")
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to view resume")
     }
   }
 
@@ -266,8 +302,9 @@ export default function StudentProfilePage() {
         { resumeVisible: checked },
         { merge: true }
       )
-    } catch (err: any) {
-      console.error("Error saving resume visibility:", err)
+    } catch (error: unknown) {
+      const kind = error instanceof Error ? error.name : typeof error
+      console.error("Error saving resume visibility", kind)
       setError("Failed to save resume visibility")
     }
   }
@@ -275,61 +312,109 @@ export default function StudentProfilePage() {
   if (!user) return null
 
   return (
-    <BaseLayout pageTitle="Customize Profile">
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <Card sx={{ p: 4, borderRadius: 3, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+    <BaseLayout pageTitle="Student profile">
+      <Container maxWidth="md" sx={{ py: { xs: 3, sm: 5 } }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
+          Your profile
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 560 }}>
+          Keep your academics, interests, and resume up to date. Employers use this when you visit booths and receive invitations.
+        </Typography>
 
-          <form onSubmit={handleSave} autoComplete="off">
-            {error && (
-              <Typography color="error" sx={{ mb: 2 }}>
-                {error}
+        <Card elevation={2} sx={{ borderRadius: 2, overflow: "hidden" }}>
+          <CardContent sx={{ p: { xs: 2.5, sm: 4 } }}>
+            <form onSubmit={handleSave}>
+              {error && (
+                <Typography color="error" sx={{ mb: 2 }}>
+                  {error}
+                </Typography>
+              )}
+
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Academic & skills
               </Typography>
-            )}
+              <Stack spacing={2.5}>
+                <TextField
+                  label="Major"
+                  fullWidth
+                  value={major}
+                  onChange={(e) => setMajor(e.target.value)}
+                  required
+                />
 
-            <TextField
-              label="Major"
-              fullWidth
-              value={major}
-              onChange={(e) => setMajor(e.target.value)}
-              required
-              sx={{ mb: 3 }}
-            />
+                <TextField
+                  label="Expected Graduation Year"
+                  type="number"
+                  fullWidth
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                  required
+                />
 
-            <TextField
-              select
-              label="Expected Graduation Year"
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-              fullWidth
-              required
-              sx={{ mb: 3 }}
-              slotProps={{ select: { native: true, name: "expectedGradYear" } }}
-            >
-              <option value="">Select year...</option>
-              {[2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034, 2035].map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </TextField>
+                <TextField
+                  label="Skills"
+                  fullWidth
+                  value={skills}
+                  onChange={(e) => setSkills(e.target.value)}
+                  placeholder="e.g., Python, React, SQL"
+                />
+              </Stack>
 
-            <TextField
-              label="Skills"
-              fullWidth
-              value={skills}
-              onChange={(e) => setSkills(e.target.value)}
-              placeholder="e.g., Python, React, SQL"
-              sx={{ mb: 3 }}
-            />
+              <Divider sx={{ my: 3 }} />
 
-            <TextField
-              label="LinkedIn URL"
-              fullWidth
-              value={linkedinUrl}
-              onChange={(e) => setLinkedinUrl(e.target.value)}
-              placeholder="https://linkedin.com/in/your-profile"
-              sx={{ mb: 3 }}
-            />
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Career interests
+              </Typography>
+              <Autocomplete
+                multiple
+                options={[...ACCEPTED_INTEREST_TAGS]}
+                value={interestTags}
+                onChange={(_, newValue) => setInterestTags(normalizeInterestTags(newValue))}
+                getOptionLabel={(option) => formatInterestTagLabel(option)}
+                filterOptions={filterInterestOptions}
+                isOptionEqualToValue={(a, b) => a === b}
+                openOnFocus
+                disableCloseOnSelect
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => (
+                    <Chip
+                      {...getTagProps({ index })}
+                      key={option}
+                      variant="outlined"
+                      size="small"
+                      label={formatInterestTagLabel(option)}
+                    />
+                  ))
+                }
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Interests"
+                    placeholder="Search interests…"
+                    helperText={`Choose from the list. Up to ${MAX_INTEREST_TAGS} tags. Used when employers search for candidates.`}
+                  />
+                )}
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Professional presence
+              </Typography>
+              <TextField
+                label="LinkedIn URL"
+                fullWidth
+                value={linkedinUrl}
+                onChange={(e) => setLinkedinUrl(e.target.value)}
+                placeholder="https://www.linkedin.com/in/…"
+                helperText="Optional. Shown in the fair networking lounge and to employers where your profile appears."
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Resume
+              </Typography>
 
             {/* Resume Upload */}
             <Box sx={{ mb: 3 }}>
@@ -404,23 +489,17 @@ export default function StudentProfilePage() {
               </Box>
             )}
 
-            <Box
-              sx={{
-                display: "flex",
-                background: "b03a6c",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 2, pt: 2 }}>
               <Button variant="outlined" onClick={() => navigate("/dashboard")} disabled={loading}>
                 Back
               </Button>
 
-              <Button type="submit" variant="contained" disabled={loading}>
-                {loading ? <CircularProgress size={24} color="success" /> : "Save Profile"}
+              <Button type="submit" variant="contained" size="large" disabled={loading}>
+                {loading ? <CircularProgress size={22} color="inherit" /> : "Save profile"}
               </Button>
             </Box>
           </form>
+          </CardContent>
         </Card>
       </Container>
 

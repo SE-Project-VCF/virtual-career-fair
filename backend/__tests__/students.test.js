@@ -29,14 +29,23 @@ jest.mock("stream-chat", () => ({
   },
 }));
 
-jest.mock("../firebase", () => ({
-  db: { collection: jest.fn() },
-  auth: {
-    verifyIdToken: jest.fn(),
-    createUser: jest.fn(),
-    getUserByEmail: jest.fn(),
-  },
-}));
+jest.mock("../firebase", () => {
+  const { mockQuerySnap } = require("./testUtils");
+  return {
+    db: {
+      collection: jest.fn(),
+      collectionGroup: jest.fn(() => ({
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      })),
+    },
+    auth: {
+      verifyIdToken: jest.fn(),
+      createUser: jest.fn(),
+      getUserByEmail: jest.fn(),
+    },
+  };
+});
 
 jest.mock("../helpers", () => {
   const actual = jest.requireActual("../helpers");
@@ -61,6 +70,7 @@ const sampleStudents = [
       lastName: "Smith",
       email: "alice@example.com",
       major: "Computer Science",
+      interestTags: ["finance", "ai", "data science"],
     }),
   },
   {
@@ -202,6 +212,43 @@ describe("GET /api/students", () => {
     expect(res.status).toBe(200);
     expect(res.body.students[0].id).toBe("s1");
     expect(res.body.students[1].id).toBe("s2");
+  });
+
+  it("includes normalized interestTags on each student", async () => {
+    setupRepAuth("rep-1");
+
+    const res = await request(app)
+      .get("/api/students?userId=rep-1")
+      .set("Authorization", authHeader("rep-1"));
+
+    expect(res.status).toBe(200);
+    const alice = res.body.students.find((s) => s.id === "s1");
+    expect(alice.interestTags).toEqual(["finance", "ai", "data science"]);
+    expect(res.body.students.find((s) => s.id === "s2").interestTags).toEqual([]);
+  });
+
+  it("filters students by search term matching an interest tag", async () => {
+    setupRepAuth("rep-1");
+
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&search=finance")
+      .set("Authorization", authHeader("rep-1"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.students).toHaveLength(1);
+    expect(res.body.students[0].firstName).toBe("Alice");
+  });
+
+  it("filters students by interest query matching a tag", async () => {
+    setupRepAuth("rep-1");
+
+    const res = await request(app)
+      .get("/api/students?userId=rep-1&interest=ai")
+      .set("Authorization", authHeader("rep-1"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.students).toHaveLength(1);
+    expect(res.body.students[0].firstName).toBe("Alice");
   });
 
   it("filters students by search term matching first name", async () => {
@@ -392,5 +439,7 @@ describe("GET /api/students", () => {
     expect(res.body.students[0].firstName).toBe("");
     expect(res.body.students[0].email).toBe("");
     expect(res.body.students[0].major).toBe("");
+    expect(res.body.students[0].skills).toBe("");
+    expect(res.body.students[0].interestTags).toEqual([]);
   });
 });

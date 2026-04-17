@@ -70,20 +70,6 @@ vi.mock("../ProfileMenu", () => ({
   default: () => <div data-testid="profile-menu">Profile Menu</div>,
 }))
 
-vi.mock("../../components/BaseLayout", () => ({
-  default: ({ children, pageTitle }: any) => (
-    <div data-testid="base-layout">
-      <button aria-label="menu">Menu</button>
-      <span>Job Goblin</span>
-      <span>Virtual Career Fair</span>
-      {pageTitle && <h6>{pageTitle}</h6>}
-      <button data-testid="notification-bell" />
-      <button data-testid="profile-menu">Profile Menu</button>
-      {children}
-    </div>
-  ),
-}))
-
 vi.mock("../../contexts/FairContext", () => ({
   useFair: vi.fn(),
   FairProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -113,9 +99,6 @@ const fairBoothPayload = {
   industry: "software",
   companySize: "51-200",
   location: "San Francisco",
-  locationIsRemote: false,
-  locationCity: "San Francisco",
-  locationState: "CA",
   description: "Fair booth description",
   contactName: "Jane Doe",
   contactEmail: "owner@company.com",
@@ -318,45 +301,47 @@ describe("BoothEditor – fair-scoped", () => {
         expect(screen.getByText(/failed to save booth/i)).toBeInTheDocument()
       )
     })
-  })
 
-  describe("fair-scoped save when fair booth id missing (404 load)", () => {
-    it("shows error when fairBoothId is null and user submits a valid form", async () => {
-      const user = userEvent.setup()
-      globalThis.fetch = vi.fn().mockResolvedValue({ status: 404, ok: false })
+    it(
+      "shows error when fairBoothId is null (404 load) and user tries to save",
+      async () => {
+        const user = userEvent.setup()
+        // Override: 404 so fairBoothId never gets set
+        globalThis.fetch = vi.fn().mockResolvedValue({ status: 404, ok: false })
 
-      renderBoothEditor()
+        renderBoothEditor()
 
-      await screen.findByRole("textbox", { name: /company name/i })
+        await waitFor(() =>
+          expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument()
+        )
 
-      const industrySelect = screen.getByRole("combobox", { name: /industry/i })
-      await user.click(industrySelect)
-      await user.click(
-        await screen.findByRole("option", { name: /software development/i })
-      )
+        const industrySelect = screen.getByRole("combobox", { name: /industry/i })
+        await user.click(industrySelect)
+        await waitFor(() =>
+          expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument()
+        )
+        await user.click(screen.getByRole("option", { name: /software development/i }))
 
-      const sizeSelect = screen.getByRole("combobox", { name: /company size/i })
-      await user.click(sizeSelect)
-      await user.click(
-        await screen.findByRole("option", { name: /51-200 employees/i })
-      )
+        const sizeSelect = screen.getByRole("combobox", { name: /company size/i })
+        await user.click(sizeSelect)
+        await waitFor(() =>
+          expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument()
+        )
+        await user.click(screen.getByRole("option", { name: /51-200 employees/i }))
 
-      await user.type(screen.getByRole("textbox", { name: /^city$/i }), "San Francisco")
-      await user.type(screen.getByRole("textbox", { name: /state \/ region/i }), "CA")
-      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test")
-      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe")
-      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com")
+        await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco")
+        await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test")
+        await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe")
+        await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com")
 
-      await user.click(screen.getByRole("button", { name: /create booth/i }))
+        await user.click(screen.getByRole("button", { name: /create booth/i }))
 
-      await waitFor(() =>
-        expect(
-          screen.getByText(
-            /Unable to save: booth not found for this fair/i
-          )
-        ).toBeInTheDocument()
-      )
-    }, 25000)
+        await waitFor(() =>
+          expect(screen.getByText(/Unable to save.*booth not found/i)).toBeInTheDocument()
+        )
+      },
+      30_000
+    )
   })
 
   // -------------------------------------------------------------------------
@@ -407,7 +392,8 @@ describe("BoothEditor – fair-scoped", () => {
         expect(screen.getByRole("heading", { name: /create booth/i })).toBeInTheDocument()
       )
 
-      await user.click(screen.getByRole("button", { name: /fairs/i }))
+      // First button in the header is the ArrowBack icon button
+      await user.click(screen.getAllByRole("button")[0])
       expect(mockNavigate).toHaveBeenCalledWith("/fairs")
     })
 

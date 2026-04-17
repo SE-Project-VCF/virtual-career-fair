@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom"
 import { Box, Container } from "@mui/material"
-import StudentProfilePage from "./pages/StudentProfilePage"
+import ProfilePage from "./pages/ProfilePage"
 import RoleSelection from "./pages/RoleSelection"
 import Register from "./pages/Register"
 import Login from "./pages/Login"
@@ -17,6 +17,7 @@ import ChatPage from "./pages/ChatPage"
 import AdminDashboard from "./pages/AdminDashboard"
 import BoothHistoryPage from "./pages/BoothHistoryPage"
 import JobInvitations from "./pages/JobInvitations"
+import JobSearchPage from "./pages/JobSearchPage"
 import CallInvitationsPage from "./pages/CallInvitationsPage"
 import FairBoothsPage from "./pages/FairBoothsPage"
 import StudentFairBoothsPage from "./pages/StudentFairBoothsPage"
@@ -98,6 +99,7 @@ function App() {
         <Route path="/dashboard/chat" element={<ChatPage />} />
         <Route path="/dashboard/booth-history" element={<BoothHistoryPage />} />
         <Route path="/dashboard/job-invitations" element={<JobInvitations />} />
+        <Route path="/dashboard/job-search" element={<JobSearchPage />} />
         <Route path="/dashboard/call-invitations" element={<CallInvitationsPage />} />
         <Route path="/dashboard/1x1-calls" element={<StudentCallInvitations />} />
         <Route path="/dashboard/my-calls" element={<EmployerMyCalls />} />
@@ -121,7 +123,7 @@ function App() {
         <Route path="/qa-session/:boothId" element={<QASessionPage />} />
         <Route path="/verification-pending" element={<EmailVerificationPending />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/profile" element={<StudentProfilePage />} />
+        <Route path="/profile" element={<ProfilePage />} />
 
         {/* Multi-fair routes */}
         <Route path="/fairs" element={<FairList />} />
