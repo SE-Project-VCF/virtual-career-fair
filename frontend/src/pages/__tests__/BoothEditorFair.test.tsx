@@ -96,6 +96,7 @@ const mockCompanyDoc = {
 
 const fairBoothPayload = {
   boothId: "fair-booth-1",
+  boothName: "Engineering",
   companyName: "Tech Company",
   industry: "software",
   companySize: "51-200",
@@ -315,6 +316,8 @@ describe("BoothEditor – fair-scoped", () => {
         await waitFor(() =>
           expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument()
         )
+
+        await user.type(screen.getByRole("textbox", { name: /booth name/i }), "Engineering")
 
         const industrySelect = screen.getByRole("combobox", { name: /industry/i })
         await user.click(industrySelect)

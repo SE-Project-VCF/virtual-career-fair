@@ -76,12 +76,18 @@ const renderBoothEditor = () => {
   );
 };
 
-/** Pick industry + size and fill the required Location field. */
+/** Pick industry + size and fill the required Booth Name and Location fields. */
 async function fillRequiredBoothLocation(
   user: ReturnType<typeof userEvent.setup>,
-  opts?: { includeIndustrySize?: boolean; location?: string }
+  opts?: { includeIndustrySize?: boolean; location?: string; boothName?: string }
 ) {
-  const { includeIndustrySize = true, location = "San Francisco, CA" } = opts ?? {};
+  const {
+    includeIndustrySize = true,
+    location = "San Francisco, CA",
+    boothName = "Engineering",
+  } = opts ?? {};
+
+  await user.type(screen.getByRole("textbox", { name: /booth name/i }), boothName);
 
   if (includeIndustrySize) {
     const industrySelect = screen.getByRole("combobox", { name: /industry/i });

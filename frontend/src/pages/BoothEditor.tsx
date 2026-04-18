@@ -445,10 +445,8 @@ export default function BoothEditor() {
   const validateBoothForm = async (companyInfo: typeof company): Promise<string | null> => {
     if (!companyInfo) return "Company not found"
 
-    if (!formData.locationIsRemote) {
-      if (!formData.locationCity.trim() || !formData.locationState.trim()) {
-        return "City and state are required unless you mark the booth as Remote."
-      }
+    if (!formData.location.trim()) {
+      return "Location is required."
     }
 
     const normalizedEmail = formData.contactEmail.trim().toLowerCase()
