@@ -39,19 +39,61 @@ vi.mock("firebase/firestore", () => ({
   where: vi.fn(() => ({})),
 }));
 
+/** Mutable auth for tests that need null user or custom getIdToken behavior. */
+const mockFirebaseAuth = vi.hoisted(() => ({
+  currentUser: {
+    getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+    uid: "owner-1",
+  } as { getIdToken: ReturnType<typeof vi.fn>; uid: string } | null,
+}))
+
 vi.mock("../../firebase", () => ({
   db: {},
+  storage: {},
   auth: {
-    currentUser: {
-      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
-      uid: "owner-1",
+    get currentUser() {
+      return mockFirebaseAuth.currentUser
     },
   },
-  storage: {},
 }));
 
 // Import after mocks
 import { authUtils } from "../../utils/auth";
+
+/** Mutable return for job dialog location Autocomplete (on-site jobs). */
+const mockJobGeocodeState = vi.hoisted(() => ({
+  options: [] as Array<{ id: string; label: string; lat: number; lng: number; city: string; state: string }>,
+  loading: false,
+}))
+
+vi.mock("../../hooks/useGeocodeSuggest", () => ({
+  useGeocodeSuggest: () => mockJobGeocodeState,
+}));
+
+vi.mock("../../components/JobInviteDialog", () => ({
+  default: ({
+    open,
+    onClose,
+    onSuccess,
+    jobTitle,
+  }: {
+    open: boolean
+    onClose: () => void
+    onSuccess?: () => void
+    jobTitle: string
+  }) =>
+    open ? (
+      <div data-testid="mock-job-invite-dialog">
+        <span data-testid="mock-invite-job-title">{jobTitle}</span>
+        <button type="button" data-testid="mock-invite-success" onClick={() => onSuccess?.()}>
+          mock-invite-success
+        </button>
+        <button type="button" data-testid="mock-invite-close" onClick={onClose}>
+          mock-invite-close
+        </button>
+      </div>
+    ) : null,
+}))
 
 vi.mock("../../components/BaseLayout", () => ({
   default: ({ children, pageTitle }: any) => (
@@ -95,7 +137,57 @@ const mockJobData = {
   majorsAssociated: "Computer Science",
   applicationLink: "https://example.com/apply",
   createdAt: { toMillis: () => 1234567890 },
+  locationIsRemote: true,
 };
+
+function defaultFetchImpl(url: string | URL, init?: RequestInit) {
+  const u = typeof url === "string" ? url : String(url);
+  if (u.includes("/api/companies/") && u.includes("/invite-code")) {
+    return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+  }
+  if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        success: true,
+        jobs: [
+          {
+            id: "job-1",
+            companyId: "company-1",
+            name: "Software Engineer",
+            description: "We are hiring",
+            majorsAssociated: "Computer Science",
+            applicationLink: "https://example.com/apply",
+            createdAt: 1234567890,
+            locationIsRemote: true,
+          },
+        ],
+      }),
+    });
+  }
+  if (u.includes("/api/job-invitations/stats/")) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        totalSent: 0,
+        totalViewed: 0,
+        totalClicked: 0,
+        viewRate: "0",
+        clickRate: "0",
+      }),
+    });
+  }
+  if (u.includes("/api/jobs") && init?.method === "POST") {
+    return Promise.resolve({ ok: true, json: async () => ({ success: true, jobId: "new-job" }) });
+  }
+  if (/\/api\/jobs\/[^/]+$/.test(u) && init?.method === "PUT") {
+    return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+  }
+  if (/\/api\/jobs\/[^/]+$/.test(u) && init?.method === "DELETE") {
+    return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+  }
+  return Promise.resolve({ ok: false, json: async () => ({ error: "Not found" }) });
+}
 
 describe("Company", () => {
   beforeEach(() => {
@@ -140,30 +232,44 @@ describe("Company", () => {
     (deleteDoc as any).mockResolvedValue(undefined);
     (arrayRemove as any).mockImplementation((v: unknown) => v);
 
-    // Mock fetch for invite code API
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ inviteCode: "INVITE123" }),
-        });
-      }
-      // Default for other fetch calls
-      return Promise.resolve({
-        ok: false,
-        json: async () => ({ error: "Not found" }),
-      });
-    });
+    globalThis.fetch = vi.fn().mockImplementation(defaultFetchImpl);
+
+    mockJobGeocodeState.options = []
+    mockJobGeocodeState.loading = false
+
+    mockFirebaseAuth.currentUser = {
+      getIdToken: vi.fn(() => Promise.resolve("mock-token")),
+      uid: "owner-1",
+    }
   });
 
   const renderComp = () => render(<BrowserRouter><Company /></BrowserRouter>);
 
-  it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('/api/companies/') && url.includes('/invite-code')) {
-        return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+  it("BoothReviewsSection shows no reviews when ratings HTTP response is not ok", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/booths/") && u.includes("/ratings")) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "bad" }),
+        });
       }
-      if (url.includes('/api/booths/') && url.includes('/ratings')) {
+      return defaultFetchImpl(url, init);
+    });
+
+    renderComp();
+
+    await waitFor(() => {
+      expect(screen.getByText("Booth Reviews")).toBeInTheDocument();
+      expect(screen.getByText("No reviews yet.")).toBeInTheDocument();
+    });
+  });
+
+  it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/booths/") && u.includes("/ratings")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -176,7 +282,7 @@ describe("Company", () => {
           }),
         });
       }
-      return Promise.resolve({ ok: false, json: async () => ({ error: "Not found" }) });
+      return defaultFetchImpl(url, init);
     });
 
     renderComp();
@@ -506,15 +612,20 @@ describe("Company", () => {
 
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
+      const skillsInput = screen.getByLabelText(/required skills/i);
 
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
+      await user.type(skillsInput, "Python");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
         await waitFor(() => {
-          expect(addDoc).toHaveBeenCalled();
+          const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+            (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+          );
+          expect(postCalls.length).toBeGreaterThan(0);
         });
       }
     }
@@ -529,10 +640,13 @@ describe("Company", () => {
     if (addButtons.length > 0) {
       await user.click(addButtons[0]);
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        expect(addDoc).not.toHaveBeenCalled();
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
+        const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+          (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+        );
+        expect(postCalls.length).toBe(0);
       }
     }
   });
@@ -552,12 +666,86 @@ describe("Company", () => {
       await user.type(titleInput, "Job");
       await user.type(linkInput, "not-a-url");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
-        expect(addDoc).not.toHaveBeenCalled();
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
+        const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+          (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+        );
+        expect(postCalls.length).toBe(0);
       }
     }
+  });
+
+  it("validates on-site location when remote is unchecked", async () => {
+    const user = userEvent.setup();
+    mockJobGeocodeState.options = [];
+    renderComp();
+    await screen.findByRole("heading", { name: /Tech Corp/i });
+
+    const addButtons = screen.queryAllByRole("button").filter((b) => b.textContent?.includes("Add"));
+    if (addButtons.length === 0) return;
+    await user.click(addButtons[0]);
+
+    await user.type(screen.getByLabelText(/job title/i), "Onsite Job");
+    await user.type(screen.getByLabelText(/description/i), "Desc");
+    await user.type(screen.getByLabelText(/required skills/i), "Go");
+
+    const remoteCb = screen.getByRole("checkbox", { name: /remote position/i });
+    await user.click(remoteCb);
+    expect(remoteCb).not.toBeChecked();
+
+    const publishButtons = screen.queryAllByRole("button").filter((b) => b.textContent === "Publish Job");
+    if (publishButtons.length === 0) return;
+    await user.click(publishButtons[0]);
+
+    expect(
+      await screen.findByText(/select a location from the suggestions for on-site jobs/i)
+    ).toBeInTheDocument();
+    const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+    );
+    expect(postCalls.length).toBe(0);
+  });
+
+  it("creates on-site job with location pick from suggestions", async () => {
+    const user = userEvent.setup();
+    mockJobGeocodeState.options = [
+      { id: "loc1", label: "Austin, TX", lat: 30, lng: -97, city: "Austin", state: "TX" },
+    ];
+    renderComp();
+    await screen.findByRole("heading", { name: /Tech Corp/i });
+
+    const addButtons = screen.queryAllByRole("button").filter((b) => b.textContent?.includes("Add"));
+    if (addButtons.length === 0) return;
+    await user.click(addButtons[0]);
+
+    await user.type(screen.getByLabelText(/job title/i), "Onsite Role");
+    await user.type(screen.getByLabelText(/description/i), "Work in office");
+    await user.type(screen.getByLabelText(/required skills/i), "TypeScript");
+
+    await user.click(screen.getByRole("checkbox", { name: /remote position/i }));
+
+    const combo = screen.getByRole("combobox", { name: /job location/i });
+    await user.click(combo);
+    const opt = await screen.findByRole("option", { name: /austin/i });
+    await user.click(opt);
+
+    const publishButtons = screen.queryAllByRole("button").filter((b) => b.textContent === "Publish Job");
+    if (publishButtons.length === 0) return;
+    await user.click(publishButtons[0]);
+
+    await waitFor(() => {
+      const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+      );
+      expect(postCalls.length).toBeGreaterThan(0);
+      const body = JSON.parse((postCalls[0][1] as RequestInit).body as string);
+      expect(body.locationIsRemote).toBe(false);
+      expect(body.locationCity).toBe("Austin");
+      expect(body.locationState).toBe("TX");
+      expect(body.location).toBe("Austin, TX");
+    });
   });
 
   it("edits existing job", async () => {
@@ -592,10 +780,12 @@ describe("Company", () => {
     }
 
     await waitFor(() => {
-      expect(updateDoc).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "job-1" }),
-        expect.objectContaining({ applicationLink: null })
+      const putCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (c) => c[1]?.method === "PUT" && String(c[0]).includes("/api/jobs/job-1")
       );
+      expect(putCalls.length).toBeGreaterThan(0);
+      const body = JSON.parse((putCalls[0][1] as RequestInit).body as string);
+      expect(body.applicationLink).toBeNull();
     });
   });
 
@@ -613,7 +803,10 @@ describe("Company", () => {
       if (confirmButtons.length > 0) {
         await user.click(confirmButtons[0]);
         await waitFor(() => {
-          expect(deleteDoc).toHaveBeenCalled();
+          const delCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+            (c) => c[1]?.method === "DELETE" && String(c[0]).includes("/api/jobs/")
+          );
+          expect(delCalls.length).toBeGreaterThan(0);
         });
       }
     }
@@ -621,7 +814,15 @@ describe("Company", () => {
 
   it("shows error when job deletion fails", async () => {
     const user = userEvent.setup();
-    (deleteDoc as any).mockRejectedValueOnce(new Error("delete failed"));
+    let deleteFailOnce = true;
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (deleteFailOnce && init?.method === "DELETE" && u.includes("/api/jobs/")) {
+        deleteFailOnce = false;
+        return Promise.reject(new Error("delete failed"));
+      }
+      return defaultFetchImpl(url, init);
+    });
     renderComp();
     await screen.findByText(/Software Engineer/i);
 
@@ -737,7 +938,13 @@ describe("Company", () => {
   });
 
   it("handles job fetch errors", async () => {
-    (getDocs as any).mockRejectedValue(new Error("Job fetch error"));
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/jobs?") && u.includes("companyId")) {
+        return Promise.reject(new Error("Job fetch error"));
+      }
+      return defaultFetchImpl(url, init);
+    });
     renderComp();
     // Company should still load
     expect(await screen.findByRole('heading', { name: /Tech Corp/i })).toBeInTheDocument();
@@ -762,25 +969,53 @@ describe("Company", () => {
       await user.click(addButtons[0]);
 
       const titleInput = screen.getByLabelText(/job title/i);
+      const descInput = screen.getByLabelText(/description/i);
+      const skillsInput = screen.getByLabelText(/required skills/i);
       await user.type(titleInput, "New Job");
+      await user.type(descInput, "Desc");
+      await user.type(skillsInput, "Go");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
       }
     }
   });
 
   it("sorts jobs by creation date", async () => {
-    const job1 = { ...mockJobData, createdAt: { toMillis: () => 1000 } };
-    const job2 = { ...mockJobData, createdAt: { toMillis: () => 2000 } };
-
-    (getDocs as any).mockResolvedValue({
-      forEach: (cb: any) => {
-        cb({ id: "job-1", data: () => job1 });
-        cb({ id: "job-2", data: () => job2 });
-      },
-      empty: false,
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/jobs?") && u.includes("companyId")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            jobs: [
+              {
+                id: "job-1",
+                companyId: "company-1",
+                name: "Job A",
+                description: "a",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                createdAt: 1000,
+                locationIsRemote: true,
+              },
+              {
+                id: "job-2",
+                companyId: "company-1",
+                name: "Job B",
+                description: "b",
+                majorsAssociated: "CS",
+                applicationLink: null,
+                createdAt: 2000,
+                locationIsRemote: true,
+              },
+            ],
+          }),
+        });
+      }
+      return defaultFetchImpl(url, init);
     });
 
     renderComp();
@@ -789,11 +1024,29 @@ describe("Company", () => {
   });
 
   it("handles jobs with no creation date", async () => {
-    const jobNoDate = { ...mockJobData, createdAt: null };
-
-    (getDocs as any).mockResolvedValue({
-      forEach: (cb: any) => cb({ id: "job-1", data: () => jobNoDate }),
-      empty: false,
+    globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/jobs?") && u.includes("companyId")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            jobs: [
+              {
+                id: "job-1",
+                companyId: "company-1",
+                name: "Software Engineer",
+                description: "We are hiring",
+                majorsAssociated: "Computer Science",
+                applicationLink: "https://example.com/apply",
+                createdAt: null,
+                locationIsRemote: true,
+              },
+            ],
+          }),
+        });
+      }
+      return defaultFetchImpl(url, init);
     });
 
     renderComp();
@@ -830,15 +1083,20 @@ describe("Company", () => {
 
       const titleInput = screen.getByLabelText(/job title/i);
       const descInput = screen.getByLabelText(/description/i);
+      const skillsInput = screen.getByLabelText(/required skills/i);
 
       await user.type(titleInput, "New Job");
       await user.type(descInput, "Description");
+      await user.type(skillsInput, "Rust");
 
-      const saveButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Save");
-      if (saveButtons.length > 0) {
-        await user.click(saveButtons[0]);
+      const publishButtons = screen.queryAllByRole("button").filter(b => b.textContent === "Publish Job");
+      if (publishButtons.length > 0) {
+        await user.click(publishButtons[0]);
         await waitFor(() => {
-          expect(addDoc).toHaveBeenCalled();
+          const postCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+            (c) => c[1]?.method === "POST" && String(c[0]).includes("/api/jobs")
+          );
+          expect(postCalls.length).toBeGreaterThan(0);
         });
       }
     }
@@ -846,27 +1104,40 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
-      globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-        if (url.includes("/ratings")) {
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/ratings")) {
           return Promise.resolve({
             ok: true,
             json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
           });
         }
-        return Promise.resolve({ ok: false, json: async () => ({}) });
+        return defaultFetchImpl(url, init);
       });
     });
 
     it("fetches and displays job invitation stats", async () => {
-      (globalThis.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          totalSent: 5,
-          totalViewed: 3,
-          totalClicked: 1,
-          viewRate: "60.0",
-          clickRate: "20.0",
-        }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 5,
+              totalViewed: 3,
+              totalClicked: 1,
+              viewRate: "60.0",
+              clickRate: "20.0",
+            }),
+          });
+        }
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return defaultFetchImpl(url, init);
       });
 
       renderComp();
@@ -881,15 +1152,27 @@ describe("Company", () => {
     });
 
     it("displays View Details button when invitations exist", async () => {
-      (globalThis.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          totalSent: 5,
-          totalViewed: 3,
-          totalClicked: 1,
-          viewRate: "60.0",
-          clickRate: "20.0",
-        }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 5,
+              totalViewed: 3,
+              totalClicked: 1,
+              viewRate: "60.0",
+              clickRate: "20.0",
+            }),
+          });
+        }
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return defaultFetchImpl(url, init);
       });
 
       renderComp();
@@ -906,40 +1189,52 @@ describe("Company", () => {
     it("opens JobInviteStatsDialog when View Details is clicked", async () => {
       const user = userEvent.setup();
 
-      (globalThis.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          totalSent: 5,
-          totalViewed: 3,
-          totalClicked: 1,
-          viewRate: "60.0",
-          clickRate: "20.0",
-        }),
-      });
-
-      // Mock the details endpoint
-      (globalThis.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          invitations: [
-            {
-              id: "inv-1",
-              studentId: "s1",
-              student: {
-                id: "s1",
-                firstName: "Test",
-                lastName: "Student",
-                email: "test@test.com",
-                major: "CS",
-              },
-              status: "sent",
-              sentAt: Date.now(),
-              viewedAt: null,
-              clickedAt: null,
-              message: null,
-            },
-          ],
-        }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/job-invitations/details/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              invitations: [
+                {
+                  id: "inv-1",
+                  studentId: "s1",
+                  student: {
+                    id: "s1",
+                    firstName: "Test",
+                    lastName: "Student",
+                    email: "test@test.com",
+                    major: "CS",
+                  },
+                  status: "sent",
+                  sentAt: Date.now(),
+                  viewedAt: null,
+                  clickedAt: null,
+                  message: null,
+                },
+              ],
+            }),
+          });
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 5,
+              totalViewed: 3,
+              totalClicked: 1,
+              viewRate: "60.0",
+              clickRate: "20.0",
+            }),
+          });
+        }
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return defaultFetchImpl(url, init);
       });
 
       renderComp();
@@ -960,14 +1255,15 @@ describe("Company", () => {
     it("closes JobInviteStatsDialog when Close is clicked", async () => {
       const user = userEvent.setup();
 
-      (globalThis.fetch as any).mockImplementation((url: string) => {
-        if (url.includes("/ratings")) {
+      (globalThis.fetch as any).mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/ratings")) {
           return Promise.resolve({
             ok: true,
             json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
           });
         }
-        if (url.includes("/job-invitations/stats/")) {
+        if (u.includes("/job-invitations/stats/")) {
           return Promise.resolve({
             ok: true,
             json: async () => ({
@@ -979,13 +1275,13 @@ describe("Company", () => {
             }),
           });
         }
-        if (url.includes("/job-invitations/details/")) {
+        if (u.includes("/job-invitations/details/")) {
           return Promise.resolve({
             ok: true,
             json: async () => ({ invitations: [] }),
           });
         }
-        return Promise.resolve({ ok: false, json: async () => ({}) });
+        return defaultFetchImpl(url, init);
       });
 
       renderComp();
@@ -1005,15 +1301,27 @@ describe("Company", () => {
     });
 
     it("does not display View Details button when no invitations", async () => {
-      (globalThis.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          totalSent: 0,
-          totalViewed: 0,
-          totalClicked: 0,
-          viewRate: "0",
-          clickRate: "0",
-        }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 0,
+              totalViewed: 0,
+              totalClicked: 0,
+              viewRate: "0",
+              clickRate: "0",
+            }),
+          });
+        }
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return defaultFetchImpl(url, init);
       });
 
       renderComp();
@@ -1026,7 +1334,13 @@ describe("Company", () => {
     });
 
     it("handles stats fetch error gracefully", async () => {
-      (globalThis.fetch as any).mockRejectedValueOnce(new Error("Network error"));
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.reject(new Error("Network error"));
+        }
+        return defaultFetchImpl(url, init);
+      });
 
       renderComp();
       await screen.findByRole('heading', { name: /Tech Corp/i }, { timeout: 3000 });
@@ -1038,15 +1352,27 @@ describe("Company", () => {
     });
 
     it("displays invitation stats summary", async () => {
-      (globalThis.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          totalSent: 10,
-          totalViewed: 7,
-          totalClicked: 3,
-          viewRate: "70.0",
-          clickRate: "30.0",
-        }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 10,
+              totalViewed: 7,
+              totalClicked: 3,
+              viewRate: "70.0",
+              clickRate: "30.0",
+            }),
+          });
+        }
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return defaultFetchImpl(url, init);
       });
 
       renderComp();
@@ -1061,28 +1387,64 @@ describe("Company", () => {
   });
 
   describe("Application Form Management", () => {
+    const publishedForm = {
+      title: "Apply Here",
+      status: "published",
+      fields: [{ id: "f1", type: "shortText", label: "Name", required: true }],
+    };
+
+    const draftForm = {
+      title: "Draft Form",
+      status: "draft",
+      fields: [],
+    };
+
     const mockJobWithForm = {
       ...mockJobData,
-      applicationForm: {
-        title: "Apply Here",
-        status: "published",
-        fields: [{ id: "f1", type: "shortText", label: "Name", required: true }],
-      },
+      applicationForm: publishedForm,
     };
 
     const mockJobWithDraftForm = {
       ...mockJobData,
-      applicationForm: {
-        title: "Draft Form",
-        status: "draft",
-        fields: [],
-      },
+      applicationForm: draftForm,
+    };
+
+    const apiJobBase = {
+      id: "job-1",
+      companyId: "company-1",
+      name: "Software Engineer",
+      description: "We are hiring",
+      majorsAssociated: "Computer Science",
+      applicationLink: "https://example.com/apply",
+      createdAt: 1234567890,
+      locationIsRemote: true,
     };
 
     beforeEach(() => {
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [{ ...apiJobBase, applicationForm: publishedForm }],
+            }),
+          });
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 0,
+              totalViewed: 0,
+              totalClicked: 0,
+              viewRate: "0",
+              clickRate: "0",
+            }),
+          });
+        }
+        return defaultFetchImpl(url, init);
       });
     });
 
@@ -1099,6 +1461,31 @@ describe("Company", () => {
     });
 
     it("shows draft application form chip on job card", async () => {
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [{ ...apiJobBase, applicationForm: draftForm }],
+            }),
+          });
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 0,
+              totalViewed: 0,
+              totalClicked: 0,
+              viewRate: "0",
+              clickRate: "0",
+            }),
+          });
+        }
+        return defaultFetchImpl(url, init);
+      });
       (getDocs as any).mockResolvedValue({
         forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithDraftForm }),
         empty: false,
@@ -1168,6 +1555,9 @@ describe("Company", () => {
     });
 
     it("does not show delete form button when job has no form", async () => {
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) =>
+        defaultFetchImpl(url, init)
+      );
       renderComp();
       await screen.findByText(/Software Engineer/i, {}, { timeout: 3000 });
 
@@ -1231,16 +1621,22 @@ describe("Company", () => {
     it("deletes application form and shows success message", async () => {
       const user = userEvent.setup();
 
-      // First call returns stats (0), second call is the DELETE /api/jobs/:id/form
-      (globalThis.fetch as any)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true }),
-        });
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [{ ...apiJobBase, applicationForm: publishedForm }],
+            }),
+          });
+        }
+        if (u.includes("/api/jobs/") && u.includes("/form") && init?.method === "DELETE") {
+          return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+        }
+        return defaultFetchImpl(url, init);
+      });
 
       (getDocs as any).mockResolvedValue({
         forEach: (cb: any) => cb({ id: "job-1", data: () => mockJobWithForm }),
@@ -1271,18 +1667,24 @@ describe("Company", () => {
     it("shows error when form deletion API call fails", async () => {
       const user = userEvent.setup();
 
-      (globalThis.fetch as any).mockImplementation((url: string) => {
-        if (url.includes("/invite-code")) {
-          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [{ ...apiJobBase, applicationForm: publishedForm }],
+            }),
+          });
         }
-        if (url.includes("/job-invitations/stats")) {
-          return Promise.resolve({ ok: true, json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }) });
+        if (u.includes("/api/jobs/") && u.includes("/form") && init?.method === "DELETE") {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "Unauthorized to delete form" }),
+          });
         }
-        if (url.includes("/ratings")) {
-          return Promise.resolve({ ok: true, json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }) });
-        }
-        // form deletion and any other calls
-        return Promise.resolve({ ok: false, json: async () => ({ error: "Unauthorized to delete form" }) });
+        return defaultFetchImpl(url, init);
       });
 
       (getDocs as any).mockResolvedValue({
@@ -1318,10 +1720,9 @@ describe("Company", () => {
         uid: "rep-1",
         role: "representative",
       });
-      globalThis.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ totalSent: 0, totalViewed: 0, totalClicked: 0 }),
-      });
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) =>
+        defaultFetchImpl(url, init)
+      );
     });
 
     it("hides invite code section from representatives", async () => {
@@ -1507,4 +1908,554 @@ describe("Company", () => {
     });
   });
 
-});
+  describe("Access control and fetch errors", () => {
+    it("shows company not found when Firestore has no company doc", async () => {
+      (getDoc as any).mockResolvedValue({
+        exists: () => false,
+      });
+      renderComp();
+      expect(
+        await screen.findByText(/Company not found/i, {}, { timeout: 5000 })
+      ).toBeInTheDocument();
+    });
+
+    it("redirects student users to dashboard", async () => {
+      (getDoc as any).mockImplementation((docRef: { id?: string }) => {
+        if (docRef.id === "company-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "company-1",
+            data: () => mockCompanyData,
+          });
+        }
+        if (docRef.id === "rep-1") {
+          return Promise.resolve({
+            exists: () => true,
+            id: "rep-1",
+            data: () => mockRepresentativeData,
+          });
+        }
+        return Promise.resolve({ exists: () => false });
+      });
+      (authUtils.getCurrentUser as any).mockReturnValue({
+        uid: "student-1",
+        role: "student",
+      });
+      renderComp();
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+        },
+        { timeout: 5000 }
+      );
+    });
+
+    it("surfaces error when jobs list fetch fails", async () => {
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/api/jobs?") && u.includes("companyId")) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "server" }),
+          });
+        }
+        return defaultFetchImpl(u, init);
+      });
+      renderComp();
+      expect(
+        await screen.findByText(/Failed to load job postings/i, {}, { timeout: 5000 })
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("Job invitations, stats, CRUD edge cases and job dialog UX", () => {
+    const onsiteJobApiRow = {
+      id: "job-1",
+      companyId: "company-1",
+      name: "Onsite Lead",
+      description: "Office work",
+      majorsAssociated: "Python",
+      applicationLink: "https://example.com/apply",
+      createdAt: 1234567890,
+      locationIsRemote: false,
+      locationCity: "Seattle",
+      locationState: "WA",
+      location: null as string | null,
+    }
+
+    function jobCardRoot() {
+      const el = screen.getByText(/Onsite Lead|Software Engineer/i)
+      const card = el.closest(".MuiCard-root")
+      if (!card) throw new Error("expected MuiCard-root")
+      return card as HTMLElement
+    }
+
+    it("logs when fetchJobStats rejects (per-job stats fetch)", async () => {
+      const logSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.reject(new Error("stats network fail"))
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await waitFor(() => {
+        expect(logSpy).toHaveBeenCalled()
+      })
+      logSpy.mockRestore()
+    })
+
+    it("opens invite dialog when Send is clicked and titles the mock dialog", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      const inviteBtn = within(jobCardRoot()).getAllByRole("button")[0]
+      await user.click(inviteBtn)
+
+      expect(screen.getByTestId("mock-job-invite-dialog")).toBeInTheDocument()
+      expect(screen.getByTestId("mock-invite-job-title")).toHaveTextContent("Software Engineer")
+    })
+
+    it("onInviteSuccess refreshes stats for the selected job", async () => {
+      const user = userEvent.setup()
+      const statsCalls: string[] = []
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/job-invitations/stats/")) {
+          statsCalls.push(u)
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 1,
+              totalViewed: 0,
+              totalClicked: 0,
+              viewRate: "0",
+              clickRate: "0",
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      await user.click(within(jobCardRoot()).getAllByRole("button")[0])
+      await user.click(screen.getByTestId("mock-invite-success"))
+
+      await waitFor(() => {
+        expect(statsCalls.filter((u) => u.includes("job-1")).length).toBeGreaterThanOrEqual(2)
+      })
+    })
+
+    it("fetchJobStats returns early when getIdToken yields no token on refresh", async () => {
+      const user = userEvent.setup()
+      const noToken = {
+        getIdToken: vi.fn(() => Promise.resolve(undefined as unknown as string)),
+        uid: "owner-1",
+      }
+      mockFirebaseAuth.currentUser = noToken
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      await user.click(within(jobCardRoot()).getAllByRole("button")[0])
+      await user.click(screen.getByTestId("mock-invite-success"))
+
+      await waitFor(() => {
+        expect(noToken.getIdToken.mock.calls.length).toBeGreaterThan(0)
+      })
+    })
+
+    it("resetJobForm clears the job dialog when Cancel is clicked", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      const dlg = await screen.findByRole("dialog")
+
+      await user.click(within(dlg).getByRole("button", { name: /^cancel$/i }))
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      })
+    })
+
+    it("loads on-site job using custom location label when API provides location string", async () => {
+      const user = userEvent.setup()
+      const row = {
+        ...onsiteJobApiRow,
+        location: "HQ — Floor 3",
+        locationCity: "Seattle",
+        locationState: "WA",
+      }
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [row],
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => ({ ...mockJobData, name: "Onsite Lead" }) }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Onsite Lead/i)
+
+      await user.click(screen.queryAllByTestId("EditIcon").at(-1)!.closest("button")!)
+
+      expect(screen.getByDisplayValue("HQ — Floor 3")).toBeInTheDocument()
+    })
+
+    it("loads on-site job into edit form with derived location label from city and state", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [onsiteJobApiRow],
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => ({ ...mockJobData, name: "Onsite Lead" }) }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Onsite Lead/i)
+
+      const editBtns = screen.queryAllByTestId("EditIcon")
+      await user.click(editBtns.at(-1)!.closest("button")!)
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument()
+      expect(screen.getByDisplayValue("Seattle, WA")).toBeInTheDocument()
+      const remoteCb = screen.getByRole("checkbox", { name: /remote position/i })
+      expect(remoteCb).not.toBeChecked()
+    })
+
+    it("PUT updates an on-site job preserving location payload", async () => {
+      const user = userEvent.setup()
+      mockJobGeocodeState.options = [
+        { id: "loc1", label: "Seattle, WA", lat: 0, lng: 0, city: "Seattle", state: "WA" },
+      ]
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true, jobs: [onsiteJobApiRow] }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) => cb({ id: "job-1", data: () => ({ ...mockJobData, name: "Onsite Lead" }) }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Onsite Lead/i)
+
+      await user.click(screen.queryAllByTestId("EditIcon").at(-1)!.closest("button")!)
+
+      const titleInput = screen.getByLabelText(/job title/i)
+      await user.clear(titleInput)
+      await user.type(titleInput, "Onsite Lead Updated")
+
+      await user.click(screen.getByRole("button", { name: /^update job$/i }))
+
+      await waitFor(() => {
+        const puts = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter(
+          (c) => c[1]?.method === "PUT" && String(c[0]).includes("/api/jobs/job-1")
+        )
+        expect(puts.length).toBeGreaterThan(0)
+        const body = JSON.parse((puts[0][1] as RequestInit).body as string)
+        expect(body.locationIsRemote).toBe(false)
+        expect(body.locationCity).toBe("Seattle")
+        expect(body.locationState).toBe("WA")
+      })
+    })
+
+    it("shows save error when POST create job returns non-OK", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        const path = new URL(u, "http://localhost").pathname
+        if (init?.method === "POST" && path === "/api/jobs") {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "duplicate title" }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.type(screen.getByLabelText(/job title/i), "X")
+      await user.type(screen.getByLabelText(/description/i), "Y")
+      await user.type(screen.getByLabelText(/required skills/i), "Z")
+      await user.click(screen.getByRole("button", { name: /^publish job$/i }))
+
+      expect(await screen.findByText(/failed to save job posting/i)).toBeInTheDocument()
+    })
+
+    it("shows save error when Firebase returns no id token during save", async () => {
+      const user = userEvent.setup()
+      mockFirebaseAuth.currentUser = {
+        getIdToken: vi.fn(() => Promise.resolve(undefined as unknown as string)),
+        uid: "owner-1",
+      }
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.type(screen.getByLabelText(/job title/i), "T")
+      await user.type(screen.getByLabelText(/description/i), "D")
+      await user.type(screen.getByLabelText(/required skills/i), "S")
+      await user.click(screen.getByRole("button", { name: /^publish job$/i }))
+
+      expect(await screen.findByText(/failed to save job posting/i)).toBeInTheDocument()
+    })
+
+    it("shows save error when PUT update returns non-OK", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (/\/api\/jobs\/job-1/.test(u) && init?.method === "PUT") {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "cannot update" }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      await user.click(screen.queryAllByTestId("EditIcon").at(-1)!.closest("button")!)
+      await user.click(screen.getByRole("button", { name: /^update job$/i }))
+
+      expect(await screen.findByText(/failed to save job posting/i)).toBeInTheDocument()
+    })
+
+    it("blocks save when session expired (no Firebase user) and schedules login redirect", async () => {
+      const user = userEvent.setup()
+      mockFirebaseAuth.currentUser = null
+
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.type(screen.getByLabelText(/job title/i), "T")
+      await user.type(screen.getByLabelText(/description/i), "D")
+      await user.type(screen.getByLabelText(/required skills/i), "S")
+      await user.click(screen.getByRole("button", { name: /^publish job$/i }))
+
+      expect(await screen.findByText(/session has expired/i)).toBeInTheDocument()
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/login")
+        },
+        { timeout: 4000 }
+      )
+    })
+
+    it("blocks delete job when session expired", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      const delIcons = screen.queryAllByTestId("DeleteIcon")
+      const jobRowDelete = delIcons.length >= 2 ? delIcons[1]! : delIcons[0]!
+      await user.click(jobRowDelete.closest("button")!)
+
+      const jobDelDlg = await screen.findByRole("dialog", { name: /delete job posting/i })
+      mockFirebaseAuth.currentUser = null
+      await user.click(within(jobDelDlg).getByRole("button", { name: /^delete$/i }))
+
+      expect(await screen.findByText(/session has expired/i)).toBeInTheDocument()
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/login")
+        },
+        { timeout: 4000 }
+      )
+    })
+
+    it("shows API error when delete job returns non-OK", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (init?.method === "DELETE" && u.includes("/api/jobs/job-1")) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "locked" }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+
+      renderComp()
+      await screen.findByText(/Software Engineer/i)
+
+      const delIcons = screen.queryAllByTestId("DeleteIcon")
+      const jobRowDelete = delIcons.length >= 2 ? delIcons[1]! : delIcons[0]!
+      await user.click(jobRowDelete.closest("button")!)
+      const jobDelDlg = await screen.findByRole("dialog", { name: /delete job posting/i })
+      await user.click(within(jobDelDlg).getByRole("button", { name: /^delete$/i }))
+
+      expect(await screen.findByText(/failed to delete job posting/i)).toBeInTheDocument()
+    })
+
+    it("checking Remote again clears on-site location fields", async () => {
+      const user = userEvent.setup()
+      mockJobGeocodeState.options = [
+        { id: "loc1", label: "Denver, CO", lat: 0, lng: 0, city: "Denver", state: "CO" },
+      ]
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.click(screen.getByRole("checkbox", { name: /remote position/i }))
+      const combo = screen.getByRole("combobox", { name: /job location/i })
+      await user.click(combo)
+      await user.click(await screen.findByRole("option", { name: /denver/i }))
+      await user.click(screen.getByRole("checkbox", { name: /remote position/i }))
+
+      expect(screen.queryByRole("combobox", { name: /job location/i })).not.toBeInTheDocument()
+    })
+
+    it("typing in location combobox clears the selected pick (input path)", async () => {
+      const user = userEvent.setup()
+      mockJobGeocodeState.options = [
+        { id: "loc1", label: "Denver, CO", lat: 0, lng: 0, city: "Denver", state: "CO" },
+      ]
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await user.click(screen.getByRole("checkbox", { name: /remote position/i }))
+      const combo = screen.getByRole("combobox", { name: /job location/i })
+      await user.click(combo)
+      await user.click(await screen.findByRole("option", { name: /denver/i }))
+      await user.type(combo, "x")
+
+      await waitFor(() => {
+        expect(screen.queryByDisplayValue("Denver, CO")).not.toBeInTheDocument()
+      })
+    })
+
+    it("closes job dialog via Escape (resetJobForm)", async () => {
+      const user = userEvent.setup()
+      renderComp()
+      await screen.findByRole("heading", { name: /Tech Corp/i })
+
+      await user.click(screen.getAllByRole("button", { name: /create job posting/i })[0]!)
+      await screen.findByRole("dialog")
+      await user.keyboard("{Escape}")
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  describe("Application form delete — session handling", () => {
+    const publishedForm = {
+      title: "Apply Here",
+      status: "published",
+      fields: [{ id: "f1", type: "shortText", label: "Name", required: true }],
+    }
+
+    const apiJobBase = {
+      id: "job-1",
+      companyId: "company-1",
+      name: "Software Engineer",
+      description: "We are hiring",
+      majorsAssociated: "Computer Science",
+      applicationLink: "https://example.com/apply",
+      createdAt: 1234567890,
+      locationIsRemote: true,
+    }
+
+    it("blocks delete application form when session expired", async () => {
+      const user = userEvent.setup()
+      globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url)
+        if (u.includes("/api/jobs?") && u.includes("companyId") && (!init?.method || init.method === "GET")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              jobs: [{ ...apiJobBase, applicationForm: publishedForm }],
+            }),
+          })
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              totalSent: 0,
+              totalViewed: 0,
+              totalClicked: 0,
+              viewRate: "0",
+              clickRate: "0",
+            }),
+          })
+        }
+        return defaultFetchImpl(url, init)
+      })
+      ;(getDocs as any).mockResolvedValue({
+        forEach: (cb: any) =>
+          cb({
+            id: "job-1",
+            data: () => ({ ...mockJobData, applicationForm: publishedForm }),
+          }),
+        empty: false,
+      })
+
+      renderComp()
+      await screen.findByText(/Application Form: Published/i, {}, { timeout: 5000 })
+
+      await user.click(screen.queryAllByTestId("DeleteSweepIcon")[0]!.closest("button")!)
+      await screen.findByText(/Delete Application Form/i)
+
+      const formDlg = screen.getByRole("dialog", { name: /delete application form/i })
+      mockFirebaseAuth.currentUser = null
+      await user.click(within(formDlg).getByRole("button", { name: /delete form/i }))
+
+      expect(await screen.findByText(/session has expired/i)).toBeInTheDocument()
+      await waitFor(
+        () => {
+          expect(mockNavigate).toHaveBeenCalledWith("/login")
+        },
+        { timeout: 4000 }
+      )
+    })
+  })
+})
+

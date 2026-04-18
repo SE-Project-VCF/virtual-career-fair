@@ -147,6 +147,47 @@ describe("StudentProfileCard", () => {
         expect(screen.getByText(/Expected Graduation: 2027/)).toBeInTheDocument()
       })
     })
+
+    it("displays interest tag chips when present", async () => {
+      const mockGetDoc = vi.mocked(firestoreModule.getDoc)
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          firstName: "John",
+          lastName: "Doe",
+          email: "john@example.com",
+          interestTags: ["data science", "software engineering"],
+        }),
+      } as any)
+
+      render(<StudentProfileCard studentId="student-123" />)
+
+      await waitFor(() => {
+        expect(screen.getByText("Interests")).toBeInTheDocument()
+        expect(screen.getByText("Data Science")).toBeInTheDocument()
+        expect(screen.getByText("Software Engineering")).toBeInTheDocument()
+      })
+    })
+
+    it("shows LinkedIn link when linkedinUrl is set", async () => {
+      const mockGetDoc = vi.mocked(firestoreModule.getDoc)
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          firstName: "John",
+          lastName: "Doe",
+          email: "john@example.com",
+          linkedinUrl: "www.linkedin.com/in/johndoe",
+        }),
+      } as any)
+
+      render(<StudentProfileCard studentId="student-123" />)
+
+      await waitFor(() => {
+        const link = screen.getByRole("link", { name: /LinkedIn/i })
+        expect(link).toHaveAttribute("href", "https://www.linkedin.com/in/johndoe")
+      })
+    })
   })
 
   describe("Partial Profile Data", () => {

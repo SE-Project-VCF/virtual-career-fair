@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
@@ -27,14 +27,19 @@ vi.mock("../ProfileMenu", () => ({
 }));
 
 vi.mock("../../components/BaseLayout", () => ({
-  default: ({ children, pageTitle }: any) => (
+  default: ({
+    children,
+    pageTitle,
+  }: {
+    children: React.ReactNode;
+    pageTitle?: string;
+  }) => (
     <div data-testid="base-layout">
-      <button aria-label="menu">Menu</button>
-      <span>Job Goblin</span>
-      <span>Virtual Career Fair</span>
-      {pageTitle && <h6>{pageTitle}</h6>}
-      <button data-testid="notification-bell" />
-      <button data-testid="profile-menu">Profile Menu</button>
+      <button type="button" aria-label="Open navigation menu">
+        Menu
+      </button>
+      {pageTitle ? <span>{pageTitle}</span> : null}
+      <div data-testid="profile-menu">Profile Menu</div>
       {children}
     </div>
   ),
@@ -125,17 +130,14 @@ describe("StudentProfilePage", () => {
   it("renders student profile page with correct title", async () => {
     renderStudentProfile();
     await waitFor(() => {
-      expect(screen.getByText("Customize Profile")).toBeInTheDocument();
+      expect(screen.getByText("Your profile")).toBeInTheDocument();
     });
   });
 
-  it("renders page layout wrapper", () => {
+  it("uses BaseLayout with navigation and profile menu", () => {
     renderStudentProfile();
     expect(screen.getByTestId("base-layout")).toBeInTheDocument();
-  });
-
-  it("renders ProfileMenu component", () => {
-    renderStudentProfile();
+    expect(screen.getByText("Student profile")).toBeInTheDocument();
     expect(screen.getByTestId("profile-menu")).toBeInTheDocument();
   });
 
@@ -180,7 +182,7 @@ describe("StudentProfilePage", () => {
 
   it("displays save profile button", () => {
     renderStudentProfile();
-    expect(screen.getByRole("button", { name: /Save Profile/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save profile/i })).toBeInTheDocument();
   });
 
   // Form Interaction Tests
@@ -198,10 +200,11 @@ describe("StudentProfilePage", () => {
     const user = userEvent.setup();
     renderStudentProfile();
 
-    const yearSelect = await screen.findByRole("combobox", { name: /Expected Graduation Year/i });
-    await user.selectOptions(yearSelect, "2025");
+    const yearInput = await screen.findByLabelText(/Expected Graduation Year/i);
+    await user.clear(yearInput);
+    await user.type(yearInput, "2025");
 
-    expect((yearSelect as HTMLSelectElement).value).toBe("2025");
+    expect((yearInput as HTMLInputElement).value).toBe("2025");
   });
 
   it("allows user to type in skills field", async () => {
@@ -230,10 +233,11 @@ describe("StudentProfilePage", () => {
     const user = userEvent.setup();
     renderStudentProfile();
 
-    const yearSelect = await screen.findByRole("combobox", { name: /Expected Graduation Year/i });
-    await user.selectOptions(yearSelect, "2025");
+    const yearInput = await screen.findByLabelText(/Expected Graduation Year/i);
+    await user.clear(yearInput);
+    await user.type(yearInput, "2025");
 
-    const form = screen.getByRole("button", { name: /Save Profile/ }).closest("form");
+    const form = screen.getByRole("button", { name: /Save profile/i }).closest("form");
     if (form) {
       fireEvent.submit(form);
       await waitFor(() => {
@@ -249,7 +253,7 @@ describe("StudentProfilePage", () => {
     const majorInput = await screen.findByLabelText(/Major/);
     await user.type(majorInput, "Computer Science");
 
-    const form = screen.getByRole("button", { name: /Save Profile/ }).closest("form");
+    const form = screen.getByRole("button", { name: /Save profile/i }).closest("form");
     if (form) {
       fireEvent.submit(form);
       await waitFor(() => {
@@ -258,11 +262,8 @@ describe("StudentProfilePage", () => {
     }
   });
 
-  it.skip("shows error for graduation year outside valid range", async () => {
-    // Skip: Select only offers valid options (2023-2035), so invalid value (e.g. 2020)
-    // cannot be set through the UI. The validation exists in handleSave but is unreachable.
+  it("shows error for graduation year outside valid range", async () => {
     const user = userEvent.setup();
-    // Mock window.alert so save success doesn't throw in jsdom
     const alertSpy = vi.spyOn(globalThis, "alert").mockImplementation(() => {});
 
     renderStudentProfile();
@@ -272,17 +273,11 @@ describe("StudentProfilePage", () => {
     const majorInput = await screen.findByLabelText(/Major/);
     await user.type(majorInput, "Computer Science");
 
-    // Use name attribute to get the exact select MUI renders; set invalid value via change event
-    const yearSelect = document.querySelector('select[name="expectedGradYear"]') as HTMLSelectElement;
-    expect(yearSelect).toBeTruthy();
-    fireEvent.change(yearSelect, { target: { value: "2020" } });
+    const yearInput = await screen.findByLabelText(/Expected Graduation Year/i);
+    await user.clear(yearInput);
+    await user.type(yearInput, "2020");
 
-    // Allow React to flush the state update before clicking save
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 10));
-    });
-
-    const saveButton = screen.getByRole("button", { name: /Save Profile/ });
+    const saveButton = screen.getByRole("button", { name: /Save profile/i });
     await user.click(saveButton);
 
     await waitFor(
@@ -307,12 +302,13 @@ describe("StudentProfilePage", () => {
     await waitFor(() => expect(screen.queryByText(/Failed to load tailored resumes/)).not.toBeInTheDocument(), { timeout: 2000 });
 
     const majorInput = await screen.findByLabelText(/Major/, {}, { timeout: 3000 });
-    const yearSelect = await screen.findByRole("combobox", { name: /Expected Graduation Year/i }, { timeout: 3000 });
+    const yearInput = await screen.findByLabelText(/Expected Graduation Year/i, {}, { timeout: 3000 });
 
     await user.type(majorInput, "Computer Science");
-    await user.selectOptions(yearSelect, "2025");
+    await user.clear(yearInput);
+    await user.type(yearInput, "2025");
 
-    const saveButton = screen.getByRole("button", { name: /Save Profile/ });
+    const saveButton = screen.getByRole("button", { name: /Save profile/i });
     await user.click(saveButton);
 
     await waitFor(() => {

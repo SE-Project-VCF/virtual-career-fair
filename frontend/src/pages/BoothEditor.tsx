@@ -11,14 +11,13 @@ import {
   TextField,
   Alert,
   CircularProgress,
+  IconButton,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
   Divider,
   Grid,
-  FormControlLabel,
-  Checkbox,
 } from "@mui/material"
 
 import { authUtils } from "../utils/auth"
@@ -41,7 +40,7 @@ import BusinessIcon from "@mui/icons-material/Business"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import RestartAltIcon from "@mui/icons-material/RestartAlt"
-import BaseLayout from "../components/BaseLayout"
+import ProfileMenu from "./ProfileMenu"
 
 interface BoothData {
   boothName: string
@@ -49,9 +48,6 @@ interface BoothData {
   industry: string
   companySize: string
   location: string
-  locationIsRemote: boolean
-  locationCity: string
-  locationState: string
   description: string
   logoUrl?: string
   website?: string
@@ -111,9 +107,6 @@ export default function BoothEditor() {
     industry: "",
     companySize: "",
     location: "",
-    locationIsRemote: false,
-    locationCity: "",
-    locationState: "",
     description: "",
     website: "",
     careersPage: "",
@@ -283,9 +276,6 @@ export default function BoothEditor() {
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
         location: boothData.location || "",
-        locationIsRemote: boothData.locationIsRemote === true,
-        locationCity: boothData.locationCity ?? "",
-        locationState: boothData.locationState ?? "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -348,9 +338,6 @@ export default function BoothEditor() {
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
         location: boothData.location || "",
-        locationIsRemote: boothData.locationIsRemote === true,
-        locationCity: boothData.locationCity ?? "",
-        locationState: boothData.locationState ?? "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -523,13 +510,6 @@ export default function BoothEditor() {
         }
       }
 
-      const isRemote = formData.locationIsRemote
-      const city = formData.locationCity.trim()
-      const state = formData.locationState.trim()
-      const locLine = formData.location.trim()
-      const composedLocation =
-        locLine || (isRemote ? "" : [city, state].filter(Boolean).join(", "))
-
       // Booth document payload
       const boothData = {
         companyId: company.id,
@@ -537,10 +517,7 @@ export default function BoothEditor() {
         companyName: formData.companyName,
         industry: formData.industry,
         companySize: formData.companySize,
-        location: isRemote ? null : (composedLocation || null),
-        locationIsRemote: isRemote,
-        locationCity: isRemote ? null : (city || null),
-        locationState: isRemote ? null : (state || null),
+        location: formData.location,
         description: formData.description,
         logoUrl: logoUrlToSave,
         website: formData.website || null,
@@ -552,8 +529,9 @@ export default function BoothEditor() {
         updatedAt: new Date().toISOString(),
       }
 
+      // Remove undefined/null fields (keeps your existing behavior)
       const cleanedData = Object.fromEntries(
-        Object.entries(boothData).filter(([_, value]) => value !== undefined),
+        Object.entries(boothData).filter(([_, value]) => value !== undefined && value !== null)
       )
 
       // Fair-scoped booth: save via API
@@ -613,9 +591,6 @@ export default function BoothEditor() {
       industry: "",
       companySize: "",
       location: "",
-      locationIsRemote: false,
-      locationCity: "",
-      locationState: "",
       description: "",
       website: "",
       careersPage: "",
@@ -727,17 +702,44 @@ export default function BoothEditor() {
   const boothPageTitle = resolvedBoothId ? "Edit Booth" : "Create Booth"
 
   return (
-    <BaseLayout pageTitle={boothPageTitle}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
+      {/* Header */}
+      <Box
+        sx={{
+          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
+          py: 3,
+          px: 4,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
+              <IconButton
+                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
+                sx={{ color: "white" }}
+                aria-label={fairId ? "Back to fairs" : "Back to company profile"}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
+              <Box>
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: "white" }}>
+                  {boothPageTitle}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
+                  Set up your company presence at the virtual career fair
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <ProfileMenu />
+            </Box>
+          </Box>
+        </Container>
+      </Box>
+
       <Container maxWidth="md" sx={{ py: 4 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}>
-            {fairId ? "Fairs" : "Company"}
-          </Button>
-          <BusinessIcon sx={{ color: "#388560" }} />
-          <Typography variant="body2" color="text.secondary">
-            Set up your company presence at the virtual career fair
-          </Typography>
-        </Box>
         {error && (
           <Alert 
             severity="error" 
@@ -788,7 +790,7 @@ export default function BoothEditor() {
         )}
 
         <Card sx={{ p: 4 }}>
-          <form noValidate onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
             {/* Company Information Section */}
             <Box sx={{ mb: 4 }}>
               <Typography
@@ -867,60 +869,17 @@ export default function BoothEditor() {
                 </Grid>
 
                 <Grid size={{ xs: 12 }}>
-                  <FormControlLabel
-                    control={(
-                      <Checkbox
-                        checked={formData.locationIsRemote}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          locationIsRemote: e.target.checked,
-                          ...(e.target.checked
-                            ? { locationCity: "", locationState: "", location: "" }
-                            : {}),
-                        })}
-                      />
-                    )}
-                    label="Remote employer (nationwide — not tied to a city)"
+                  <TextField
+                    fullWidth
+                    id="company-location"
+                    name="location"
+                    label="Location"
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    placeholder="City, State/Country"
+                    required
                   />
                 </Grid>
-
-                {!formData.locationIsRemote && (
-                  <>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        id="booth-location-city"
-                        name="locationCity"
-                        label="City"
-                        value={formData.locationCity}
-                        onChange={(e) => setFormData({ ...formData, locationCity: e.target.value })}
-                        required
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        id="booth-location-state"
-                        name="locationState"
-                        label="State / region"
-                        value={formData.locationState}
-                        onChange={(e) => setFormData({ ...formData, locationState: e.target.value })}
-                        required
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12 }}>
-                      <TextField
-                        fullWidth
-                        id="company-location"
-                        name="location"
-                        label="Location details (optional)"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        placeholder="e.g. HQ neighborhood or metro area"
-                      />
-                    </Grid>
-                  </>
-                )}
 
                 <Grid size={{ xs: 12 }}>
                   <TextField
@@ -1117,7 +1076,7 @@ export default function BoothEditor() {
               <Box sx={{ display: "flex", gap: 2 }}>
                 <Button
                   variant="outlined"
-                  onClick={() => navigate(fairId ? "/fairs" : `/company/${company.id}`)}
+                  onClick={() => (fairId ? navigate("/fairs") : navigate("/companies"))}
                   disabled={saving}
                   sx={{
                     borderColor: "#388560",
@@ -1176,6 +1135,6 @@ export default function BoothEditor() {
           </Typography>
         </Box>
       </Container>
-    </BaseLayout>
-  )
+    </Box>
+  );
 }
