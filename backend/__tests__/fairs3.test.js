@@ -995,35 +995,7 @@ describe("PUT /api/fairs/:fairId/booths/:boothId – error paths", () => {
     expect(res.status).toBe(500);
   });
 
-  it("returns 400 when locationCity exceeds 100 characters", async () => {
-    verifyAdmin.mockResolvedValue(null);
-    setupSimpleFairs({
-      boothData: { companyId: "company-id", companyName: "Acme" },
-      boothExists: true,
-    });
-    const res = await request(app)
-      .put("/api/fairs/fair-id/booths/booth-id")
-      .set("Authorization", authHeader())
-      .send({ locationCity: `${"C".repeat(101)}` });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/city must be 100/i);
-  });
-
-  it("returns 400 when locationState exceeds 100 characters", async () => {
-    verifyAdmin.mockResolvedValue(null);
-    setupSimpleFairs({
-      boothData: { companyId: "company-id", companyName: "Acme" },
-      boothExists: true,
-    });
-    const res = await request(app)
-      .put("/api/fairs/fair-id/booths/booth-id")
-      .set("Authorization", authHeader())
-      .send({ locationState: `${"S".repeat(101)}` });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/state must be 100/i);
-  });
-
-  it("nulls location city and state when locationIsRemote is true", async () => {
+  it("ignores legacy location fields on booth update", async () => {
     verifyAdmin.mockResolvedValue(null);
     const update = jest.fn().mockResolvedValue(undefined);
     setupSimpleFairs({
@@ -1071,14 +1043,18 @@ describe("PUT /api/fairs/:fairId/booths/:boothId – error paths", () => {
     const res = await request(app)
       .put("/api/fairs/fair-id/booths/booth-id")
       .set("Authorization", authHeader())
-      .send({ locationIsRemote: true, locationCity: "Remote City", locationState: "RS" });
+      .send({
+        companyName: "Acme2",
+        locationCity: "ShouldNotPersist",
+        locationIsRemote: true,
+      });
 
     expect(res.status).toBe(200);
     expect(update).toHaveBeenCalled();
     const payload = update.mock.calls[0][0];
-    expect(payload.locationIsRemote).toBe(true);
-    expect(payload.locationCity).toBeNull();
-    expect(payload.locationState).toBeNull();
+    expect(payload.companyName).toBe("Acme2");
+    expect(payload.locationCity).toBeUndefined();
+    expect(payload.locationIsRemote).toBeUndefined();
   });
 });
 

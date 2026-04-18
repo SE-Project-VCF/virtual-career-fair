@@ -1,7 +1,26 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, type Dispatch, type SetStateAction } from "react"
 import { getRepresentativeName } from "../utils/representativeUtils"
 import { useNavigate, useParams } from "react-router-dom"
-import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip, Rating, Autocomplete, FormControlLabel, Checkbox } from "@mui/material"
+import {
+  Container,
+  Box,
+  Typography,
+  Button,
+  Card,
+  CardContent,
+  Alert,
+  CircularProgress,
+  IconButton,
+  Tooltip,
+  Divider,
+  Grid,
+  TextField,
+  Chip,
+  Rating,
+  Autocomplete,
+  FormControlLabel,
+  Checkbox,
+} from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc } from "firebase/firestore"
@@ -22,6 +41,7 @@ import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
+import LocationOnIcon from "@mui/icons-material/LocationOn"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import VisibilityIcon from "@mui/icons-material/Visibility"
 import BaseLayout from "../components/BaseLayout"
@@ -49,12 +69,22 @@ import DialogTitle from "@mui/material/DialogTitle"
 import DialogContent from "@mui/material/DialogContent"
 import DialogActions from "@mui/material/DialogActions"
 
+export type OfficeLocationRow = {
+  id: string
+  label: string
+  city?: string
+  state?: string
+  zip?: string | null
+}
+
 interface Company {
   id: string
   companyName: string
   representativeIDs: string[]
   boothId?: string
   ownerId: string
+  remoteEmployer?: boolean
+  officeLocations?: OfficeLocationRow[]
 }
 
 interface Representative {
@@ -307,6 +337,235 @@ function RepresentativesSection({
   )
 }
 
+function newLocationId(): string {
+  const c = globalThis.crypto
+  if (c?.randomUUID) {
+    return c.randomUUID()
+  }
+  if (c?.getRandomValues) {
+    const bytes = new Uint8Array(8)
+    c.getRandomValues(bytes)
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+    return `loc-${Date.now()}-${hex}`
+  }
+  throw new Error("Web Crypto API is required to generate office location IDs")
+}
+
+function normalizeOfficeLocationsFromDb(raw: unknown): OfficeLocationRow[] {
+  if (!Array.isArray(raw)) return []
+  const out: OfficeLocationRow[] = []
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue
+    const o = x as Record<string, unknown>
+    const id = typeof o.id === "string" ? o.id : ""
+    const city = typeof o.city === "string" ? o.city : ""
+    const state = typeof o.state === "string" ? o.state : ""
+    const label =
+      typeof o.label === "string" && o.label.trim()
+        ? o.label.trim()
+        : [city, state].filter(Boolean).join(", ")
+    if (!id || !label) continue
+    out.push({
+      id,
+      label,
+      city: city || undefined,
+      state: state || undefined,
+      zip: typeof o.zip === "string" ? o.zip : typeof o.zip === "number" ? String(o.zip) : null,
+    })
+  }
+  return out
+}
+
+function officeLocationsListFingerprint(rows: OfficeLocationRow[]): string {
+  return JSON.stringify(
+    rows
+      .map((r) => ({
+        id: r.id,
+        label: (r.label || "").trim(),
+        city: (r.city || "").trim(),
+        state: (r.state || "").trim(),
+        zip: r.zip == null ? "" : String(r.zip).trim(),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  )
+}
+
+/** True when draft remote flag or office list differs from what is stored on `company`. */
+function isOfficeLocationsDirty(
+  company: Company,
+  officeDraftRemote: boolean,
+  officeDraftList: OfficeLocationRow[],
+): boolean {
+  const savedRemote = company.remoteEmployer === true
+  if (officeDraftRemote !== savedRemote) return true
+  if (savedRemote) return false
+  const savedRows = normalizeOfficeLocationsFromDb(company.officeLocations)
+  return officeLocationsListFingerprint(savedRows) !== officeLocationsListFingerprint(officeDraftList)
+}
+
+function OfficeLocationsReadOnly({ company }: Readonly<{ company: Company }>) {
+  if (company.remoteEmployer === true) {
+    return (
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Chip label="Remote employer" color="primary" size="small" variant="outlined" />
+      </Box>
+    )
+  }
+  const rows = normalizeOfficeLocationsFromDb(company.officeLocations)
+  if (rows.length === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        No office locations on file. The company owner can add verified locations here.
+      </Typography>
+    )
+  }
+  return (
+    <List dense disablePadding>
+      {rows.map((r) => (
+        <ListItem key={r.id} disableGutters>
+          <ListItemText primary={r.label} secondary={[r.city, r.state].filter(Boolean).join(", ") || undefined} />
+        </ListItem>
+      ))}
+    </List>
+  )
+}
+
+function OfficeLocationsOwnerCard({
+  officeDraftRemote,
+  setOfficeDraftRemote,
+  officeDraftList,
+  setOfficeDraftList,
+  officeSearchInput,
+  setOfficeSearchInput,
+  suggestOptions,
+  suggestLoading,
+  savingOfficeLocations,
+  officeLocationsDirty,
+  onSave,
+}: Readonly<{
+  officeDraftRemote: boolean
+  setOfficeDraftRemote: (v: boolean) => void
+  officeDraftList: OfficeLocationRow[]
+  setOfficeDraftList: Dispatch<SetStateAction<OfficeLocationRow[]>>
+  officeSearchInput: string
+  setOfficeSearchInput: (v: string) => void
+  suggestOptions: LocationSuggestOption[]
+  suggestLoading: boolean
+  savingOfficeLocations: boolean
+  officeLocationsDirty: boolean
+  onSave: () => void
+}>) {
+  const handleAddSuggestion = (opt: LocationSuggestOption | null) => {
+    if (!opt || typeof opt !== "object" || !("lat" in opt)) return
+    const label = typeof opt.label === "string" ? opt.label.trim() : ""
+    if (!label) return
+    const id = newLocationId()
+    const city = typeof opt.city === "string" ? opt.city : ""
+    const state = typeof opt.state === "string" ? opt.state : ""
+    const zip = typeof opt.zip === "string" ? opt.zip : null
+    setOfficeDraftList((prev) => {
+      if (prev.some((p) => p.label === label)) return prev
+      return [...prev, { id, label, city: city || undefined, state: state || undefined, zip }]
+    })
+    setOfficeSearchInput("")
+  }
+
+  return (
+    <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+      <CardContent sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+          <LocationOnIcon sx={{ color: "#388560" }} />
+          Office locations
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Search for places (Mapbox). Each location is verified on save. These appear on your fair booths and public booth
+          listing.
+        </Typography>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={officeDraftRemote}
+              onChange={(_, checked) => {
+                setOfficeDraftRemote(checked)
+                if (checked) setOfficeDraftList([])
+              }}
+            />
+          }
+          label="Remote employer (no physical office list)"
+          sx={{ mb: 2, display: "block" }}
+        />
+
+        {!officeDraftRemote && (
+          <>
+            <Autocomplete
+              freeSolo
+              size="small"
+              options={suggestOptions}
+              loading={suggestLoading}
+              filterOptions={(opts) => opts}
+              getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+              isOptionEqualToValue={(a, b) =>
+                typeof a === "object" && typeof b === "object" && Boolean(a.id && b.id && a.id === b.id)
+              }
+              inputValue={officeSearchInput}
+              onInputChange={(_, newInputValue, reason) => {
+                if (reason === "reset") {
+                  setOfficeSearchInput(newInputValue)
+                  return
+                }
+                setOfficeSearchInput(newInputValue)
+              }}
+              onChange={(_, newValue) => {
+                if (newValue && typeof newValue === "object" && "lat" in newValue) {
+                  handleAddSuggestion(newValue)
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search places to add"
+                  placeholder="City, ZIP, or address — pick a suggestion"
+                  sx={{ mb: 2 }}
+                />
+              )}
+            />
+
+            {officeDraftList.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  {officeLocationsDirty
+                    ? `Locations to save (${officeDraftList.length})`
+                    : `Saved office locations (${officeDraftList.length})`}
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  {officeDraftList.map((row) => (
+                    <Chip
+                      key={row.id}
+                      label={row.label}
+                      onDelete={() => setOfficeDraftList((prev) => prev.filter((p) => p.id !== row.id))}
+                      variant="outlined"
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </>
+        )}
+
+        <Button
+          variant="contained"
+          onClick={onSave}
+          disabled={savingOfficeLocations || !officeLocationsDirty}
+          sx={{ mt: 1 }}
+        >
+          {savingOfficeLocations ? "Saving..." : "Save locations"}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
   companyId: string
   boothId?: string
@@ -550,9 +809,26 @@ export default function Company() {
   const [deleteFormDialogOpen, setDeleteFormDialogOpen] = useState(false)
   const [jobToDeleteForm, setJobToDeleteForm] = useState<Job | null>(null)
   const [deletingForm, setDeletingForm] = useState(false)
+  const [officeDraftRemote, setOfficeDraftRemote] = useState(false)
+  const [officeDraftList, setOfficeDraftList] = useState<OfficeLocationRow[]>([])
+  const [officeSearchInput, setOfficeSearchInput] = useState("")
+  const [savingOfficeLocations, setSavingOfficeLocations] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
+
+  const officeLocationsDirty = useMemo(() => {
+    if (!company) return false
+    return isOfficeLocationsDirty(company, officeDraftRemote, officeDraftList)
+  }, [company, officeDraftRemote, officeDraftList])
+
+  const ownerEditingOfficeLocations = Boolean(
+    company && userRole === "companyOwner" && company.ownerId === userId,
+  )
+  const { options: officeSuggestOptions, loading: officeSuggestLoading } = useGeocodeSuggest(
+    officeSearchInput,
+    ownerEditingOfficeLocations && !officeDraftRemote,
+  )
 
   const { options: jobLocationOptions, loading: jobLocationSuggestLoading } = useGeocodeSuggest(
     jobForm.locationInput,
@@ -602,6 +878,9 @@ export default function Company() {
       if (!hasAccess) return
 
       setCompany(companyInfo)
+      setOfficeDraftRemote(companyInfo.remoteEmployer === true)
+      setOfficeDraftList(normalizeOfficeLocationsFromDb(companyInfo.officeLocations))
+      setOfficeSearchInput("")
 
       fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
@@ -627,6 +906,69 @@ export default function Company() {
       }
     } catch (error: unknown) {
       logClientError("Error fetching invite code", error)
+    }
+  }
+
+  const handleSaveOfficeLocations = async () => {
+    if (!company || !auth.currentUser) return
+    try {
+      setSavingOfficeLocations(true)
+      setError("")
+      const token = await auth.currentUser.getIdToken()
+      const body = officeDraftRemote
+        ? { remoteEmployer: true }
+        : {
+            remoteEmployer: false,
+            officeLocations: officeDraftList.map((r) => ({
+              id: r.id,
+              label: r.label,
+              geocodeQuery: r.label.trim(),
+              city: r.city ?? "",
+              state: r.state ?? "",
+              zip: r.zip ?? "",
+            })),
+          }
+      const res = await fetch(`${API_URL}/api/companies/${company.id}/locations`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        code?: string
+        hint?: string
+        remoteEmployer?: boolean
+        officeLocations?: OfficeLocationRow[]
+      }
+      if (!res.ok) {
+        const base =
+          typeof data.error === "string" && data.error.trim()
+            ? data.error.trim()
+            : "Failed to save office locations"
+        const withHint =
+          data.code === "COMPANY_DOC_MISSING" && typeof data.hint === "string" && data.hint.trim()
+            ? `${base} ${data.hint.trim()}`
+            : base
+        throw new Error(withHint)
+      }
+      setCompany((c) =>
+        c
+          ? {
+              ...c,
+              remoteEmployer: Boolean(data.remoteEmployer),
+              officeLocations: Array.isArray(data.officeLocations) ? data.officeLocations : [],
+            }
+          : c,
+      )
+      setOfficeDraftRemote(Boolean(data.remoteEmployer))
+      setOfficeDraftList(normalizeOfficeLocationsFromDb(data.officeLocations))
+      setOfficeSearchInput("")
+      setSuccess("Office locations updated.")
+      setTimeout(() => setSuccess(""), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save office locations")
+    } finally {
+      setSavingOfficeLocations(false)
     }
   }
 
@@ -1213,6 +1555,42 @@ export default function Company() {
             boothId={company.boothId}
             navigate={navigate}
           />
+
+          {isOwner ? (
+            <Grid size={{ xs: 12 }}>
+              <OfficeLocationsOwnerCard
+                officeDraftRemote={officeDraftRemote}
+                setOfficeDraftRemote={setOfficeDraftRemote}
+                officeDraftList={officeDraftList}
+                setOfficeDraftList={setOfficeDraftList}
+                officeSearchInput={officeSearchInput}
+                setOfficeSearchInput={setOfficeSearchInput}
+                suggestOptions={officeSuggestOptions}
+                suggestLoading={officeSuggestLoading}
+                savingOfficeLocations={savingOfficeLocations}
+                officeLocationsDirty={officeLocationsDirty}
+                onSave={handleSaveOfficeLocations}
+              />
+            </Grid>
+          ) : (
+            <Grid size={{ xs: 12 }}>
+              <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography
+                    variant="h6"
+                    sx={{ fontWeight: 600, mb: 2, display: "flex", alignItems: "center", gap: 1 }}
+                  >
+                    <LocationOnIcon sx={{ color: "#388560" }} />
+                    Office locations
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Only the company owner can edit locations. This is what students see on your booth.
+                  </Typography>
+                  <OfficeLocationsReadOnly company={company} />
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
 
           {/* Representatives List Card */}
           <RepresentativesSection

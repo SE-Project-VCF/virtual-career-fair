@@ -43,6 +43,7 @@ import {
   formatStartsInCountdown,
   getQaSessionJoinUiState,
 } from "../utils/qaSessionUi"
+import { formatCompanyOfficeLocationsForDisplay } from "../utils/companyOfficeLocationDisplay"
 
 interface Booth {
   id: string
@@ -50,6 +51,9 @@ interface Booth {
   industry: string | null
   companySize: string | null
   location: string | null
+  locationDisplay?: string | null
+  remoteEmployer?: boolean
+  officeLocations?: Array<{ id?: string; label?: string; city?: string | null; state?: string | null }>
   locationIsRemote?: boolean
   locationCity?: string | null
   locationState?: string | null
@@ -170,9 +174,25 @@ export default function FairBoothView() {
         boothId: originalOrFairBoothId,
         companyName: boothData.companyName,
         industry: boothData.industry,
-        location: boothData.locationIsRemote
-          ? "Remote"
-          : ([boothData.locationCity, boothData.locationState].filter(Boolean).join(", ") || boothData.location),
+        location: (() => {
+          const ld =
+            typeof boothData.locationDisplay === "string" && boothData.locationDisplay.trim()
+              ? boothData.locationDisplay.trim()
+              : ""
+          if (ld) return ld
+          return formatCompanyOfficeLocationsForDisplay(
+            {
+              remoteEmployer: boothData.remoteEmployer,
+              officeLocations: boothData.officeLocations,
+            },
+            {
+              location: boothData.location,
+              locationIsRemote: boothData.locationIsRemote,
+              locationCity: boothData.locationCity,
+              locationState: boothData.locationState,
+            },
+          )
+        })(),
         logoUrl: boothData.logoUrl,
       })
       
@@ -339,15 +359,33 @@ export default function FairBoothView() {
                         </Box>
                       </Grid>
                     )}
-                    {(booth.locationIsRemote || booth.location || booth.locationCity || booth.locationState) && (
+                    {(booth.remoteEmployer ||
+                      (booth.officeLocations && booth.officeLocations.length > 0) ||
+                      booth.locationDisplay ||
+                      booth.location ||
+                      booth.locationIsRemote ||
+                      booth.locationCity ||
+                      booth.locationState) && (
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary", flexWrap: "wrap" }}>
                           <LocationOnIcon fontSize="small" />
-                          {booth.locationIsRemote ? (
+                          {booth.remoteEmployer || booth.locationIsRemote ? (
                             <Chip label="Remote" color="primary" size="small" variant="outlined" />
+                          ) : booth.officeLocations && booth.officeLocations.length > 0 ? (
+                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                              {booth.officeLocations.map((o) => (
+                                <Chip
+                                  key={o.id || o.label || `${o.city}-${o.state}`}
+                                  label={o.label || [o.city, o.state].filter(Boolean).join(", ")}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              ))}
+                            </Box>
                           ) : (
                             <Typography variant="body2">
-                              {[booth.locationCity, booth.locationState].filter(Boolean).join(", ")
+                              {booth.locationDisplay?.trim()
+                                || [booth.locationCity, booth.locationState].filter(Boolean).join(", ")
                                 || booth.location}
                             </Typography>
                           )}
