@@ -455,14 +455,36 @@ export default function BoothEditor() {
     }
   }
 
-  /**
-   * Save booth data:
-   * - Validate the contact email belongs to a registered user
-   * - Ensure that contact user is owner or representative for the company
-   * - If a new logo was selected, upload it and save the URL
-   * - Create or update the booth doc
-   * - Ensure companies/{companyId}.boothId is set on first create
-   */
+  const validateBoothForm = async (companyInfo: typeof company): Promise<string | null> => {
+    if (!companyInfo) return "Company not found"
+
+    if (!formData.locationIsRemote) {
+      if (!formData.locationCity.trim() || !formData.locationState.trim()) {
+        return "City and state are required unless you mark the booth as Remote."
+      }
+    }
+
+    const normalizedEmail = formData.contactEmail.trim().toLowerCase()
+    const usersRef = collection(db, "users")
+    const q = query(usersRef, where("email", "==", normalizedEmail))
+    const snap = await getDocs(q)
+
+    if (snap.empty) {
+      return "Contact email does not match any registered user. Please use your own email or a registered team member's email."
+    }
+
+    const rep = snap.docs[0].data()
+    const repId = rep.uid
+    const isOwner = repId === companyInfo.ownerId
+    const isRep = companyInfo.representativeIDs?.includes(repId)
+
+    if (!isOwner && !isRep) {
+      return "This user is not an owner or representative of your company."
+    }
+
+    return null
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!company || !userId) return
@@ -474,37 +496,11 @@ export default function BoothEditor() {
       setError("")
       setSuccess("")
 
-      if (!formData.locationIsRemote) {
-        if (!formData.locationCity.trim() || !formData.locationState.trim()) {
-          setError("City and state are required unless you mark the booth as Remote.")
-          scrollToTop()
-          setSaving(false)
-          return
-        }
-      }
-
-      // Validate contact rep is a real Firestore user
-      const normalizedEmail = formData.contactEmail.trim().toLowerCase()
-      const usersRef = collection(db, "users")
-      const q = query(usersRef, where("email", "==", normalizedEmail))
-      const snap = await getDocs(q)
-
-      if (snap.empty) {
-        setError("Contact email does not match any registered user. Please use your own email or a registered team member's email.")
+      const validationError = await validateBoothForm(company)
+      if (validationError) {
+        setError(validationError)
         scrollToTop()
-        return
-      }
-
-      const rep = snap.docs[0].data()
-      const repId = rep.uid
-
-      // Check that this user belongs to the company
-      const isOwner = repId === company.ownerId
-      const isRep = company.representativeIDs?.includes(repId)
-
-      if (!isOwner && !isRep) {
-        setError("This user is not an owner or representative of your company.")
-        scrollToTop()
+        setSaving(false)
         return
       }
 
@@ -612,6 +608,7 @@ export default function BoothEditor() {
 
   const handleStartFresh = () => {
     setFormData({
+      boothName: "",
       companyName: company?.companyName ?? "",
       industry: "",
       companySize: "",

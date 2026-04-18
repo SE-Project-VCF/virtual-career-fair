@@ -54,6 +54,14 @@ export default function FairLanding() {
 
   const isCompanyUser = user?.role === "companyOwner" || user?.role === "representative"
 
+  const toggleBoothSelection = (boothId: string) => {
+    setSelectedBoothIds((prev) =>
+      prev.includes(boothId)
+        ? prev.filter((id) => id !== boothId)
+        : [...prev, boothId]
+    )
+  }
+
   useEffect(() => {
     if (!isCompanyUser || !fairId) return
 
@@ -294,13 +302,7 @@ export default function FairLanding() {
                     control={
                       <Checkbox
                         checked={selectedBoothIds.includes(booth.id)}
-                        onChange={(e) => {
-                          setSelectedBoothIds((prev) =>
-                            e.target.checked
-                              ? [...prev, booth.id]
-                              : prev.filter((id) => id !== booth.id)
-                          )
-                        }}
+                        onChange={() => toggleBoothSelection(booth.id)}
                       />
                     }
                     label={booth.boothName || "Untitled Booth"}
