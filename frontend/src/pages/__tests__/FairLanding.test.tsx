@@ -480,11 +480,15 @@ describe("FairLanding", () => {
       fairId: "f1",
     })
 
-    // First call: load enrollments (not enrolled); second call: enroll fails
+    // First call: load enrollments; second: booths fetch (on dialog open); third: enroll fails
     globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ enrollments: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ booths: [] }),
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -509,7 +513,7 @@ describe("FairLanding", () => {
     })
   })
 
-  it("handleJoinFair: navigates to booth editor on success when boothId and companyId are present", async () => {
+  it("handleJoinFair: navigates to company dashboard on success when companyId is present", async () => {
     const user = userEvent.setup()
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
@@ -531,6 +535,10 @@ describe("FairLanding", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ enrollments: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ booths: [] }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -551,11 +559,11 @@ describe("FairLanding", () => {
     await user.click(screen.getByRole("button", { name: /^join fair$/i }))
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/company/company-1/booth")
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1")
     })
   })
 
-  it("handleJoinFair: shows success alert and does not navigate when boothId is absent", async () => {
+  it("handleJoinFair: navigates to company dashboard when companyId is present even without boothId", async () => {
     const user = userEvent.setup()
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
@@ -580,6 +588,10 @@ describe("FairLanding", () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => ({ booths: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ({ fairId: "f1" }), // no boothId
       })
 
@@ -597,10 +609,8 @@ describe("FairLanding", () => {
     await user.click(screen.getByRole("button", { name: /^join fair$/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/successfully joined the fair/i)).toBeInTheDocument()
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1")
     })
-
-    expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining("/booth"))
   })
 
   it("shows leave dialog when Leave Fair button is clicked", async () => {
@@ -1063,7 +1073,7 @@ describe("FairLanding", () => {
     expect(screen.getByTestId("base-layout")).toHaveTextContent("Regional Hiring Day")
   })
 
-  it("handleJoinFair: navigates using context fairId when response has boothId but no fairId", async () => {
+  it("handleJoinFair: navigates to company dashboard when response has boothId but no fairId", async () => {
     const user = userEvent.setup()
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
@@ -1088,6 +1098,10 @@ describe("FairLanding", () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => ({ booths: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ({ boothId: "booth-only" }),
       })
 
@@ -1102,7 +1116,7 @@ describe("FairLanding", () => {
     await user.click(screen.getByRole("button", { name: /^join fair$/i }))
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/company/company-1/booth")
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1")
     })
   })
 

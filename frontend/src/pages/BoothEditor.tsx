@@ -723,7 +723,7 @@ export default function BoothEditor() {
 
   if (!company) return null
 
-  const resolvedBoothId = fairId ? fairBoothId : company.boothId
+  const resolvedBoothId = fairId ? fairBoothId : (urlBoothId || company.boothId)
   const boothPageTitle = resolvedBoothId ? "Edit Booth" : "Create Booth"
 
   return (
@@ -1132,7 +1132,7 @@ export default function BoothEditor() {
                 </Button>
 
                 {(() => {
-                  const activeBoothId = fairId ? fairBoothId : company.boothId;
+                  const activeBoothId = fairId ? fairBoothId : (urlBoothId || company.boothId);
                   const savingText = activeBoothId ? "Updating..." : "Creating...";
                   const defaultText = activeBoothId ? "Update Booth" : "Create Booth";
                   const buttonText = saving ? savingText : defaultText;
