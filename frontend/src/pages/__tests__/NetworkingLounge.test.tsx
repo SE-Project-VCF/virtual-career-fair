@@ -26,11 +26,25 @@ vi.mock("../../contexts/FairContext", () => ({
   FairProvider: ({ children }: any) => <>{children}</>,
 }))
 
+const firebaseAuthRef: {
+  currentUser: { getIdToken: ReturnType<typeof vi.fn> } | null
+  onAuthStateChanged: (cb: (u: unknown) => void) => () => void
+} = {
+  currentUser: {
+    getIdToken: vi.fn().mockResolvedValue("mock-token"),
+  },
+  onAuthStateChanged: (cb: (u: unknown) => void) => {
+    queueMicrotask(() => cb({ getIdToken: () => Promise.resolve("mock-token") }))
+    return () => {}
+  },
+}
+
 vi.mock("../../firebase", () => ({
   auth: {
-    currentUser: {
-      getIdToken: vi.fn().mockResolvedValue("mock-token"),
+    get currentUser() {
+      return firebaseAuthRef.currentUser
     },
+    onAuthStateChanged: (cb: (u: unknown) => void) => firebaseAuthRef.onAuthStateChanged(cb),
   },
 }))
 
@@ -100,6 +114,14 @@ describe("NetworkingLounge", () => {
     mockStreamClient.userID = null
     setStreamClient(null)
     globalThis.fetch = vi.fn()
+    firebaseAuthRef.currentUser = {
+      getIdToken: vi.fn().mockResolvedValue("mock-token"),
+    }
+    firebaseAuthRef.onAuthStateChanged = (cb) => {
+      queueMicrotask(() => cb({ getIdToken: () => Promise.resolve("mock-token") }))
+      return () => {}
+    }
+    localStorage.clear()
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "user-1",
@@ -787,6 +809,227 @@ describe("NetworkingLounge", () => {
         call[0].includes("/lounge/attendees")
       )
       expect(attendeesFetches).toHaveLength(1)
+    })
+
+    it("sorts the current user to the top of the attendees list", async () => {
+      const user = userEvent.setup()
+      mockStreamClient.userID = "user-1"
+      setStreamClient(mockStreamClient)
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            attendees: [
+              { uid: "student-2", firstName: "Alice", lastName: "Z", email: "a@x.com", major: "", expectedGradYear: null, skills: "", linkedinUrl: null },
+              { uid: "user-1", firstName: "John", lastName: "Doe", email: "student@example.com", major: "", expectedGradYear: null, skills: "", linkedinUrl: null },
+              { uid: "student-3", firstName: "Bob", lastName: "Y", email: "b@x.com", major: "", expectedGradYear: null, skills: "", linkedinUrl: null },
+            ],
+          }),
+        })
+
+      await renderNetworkingLounge()
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => expect(screen.getByText("John Doe")).toBeInTheDocument())
+
+      const names = screen.getAllByRole("heading", { level: 6 }).map((el) => el.textContent)
+      const johnIdx = names.findIndex((n) => n?.includes("John Doe"))
+      const aliceIdx = names.findIndex((n) => n?.includes("Alice"))
+      const bobIdx = names.findIndex((n) => n?.includes("Bob"))
+      expect(johnIdx).toBeLessThan(aliceIdx)
+      expect(johnIdx).toBeLessThan(bobIdx)
+    })
+
+    it("logs an error when the attendees fetch fails", async () => {
+      const user = userEvent.setup()
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+      mockStreamClient.userID = "user-1"
+      setStreamClient(mockStreamClient)
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({ ok: false })
+
+      await renderNetworkingLounge()
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => {
+        expect(consoleError).toHaveBeenCalledWith("Attendees fetch error:", expect.any(Error))
+      })
+      consoleError.mockRestore()
+    })
+
+    it("persists ghostMode to localStorage on successful toggle", async () => {
+      const user = userEvent.setup()
+      localStorage.setItem(
+        "currentUser",
+        JSON.stringify({ uid: "user-1", email: "student@example.com", ghostMode: false })
+      )
+      mockStreamClient.userID = "user-1"
+      setStreamClient(mockStreamClient)
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ attendees: [] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ ghostMode: true }),
+        })
+
+      await renderNetworkingLounge()
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => expect(screen.getByRole("switch", { name: /ghost mode/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("switch", { name: /ghost mode/i }))
+
+      await waitFor(() => {
+        const stored = localStorage.getItem("currentUser")
+        expect(stored).not.toBeNull()
+        expect(JSON.parse(stored!).ghostMode).toBe(true)
+      })
+    })
+
+    it("closes the error snackbar when onClose is triggered", async () => {
+      const user = userEvent.setup()
+      mockStreamClient.userID = "user-1"
+      setStreamClient(mockStreamClient)
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ attendees: [] }),
+        })
+        .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "nope" }) })
+
+      globalThis.fetch = fetchMock
+
+      await renderNetworkingLounge()
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => expect(screen.getByRole("switch", { name: /ghost mode/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("switch", { name: /ghost mode/i }))
+
+      const alertCloseBtn = await screen.findByRole("button", { name: /close/i })
+      await user.click(alertCloseBtn)
+
+      await waitFor(() => {
+        expect(screen.queryByText(/failed to update ghost mode/i)).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  describe("Stream token flow", () => {
+    it("waits for firebase user via onAuthStateChanged when currentUser is null", async () => {
+      mockStreamClient.userID = null
+      setStreamClient(mockStreamClient)
+
+      firebaseAuthRef.currentUser = null
+      firebaseAuthRef.onAuthStateChanged = (cb) => {
+        queueMicrotask(() => cb({ getIdToken: () => Promise.resolve("late-token") }))
+        return () => {}
+      }
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ token: "stream-token-late" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => {
+        expect(mockStreamClient.connectUser).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "user-1" }),
+          "stream-token-late"
+        )
+      })
+    })
+
+    it("shows 'Failed to connect to chat' when firebase emits a null user", async () => {
+      mockStreamClient.userID = null
+      setStreamClient(mockStreamClient)
+
+      firebaseAuthRef.currentUser = null
+      firebaseAuthRef.onAuthStateChanged = (cb) => {
+        queueMicrotask(() => cb(null))
+        return () => {}
+      }
+
+      globalThis.fetch = vi.fn()
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => {
+        expect(screen.getByText(/failed to connect to chat/i)).toBeInTheDocument()
+      })
+    })
+
+    it("surfaces the server error message when stream-token response has error body", async () => {
+      mockStreamClient.userID = null
+      setStreamClient(mockStreamClient)
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        json: async () => ({ error: "forbidden" }),
+      })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => {
+        expect(screen.getByText(/failed to connect to chat/i)).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe("Textarea behavior", () => {
+    it("resizes the textarea on input", async () => {
+      mockStreamClient.userID = "user-1"
+      setStreamClient(mockStreamClient)
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ channelId: "lounge-f1" }),
+      })
+
+      await renderNetworkingLounge()
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText(/chat with other students/i)).toBeInTheDocument()
+      })
+
+      const textarea = screen.getByPlaceholderText(/chat with other students/i) as HTMLTextAreaElement
+      Object.defineProperty(textarea, "scrollHeight", { configurable: true, value: 120 })
+
+      fireEvent.input(textarea, { target: { value: "multi\nline\nmessage" } })
+
+      expect(textarea.style.height).toBe("120px")
     })
   })
 })

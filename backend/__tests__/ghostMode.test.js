@@ -80,4 +80,22 @@ describe("PATCH /api/users/me/ghost-mode", () => {
     expect(res.body).toEqual({ ghostMode: true });
     expect(updateMock).toHaveBeenCalledWith({ ghostMode: true });
   });
+
+  it("returns 500 when the Firestore update fails", async () => {
+    const updateMock = jest.fn().mockRejectedValue(new Error("firestore down"));
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return { doc: jest.fn(() => ({ update: updateMock })) };
+      }
+      return { doc: jest.fn() };
+    });
+
+    const res = await request(app)
+      .patch("/api/users/me/ghost-mode")
+      .set("Authorization", VALID_TOKEN)
+      .send({ ghostMode: false });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Failed to update ghost mode" });
+  });
 });
