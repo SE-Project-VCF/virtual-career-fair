@@ -129,7 +129,6 @@ describe("verifyOfficeLocationInput", () => {
 
   it("geocode-by-label path: generates id when missing", async () => {
     jest.spyOn(Date, "now").mockReturnValue(111);
-    jest.spyOn(Math, "random").mockReturnValue(0.123456789);
     forwardGeocode.mockResolvedValue(okGeo());
     const res = await verifyOfficeLocationInput({
       label: "",
@@ -139,10 +138,11 @@ describe("verifyOfficeLocationInput", () => {
       zip: "",
     });
     expect(res.ok).toBe(true);
-    expect(res.value.id).toMatch(/^loc-111-/);
+    expect(res.value.id).toMatch(
+      /^loc-111-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
     expect(res.value.label).toBe("Austin, TX, USA");
     Date.now.mockRestore();
-    Math.random.mockRestore();
   });
 
   it("city/state/zip path: rejects zip longer than 20 chars", async () => {

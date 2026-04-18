@@ -338,7 +338,17 @@ function RepresentativesSection({
 }
 
 function newLocationId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `loc-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+  const c = globalThis.crypto
+  if (c?.randomUUID) {
+    return c.randomUUID()
+  }
+  if (c?.getRandomValues) {
+    const bytes = new Uint8Array(8)
+    c.getRandomValues(bytes)
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+    return `loc-${Date.now()}-${hex}`
+  }
+  throw new Error("Web Crypto API is required to generate office location IDs")
 }
 
 function normalizeOfficeLocationsFromDb(raw: unknown): OfficeLocationRow[] {

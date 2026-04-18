@@ -1935,7 +1935,13 @@ describe("Company", () => {
 
     it("owner uses fallback id when crypto.randomUUID is unavailable", async () => {
       const user = userEvent.setup();
-      vi.stubGlobal("crypto", { randomUUID: undefined } as unknown as Crypto);
+      vi.stubGlobal("crypto", {
+        randomUUID: undefined,
+        getRandomValues(arr: Uint8Array) {
+          arr.fill(0xab)
+          return arr
+        },
+      } as unknown as Crypto);
       geocodeSuggestMocks.state.options = [
         { id: "s2", label: "Seattle, WA", lat: 47.6, lng: -122.3, city: "Seattle", state: "WA", zip: null },
       ];

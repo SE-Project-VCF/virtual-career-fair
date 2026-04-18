@@ -1,3 +1,4 @@
+const { randomUUID } = require("node:crypto");
 const { forwardGeocode } = require("./mapboxGeocode");
 
 const HUB_GEOCODE_QUERY_MAX_LEN = 256;
@@ -61,7 +62,7 @@ async function verifyOfficeLocationInput(input) {
     const id =
       typeof input.id === "string" && input.id.trim()
         ? input.id.trim()
-        : `loc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        : `loc-${Date.now()}-${randomUUID()}`;
     return {
       ok: true,
       value: {
@@ -118,7 +119,7 @@ async function verifyOfficeLocationInput(input) {
   const id =
     typeof input.id === "string" && input.id.trim()
       ? input.id.trim()
-      : `loc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      : `loc-${Date.now()}-${randomUUID()}`;
   return {
     ok: true,
     value: {

@@ -1,6 +1,20 @@
-const rawApiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").trim();
+function stripTrailingSlashes(s: string): string {
+  let i = s.length
+  while (i > 0 && s[i - 1] === "/") i--
+  return s.slice(0, i)
+}
+
+/** Removes a final `/api` path segment (case-insensitive on `api`). */
+function stripTrailingApiSegment(s: string): string {
+  if (s.length < 4) return s
+  if (s[s.length - 4] !== "/") return s
+  if (s.slice(-3).toLowerCase() !== "api") return s
+  return s.slice(0, -4)
+}
+
+const rawApiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000").trim()
 /** Origin only: no trailing slash, no trailing `/api` (URLs are built as `${API_URL}/api/...`). */
-export const API_URL = rawApiBase.replaceAll(/\/+$/g, "").replace(/\/api$/i, "");
+export const API_URL = stripTrailingApiSegment(stripTrailingSlashes(rawApiBase))
 
 function normalizeMapboxToken(raw: string): string {
   let t = raw.replace(/\r/g, "").replace(/^\uFEFF/, "").trim()
