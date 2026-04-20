@@ -1271,10 +1271,13 @@ describe("DELETE /api/fairs/:fairId/leave", () => {
         };
       }
       if (name === "companies") {
+        const companySnap = mockDocSnap({ ownerId: "user-id", representativeIDs: [] }, true, "company-id");
         return {
           doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ ownerId: "user-id", representativeIDs: [] }, true, "company-id")),
+            get: jest.fn().mockResolvedValue(companySnap),
           })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([companySnap])),
         };
       }
       if (name === "fairs") {
