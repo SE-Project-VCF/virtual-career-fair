@@ -78,6 +78,10 @@ vi.mock("../../firebase", () => ({
   },
 }))
 
+vi.mock("../../utils/ownedCompanies", () => ({
+  fetchOwnedCompaniesForUser: vi.fn().mockResolvedValue([]),
+}))
+
 const renderFairList = () =>
   render(
     <BrowserRouter>

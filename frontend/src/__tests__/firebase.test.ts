@@ -7,7 +7,8 @@ vi.mock("firebase/app", () => ({
 }));
 
 vi.mock("firebase/auth", () => ({
-  getAuth: vi.fn(() => ({ name: "mock-auth" })),
+  getAuth: vi.fn(() => ({ name: "mock-auth", currentUser: null })),
+  onAuthStateChanged: vi.fn(),
   GoogleAuthProvider: class MockGoogleAuthProvider {
     name = "mock-google-provider";
   },

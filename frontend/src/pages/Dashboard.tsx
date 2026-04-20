@@ -16,6 +16,7 @@ import VideoCallIcon from "@mui/icons-material/VideoCall"
 import GroupsIcon from "@mui/icons-material/Groups"
 import EventList from "../components/EventList"
 import BaseLayout from "../components/BaseLayout"
+import FairAnnouncementsBanner from "../components/FairAnnouncementsBanner"
 
 // Helper function to get fair status message based on user role
 function getFairStatusMessage(role: string | undefined): string {
@@ -848,8 +849,9 @@ export default function Dashboard() {
 
   return (
     <BaseLayout>
-      <Container maxWidth="lg">
-        <Box sx={{ py: 6 }}>
+      <Container maxWidth="lg" sx={{ pt: 3 }}>
+        <FairAnnouncementsBanner user={user} />
+        <Box sx={{ pb: 6 }}>
           {/* Welcome Section */}
           <Box
             sx={{

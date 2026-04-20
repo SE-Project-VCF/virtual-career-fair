@@ -33,6 +33,7 @@ import PresentationIcon from "@mui/icons-material/Slideshow"
 import PeopleIcon from "@mui/icons-material/People"
 import WorkIcon from "@mui/icons-material/Work"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
+import CampaignIcon from "@mui/icons-material/Campaign"
 import NotificationBell from "./NotificationBell"
 import ProfileMenu from "../pages/ProfileMenu"
 import FairyJobmotherAssistant from "./jobmother/FairyJobmotherAssistant"
@@ -66,6 +67,7 @@ function getNavItems(user: User | null): NavItem[] {
   // companyOwner manages companies and fairs at the org level
   const companyOwnerItems: NavItem[] = [
     { label: "Manage Companies", path: "/companies", icon: <ShareIcon /> },
+    { label: "Fair announcements", path: "/dashboard/fair-announcements", icon: <CampaignIcon /> },
     { label: "Browse Booths", path: "/booths", icon: <BusinessIcon /> },
     { label: "Candidate Shortlist", path: "/dashboard/shortlist", icon: <PeopleIcon /> },
     { label: "Q&A Sessions", path: "/dashboard/qa-sessions", icon: <PresentationIcon /> },
@@ -77,12 +79,14 @@ function getNavItems(user: User | null): NavItem[] {
     ? [
         { label: "Manage Booth", path: `/company/${user.companyId}/booth`, icon: <BusinessIcon /> },
         { label: "Submissions", path: `/company/${user.companyId}/submissions`, icon: <AssignmentIcon /> },
+        { label: "Fair announcements", path: "/dashboard/fair-announcements", icon: <CampaignIcon /> },
         { label: "Browse Booths", path: "/booths", icon: <EventIcon /> },
         { label: "Candidate Shortlist", path: "/dashboard/shortlist", icon: <PeopleIcon /> },
         { label: "Q&A Sessions", path: "/dashboard/qa-sessions", icon: <PresentationIcon /> },
         { label: "My 1x1 Calls", path: "/dashboard/my-calls", icon: <VideoCallIcon /> },
       ]
     : [
+        { label: "Fair announcements", path: "/dashboard/fair-announcements", icon: <CampaignIcon /> },
         { label: "Browse Booths", path: "/booths", icon: <BusinessIcon /> },
       ]
 

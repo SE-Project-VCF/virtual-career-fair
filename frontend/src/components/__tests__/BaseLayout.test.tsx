@@ -240,6 +240,7 @@ describe("BaseLayout", () => {
       )
       await openDrawer()
       expect(screen.getByText("Manage Companies")).toBeInTheDocument()
+      expect(screen.getByText("Fair announcements")).toBeInTheDocument()
       expect(screen.getByText("Browse Booths")).toBeInTheDocument()
     })
 

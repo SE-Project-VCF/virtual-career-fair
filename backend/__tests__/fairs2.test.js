@@ -128,6 +128,9 @@ function setupFairsDbMock({
   boothDocs = [],
   jobDocs = [],
   enrollmentDocs = [],
+  announcementListDocs = [],
+  announcementDocForPutDelete = null,
+  announcementPutDeleteExists = true,
 } = {}) {
   const batchMock = {
     set: jest.fn().mockReturnThis(),
@@ -160,6 +163,50 @@ function setupFairsDbMock({
         newDocId: "company-id",
       });
 
+      const annDataForNew = {
+        title: "Posted title",
+        description: "New session",
+        published: true,
+        publishedAt: { toMillis: () => 1000000 },
+        createdAt: { toMillis: () => 1000000 },
+        updatedAt: { toMillis: () => 1000000 },
+        createdBy: "admin-uid",
+      };
+      let announcementMutable = announcementDocForPutDelete
+        ? { ...announcementDocForPutDelete }
+        : { ...annDataForNew };
+      const announcementSubcol = {
+        doc: jest.fn((annId) => ({
+          get: jest.fn().mockImplementation(() =>
+            Promise.resolve(
+              mockDocSnap(
+                announcementMutable,
+                announcementPutDeleteExists,
+                annId || "ann-id",
+              ),
+            ),
+          ),
+          update: jest.fn().mockImplementation((patch) => {
+            announcementMutable = {
+              ...announcementMutable,
+              ...patch,
+              title: patch.title ?? announcementMutable.title,
+              description: patch.description ?? announcementMutable.description,
+              published: patch.published ?? announcementMutable.published,
+              publishedAt: patch.publishedAt ?? announcementMutable.publishedAt,
+            };
+          }),
+          delete: jest.fn().mockResolvedValue(undefined),
+        })),
+        add: jest.fn().mockResolvedValue({
+          id: "new-announcement-id",
+          get: jest.fn().mockResolvedValue(mockDocSnap(annDataForNew, true, "new-announcement-id")),
+        }),
+        get: jest.fn().mockResolvedValue(mockQuerySnap(announcementListDocs)),
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+
       const fairDocRef = {
         get: jest.fn().mockResolvedValue(mockDocSnap(fairData, fairExists, fairId)),
         set: jest.fn().mockResolvedValue(undefined),
@@ -172,6 +219,7 @@ function setupFairsDbMock({
           if (sub === "booths") return boothSubcol.subColRef;
           if (sub === "jobs") return jobSubcol.subColRef;
           if (sub === "enrollments") return enrollmentSubcol.subColRef;
+          if (sub === "announcements") return announcementSubcol;
           return makeSubcollectionMock().subColRef;
         }),
       };
@@ -482,6 +530,7 @@ describe("GET /api/fairs/my-enrollments", () => {
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toHaveLength(1);
     expect(res.body.enrollments[0].fairId).toBe("fair-id");
+    expect(res.body.enrollments[0].companyId).toBe("company-id");
     expect(res.body.enrollments[0].boothId).toBe("booth-abc");
   });
 
@@ -545,6 +594,241 @@ describe("GET /api/fairs/my-enrollments", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toEqual([]);
+  });
+});
+
+/* =======================================================
+   GET /api/fairs/my-announcements
+======================================================= */
+describe("GET /api/fairs/my-announcements", () => {
+  beforeEach(() => jest.resetAllMocks());
+
+  it("returns 401 without auth token", async () => {
+    const res = await request(app).get("/api/fairs/my-announcements");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns empty announcements for non-company roles", async () => {
+    setupFairsDbMock({
+      userData: { uid: "admin-uid", role: "student" },
+      userExists: true,
+    });
+    const res = await request(app)
+      .get("/api/fairs/my-announcements")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.announcements).toEqual([]);
+  });
+
+  it("returns published announcements for enrolled company representative", async () => {
+    const enrollDoc = {
+      exists: true,
+      data: () => ({
+        boothId: "booth-abc",
+        enrolledAt: { toMillis: () => 999999 },
+      }),
+    };
+
+    const annDoc = {
+      id: "ann-1",
+      data: () => ({
+        title: "Reminder",
+        description: "Q&A at noon",
+        published: true,
+        publishedAt: { toMillis: () => 100 },
+        createdAt: { toMillis: () => 5000 },
+        updatedAt: { toMillis: () => 5000 },
+      }),
+    };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                { uid: "rep-uid", companyId: "company-id", role: "representative" },
+                true,
+                "rep-uid",
+              ),
+            ),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        const enrollmentSubcol = {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(enrollDoc),
+          })),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+        };
+        const announcementSubcol = {
+          doc: jest.fn(() => ({ get: jest.fn(), update: jest.fn(), delete: jest.fn() })),
+          add: jest.fn(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([annDoc])),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+        };
+
+        const fairDocRef = {
+          get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_DATA, true, "fair-id")),
+          id: "fair-id",
+          collection: jest.fn((sub) => {
+            if (sub === "enrollments") return enrollmentSubcol;
+            if (sub === "announcements") return announcementSubcol;
+            return makeSubcollectionMock().subColRef;
+          }),
+        };
+
+        return {
+          doc: jest.fn(() => fairDocRef),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([{ id: "fair-id", data: () => FAIR_DATA }])),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+    });
+
+    auth.verifyIdToken.mockResolvedValue({ uid: "rep-uid", email: "rep@test.com" });
+
+    const res = await request(app)
+      .get("/api/fairs/my-announcements")
+      .set("Authorization", "Bearer valid-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.announcements).toHaveLength(1);
+    expect(res.body.announcements[0].fairId).toBe("fair-id");
+    expect(res.body.announcements[0].fairName).toBe("Spring Fair");
+    expect(res.body.announcements[0].fairStartTime).toBe(500);
+    expect(res.body.announcements[0].fairEndTime).toBe(2000);
+    expect(res.body.announcements[0].title).toBe("Reminder");
+    expect(res.body.announcements[0].description).toBe("Q&A at noon");
+  });
+});
+
+/* =======================================================
+   Fair announcements (admin CRUD)
+======================================================= */
+describe("Fair announcements admin API", () => {
+  beforeEach(() => jest.resetAllMocks());
+
+  it("GET /api/fairs/:fairId/announcements returns 401 without token", async () => {
+    const res = await request(app).get("/api/fairs/fair-id/announcements");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/fairs/:fairId/announcements returns 403 when not admin", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+    setupFairsDbMock({ fairData: FAIR_DATA });
+    const res = await request(app)
+      .get("/api/fairs/fair-id/announcements")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /api/fairs/:fairId/announcements lists announcements", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    const annDoc = {
+      id: "ann-1",
+      data: () => ({
+        title: "Parking",
+        description: "Info session",
+        published: false,
+        createdAt: { toMillis: () => 1 },
+        updatedAt: { toMillis: () => 2 },
+        createdBy: "admin-uid",
+      }),
+    };
+    setupFairsDbMock({
+      fairData: FAIR_DATA,
+      announcementListDocs: [annDoc],
+    });
+    const res = await request(app)
+      .get("/api/fairs/fair-id/announcements")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.announcements).toHaveLength(1);
+    expect(res.body.announcements[0].id).toBe("ann-1");
+    expect(res.body.announcements[0].title).toBe("Parking");
+    expect(res.body.announcements[0].description).toBe("Info session");
+    expect(res.body.announcements[0].published).toBe(false);
+  });
+
+  it("POST /api/fairs/:fairId/announcements creates announcement", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupFairsDbMock({ fairData: FAIR_DATA });
+    const res = await request(app)
+      .post("/api/fairs/fair-id/announcements")
+      .set("Authorization", authHeader())
+      .send({
+        title: "Employer meetup",
+        description: "Optional details",
+        published: true,
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe("new-announcement-id");
+    expect(res.body.title).toBe("Posted title");
+    expect(res.body.description).toBe("New session");
+  });
+
+  it("POST returns 400 when title missing", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupFairsDbMock({ fairData: FAIR_DATA });
+    const res = await request(app)
+      .post("/api/fairs/fair-id/announcements")
+      .set("Authorization", authHeader())
+      .send({ description: "Only body" });
+    expect(res.status).toBe(400);
+  });
+
+  it("PUT /api/fairs/:fairId/announcements/:id updates announcement", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupFairsDbMock({
+      fairData: FAIR_DATA,
+      announcementDocForPutDelete: {
+        title: "Old title",
+        description: "Old",
+        published: false,
+        createdAt: { toMillis: () => 1 },
+        updatedAt: { toMillis: () => 2 },
+        createdBy: "admin-uid",
+      },
+    });
+    const res = await request(app)
+      .put("/api/fairs/fair-id/announcements/ann-1")
+      .set("Authorization", authHeader())
+      .send({ description: "Updated text", published: true });
+    expect(res.status).toBe(200);
+    expect(res.body.description).toBe("Updated text");
+    expect(res.body.published).toBe(true);
+  });
+
+  it("DELETE /api/fairs/:fairId/announcements/:id returns 204", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    setupFairsDbMock({
+      fairData: FAIR_DATA,
+      announcementDocForPutDelete: {
+        title: "T",
+        description: "x",
+        published: true,
+        publishedAt: { toMillis: () => 1 },
+        createdAt: { toMillis: () => 1 },
+        updatedAt: { toMillis: () => 2 },
+        createdBy: "admin-uid",
+      },
+    });
+    const res = await request(app)
+      .delete("/api/fairs/fair-id/announcements/ann-1")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(204);
   });
 });
 
