@@ -724,6 +724,74 @@ describe("FairList — enrollment edge cases", () => {
     if (origCurrentUser) Object.defineProperty(firebaseMock.auth, "currentUser", origCurrentUser)
     if (origOnAuthStateChanged) Object.defineProperty(firebaseMock.auth, "onAuthStateChanged", origOnAuthStateChanged)
   })
+
+  it("resolves local waitForFirebaseUser when auth restores user via onAuthStateChanged", async () => {
+    const firebaseMock = await import("../../firebase")
+    const origCurrentUser = Object.getOwnPropertyDescriptor(firebaseMock.auth, "currentUser")
+    const origOnAuthStateChanged = Object.getOwnPropertyDescriptor(firebaseMock.auth, "onAuthStateChanged")
+    const mockUnsub = vi.fn()
+
+    Object.defineProperty(firebaseMock.auth, "currentUser", {
+      get: () => null,
+      configurable: true,
+    })
+    Object.defineProperty(firebaseMock.auth, "onAuthStateChanged", {
+      value: vi.fn((cb: (u: unknown) => void) => {
+        queueMicrotask(() => {
+          cb({ uid: "restored", getIdToken: async () => "tok" })
+        })
+        return mockUnsub
+      }),
+      configurable: true,
+    })
+
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@company.com",
+      role: "companyOwner",
+    })
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Async Session Fair",
+              description: null,
+              isLive: false,
+              startTime: null,
+              endTime: null,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+
+    try {
+      renderFairList()
+
+      await waitFor(() => expect(screen.getByText("Async Session Fair")).toBeInTheDocument())
+
+      await waitFor(() => expect(mockUnsub).toHaveBeenCalled())
+
+      await waitFor(() => {
+        expect(globalThis.fetch).toHaveBeenCalledWith(
+          expect.stringContaining("/api/fairs/my-enrollments"),
+          expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: "Bearer tok" }),
+          }),
+        )
+      })
+    } finally {
+      if (origCurrentUser) Object.defineProperty(firebaseMock.auth, "currentUser", origCurrentUser)
+      if (origOnAuthStateChanged) Object.defineProperty(firebaseMock.auth, "onAuthStateChanged", origOnAuthStateChanged)
+    }
+  })
 })
 
 describe("FairList — join fair flow", () => {

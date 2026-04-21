@@ -1,5 +1,10 @@
+vi.mock("../utils/consoleErrorFilter", () => ({
+  setupConsoleErrorFilter: vi.fn(),
+}))
+
 import { render, screen } from "@testing-library/react"
 import { describe, it, expect, vi, afterEach } from "vitest"
+import { setupConsoleErrorFilter } from "../utils/consoleErrorFilter"
 import App from "../App"
 
 vi.mock("../pages/RoleSelection", () => ({ default: () => <div>RoleSelection</div> }))
@@ -55,6 +60,10 @@ vi.mock("../contexts/FairContext", () => ({
 describe("App", () => {
   afterEach(() => {
     globalThis.history.pushState({}, "", "/")
+  })
+
+  it("calls setupConsoleErrorFilter when the App module loads (TensorFlow console noise)", () => {
+    expect(vi.mocked(setupConsoleErrorFilter)).toHaveBeenCalled()
   })
 
   it("renders RoleSelection at /", () => {
