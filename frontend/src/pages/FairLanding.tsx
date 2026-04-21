@@ -107,7 +107,8 @@ export default function FairLanding() {
     const fetchBooths = async () => {
       setLoadingBooths(true)
       try {
-        const token = await auth.currentUser?.getIdToken()
+        const firebaseUser = await waitForFirebaseUser()
+        const token = await firebaseUser?.getIdToken()
         const res = await fetch(`${API_URL}/api/booths?companyId=${user.companyId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })

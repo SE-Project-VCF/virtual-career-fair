@@ -131,6 +131,7 @@ describe("GET /api/booths", () => {
           where: jest.fn().mockReturnValue({
             get: jest.fn().mockResolvedValue(mockQuerySnap([])),
           }),
+          doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
         };
       }
       return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
@@ -143,5 +144,81 @@ describe("GET /api/booths", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.booths).toEqual([]);
+  });
+
+  it("includes legacy booth from company.boothId when not in companyId-indexed list", async () => {
+    const legacyBoothData = { boothName: "Legacy Booth", industry: "tech" };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ ownerId: "owner-uid", representativeIDs: [], boothId: "legacy-b" }, true, "c1")
+            ),
+          })),
+        };
+      }
+      if (name === "booths") {
+        return {
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+          }),
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              id === "legacy-b"
+                ? { exists: true, id: "legacy-b", data: () => legacyBoothData }
+                : mockDocSnap(null, false)
+            ),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+    });
+
+    const res = await request(app)
+      .get("/api/booths")
+      .query({ companyId: "c1" })
+      .set("Authorization", VALID_TOKEN);
+
+    expect(res.status).toBe(200);
+    expect(res.body.booths).toHaveLength(1);
+    expect(res.body.booths[0]).toMatchObject({ id: "legacy-b", boothName: "Legacy Booth" });
+  });
+
+  it("does not duplicate booth when company.boothId already in companyId-indexed list", async () => {
+    const boothData = { companyId: "c1", boothName: "Shared Booth", industry: "tech" };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ ownerId: "owner-uid", representativeIDs: [], boothId: "b1" }, true, "c1")
+            ),
+          })),
+        };
+      }
+      if (name === "booths") {
+        return {
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue(
+              mockQuerySnap([{ id: "b1", data: () => boothData }])
+            ),
+          }),
+          doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+    });
+
+    const res = await request(app)
+      .get("/api/booths")
+      .query({ companyId: "c1" })
+      .set("Authorization", VALID_TOKEN);
+
+    expect(res.status).toBe(200);
+    expect(res.body.booths).toHaveLength(1);
+    expect(res.body.booths[0]).toMatchObject({ id: "b1", boothName: "Shared Booth" });
   });
 });
