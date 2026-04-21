@@ -330,7 +330,7 @@ export default function FairList() {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) {
-          console.error("loadEnrollments: API returned", res.status, await res.text().catch(() => ""))
+          console.error("loadEnrollments: request failed", res.status)
           return
         }
         const data = await res.json()
