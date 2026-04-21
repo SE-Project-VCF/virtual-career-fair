@@ -752,7 +752,7 @@ describe("Register", () => {
       status: 200,
       json: async () => ({}),
     });
-    const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
+    const setItemSpy = vi.spyOn(localStorage, "setItem");
 
     renderRegister();
 

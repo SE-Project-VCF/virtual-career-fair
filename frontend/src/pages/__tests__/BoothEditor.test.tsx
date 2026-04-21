@@ -76,37 +76,11 @@ const renderBoothEditor = () => {
   );
 };
 
-/** Pick industry + size and fill the required Booth Name and Location fields. */
-async function fillRequiredBoothLocation(
-  user: ReturnType<typeof userEvent.setup>,
-  opts?: { includeIndustrySize?: boolean; location?: string; boothName?: string }
-) {
-  const {
-    includeIndustrySize = true,
-    boothName = "Engineering",
-  } = opts ?? {};
 
-  await user.type(screen.getByRole("textbox", { name: /booth name/i }), boothName);
-
-  if (includeIndustrySize) {
-    const industrySelect = screen.getByRole("combobox", { name: /industry/i });
-    await user.click(industrySelect);
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole("option", { name: /software development/i }));
-
-    const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
-    await user.click(sizeSelect);
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
-  }
-}
-
-/** Pick industry + company size (required booth fields). */
+/** Pick industry + company size + booth name (all required booth fields). */
 async function fillRequiredIndustryAndSize(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByRole("textbox", { name: /booth name/i }), "Engineering");
+
   const industrySelect = screen.getByRole("combobox", { name: /industry/i });
   await user.click(industrySelect);
   await waitFor(() => {

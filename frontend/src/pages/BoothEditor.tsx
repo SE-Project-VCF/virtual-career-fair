@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom"
 import {
   Container,
   Box,
@@ -442,10 +442,6 @@ export default function BoothEditor() {
 
   const validateBoothForm = async (companyInfo: typeof company): Promise<string | null> => {
     if (!companyInfo) return "Company not found"
-
-    if (!formData.location.trim()) {
-      return "Location is required."
-    }
 
     const normalizedEmail = formData.contactEmail.trim().toLowerCase()
     const usersRef = collection(db, "users")
