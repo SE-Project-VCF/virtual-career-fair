@@ -752,7 +752,9 @@ describe("Register", () => {
       status: 200,
       json: async () => ({}),
     });
-    const setItemSpy = vi.spyOn(localStorage, "setItem");
+    // Note: we check the stored value directly because our in-memory localStorage
+    // mock (required for Node.js 25 compatibility) doesn't route through Storage.prototype.
+
 
     renderRegister();
 
@@ -803,7 +805,7 @@ describe("Register", () => {
     });
 
     await waitFor(() => {
-      expect(setItemSpy).toHaveBeenCalled();
+      expect(localStorage.getItem("currentUser")).not.toBeNull();
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
   });

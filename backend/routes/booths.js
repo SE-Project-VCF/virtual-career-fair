@@ -95,6 +95,16 @@ router.get("/booths", verifyFirebaseToken, async (req, res) => {
     const boothsSnap = await db.collection("booths").where("companyId", "==", companyId).get();
     const booths = boothsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
+    // Legacy support: if company.boothId points to a booth not already in the list, include it
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    const legacyBoothId = companyDoc.exists ? companyDoc.data().boothId : null;
+    if (legacyBoothId && !booths.some((b) => b.id === legacyBoothId)) {
+      const legacyBoothDoc = await db.collection("booths").doc(legacyBoothId).get();
+      if (legacyBoothDoc.exists) {
+        booths.unshift({ id: legacyBoothDoc.id, ...legacyBoothDoc.data() });
+      }
+    }
+
     return res.json({ booths });
   } catch (err) {
     console.error("GET /api/booths error:", err);

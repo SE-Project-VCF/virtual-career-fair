@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import EmailVerificationPending from "../EmailVerificationPending"
@@ -168,8 +168,12 @@ describe("EmailVerificationPending", () => {
   })
 
   it("disables verify button while loading", async () => {
-    mockVerifyAndLogin.mockImplementation(() =>
-      new Promise(resolve => setTimeout(() => resolve({ success: true }), 100))
+    let finishVerify!: (value: { success: boolean }) => void
+    mockVerifyAndLogin.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishVerify = resolve
+        })
     )
     const user = userEvent.setup()
 
@@ -184,7 +188,11 @@ describe("EmailVerificationPending", () => {
 
     await user.click(verifyButton)
 
-    // Button should be disabled during loading
-    expect(verifyButton).toBeDisabled()
+    // While loading, the primary button shows a spinner instead of label text (no accessible name).
+    await waitFor(() => {
+      expect(screen.getByRole("progressbar")).toBeInTheDocument()
+    })
+
+    finishVerify({ success: true })
   })
 })

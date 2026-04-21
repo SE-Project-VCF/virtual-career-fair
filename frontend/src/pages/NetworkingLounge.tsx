@@ -14,6 +14,10 @@ import {
   Chip,
   Container,
   Grid,
+  FormControlLabel,
+  Switch,
+  Snackbar,
+  Alert,
 } from "@mui/material"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ChatIcon from "@mui/icons-material/Chat"
@@ -140,6 +144,10 @@ export default function NetworkingLounge() {
   const [activeTab, setActiveTab] = useState(0)
   const [attendees, setAttendees] = useState<Attendee[]>([])
   const [loadingAttendees, setLoadingAttendees] = useState(false)
+  const [ghostMode, setGhostMode] = useState<boolean>(
+    Boolean((user as any)?.ghostMode)
+  )
+  const [ghostError, setGhostError] = useState<string | null>(null)
   const attendeesFetched = useRef(false)
 
   useEffect(() => {
@@ -240,7 +248,9 @@ export default function NetworkingLounge() {
         })
         if (!res.ok) throw new Error("Failed to fetch attendees")
         const data = await res.json()
-        setAttendees(data.attendees || [])
+        const list: Attendee[] = (data.attendees || []).filter((attendee: Attendee) => attendee.uid !== (user?.uid ?? ""))
+        list.sort((a, b) => (a.firstName || "").localeCompare(b.firstName || ""))
+        setAttendees(list)
       } catch (err) {
         console.error("Attendees fetch error:", err)
       } finally {
@@ -253,6 +263,34 @@ export default function NetworkingLounge() {
 
   const handleMessageAttendee = (attendee: Attendee) => {
     navigate("/dashboard/chat", { state: { repId: attendee.uid } })
+  }
+
+  const handleToggleGhostMode = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.checked
+    const prev = ghostMode
+    setGhostMode(next)
+    try {
+      const idToken = await auth.currentUser?.getIdToken()
+      const res = await fetch(`${API_URL}/api/users/me/ghost-mode`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ghostMode: next }),
+      })
+      if (!res.ok) throw new Error("Failed to update ghost mode")
+      const stored = localStorage.getItem("currentUser")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        parsed.ghostMode = next
+        localStorage.setItem("currentUser", JSON.stringify(parsed))
+      }
+    } catch (err) {
+      console.error(err)
+      setGhostMode(prev)
+      setGhostError("Failed to update Ghost Mode. Please try again.")
+    }
   }
 
   const sendMessage = async () => {
@@ -280,6 +318,9 @@ export default function NetworkingLounge() {
     el.style.height = "auto"
     el.style.height = el.scrollHeight + "px"
   }
+
+  const currentUid = user?.uid ?? ""
+  const visibleAttendees = attendees
 
   if (!client) {
     return (
@@ -373,12 +414,24 @@ export default function NetworkingLounge() {
         {activeTab === 1 && (
           <Box sx={{ flex: 1, overflowY: "auto" }}>
             <Container maxWidth="lg" sx={{ py: 4 }}>
+              <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={ghostMode}
+                      onChange={handleToggleGhostMode}
+                      inputProps={{ "aria-label": "Ghost Mode" }}
+                    />
+                  }
+                  label="Ghost Mode — hide my profile from other attendees"
+                />
+              </Box>
               {loadingAttendees && (
                 <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
                   <CircularProgress />
                 </Box>
               )}
-              {!loadingAttendees && attendees.length === 0 && (
+              {!loadingAttendees && visibleAttendees.length === 0 && (
                 <Box sx={{ textAlign: "center", py: 8 }}>
                   <PeopleIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
                   <Typography variant="h6" color="text.secondary">
@@ -390,11 +443,11 @@ export default function NetworkingLounge() {
                 </Box>
               )}
               <Grid container spacing={3}>
-                {!loadingAttendees && attendees.map((a) => (
+                {!loadingAttendees && visibleAttendees.map((a) => (
                   <Grid size={{ xs: 12, sm: 6, md: 4 }} key={a.uid}>
                     <AttendeeCard
                       attendee={a}
-                      currentUid={user?.uid ?? ""}
+                      currentUid={currentUid}
                       onMessage={handleMessageAttendee}
                     />
                   </Grid>
@@ -404,6 +457,16 @@ export default function NetworkingLounge() {
           </Box>
         )}
       </Box>
+      <Snackbar
+        open={ghostError !== null}
+        autoHideDuration={4000}
+        onClose={() => setGhostError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setGhostError(null)}>
+          {ghostError}
+        </Alert>
+      </Snackbar>
     </BaseLayout>
   )
 }

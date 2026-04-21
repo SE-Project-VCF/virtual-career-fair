@@ -56,11 +56,25 @@ const renderFairAdminDashboard = () =>
     </BrowserRouter>
   )
 
+/** Initial fair-admin load calls GET enrollments then GET announcements (fair id f1 in tests). */
+function mockFetchAnnouncementsOk() {
+  return { ok: true, json: async () => ({ announcements: [] }) }
+}
+
 describe("FairAdminDashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
-    globalThis.fetch = vi.fn()
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+    })
 
     // Default: administrator
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
@@ -84,12 +98,6 @@ describe("FairAdminDashboard", () => {
       },
       isLive: false,
       fairId: "f1",
-    })
-
-    // Default fetch: enrollments endpoint returns empty list
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ enrollments: [] }),
     })
   })
 
@@ -266,9 +274,15 @@ describe("FairAdminDashboard — invite code", () => {
       fairId: "f1",
     })
 
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ enrollments: [] }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
     })
 
     // Mock clipboard writeText as a spy
@@ -291,12 +305,13 @@ describe("FairAdminDashboard — invite code", () => {
   it("calls refresh invite code endpoint and clears Copied state", async () => {
     const user = userEvent.setup()
 
-    // First call = enrollments, second = refresh-invite-code
+    // enrollments, announcements, refresh-invite-code
     globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ inviteCode: "XYZ789" }),
@@ -325,6 +340,7 @@ describe("FairAdminDashboard — invite code", () => {
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -353,6 +369,7 @@ describe("FairAdminDashboard — invite code", () => {
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: false,
         status: 503,
@@ -401,9 +418,15 @@ describe("FairAdminDashboard — toggle live", () => {
       fairId: "f1",
     })
 
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ enrollments: [] }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
     })
   })
 
@@ -420,6 +443,7 @@ describe("FairAdminDashboard — toggle live", () => {
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({}),
@@ -446,6 +470,7 @@ describe("FairAdminDashboard — toggle live", () => {
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: false,
         json: async () => ({}),
@@ -491,9 +516,15 @@ describe("FairAdminDashboard — add company dialog", () => {
       fairId: "f1",
     })
 
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ enrollments: [] }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
     })
   })
 
@@ -505,6 +536,7 @@ describe("FairAdminDashboard — add company dialog", () => {
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: false,
         json: async () => ({ error: "Company not found" }),
@@ -533,6 +565,7 @@ describe("FairAdminDashboard — add company dialog", () => {
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ success: true }),
@@ -609,13 +642,19 @@ describe("FairAdminDashboard — enrolled companies table", () => {
   })
 
   it("renders enrolled companies in the table", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        enrollments: [
-          { id: "c1", companyName: "Acme Corp", enrollmentMethod: "invite", enrolledAt: { seconds: 1700000000 } },
-        ],
-      }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          enrollments: [
+            { id: "c1", companyName: "Acme Corp", enrollmentMethod: "invite", enrolledAt: { seconds: 1700000000 } },
+          ],
+        }),
+      })
     })
 
     renderFairAdminDashboard()
@@ -627,13 +666,19 @@ describe("FairAdminDashboard — enrolled companies table", () => {
   })
 
   it("shows dash for enrollment date when enrolledAt is missing", async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        enrollments: [
-          { id: "c1", companyName: "NoDate Corp", enrollmentMethod: "admin", enrolledAt: null },
-        ],
-      }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          enrollments: [
+            { id: "c1", companyName: "NoDate Corp", enrollmentMethod: "admin", enrolledAt: null },
+          ],
+        }),
+      })
     })
 
     renderFairAdminDashboard()
@@ -657,6 +702,7 @@ describe("FairAdminDashboard — enrolled companies table", () => {
           ],
         }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({}),
@@ -684,13 +730,19 @@ describe("FairAdminDashboard — enrolled companies table", () => {
   it("does not remove company when confirm is cancelled", async () => {
     globalThis.confirm = vi.fn().mockReturnValue(false)
 
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        enrollments: [
-          { id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null },
-        ],
-      }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          enrollments: [
+            { id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null },
+          ],
+        }),
+      })
     })
 
     const user = userEvent.setup()
@@ -717,6 +769,7 @@ describe("FairAdminDashboard — enrolled companies table", () => {
           ],
         }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: false,
         json: async () => ({}),
@@ -762,9 +815,15 @@ describe("FairAdminDashboard — edit fair dialog", () => {
       fairId: "f1",
     })
 
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ enrollments: [] }),
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
     })
   })
 
@@ -793,6 +852,7 @@ describe("FairAdminDashboard — edit fair dialog", () => {
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: false,
         json: async () => ({ error: "Name is required" }),
@@ -843,6 +903,7 @@ describe("FairAdminDashboard — edit fair dialog", () => {
           ],
         }),
       })
+      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
       .mockResolvedValueOnce({
         ok: false,
         json: async () => ({}),

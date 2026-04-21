@@ -30,6 +30,7 @@ import {
 } from "@mui/material"
 import DeleteIcon from "@mui/icons-material/Delete"
 import AddIcon from "@mui/icons-material/Add"
+import EditIcon from "@mui/icons-material/Edit"
 import ContentCopyIcon from "@mui/icons-material/ContentCopy"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import BaseLayout from "../components/BaseLayout"
@@ -38,6 +39,19 @@ import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
 import { API_URL } from "../config"
 import { useGeocodeSuggest } from "../hooks/useGeocodeSuggest"
+
+type FairAnnouncementRow = {
+  id: string
+  fairId: string
+  fairName: string | null
+  title: string
+  description: string
+  published: boolean
+  publishedAt: number | null
+  createdAt: number | null
+  updatedAt: number | null
+  createdBy: string | null
+}
 
 function formatSavedHubLine(fair: {
   venueCity?: string | null
@@ -100,6 +114,15 @@ export default function FairAdminDashboard() {
   const [codeCopied, setCodeCopied] = useState(false)
   const [refreshingInviteCode, setRefreshingInviteCode] = useState(false)
 
+  const [announcements, setAnnouncements] = useState<FairAnnouncementRow[]>([])
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true)
+  const [annDialogOpen, setAnnDialogOpen] = useState(false)
+  const [editingAnnId, setEditingAnnId] = useState<string | null>(null)
+  const [annForm, setAnnForm] = useState({ title: "", description: "", published: false })
+  const [annSaving, setAnnSaving] = useState(false)
+  const [annError, setAnnError] = useState("")
+  const [publishingAnnId, setPublishingAnnId] = useState<string | null>(null)
+
   useEffect(() => {
     if (user?.role !== "administrator") {
       navigate("/dashboard")
@@ -107,6 +130,7 @@ export default function FairAdminDashboard() {
     }
     if (!fairLoading && fairId) {
       loadEnrollments()
+      loadAnnouncements()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fairLoading, fairId, navigate])
@@ -161,6 +185,133 @@ export default function FairAdminDashboard() {
       console.error(err)
     } finally {
       setLoadingEnrollments(false)
+    }
+  }
+
+  const loadAnnouncements = async () => {
+    if (!fairId) return
+    try {
+      setLoadingAnnouncements(true)
+      const token = await getToken()
+      const res = await fetch(`${API_URL}/api/fairs/${fairId}/announcements`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error("Failed to load announcements")
+      const data = await res.json()
+      setAnnouncements(data.announcements || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingAnnouncements(false)
+    }
+  }
+
+  const openCreateAnnouncement = () => {
+    setEditingAnnId(null)
+    setAnnForm({ title: "", description: "", published: false })
+    setAnnError("")
+    setAnnDialogOpen(true)
+  }
+
+  const openEditAnnouncement = (row: FairAnnouncementRow) => {
+    setEditingAnnId(row.id)
+    setAnnForm({
+      title: row.title,
+      description: row.description,
+      published: row.published,
+    })
+    setAnnError("")
+    setAnnDialogOpen(true)
+  }
+
+  const submitAnnouncement = async (mode: "create-draft" | "create-publish" | "save-edit") => {
+    if (!fairId || !annForm.title.trim()) {
+      setAnnError("Title is required")
+      return
+    }
+    let published = annForm.published
+    if (mode === "create-publish") published = true
+    if (mode === "create-draft") published = false
+
+    setAnnSaving(true)
+    setAnnError("")
+    try {
+      const token = await getToken()
+      const body: Record<string, unknown> = {
+        title: annForm.title.trim(),
+        published,
+      }
+      const desc = annForm.description.trim()
+      if (desc) body.description = desc
+      else if (editingAnnId) body.description = ""
+
+      if (editingAnnId) {
+        const res = await fetch(`${API_URL}/api/fairs/${fairId}/announcements/${editingAnnId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to update announcement")
+      } else {
+        const res = await fetch(`${API_URL}/api/fairs/${fairId}/announcements`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            title: annForm.title.trim(),
+            ...(desc ? { description: desc } : {}),
+            published,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to create announcement")
+      }
+      setAnnDialogOpen(false)
+      setSuccess(editingAnnId ? "Announcement updated" : "Announcement saved")
+      await loadAnnouncements()
+    } catch (err: any) {
+      setAnnError(err.message || "Save failed")
+    } finally {
+      setAnnSaving(false)
+    }
+  }
+
+  const handleDeleteAnnouncement = async (announcementId: string) => {
+    if (!fairId) return
+    if (!globalThis.confirm("Delete this announcement?")) return
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API_URL}/api/fairs/${fairId}/announcements/${announcementId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error("Failed to delete")
+      setSuccess("Announcement deleted")
+      await loadAnnouncements()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  const handlePublishAnnouncement = async (row: FairAnnouncementRow) => {
+    if (!fairId || row.published) return
+    setPublishingAnnId(row.id)
+    setError("")
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API_URL}/api/fairs/${fairId}/announcements/${row.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ published: true }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to publish")
+      setSuccess("Announcement published")
+      await loadAnnouncements()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setPublishingAnnId(null)
     }
   }
 
@@ -483,6 +634,90 @@ export default function FairAdminDashboard() {
             </Card>
           </Grid>
 
+          {/* Fair announcements (employer banners) */}
+          <Grid size={{ xs: 12 }}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                  <Typography variant="h6">Fair announcements</Typography>
+                  <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateAnnouncement}>
+                    New announcement
+                  </Button>
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Published announcements appear as banners for company owners and representatives whose company is
+                  enrolled in this fair.
+                </Typography>
+                {loadingAnnouncements && <CircularProgress size={24} />}
+                {!loadingAnnouncements && announcements.length === 0 && (
+                  <Typography color="text.secondary">No announcements yet.</Typography>
+                )}
+                {!loadingAnnouncements && announcements.length > 0 && (
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Title</TableCell>
+                          <TableCell>Description</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell align="right">Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {announcements.map((row) => (
+                          <TableRow key={row.id}>
+                            <TableCell sx={{ fontWeight: 600, maxWidth: 220 }}>
+                              {row.title}
+                            </TableCell>
+                            <TableCell sx={{ maxWidth: 360 }}>
+                              <Typography variant="body2" noWrap title={row.description || undefined}>
+                                {row.description || "—"}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                size="small"
+                                label={row.published ? "Published" : "Draft"}
+                                color={row.published ? "success" : "default"}
+                                variant={row.published ? "filled" : "outlined"}
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                {!row.published ? (
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="success"
+                                    disabled={publishingAnnId === row.id}
+                                    onClick={() => void handlePublishAnnouncement(row)}
+                                  >
+                                    {publishingAnnId === row.id ? "Publishing…" : "Publish"}
+                                  </Button>
+                                ) : null}
+                                <IconButton size="small" onClick={() => openEditAnnouncement(row)} title="Edit">
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => handleDeleteAnnouncement(row.id)}
+                                  title="Delete"
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
           {/* Enrolled Companies */}
           <Grid size={{ xs: 12 }}>
             <Card>
@@ -674,6 +909,89 @@ export default function FairAdminDashboard() {
             <Button type="submit" variant="contained" disabled={saving || !editForm.name.trim()}>
               {saving ? "Saving..." : "Save"}
             </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Announcement create/edit */}
+      <Dialog
+        open={annDialogOpen}
+        onClose={() => !annSaving && setAnnDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{editingAnnId ? "Edit announcement" : "New announcement"}</DialogTitle>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            void submitAnnouncement(editingAnnId ? "save-edit" : "create-publish")
+          }}
+        >
+          <DialogContent>
+            <TextField
+              label="Title"
+              value={annForm.title}
+              onChange={(e) => setAnnForm((f) => ({ ...f, title: e.target.value }))}
+              fullWidth
+              required
+              sx={{ mt: 1, mb: 2 }}
+            />
+            <TextField
+              label="Description (optional)"
+              value={annForm.description}
+              onChange={(e) => setAnnForm((f) => ({ ...f, description: e.target.value }))}
+              fullWidth
+              multiline
+              minRows={3}
+              sx={{ mb: 2 }}
+              placeholder="Add more context for employers…"
+            />
+            {editingAnnId ? (
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={annForm.published}
+                    onChange={(e) => setAnnForm((f) => ({ ...f, published: e.target.checked }))}
+                    color="success"
+                  />
+                }
+                label={annForm.published ? "Published" : "Draft"}
+              />
+            ) : null}
+            {annError ? <Alert severity="error" sx={{ mt: 1 }}>{annError}</Alert> : null}
+          </DialogContent>
+          <DialogActions sx={{ flexWrap: "wrap", gap: 1 }}>
+            <Button type="button" onClick={() => setAnnDialogOpen(false)} disabled={annSaving}>
+              Cancel
+            </Button>
+            {editingAnnId ? (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={annSaving}
+              >
+                {annSaving ? "Saving…" : "Save changes"}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outlined"
+                  disabled={annSaving}
+                  onClick={() => void submitAnnouncement("create-draft")}
+                >
+                  Save draft
+                </Button>
+                <Button
+                  type="button"
+                  variant="contained"
+                  disabled={annSaving}
+                  onClick={() => void submitAnnouncement("create-publish")}
+                >
+                  Publish
+                </Button>
+              </>
+            )}
           </DialogActions>
         </form>
       </Dialog>

@@ -21,11 +21,14 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "firebase": "^12.4.0",
-    "firebase-admin": "^13.5.0",
+    "firebase-admin": "^13.8.0",
     "mammoth": "^1.11.0",
     "multer": "^2.1.0",
     "pdfjs-dist": "^5.4.624",
     "stream-chat": "^9.25.0"
+  },
+  "overrides": {
+    "@tootallnate/once": "3.0.1"
   },
   "devDependencies": {
     "jest": "^30.2.0",

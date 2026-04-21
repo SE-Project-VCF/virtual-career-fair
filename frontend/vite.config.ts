@@ -1,6 +1,11 @@
 /// <reference types="vitest/config" />
+import { cpus } from 'node:os'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+
+// Cap parallel test workers: many jsdom + userEvent suites in parallel can exceed timeouts on
+// busy CPUs (common on Windows and in CI). Vitest defaults to cpu count, which is often too high.
+const maxTestWorkers = Math.min(4, cpus().length)
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -24,7 +29,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: false,
-    testTimeout: 15000,
+    maxWorkers: maxTestWorkers,
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
