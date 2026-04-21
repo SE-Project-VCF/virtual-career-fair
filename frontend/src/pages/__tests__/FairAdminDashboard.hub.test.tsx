@@ -78,6 +78,72 @@ function clickChipDeleteInDialog(dialog: HTMLElement, chipAccessibleName: RegExp
   fireEvent.click(icon)
 }
 
+function requestUrlString(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input
+  if (input instanceof URL) return input.href
+  return input.url
+}
+
+/** Minimal Response shape used by app code (ok + json); satisfies `typeof fetch` for tests. */
+function mockFetchResponse(data: {
+  ok: boolean
+  status?: number
+  json: () => Promise<unknown>
+}): Promise<Response> {
+  return Promise.resolve(data as unknown as Response)
+}
+
+/** FairAdminDashboard fires enrollments + announcements GETs in parallel on mount; mockResolvedValueOnce order is nondeterministic. */
+function stubFairAdminDashboardFetch(opts: {
+  putResponse?: { ok: boolean; status: number; json: () => Promise<unknown> }
+  getFairAfterPut?: Record<string, unknown>
+}) {
+  const fairId = "f1"
+  const impl: typeof fetch = (input, init) => {
+    const u = requestUrlString(input)
+    const method = init?.method ?? "GET"
+
+    if (u.includes(`/api/fairs/${fairId}/enrollments`) && method === "GET") {
+      return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
+    }
+    if (u.includes(`/api/fairs/${fairId}/announcements`) && method === "GET") {
+      return mockFetchResponse({ ok: true, json: async () => ({ announcements: [] }) })
+    }
+
+    const isFairPut =
+      method === "PUT" &&
+      u.includes(`/api/fairs/${fairId}`) &&
+      !u.includes("/enrollments") &&
+      !u.includes("/announcements") &&
+      !u.includes("/toggle") &&
+      !u.includes("/refresh") &&
+      !u.includes("/enroll")
+
+    if (isFairPut && opts.putResponse) {
+      return mockFetchResponse(opts.putResponse)
+    }
+    if (isFairPut && !opts.putResponse) {
+      return mockFetchResponse({ ok: true, json: async () => ({}) })
+    }
+
+    const isFairGet =
+      method === "GET" &&
+      u.includes(`/api/fairs/${fairId}`) &&
+      !u.includes("/enrollments") &&
+      !u.includes("/announcements")
+
+    if (isFairGet && opts.getFairAfterPut) {
+      return mockFetchResponse({ ok: true, json: async () => opts.getFairAfterPut })
+    }
+    if (isFairGet) {
+      return mockFetchResponse({ ok: true, json: async () => ({}) })
+    }
+
+    return mockFetchResponse({ ok: true, json: async () => ({}) })
+  }
+  return vi.fn(impl)
+}
+
 describe("FairAdminDashboard — venue hub / edit save", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -264,18 +330,15 @@ describe("FairAdminDashboard — venue hub / edit save", () => {
 
   it("shows API error status when PUT fails and response body is not JSON", async () => {
     const user = userEvent.setup()
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce({
+    globalThis.fetch = stubFairAdminDashboardFetch({
+      putResponse: {
         ok: false,
         status: 502,
         json: async () => {
           throw new SyntaxError("bad json")
         },
-      })
+      },
+    })
 
     renderFairAdminDashboard()
 
@@ -296,19 +359,7 @@ describe("FairAdminDashboard — venue hub / edit save", () => {
       inviteCode: "ABC123",
       venueCity: "Raleigh",
     }
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => refreshedFair,
-      })
+    globalThis.fetch = stubFairAdminDashboardFetch({ getFairAfterPut: refreshedFair })
 
     renderFairAdminDashboard()
 

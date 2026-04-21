@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest"
+import { configure } from "@testing-library/react"
 import { vi } from "vitest"
 
 // Node.js 25 ships native localStorage that is broken when --localstorage-file
@@ -20,6 +21,9 @@ Object.defineProperty(globalThis, "localStorage", {
   writable: true,
   configurable: true,
 })
+
+// Default 1000ms is too tight when many workers run heavy jsdom + userEvent suites.
+configure({ asyncUtilTimeout: 10_000 })
 
 // Mock import.meta.env
 vi.stubEnv("VITE_FIREBASE_API_KEY", "test-api-key")
