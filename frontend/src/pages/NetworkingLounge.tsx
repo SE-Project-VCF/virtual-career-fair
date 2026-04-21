@@ -248,7 +248,7 @@ export default function NetworkingLounge() {
         })
         if (!res.ok) throw new Error("Failed to fetch attendees")
         const data = await res.json()
-        const list: Attendee[] = (data.attendees || []).filter((attendee) => attendee.uid !== (user?.uid ?? ""))
+        const list: Attendee[] = (data.attendees || []).filter((attendee: Attendee) => attendee.uid !== (user?.uid ?? ""))
         list.sort((a, b) => (a.firstName || "").localeCompare(b.firstName || ""))
         setAttendees(list)
       } catch (err) {
