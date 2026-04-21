@@ -1433,7 +1433,13 @@ router.get("/fairs/:fairId/lounge/attendees", verifyFirebaseToken, async (req, r
     );
 
     const attendees = profileDocs
-      .filter((doc) => doc.exists && doc.data().role === "student")
+      .filter(
+        (doc) =>
+          doc.exists &&
+          doc.id !== uid &&
+          doc.data().role === "student" &&
+          doc.data().ghostMode !== true
+      )
       .map((doc) => {
         const data = doc.data();
         return {
