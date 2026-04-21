@@ -1772,4 +1772,12 @@ router.get("/fairs/:fairId/lounge/attendees", verifyFirebaseToken, async (req, r
   }
 });
 
+if (process.env.NODE_ENV === "test") {
+  router.testHelpers = {
+    fairScheduleFromFairData,
+    serializeAnnouncementDoc,
+    getCompanyAndBoothSnapshot,
+  };
+}
+
 module.exports = router;
