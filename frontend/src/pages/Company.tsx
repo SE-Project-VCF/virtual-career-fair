@@ -565,9 +565,8 @@ function OfficeLocationsOwnerCard({
   )
 }
 
-function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
+function BoothManagementCard({ companyId, navigate }: Readonly<{
   companyId: string
-  boothId?: string
   navigate: ReturnType<typeof useNavigate>
 }>) {
   const [booths, setBooths] = useState<{ id: string; boothName?: string; industry?: string }[]>([])
@@ -1621,7 +1620,6 @@ export default function Company() {
           {/* Booth Management Card */}
           <BoothManagementCard
             companyId={company.id}
-            boothId={company.boothId}
             navigate={navigate}
           />
 
