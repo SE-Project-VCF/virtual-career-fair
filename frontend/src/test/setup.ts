@@ -1,5 +1,9 @@
 import "@testing-library/jest-dom/vitest"
+import { configure } from "@testing-library/react"
 import { vi } from "vitest"
+
+// Default 1000ms is too tight when many workers run heavy jsdom + userEvent suites.
+configure({ asyncUtilTimeout: 10_000 })
 
 // Mock import.meta.env
 vi.stubEnv("VITE_FIREBASE_API_KEY", "test-api-key")
