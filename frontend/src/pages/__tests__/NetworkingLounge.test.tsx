@@ -84,6 +84,19 @@ const mockStreamClient = {
 
 // Mutable ref that the mock module returns — lets tests swap between null and mockStreamClient
 const streamRef: { current: typeof mockStreamClient | null } = { current: null }
+const localStorageStore = new Map<string, string>()
+const localStorageMock = {
+  getItem: vi.fn((key: string) => localStorageStore.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string) => {
+    localStorageStore.set(key, value)
+  }),
+  removeItem: vi.fn((key: string) => {
+    localStorageStore.delete(key)
+  }),
+  clear: vi.fn(() => {
+    localStorageStore.clear()
+  }),
+}
 
 vi.mock("../../utils/streamClient", () => ({
   get streamClient() {
@@ -114,6 +127,8 @@ describe("NetworkingLounge", () => {
     mockStreamClient.userID = null
     setStreamClient(null)
     globalThis.fetch = vi.fn()
+    localStorageStore.clear()
+    vi.stubGlobal("localStorage", localStorageMock)
     firebaseAuthRef.currentUser = {
       getIdToken: vi.fn().mockResolvedValue("mock-token"),
     }
@@ -121,7 +136,6 @@ describe("NetworkingLounge", () => {
       queueMicrotask(() => cb({ getIdToken: () => Promise.resolve("mock-token") }))
       return () => {}
     }
-    localStorage.clear()
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "user-1",
@@ -558,7 +572,7 @@ describe("NetworkingLounge", () => {
       })
     })
 
-    it("shows Message button for other students but not for self", async () => {
+    it("does not render the signed-in user in the attendees list", async () => {
       const user = userEvent.setup()
       setupConnected()
 
@@ -584,9 +598,9 @@ describe("NetworkingLounge", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Jane Smith")).toBeInTheDocument()
+        expect(screen.queryByText("John Doe")).not.toBeInTheDocument()
       })
 
-      // One Message button (for Jane), not two
       expect(screen.getAllByRole("button", { name: /message/i })).toHaveLength(1)
     })
 
@@ -811,7 +825,7 @@ describe("NetworkingLounge", () => {
       expect(attendeesFetches).toHaveLength(1)
     })
 
-    it("sorts the current user to the top of the attendees list", async () => {
+    it("filters the signed-in user out of the attendees list", async () => {
       const user = userEvent.setup()
       mockStreamClient.userID = "user-1"
       setStreamClient(mockStreamClient)
@@ -836,17 +850,16 @@ describe("NetworkingLounge", () => {
       await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
       await user.click(screen.getByRole("tab", { name: /attendees/i }))
 
-      await waitFor(() => expect(screen.getByText("John Doe")).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByText("Alice Z")).toBeInTheDocument())
+      expect(screen.queryByText("John Doe")).not.toBeInTheDocument()
 
       const names = screen.getAllByRole("heading", { level: 6 }).map((el) => el.textContent)
-      const johnIdx = names.findIndex((n) => n?.includes("John Doe"))
       const aliceIdx = names.findIndex((n) => n?.includes("Alice"))
       const bobIdx = names.findIndex((n) => n?.includes("Bob"))
-      expect(johnIdx).toBeLessThan(aliceIdx)
-      expect(johnIdx).toBeLessThan(bobIdx)
+      expect(aliceIdx).toBeLessThan(bobIdx)
     })
 
-    it("hides the signed-in user from attendees when ghost mode is enabled", async () => {
+    it("keeps the signed-in user hidden when ghost mode is enabled", async () => {
       const user = userEvent.setup()
       mockStreamClient.userID = "user-1"
       setStreamClient(mockStreamClient)
@@ -874,13 +887,14 @@ describe("NetworkingLounge", () => {
       await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
       await user.click(screen.getByRole("tab", { name: /attendees/i }))
 
-      await waitFor(() => expect(screen.getByText("John Doe")).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByText("Alice Z")).toBeInTheDocument())
+      expect(screen.queryByText("John Doe")).not.toBeInTheDocument()
 
       await user.click(screen.getByRole("switch", { name: /ghost mode/i }))
 
       await waitFor(() => {
-        expect(screen.queryByText("John Doe")).not.toBeInTheDocument()
         expect(screen.getByText("Alice Z")).toBeInTheDocument()
+        expect(screen.queryByText("John Doe")).not.toBeInTheDocument()
       })
     })
 
