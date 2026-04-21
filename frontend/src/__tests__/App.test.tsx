@@ -6,6 +6,8 @@ vi.mock("../pages/RoleSelection", () => ({ default: () => <div>RoleSelection</di
 vi.mock("../pages/Register", () => ({ default: () => <div>Register</div> }))
 vi.mock("../pages/Login", () => ({ default: () => <div>Login</div> }))
 vi.mock("../pages/Dashboard", () => ({ default: () => <div>Dashboard</div> }))
+vi.mock("../pages/FairyJobmotherPage", () => ({ default: () => <div>FairyJobmotherPage</div> }))
+vi.mock("../pages/FairAnnouncementsPage", () => ({ default: () => <div>FairAnnouncementsPage</div> }))
 vi.mock("../pages/CompanyManagement", () => ({ default: () => <div>CompanyManagement</div> }))
 vi.mock("../pages/Company", () => ({ default: () => <div>Company</div> }))
 vi.mock("../pages/BoothEditor", () => ({ default: () => <div>BoothEditor</div> }))
@@ -172,6 +174,18 @@ describe("App", () => {
     globalThis.history.pushState({}, "", "/dashboard")
     render(<App />)
     expect(screen.getByText("Dashboard")).toBeInTheDocument()
+  })
+
+  it("renders FairyJobmotherPage at /dashboard/fairy-jobmother", () => {
+    globalThis.history.pushState({}, "", "/dashboard/fairy-jobmother")
+    render(<App />)
+    expect(screen.getByText("FairyJobmotherPage")).toBeInTheDocument()
+  })
+
+  it("renders FairAnnouncementsPage at /dashboard/fair-announcements", () => {
+    globalThis.history.pushState({}, "", "/dashboard/fair-announcements")
+    render(<App />)
+    expect(screen.getByText("FairAnnouncementsPage")).toBeInTheDocument()
   })
 
   it("renders AdminDashboard at /admin", () => {
