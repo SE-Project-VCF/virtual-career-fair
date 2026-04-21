@@ -333,7 +333,6 @@ describe("BoothEditor – fair-scoped", () => {
         )
         await user.click(screen.getByRole("option", { name: /51-200 employees/i }))
 
-        await user.type(screen.getByRole("textbox", { name: /location/i }), "San Francisco")
         await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test")
         await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe")
         await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com")

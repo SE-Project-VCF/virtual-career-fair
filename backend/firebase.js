@@ -28,6 +28,17 @@ if (!admin.apps.length) {
   });
 }
 
+if (!["production", "test"].includes(process.env.NODE_ENV)) {
+  try {
+    const { project_id: projectId } = getServiceAccount();
+    if (projectId) {
+      console.log(`[firebase] Admin SDK Firestore project_id: ${projectId}`);
+    }
+  } catch (err) {
+    console.warn("[firebase] Could not log service account project_id:", err.message);
+  }
+}
+
 const db = admin.firestore();
 const auth = admin.auth();
 const bucket = admin.storage().bucket(); // ✅ this uses storageBucket from initializeApp

@@ -19,6 +19,7 @@ import {
   FIRESTORE_IN_QUERY_LIMIT,
   type BoothCardItem,
 } from "../components/booths/boothShared"
+import { formatCompanyOfficeLocationsForDisplay } from "../utils/companyOfficeLocationDisplay"
 import BusinessIcon from "@mui/icons-material/Business"
 import WorkIcon from "@mui/icons-material/Work"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
@@ -145,8 +146,10 @@ export default function StudentFairBoothsPage() {
       // Fetch companies to map boothId -> companyId
       const companiesSnapshot = await getDocs(collection(db, "companies"))
       const boothIdToCompanyId: Record<string, string> = {}
+      const companyById: Record<string, Record<string, unknown>> = {}
       companiesSnapshot.forEach((companyDoc) => {
         const companyData = companyDoc.data()
+        companyById[companyDoc.id] = companyData as Record<string, unknown>
         if (companyData.boothId) {
           boothIdToCompanyId[companyData.boothId] = companyDoc.id
         }
@@ -158,10 +161,28 @@ export default function StudentFairBoothsPage() {
         const boothData = boothDoc.data()
         const companyId =
           boothData.companyId || boothIdToCompanyId[boothDoc.id] || undefined
+        const companyRow = companyId ? companyById[companyId] : undefined
+        const mergedLocation = formatCompanyOfficeLocationsForDisplay(
+          companyRow
+            ? {
+                remoteEmployer: companyRow.remoteEmployer === true,
+                officeLocations: Array.isArray(companyRow.officeLocations)
+                  ? (companyRow.officeLocations as { label?: string; city?: string; state?: string }[])
+                  : undefined,
+              }
+            : null,
+          {
+            location: boothData.location as string | null,
+            locationIsRemote: boothData.locationIsRemote === true,
+            locationCity: boothData.locationCity as string | null,
+            locationState: boothData.locationState as string | null,
+          },
+        )
         boothsList.push({
           id: boothDoc.id,
           ...boothData,
           companyId,
+          location: mergedLocation || (boothData.location as string) || "",
         } as Booth)
       })
 

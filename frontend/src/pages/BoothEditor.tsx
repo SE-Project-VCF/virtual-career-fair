@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   Container,
   Box,
@@ -18,6 +18,7 @@ import {
   InputLabel,
   Divider,
   Grid,
+  Link,
 } from "@mui/material"
 
 import { authUtils } from "../utils/auth"
@@ -37,6 +38,7 @@ import { API_URL } from "../config"
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
+import LocationOnIcon from "@mui/icons-material/LocationOn"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import RestartAltIcon from "@mui/icons-material/RestartAlt"
@@ -47,7 +49,6 @@ interface BoothData {
   companyName: string
   industry: string
   companySize: string
-  location: string
   description: string
   logoUrl?: string
   website?: string
@@ -106,7 +107,6 @@ export default function BoothEditor() {
     companyName: "",
     industry: "",
     companySize: "",
-    location: "",
     description: "",
     website: "",
     careersPage: "",
@@ -275,7 +275,6 @@ export default function BoothEditor() {
         companyName: boothData.companyName || fallbackCompanyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
-        location: boothData.location || "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -337,7 +336,6 @@ export default function BoothEditor() {
         companyName: boothData.companyName || companyInfo.companyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
-        location: boothData.location || "",
         description: boothData.description || "",
         logoUrl: boothData.logoUrl,
         website: boothData.website || "",
@@ -508,14 +506,13 @@ export default function BoothEditor() {
         }
       }
 
-      // Booth document payload
+      // Booth document payload (office locations live on companies/{id})
       const boothData = {
         companyId: company.id,
         boothName: formData.boothName,
         companyName: formData.companyName,
         industry: formData.industry,
         companySize: formData.companySize,
-        location: formData.location,
         description: formData.description,
         logoUrl: logoUrlToSave,
         website: formData.website || null,
@@ -588,7 +585,6 @@ export default function BoothEditor() {
       companyName: company?.companyName ?? "",
       industry: "",
       companySize: "",
-      location: "",
       description: "",
       website: "",
       careersPage: "",
@@ -867,16 +863,20 @@ export default function BoothEditor() {
                 </Grid>
 
                 <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    id="company-location"
-                    name="location"
-                    label="Location"
-                    value={formData.location}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="City, State/Country"
-                    required
-                  />
+                  <Alert severity="info" icon={<LocationOnIcon />} sx={{ alignItems: "flex-start" }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                      Office locations and the remote-employer setting are managed on your{" "}
+                      <Link component={RouterLink} to={`/company/${companyId}`} fontWeight={600}>
+                        company page
+                      </Link>
+                      . They show automatically on this booth.
+                    </Typography>
+                    {userRole === "representative" && (
+                      <Typography variant="caption" color="text.secondary">
+                        Only the company owner can edit locations; ask them to update the company page if needed.
+                      </Typography>
+                    )}
+                  </Alert>
                 </Grid>
 
                 <Grid size={{ xs: 12 }}>
