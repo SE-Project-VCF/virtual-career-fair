@@ -324,6 +324,11 @@ export default function NetworkingLounge() {
     el.style.height = el.scrollHeight + "px"
   }
 
+  const currentUid = user?.uid ?? ""
+  const visibleAttendees = ghostMode
+    ? attendees.filter((attendee) => attendee.uid !== currentUid)
+    : attendees
+
   if (!client) {
     return (
       <BaseLayout pageTitle="Networking Lounge">
@@ -433,7 +438,7 @@ export default function NetworkingLounge() {
                   <CircularProgress />
                 </Box>
               )}
-              {!loadingAttendees && attendees.length === 0 && (
+              {!loadingAttendees && visibleAttendees.length === 0 && (
                 <Box sx={{ textAlign: "center", py: 8 }}>
                   <PeopleIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
                   <Typography variant="h6" color="text.secondary">
@@ -445,11 +450,11 @@ export default function NetworkingLounge() {
                 </Box>
               )}
               <Grid container spacing={3}>
-                {!loadingAttendees && attendees.map((a) => (
+                {!loadingAttendees && visibleAttendees.map((a) => (
                   <Grid size={{ xs: 12, sm: 6, md: 4 }} key={a.uid}>
                     <AttendeeCard
                       attendee={a}
-                      currentUid={user?.uid ?? ""}
+                      currentUid={currentUid}
                       onMessage={handleMessageAttendee}
                     />
                   </Grid>

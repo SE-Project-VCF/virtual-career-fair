@@ -846,6 +846,44 @@ describe("NetworkingLounge", () => {
       expect(johnIdx).toBeLessThan(bobIdx)
     })
 
+    it("hides the signed-in user from attendees when ghost mode is enabled", async () => {
+      const user = userEvent.setup()
+      mockStreamClient.userID = "user-1"
+      setStreamClient(mockStreamClient)
+
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ channelId: "lounge-f1" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            attendees: [
+              { uid: "user-1", firstName: "John", lastName: "Doe", email: "student@example.com", major: "", expectedGradYear: null, skills: "", linkedinUrl: null },
+              { uid: "student-2", firstName: "Alice", lastName: "Z", email: "a@x.com", major: "", expectedGradYear: null, skills: "", linkedinUrl: null },
+            ],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ ghostMode: true }),
+        })
+
+      await renderNetworkingLounge()
+      await waitFor(() => expect(screen.getByRole("tab", { name: /attendees/i })).toBeInTheDocument())
+      await user.click(screen.getByRole("tab", { name: /attendees/i }))
+
+      await waitFor(() => expect(screen.getByText("John Doe")).toBeInTheDocument())
+
+      await user.click(screen.getByRole("switch", { name: /ghost mode/i }))
+
+      await waitFor(() => {
+        expect(screen.queryByText("John Doe")).not.toBeInTheDocument()
+        expect(screen.getByText("Alice Z")).toBeInTheDocument()
+      })
+    })
+
     it("logs an error when the attendees fetch fails", async () => {
       const user = userEvent.setup()
       const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
