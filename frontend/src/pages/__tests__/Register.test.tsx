@@ -345,7 +345,7 @@ describe("Register", () => {
   });
 
   it("calls registerUser on form submission", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     (authUtils.registerUser as any).mockResolvedValue({
       success: true,
       needsVerification: false,
@@ -390,8 +390,8 @@ describe("Register", () => {
         "student",
         expect.any(Object)
       );
-    }, { timeout: 3000 });
-  }, 10000);
+    }, { timeout: 15000 });
+  }, 30000);
 
   it("displays link to login page", () => {
     renderRegister();
@@ -427,7 +427,7 @@ describe("Register", () => {
   });
 
   it("validates representative invite code is optional", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     (authUtils.registerUser as any).mockResolvedValue({
       success: true,
       needsVerification: false,
@@ -469,8 +469,8 @@ describe("Register", () => {
         "representative",
         expect.objectContaining({ firstName: "Jane", lastName: "Smith" })
       );
-    }, { timeout: 3000 });
-  }, 10000);
+    }, { timeout: 15000 });
+  }, 30000);
 
   it("includes representative invite code when provided", async () => {
     const user = userEvent.setup({ delay: null });
@@ -752,7 +752,9 @@ describe("Register", () => {
       status: 200,
       json: async () => ({}),
     });
-    const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
+    // Note: we check the stored value directly because our in-memory localStorage
+    // mock (required for Node.js 25 compatibility) doesn't route through Storage.prototype.
+
 
     renderRegister();
 
@@ -803,7 +805,7 @@ describe("Register", () => {
     });
 
     await waitFor(() => {
-      expect(setItemSpy).toHaveBeenCalled();
+      expect(localStorage.getItem("currentUser")).not.toBeNull();
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
   });

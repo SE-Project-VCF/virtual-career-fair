@@ -1,10 +1,29 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, type Dispatch, type SetStateAction } from "react"
 import { getRepresentativeName } from "../utils/representativeUtils"
 import { useNavigate, useParams } from "react-router-dom"
-import { Container, Box, Typography, Button, Card, CardContent, Alert, CircularProgress, IconButton, Tooltip, Divider, Grid, TextField, Chip, Rating } from "@mui/material"
+import {
+  Container,
+  Box,
+  Typography,
+  Button,
+  Card,
+  CardContent,
+  Alert,
+  CircularProgress,
+  IconButton,
+  Tooltip,
+  Divider,
+  Grid,
+  TextField,
+  Chip,
+  Rating,
+  Autocomplete,
+  FormControlLabel,
+  Checkbox,
+} from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
-import { doc, getDoc, arrayRemove, updateDoc, collection, query, where, getDocs, addDoc, deleteDoc } from "firebase/firestore"
+import { doc, getDoc, arrayRemove, updateDoc } from "firebase/firestore"
 import { db, auth } from "../firebase"
 import BusinessIcon from "@mui/icons-material/Business"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
@@ -22,13 +41,26 @@ import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
+import LocationOnIcon from "@mui/icons-material/LocationOn"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
 import VisibilityIcon from "@mui/icons-material/Visibility"
 import BaseLayout from "../components/BaseLayout"
+import { useGeocodeSuggest, type LocationSuggestOption } from "../hooks/useGeocodeSuggest"
 import JobInviteDialog from "../components/JobInviteDialog"
 import JobInviteStatsDialog from "../components/JobInviteStatsDialog"
 import ApplicationFormBuilderDialog from "../components/ApplicationFormBuilderDialog"
 import type { ApplicationForm } from "../types/applicationForm"
+import {
+  compareJobsByDate,
+  formatJobLocationLine,
+  getSaveButtonLabel,
+} from "../utils/companyJobHelpers"
+import {
+  ensureCompanyViewerAccess,
+  logClientError,
+  mapApiRecordToJob,
+  validateCompanyJobForm,
+} from "../utils/companyPageUtils"
 import List from "@mui/material/List"
 import ListItem from "@mui/material/ListItem"
 import ListItemText from "@mui/material/ListItemText"
@@ -37,12 +69,22 @@ import DialogTitle from "@mui/material/DialogTitle"
 import DialogContent from "@mui/material/DialogContent"
 import DialogActions from "@mui/material/DialogActions"
 
+export type OfficeLocationRow = {
+  id: string
+  label: string
+  city?: string
+  state?: string
+  zip?: string | null
+}
+
 interface Company {
   id: string
   companyName: string
   representativeIDs: string[]
   boothId?: string
   ownerId: string
+  remoteEmployer?: boolean
+  officeLocations?: OfficeLocationRow[]
 }
 
 interface Representative {
@@ -60,6 +102,10 @@ interface Job {
   majorsAssociated: string
   applicationLink: string | null
   createdAt: number | null
+  locationIsRemote?: boolean
+  locationCity?: string | null
+  locationState?: string | null
+  location?: string | null
   applicationForm?: ApplicationForm
 }
 
@@ -69,21 +115,6 @@ interface JobInvitationStats {
   totalClicked: number
   viewRate: string
   clickRate: string
-}
-
-// Helper function to compare jobs by creation date (descending)
-function compareJobsByDate(a: Job, b: Job): number {
-  if (!a.createdAt && !b.createdAt) return 0
-  if (!a.createdAt) return 1
-  if (!b.createdAt) return -1
-  return b.createdAt - a.createdAt
-}
-
-// Helper function to get save button label
-function getSaveButtonLabel(savingJob: boolean, editingJob: Job | null): string {
-  if (savingJob) return "Saving..."
-  if (editingJob) return "Update Job"
-  return "Publish Job"
 }
 
 function CompanyInfoCard({
@@ -306,6 +337,235 @@ function RepresentativesSection({
   )
 }
 
+function newLocationId(): string {
+  const c = globalThis.crypto
+  if (c?.randomUUID) {
+    return c.randomUUID()
+  }
+  if (c?.getRandomValues) {
+    const bytes = new Uint8Array(8)
+    c.getRandomValues(bytes)
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+    return `loc-${Date.now()}-${hex}`
+  }
+  throw new Error("Web Crypto API is required to generate office location IDs")
+}
+
+function normalizeOfficeLocationsFromDb(raw: unknown): OfficeLocationRow[] {
+  if (!Array.isArray(raw)) return []
+  const out: OfficeLocationRow[] = []
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue
+    const o = x as Record<string, unknown>
+    const id = typeof o.id === "string" ? o.id : ""
+    const city = typeof o.city === "string" ? o.city : ""
+    const state = typeof o.state === "string" ? o.state : ""
+    const label =
+      typeof o.label === "string" && o.label.trim()
+        ? o.label.trim()
+        : [city, state].filter(Boolean).join(", ")
+    if (!id || !label) continue
+    out.push({
+      id,
+      label,
+      city: city || undefined,
+      state: state || undefined,
+      zip: typeof o.zip === "string" ? o.zip : typeof o.zip === "number" ? String(o.zip) : null,
+    })
+  }
+  return out
+}
+
+function officeLocationsListFingerprint(rows: OfficeLocationRow[]): string {
+  return JSON.stringify(
+    rows
+      .map((r) => ({
+        id: r.id,
+        label: (r.label || "").trim(),
+        city: (r.city || "").trim(),
+        state: (r.state || "").trim(),
+        zip: r.zip == null ? "" : String(r.zip).trim(),
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  )
+}
+
+/** True when draft remote flag or office list differs from what is stored on `company`. */
+function isOfficeLocationsDirty(
+  company: Company,
+  officeDraftRemote: boolean,
+  officeDraftList: OfficeLocationRow[],
+): boolean {
+  const savedRemote = company.remoteEmployer === true
+  if (officeDraftRemote !== savedRemote) return true
+  if (savedRemote) return false
+  const savedRows = normalizeOfficeLocationsFromDb(company.officeLocations)
+  return officeLocationsListFingerprint(savedRows) !== officeLocationsListFingerprint(officeDraftList)
+}
+
+function OfficeLocationsReadOnly({ company }: Readonly<{ company: Company }>) {
+  if (company.remoteEmployer === true) {
+    return (
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Chip label="Remote employer" color="primary" size="small" variant="outlined" />
+      </Box>
+    )
+  }
+  const rows = normalizeOfficeLocationsFromDb(company.officeLocations)
+  if (rows.length === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        No office locations on file. The company owner can add verified locations here.
+      </Typography>
+    )
+  }
+  return (
+    <List dense disablePadding>
+      {rows.map((r) => (
+        <ListItem key={r.id} disableGutters>
+          <ListItemText primary={r.label} secondary={[r.city, r.state].filter(Boolean).join(", ") || undefined} />
+        </ListItem>
+      ))}
+    </List>
+  )
+}
+
+function OfficeLocationsOwnerCard({
+  officeDraftRemote,
+  setOfficeDraftRemote,
+  officeDraftList,
+  setOfficeDraftList,
+  officeSearchInput,
+  setOfficeSearchInput,
+  suggestOptions,
+  suggestLoading,
+  savingOfficeLocations,
+  officeLocationsDirty,
+  onSave,
+}: Readonly<{
+  officeDraftRemote: boolean
+  setOfficeDraftRemote: (v: boolean) => void
+  officeDraftList: OfficeLocationRow[]
+  setOfficeDraftList: Dispatch<SetStateAction<OfficeLocationRow[]>>
+  officeSearchInput: string
+  setOfficeSearchInput: (v: string) => void
+  suggestOptions: LocationSuggestOption[]
+  suggestLoading: boolean
+  savingOfficeLocations: boolean
+  officeLocationsDirty: boolean
+  onSave: () => void
+}>) {
+  const handleAddSuggestion = (opt: LocationSuggestOption | null) => {
+    if (!opt || typeof opt !== "object" || !("lat" in opt)) return
+    const label = typeof opt.label === "string" ? opt.label.trim() : ""
+    if (!label) return
+    const id = newLocationId()
+    const city = typeof opt.city === "string" ? opt.city : ""
+    const state = typeof opt.state === "string" ? opt.state : ""
+    const zip = typeof opt.zip === "string" ? opt.zip : null
+    setOfficeDraftList((prev) => {
+      if (prev.some((p) => p.label === label)) return prev
+      return [...prev, { id, label, city: city || undefined, state: state || undefined, zip }]
+    })
+    setOfficeSearchInput("")
+  }
+
+  return (
+    <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+      <CardContent sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+          <LocationOnIcon sx={{ color: "#388560" }} />
+          Office locations
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Search for places (Mapbox). Each location is verified on save. These appear on your fair booths and public booth
+          listing.
+        </Typography>
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={officeDraftRemote}
+              onChange={(_, checked) => {
+                setOfficeDraftRemote(checked)
+                if (checked) setOfficeDraftList([])
+              }}
+            />
+          }
+          label="Remote employer (no physical office list)"
+          sx={{ mb: 2, display: "block" }}
+        />
+
+        {!officeDraftRemote && (
+          <>
+            <Autocomplete
+              freeSolo
+              size="small"
+              options={suggestOptions}
+              loading={suggestLoading}
+              filterOptions={(opts) => opts}
+              getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+              isOptionEqualToValue={(a, b) =>
+                typeof a === "object" && typeof b === "object" && Boolean(a.id && b.id && a.id === b.id)
+              }
+              inputValue={officeSearchInput}
+              onInputChange={(_, newInputValue, reason) => {
+                if (reason === "reset") {
+                  setOfficeSearchInput(newInputValue)
+                  return
+                }
+                setOfficeSearchInput(newInputValue)
+              }}
+              onChange={(_, newValue) => {
+                if (newValue && typeof newValue === "object" && "lat" in newValue) {
+                  handleAddSuggestion(newValue)
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search places to add"
+                  placeholder="City, ZIP, or address — pick a suggestion"
+                  sx={{ mb: 2 }}
+                />
+              )}
+            />
+
+            {officeDraftList.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  {officeLocationsDirty
+                    ? `Locations to save (${officeDraftList.length})`
+                    : `Saved office locations (${officeDraftList.length})`}
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  {officeDraftList.map((row) => (
+                    <Chip
+                      key={row.id}
+                      label={row.label}
+                      onDelete={() => setOfficeDraftList((prev) => prev.filter((p) => p.id !== row.id))}
+                      variant="outlined"
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </>
+        )}
+
+        <Button
+          variant="contained"
+          onClick={onSave}
+          disabled={savingOfficeLocations || !officeLocationsDirty}
+          sx={{ mt: 1 }}
+        >
+          {savingOfficeLocations ? "Saving..." : "Save locations"}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
   companyId: string
   boothId?: string
@@ -519,8 +779,22 @@ export default function Company() {
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [jobDialogOpen, setJobDialogOpen] = useState(false)
   const [editingJob, setEditingJob] = useState<Job | null>(null)
-  const [jobForm, setJobForm] = useState({ title: "", description: "", skills: "", applicationLink: "" })
-  const [jobErrors, setJobErrors] = useState<{ title?: string; description?: string; skills?: string; applicationLink?: string }>({})
+  const [jobForm, setJobForm] = useState({
+    title: "",
+    description: "",
+    skills: "",
+    applicationLink: "",
+    locationIsRemote: true,
+    locationInput: "",
+    locationPick: null as LocationSuggestOption | null,
+  })
+  const [jobErrors, setJobErrors] = useState<{
+    title?: string
+    description?: string
+    skills?: string
+    applicationLink?: string
+    location?: string
+  }>({})
   const [savingJob, setSavingJob] = useState(false)
   const [deleteJobDialogOpen, setDeleteJobDialogOpen] = useState(false)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
@@ -535,9 +809,31 @@ export default function Company() {
   const [deleteFormDialogOpen, setDeleteFormDialogOpen] = useState(false)
   const [jobToDeleteForm, setJobToDeleteForm] = useState<Job | null>(null)
   const [deletingForm, setDeletingForm] = useState(false)
+  const [officeDraftRemote, setOfficeDraftRemote] = useState(false)
+  const [officeDraftList, setOfficeDraftList] = useState<OfficeLocationRow[]>([])
+  const [officeSearchInput, setOfficeSearchInput] = useState("")
+  const [savingOfficeLocations, setSavingOfficeLocations] = useState(false)
 
   const userId = useMemo(() => user?.uid, [user?.uid])
   const userRole = useMemo(() => user?.role, [user?.role])
+
+  const officeLocationsDirty = useMemo(() => {
+    if (!company) return false
+    return isOfficeLocationsDirty(company, officeDraftRemote, officeDraftList)
+  }, [company, officeDraftRemote, officeDraftList])
+
+  const ownerEditingOfficeLocations = Boolean(
+    company && userRole === "companyOwner" && company.ownerId === userId,
+  )
+  const { options: officeSuggestOptions, loading: officeSuggestLoading } = useGeocodeSuggest(
+    officeSearchInput,
+    ownerEditingOfficeLocations && !officeDraftRemote,
+  )
+
+  const { options: jobLocationOptions, loading: jobLocationSuggestLoading } = useGeocodeSuggest(
+    jobForm.locationInput,
+    !jobForm.locationIsRemote && jobDialogOpen,
+  )
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -554,26 +850,8 @@ export default function Company() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, id, userId, userRole])
 
-  const validateUserAccess = async (companyInfo: Company): Promise<boolean> => {
-    if (userRole === "companyOwner" && companyInfo.ownerId !== userId) {
-      setError("You don't have access to this company")
-      navigate("/companies")
-      return false
-    }
-
-    if (userRole === "representative" && !companyInfo.representativeIDs?.includes(userId ?? "")) {
-      setError("You don't have access to this company")
-      navigate("/dashboard")
-      return false
-    }
-
-    if (userRole !== "companyOwner" && userRole !== "representative") {
-      navigate("/dashboard")
-      return false
-    }
-
-    return true
-  }
+  const validateUserAccess = (companyInfo: Company): boolean =>
+    ensureCompanyViewerAccess(companyInfo, userId, userRole, { setError, navigate })
 
   const fetchCompany = async () => {
     if (!id) return
@@ -596,16 +874,19 @@ export default function Company() {
         ...companyData
       }
 
-      const hasAccess = await validateUserAccess(companyInfo)
+      const hasAccess = validateUserAccess(companyInfo)
       if (!hasAccess) return
 
       setCompany(companyInfo)
+      setOfficeDraftRemote(companyInfo.remoteEmployer === true)
+      setOfficeDraftList(normalizeOfficeLocationsFromDb(companyInfo.officeLocations))
+      setOfficeSearchInput("")
 
       fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
       fetchInviteCode(companyInfo.id)
-    } catch (err) {
-      console.error("Error fetching company:", err)
+    } catch (error: unknown) {
+      logClientError("Error fetching company", error)
       setError("Failed to load company")
     } finally {
       setLoading(false)
@@ -623,8 +904,71 @@ export default function Company() {
         const data = await response.json()
         setInviteCode(data.inviteCode ?? "")
       }
+    } catch (error: unknown) {
+      logClientError("Error fetching invite code", error)
+    }
+  }
+
+  const handleSaveOfficeLocations = async () => {
+    if (!company || !auth.currentUser) return
+    try {
+      setSavingOfficeLocations(true)
+      setError("")
+      const token = await auth.currentUser.getIdToken()
+      const body = officeDraftRemote
+        ? { remoteEmployer: true }
+        : {
+            remoteEmployer: false,
+            officeLocations: officeDraftList.map((r) => ({
+              id: r.id,
+              label: r.label,
+              geocodeQuery: r.label.trim(),
+              city: r.city ?? "",
+              state: r.state ?? "",
+              zip: r.zip ?? "",
+            })),
+          }
+      const res = await fetch(`${API_URL}/api/companies/${company.id}/locations`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        code?: string
+        hint?: string
+        remoteEmployer?: boolean
+        officeLocations?: OfficeLocationRow[]
+      }
+      if (!res.ok) {
+        const base =
+          typeof data.error === "string" && data.error.trim()
+            ? data.error.trim()
+            : "Failed to save office locations"
+        const withHint =
+          data.code === "COMPANY_DOC_MISSING" && typeof data.hint === "string" && data.hint.trim()
+            ? `${base} ${data.hint.trim()}`
+            : base
+        throw new Error(withHint)
+      }
+      setCompany((c) =>
+        c
+          ? {
+              ...c,
+              remoteEmployer: Boolean(data.remoteEmployer),
+              officeLocations: Array.isArray(data.officeLocations) ? data.officeLocations : [],
+            }
+          : c,
+      )
+      setOfficeDraftRemote(Boolean(data.remoteEmployer))
+      setOfficeDraftList(normalizeOfficeLocationsFromDb(data.officeLocations))
+      setOfficeSearchInput("")
+      setSuccess("Office locations updated.")
+      setTimeout(() => setSuccess(""), 3000)
     } catch (err) {
-      console.error("Error fetching invite code:", err)
+      setError(err instanceof Error ? err.message : "Failed to save office locations")
+    } finally {
+      setSavingOfficeLocations(false)
     }
   }
 
@@ -647,8 +991,8 @@ export default function Company() {
 
       const reps = (await Promise.all(repPromises)).filter((rep): rep is Representative => rep !== null)
       setRepresentatives(reps)
-    } catch (err) {
-      console.error("Error fetching representatives:", err)
+    } catch (error: unknown) {
+      logClientError("Error fetching representatives", error)
     } finally {
       setLoadingRepresentatives(false)
     }
@@ -657,41 +1001,27 @@ export default function Company() {
   const fetchJobs = async (companyId: string) => {
     try {
       setLoadingJobs(true)
-      
-      const jobsRef = collection(db, "jobs")
-      const q = query(jobsRef, where("companyId", "==", companyId))
-      const jobsSnapshot = await getDocs(q)
 
-      const jobsList: Job[] = []
-      jobsSnapshot.forEach((doc) => {
-        const data = doc.data()
-        const applicationFormData = data.applicationForm as ApplicationForm | undefined
-        jobsList.push({
-          id: doc.id,
-          companyId: data.companyId,
-          name: data.name,
-          description: data.description,
-          majorsAssociated: data.majorsAssociated,
-          applicationLink: data.applicationLink || null,
-          createdAt: data.createdAt?.toMillis?.() || data.createdAt || null,
-          applicationForm: applicationFormData
-        })
-      })
+      const response = await fetch(`${API_URL}/api/jobs?companyId=${encodeURIComponent(companyId)}`)
+      if (!response.ok) {
+        throw new Error("Failed to fetch jobs")
+      }
+      const data = await response.json()
+      const raw = data.jobs || []
+      const jobsList: Job[] = raw.map((j: Record<string, unknown>) => mapApiRecordToJob(j))
 
-      // Sort by createdAt descending
       jobsList.sort(compareJobsByDate)
-      
+
       setJobs(jobsList)
 
-      // Fetch stats for each job
       if (userId) {
         jobsList.forEach((job) => {
           fetchJobStats(job.id)
         })
       }
-    } catch (err) {
-      console.error("Error fetching jobs:", err)
-      setError(`Failed to load job postings: ${err instanceof Error ? err.message : "Unknown error"}`)
+    } catch (error: unknown) {
+      logClientError("Error fetching jobs", error)
+      setError(`Failed to load job postings: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setLoadingJobs(false)
     }
@@ -701,11 +1031,17 @@ export default function Company() {
     if (!userId) return
 
     try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) return
+
       const response = await fetch(
         `${API_URL}/api/job-invitations/stats/${jobId}?userId=${userId}`,
         {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         }
       )
 
@@ -713,8 +1049,8 @@ export default function Company() {
         const stats = await response.json()
         setJobStats((prev) => ({ ...prev, [jobId]: stats }))
       }
-    } catch (err) {
-      console.error(`Error fetching stats for job ${jobId}:`, err)
+    } catch (error: unknown) {
+      logClientError("Error fetching job invitation stats", error)
     }
   }
 
@@ -738,7 +1074,15 @@ export default function Company() {
   const resetJobForm = () => {
     setJobDialogOpen(false)
     setEditingJob(null)
-    setJobForm({ title: "", description: "", skills: "", applicationLink: "" })
+    setJobForm({
+      title: "",
+      description: "",
+      skills: "",
+      applicationLink: "",
+      locationIsRemote: true,
+      locationInput: "",
+      locationPick: null,
+    })
     setJobErrors({})
   }
 
@@ -787,9 +1131,9 @@ export default function Company() {
       setSuccess("Application form deleted.")
       setDeleteFormDialogOpen(false)
       setJobToDeleteForm(null)
-    } catch (err: any) {
-      console.error("Error deleting form:", err)
-      setError(err?.message || "Failed to delete application form.")
+    } catch (error: unknown) {
+      logClientError("Error deleting application form", error)
+      setError(error instanceof Error ? error.message : "Failed to delete application form.")
     } finally {
       setDeletingForm(false)
     }
@@ -797,14 +1141,51 @@ export default function Company() {
 
   const handleCreateJobClick = () => {
     setEditingJob(null)
-    setJobForm({ title: "", description: "", skills: "", applicationLink: "" })
+    setJobForm({
+      title: "",
+      description: "",
+      skills: "",
+      applicationLink: "",
+      locationIsRemote: true,
+      locationInput: "",
+      locationPick: null,
+    })
     setJobErrors({})
     setJobDialogOpen(true)
   }
 
   const handleEditJobClick = (job: Job) => {
+    const isRemote =
+      job.locationIsRemote === true ||
+      (job.locationIsRemote !== false && !(job.locationCity || job.locationState))
+
+    let pick: LocationSuggestOption | null = null
+    let locInput = ""
+    if (!isRemote && (job.locationCity || job.locationState)) {
+      const label =
+        job.location ||
+        [job.locationCity, job.locationState].filter(Boolean).join(", ")
+      pick = {
+        id: `saved-${job.id}`,
+        label,
+        lat: 0,
+        lng: 0,
+        city: job.locationCity ?? undefined,
+        state: job.locationState ?? undefined,
+      }
+      locInput = label
+    }
+
     setEditingJob(job)
-    setJobForm({ title: job.name, description: job.description, skills: job.majorsAssociated, applicationLink: job.applicationLink || "" })
+    setJobForm({
+      title: job.name,
+      description: job.description,
+      skills: job.majorsAssociated,
+      applicationLink: job.applicationLink || "",
+      locationIsRemote: isRemote,
+      locationInput: locInput,
+      locationPick: pick,
+    })
     setJobErrors({})
     setJobDialogOpen(true)
   }
@@ -814,25 +1195,51 @@ export default function Company() {
     setDeleteJobDialogOpen(true)
   }
 
-  const validateJobForm = (): { title?: string; description?: string; skills?: string; applicationLink?: string } => {
-    const errors: { title?: string; description?: string; skills?: string; applicationLink?: string } = {}
-    if (!jobForm.title.trim()) errors.title = "Title is required"
-    if (!jobForm.description.trim()) errors.description = "Description is required"
-    if (!jobForm.skills.trim()) errors.skills = "Skills are required"
-    if (jobForm.applicationLink.trim()) {
-      try { new URL(jobForm.applicationLink.trim()) }
-      catch { errors.applicationLink = "Please enter a valid URL (e.g. https://example.com)" }
-    }
-    return errors
-  }
-
   const saveJobToDatabase = async (companyId: string, applicationLink: string | null) => {
-    const payload = { name: jobForm.title.trim(), description: jobForm.description.trim(), majorsAssociated: jobForm.skills.trim(), applicationLink }
+    const token = await auth.currentUser?.getIdToken()
+    if (!token) throw new Error("Not authenticated")
+
+    const base: Record<string, unknown> = {
+      name: jobForm.title.trim(),
+      description: jobForm.description.trim(),
+      majorsAssociated: jobForm.skills.trim(),
+      applicationLink,
+    }
+
+    if (jobForm.locationIsRemote) {
+      base.locationIsRemote = true
+    } else {
+      const pick = jobForm.locationPick
+      if (!pick?.city?.trim() || !pick?.state?.trim()) {
+        throw new Error("Location is required for on-site jobs")
+      }
+      base.locationIsRemote = false
+      base.locationCity = pick.city
+      base.locationState = pick.state
+      base.location = pick.label
+    }
+
     if (editingJob) {
-      await updateDoc(doc(db, "jobs", editingJob.id), payload)
+      const response = await fetch(`${API_URL}/api/jobs/${editingJob.id}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(base),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error((data as { error?: string }).error || "Failed to update job")
+      }
       setSuccess("Job posting updated successfully!")
     } else {
-      await addDoc(collection(db, "jobs"), { companyId, ...payload, createdAt: new Date() })
+      const response = await fetch(`${API_URL}/api/jobs`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, ...base }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error((data as { error?: string }).error || "Failed to create job")
+      }
       setSuccess("Job posting created successfully!")
     }
   }
@@ -851,7 +1258,7 @@ export default function Company() {
 
     // Reset errors
     setJobErrors({})
-    const errors = validateJobForm()
+    const errors = validateCompanyJobForm(jobForm)
 
     if (Object.keys(errors).length > 0) {
       setJobErrors(errors)
@@ -865,8 +1272,8 @@ export default function Company() {
       await saveJobToDatabase(company.id, applicationLink)
       fetchJobs(company.id)
       setJobDialogOpen(false)
-    } catch (err) {
-      console.error("Error saving job:", err)
+    } catch (error: unknown) {
+      logClientError("Error saving job", error)
       setError("Failed to save job posting. Please try again.")
     } finally {
       setSavingJob(false)
@@ -889,15 +1296,22 @@ export default function Company() {
       setDeletingJob(true)
       setError("")
 
-      const jobRef = doc(db, "jobs", jobToDelete.id)
-      await deleteDoc(jobRef)
+      const token = await auth.currentUser.getIdToken()
+      const response = await fetch(`${API_URL}/api/jobs/${jobToDelete.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error((data as { error?: string }).error || "Failed to delete job")
+      }
 
       setSuccess("Job posting deleted successfully!")
       fetchJobs(company.id)
       setDeleteJobDialogOpen(false)
       setJobToDelete(null)
-    } catch (err) {
-      console.error("Error deleting job:", err)
+    } catch (error: unknown) {
+      logClientError("Error deleting job", error)
       setError("Failed to delete job posting")
     } finally {
       setDeletingJob(false)
@@ -948,8 +1362,8 @@ export default function Company() {
       setTimeout(() => setSuccess(""), 3000)
       setDeleteDialogOpen(false)
       setRepresentativeToDelete(null)
-    } catch (err) {
-      console.error("Error deleting representative:", err)
+    } catch (error: unknown) {
+      logClientError("Error deleting representative", error)
       setError("Failed to remove representative")
     } finally {
       setDeleting(false)
@@ -983,8 +1397,8 @@ export default function Company() {
       } else {
         setError(result.error || "Failed to delete company")
       }
-    } catch (err) {
-      console.error("Error deleting company:", err)
+    } catch (error: unknown) {
+      logClientError("Error deleting company", error)
       setError("Failed to delete company")
     } finally {
       setDeletingCompany(false)
@@ -996,8 +1410,8 @@ export default function Company() {
       await navigator.clipboard.writeText(text)
       setSuccess("Invite code copied to clipboard!")
       setTimeout(() => setSuccess(""), 3000)
-    } catch (err) {
-      console.error("Failed to copy to clipboard", err)
+    } catch (error: unknown) {
+      logClientError("Failed to copy to clipboard", error)
       setError("Failed to copy to clipboard")
     }
   }
@@ -1027,8 +1441,8 @@ export default function Company() {
       } else {
         setError(result.error || "Failed to regenerate invite code")
       }
-    } catch (err) {
-      console.error("Error regenerating invite code:", err)
+    } catch (error: unknown) {
+      logClientError("Error regenerating invite code", error)
       setError("Failed to regenerate invite code")
     } finally {
       setUpdatingInviteCode(false)
@@ -1068,8 +1482,8 @@ export default function Company() {
       } else {
         setError(result.error || "Failed to update invite code")
       }
-    } catch (err) {
-      console.error("Error updating invite code:", err)
+    } catch (error: unknown) {
+      logClientError("Error updating invite code", error)
       setError("Failed to update invite code")
     } finally {
       setUpdatingInviteCode(false)
@@ -1084,7 +1498,7 @@ export default function Company() {
     )
   }
 
-  if (error &&!company) {
+  if (error && !company) {
     return (
       <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Card sx={{ p: 4, maxWidth: 500 }}>
@@ -1141,6 +1555,42 @@ export default function Company() {
             boothId={company.boothId}
             navigate={navigate}
           />
+
+          {isOwner ? (
+            <Grid size={{ xs: 12 }}>
+              <OfficeLocationsOwnerCard
+                officeDraftRemote={officeDraftRemote}
+                setOfficeDraftRemote={setOfficeDraftRemote}
+                officeDraftList={officeDraftList}
+                setOfficeDraftList={setOfficeDraftList}
+                officeSearchInput={officeSearchInput}
+                setOfficeSearchInput={setOfficeSearchInput}
+                suggestOptions={officeSuggestOptions}
+                suggestLoading={officeSuggestLoading}
+                savingOfficeLocations={savingOfficeLocations}
+                officeLocationsDirty={officeLocationsDirty}
+                onSave={handleSaveOfficeLocations}
+              />
+            </Grid>
+          ) : (
+            <Grid size={{ xs: 12 }}>
+              <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography
+                    variant="h6"
+                    sx={{ fontWeight: 600, mb: 2, display: "flex", alignItems: "center", gap: 1 }}
+                  >
+                    <LocationOnIcon sx={{ color: "#388560" }} />
+                    Office locations
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Only the company owner can edit locations. This is what students see on your booth.
+                  </Typography>
+                  <OfficeLocationsReadOnly company={company} />
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
 
           {/* Representatives List Card */}
           <RepresentativesSection
@@ -1224,6 +1674,9 @@ export default function Company() {
                               </Typography>
                               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, whiteSpace: "pre-wrap" }}>
                                 {job.description}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                                <strong>Location:</strong> {formatJobLocationLine(job)}
                               </Typography>
                               <Box sx={{ mb: 1 }}>
                                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: "#388560" }}>
@@ -1498,12 +1951,12 @@ export default function Company() {
         <DialogTitle>{editingJob ? "Edit Job Posting" : "Create Job Posting"}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Fill in the details for your job posting. Title, description, and skills are required.
+            Fill in the details for your job posting. Title, description, skills, and location are required.
           </Typography>
 
-          {(jobErrors.title || jobErrors.description || jobErrors.skills) && (
+          {(jobErrors.title || jobErrors.description || jobErrors.skills || jobErrors.location) && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {jobErrors.title || jobErrors.description || jobErrors.skills}
+              {jobErrors.title || jobErrors.description || jobErrors.skills || jobErrors.location}
             </Alert>
           )}
 
@@ -1528,6 +1981,73 @@ export default function Company() {
               sx={{ mb: 2 }}
             />
           ))}
+
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={jobForm.locationIsRemote}
+                onChange={(_, checked) => {
+                  setJobForm((prev) => ({
+                    ...prev,
+                    locationIsRemote: checked,
+                    ...(checked ? { locationInput: "", locationPick: null } : {}),
+                  }))
+                  if (jobErrors.location) setJobErrors((prev) => ({ ...prev, location: undefined }))
+                }}
+                disabled={savingJob}
+              />
+            }
+            label="Remote position (work from anywhere)"
+            sx={{ mb: 1, display: "block" }}
+          />
+
+          {!jobForm.locationIsRemote && (
+            <Autocomplete
+              size="small"
+              options={jobLocationOptions}
+              loading={jobLocationSuggestLoading}
+              filterOptions={(opts) => opts}
+              value={jobForm.locationPick}
+              inputValue={jobForm.locationInput}
+              onInputChange={(_, v, reason) => {
+                setJobForm((prev) => ({
+                  ...prev,
+                  locationInput: v,
+                  ...(reason === "input" || reason === "clear" ? { locationPick: null } : {}),
+                }))
+                if (jobErrors.location) setJobErrors((prev) => ({ ...prev, location: undefined }))
+              }}
+              onChange={(_, newValue) => {
+                if (newValue && typeof newValue === "object" && "lat" in newValue) {
+                  setJobForm((prev) => ({
+                    ...prev,
+                    locationPick: newValue,
+                    locationInput: newValue.label,
+                  }))
+                } else {
+                  setJobForm((prev) => ({ ...prev, locationPick: null }))
+                }
+                if (jobErrors.location) setJobErrors((prev) => ({ ...prev, location: undefined }))
+              }}
+              getOptionLabel={(o) => (typeof o === "string" ? o : o.label)}
+              isOptionEqualToValue={(a, b) =>
+                typeof a === "object" &&
+                typeof b === "object" &&
+                Boolean(a?.id && b?.id && a.id === b.id)
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Job location *"
+                  placeholder="Start typing for suggestions"
+                  error={!!jobErrors.location}
+                  helperText={jobErrors.location || "Pick a place from the list"}
+                />
+              )}
+              sx={{ mb: 2 }}
+              disabled={savingJob}
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={resetJobForm} disabled={savingJob}>

@@ -42,6 +42,7 @@ import {
   formatStartsInCountdown,
   getQaSessionJoinUiState,
 } from "../utils/qaSessionUi"
+import { formatCompanyOfficeLocationsForDisplay } from "../utils/companyOfficeLocationDisplay"
 
 interface Booth {
   id: string
@@ -49,6 +50,11 @@ interface Booth {
   industry: string
   companySize: string
   location: string
+  remoteEmployer?: boolean
+  officeLocations?: Array<{ id?: string; label?: string; city?: string; state?: string }>
+  locationIsRemote?: boolean
+  locationCity?: string
+  locationState?: string
   description: string
   logoUrl?: string
   openPositions: number
@@ -330,13 +336,34 @@ export default function BoothView() {
         () => isMountedRef.current
       )
 
-      setBooth(boothData)
-      await trackStudentBoothView(boothData)
+      const resolvedCompanyId =
+        boothData.companyId || (await findCompanyIdForBooth(boothId, boothData))
+      let mergedBooth: Booth = { ...boothData }
+      if (resolvedCompanyId) {
+        const cDoc = await getDoc(doc(db, "companies", resolvedCompanyId))
+        if (cDoc.exists() && isMountedRef.current) {
+          const cData = cDoc.data()
+          const locLine = formatCompanyOfficeLocationsForDisplay(cData, boothData)
+          mergedBooth = {
+            ...boothData,
+            companyId: resolvedCompanyId,
+            location: locLine || boothData.location,
+            remoteEmployer: cData.remoteEmployer === true,
+            officeLocations: Array.isArray(cData.officeLocations)
+              ? (cData.officeLocations as Booth["officeLocations"])
+              : undefined,
+          }
+        } else {
+          mergedBooth = { ...boothData, companyId: resolvedCompanyId }
+        }
+      }
+
+      setBooth(mergedBooth)
+      await trackStudentBoothView(mergedBooth)
       await fetchMyRating(boothId)
 
-      const companyId = await findCompanyIdForBooth(boothId, boothData)
-      if (companyId) {
-        fetchJobs(companyId)
+      if (resolvedCompanyId) {
+        fetchJobs(resolvedCompanyId)
       }
     } catch (err) {
       console.error("Error fetching booth:", err)
@@ -464,11 +491,25 @@ export default function BoothView() {
                       />
                     </Box>
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mt: 2 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                         <LocationOnIcon sx={{ fontSize: 20, color: "#b03a6c" }} />
-                        <Typography variant="body2" color="text.secondary">
-                          {booth.location}
-                        </Typography>
+                        {booth.remoteEmployer || booth.locationIsRemote ? (
+                          <Chip label="Remote" color="primary" size="small" variant="outlined" />
+                        ) : booth.officeLocations && booth.officeLocations.length > 0 ? (
+                          booth.officeLocations.map((o) => (
+                            <Chip
+                              key={o.id || o.label || `${o.city}-${o.state}`}
+                              label={o.label || [o.city, o.state].filter(Boolean).join(", ")}
+                              size="small"
+                              variant="outlined"
+                              sx={{ maxWidth: "100%" }}
+                            />
+                          ))
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            {booth.location}
+                          </Typography>
+                        )}
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <PeopleIcon sx={{ fontSize: 20, color: "#b03a6c" }} />

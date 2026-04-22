@@ -96,7 +96,7 @@ describe("FairBoothsPage", () => {
   it("renders fetched fair and booth data for admins", async () => {
     renderPage()
 
-    expect(await screen.findByText("Spring Career Fair")).toBeInTheDocument()
+    expect(await screen.findByText(/Spring Career Fair/)).toBeInTheDocument()
     expect(screen.getByText("Tech Corp")).toBeInTheDocument()
     expect(screen.getByText("Great team")).toBeInTheDocument()
     expect(screen.getByText(/\(2\)/)).toBeInTheDocument()

@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom"
 import { Container, Box, TextField, Button, Typography, Alert, Paper, MenuItem, Select, FormControl, InputLabel, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
+import { clearJobmotherTeaserDismissed } from "../constants/jobmother"
 import PersonAddIcon from "@mui/icons-material/PersonAdd"
 import WorkIcon from "@mui/icons-material/Work"
 import GroupsIcon from "@mui/icons-material/Groups"
@@ -740,7 +741,8 @@ export default function Register() {
                 }),
               });
 
-              // Persist user to localStorage
+              // Persist user to localStorage; show Fairy Jobmother welcome on first entry
+              clearJobmotherTeaserDismissed()
               localStorage.setItem(
                 "currentUser",
                 JSON.stringify(userData)

@@ -113,20 +113,9 @@ describe("PUT /api/jobs/:id/form", () => {
   });
 
   it("returns 404 when company does not exist", async () => {
-    db.collection.mockImplementation((name) => {
-      if (name === "jobs") {
-        return {
-          doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ companyId: "c1" }, true)),
-            update: jest.fn(),
-          })),
-        };
-      }
-      return {
-        doc: jest.fn(() => ({
-          get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
-        })),
-      };
+    setupCollectionMock({
+      jobs: { docExists: true, docData: { companyId: "c1" } },
+      companies: { docExists: false },
     });
 
     const res = await request(app)

@@ -1,5 +1,29 @@
 import "@testing-library/jest-dom/vitest"
+import { configure } from "@testing-library/react"
 import { vi } from "vitest"
+
+// Node.js 25 ships native localStorage that is broken when --localstorage-file
+// is passed without a valid path (vitest 4.x triggers this). Override with a
+// working in-memory implementation so tests can use localStorage freely.
+const _localStorageMock = (() => {
+  let store: Record<string, string> = {}
+  return {
+    getItem: (key: string): string | null => store[key] ?? null,
+    setItem: (key: string, value: string): void => { store[key] = String(value) },
+    removeItem: (key: string): void => { delete store[key] },
+    clear: (): void => { store = {} },
+    get length(): number { return Object.keys(store).length },
+    key: (index: number): string | null => Object.keys(store)[index] ?? null,
+  }
+})()
+Object.defineProperty(globalThis, "localStorage", {
+  value: _localStorageMock,
+  writable: true,
+  configurable: true,
+})
+
+// Default 1000ms is too tight when many workers run heavy jsdom + userEvent suites.
+configure({ asyncUtilTimeout: 10_000 })
 
 // Mock import.meta.env
 vi.stubEnv("VITE_FIREBASE_API_KEY", "test-api-key")

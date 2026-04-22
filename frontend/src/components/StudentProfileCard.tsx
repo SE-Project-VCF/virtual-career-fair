@@ -1,9 +1,17 @@
 import { useState, useEffect } from "react"
-import { Box, Typography, CircularProgress, Alert, Chip, Paper } from "@mui/material"
+import { Box, Typography, CircularProgress, Alert, Chip, Paper, Button } from "@mui/material"
+import LinkedInIcon from "@mui/icons-material/LinkedIn"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
 import { API_URL } from "../config"
+import { formatInterestTagLabel } from "../constants/interestTagOptions"
+
+function linkedinHrefForDisplay(trimmed: string): string | null {
+  if (trimmed.length === 0) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
+}
 
 interface StudentProfile {
   uid: string
@@ -13,6 +21,8 @@ interface StudentProfile {
   major?: string
   expectedGradYear?: number
   skills?: string
+  interestTags?: string[]
+  linkedinUrl?: string | null
   resumeUrl?: string
   resumeVisible?: boolean
 }
@@ -153,6 +163,14 @@ export default function StudentProfileCard({ studentId }: Props) {
   }
 
   const skills = parseSkills(profile.skills)
+  const interestTags = Array.isArray(profile.interestTags)
+    ? profile.interestTags.filter((t): t is string => typeof t === "string")
+    : []
+  const linkedin =
+    typeof profile.linkedinUrl === "string" && profile.linkedinUrl.trim()
+      ? profile.linkedinUrl.trim()
+      : null
+  const linkedinHref = linkedin ? linkedinHrefForDisplay(linkedin) : null
 
   return (
     <Box sx={{ py: 2 }}>
@@ -163,7 +181,7 @@ export default function StudentProfileCard({ studentId }: Props) {
         <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
           {profile.email}
         </Typography>
-        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
           {profile.major && (
             <Chip
               label={`Major: ${profile.major}`}
@@ -180,8 +198,40 @@ export default function StudentProfileCard({ studentId }: Props) {
               sx={{ borderColor: "#388560", color: "#388560" }}
             />
           )}
+          {linkedinHref ? (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<LinkedInIcon />}
+              href={linkedinHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ borderColor: "#0a66c2", color: "#0a66c2" }}
+            >
+              LinkedIn
+            </Button>
+          ) : null}
         </Box>
       </Paper>
+
+      {interestTags.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
+            Interests
+          </Typography>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            {interestTags.map((tag) => (
+              <Chip
+                key={`int-${tag}`}
+                label={formatInterestTagLabel(tag)}
+                size="small"
+                variant="outlined"
+                sx={{ borderColor: "#388560", color: "#388560" }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
 
       {skills.length > 0 && (
         <Box sx={{ mb: 3 }}>

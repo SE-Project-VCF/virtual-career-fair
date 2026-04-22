@@ -8,6 +8,7 @@ import { authUtils } from "../../utils/auth";
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-id-token"),
   },
 }));
 
@@ -91,6 +92,20 @@ describe("JobInviteStatsDialog", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it("does not fetch when dialog is open but user is null", () => {
+    (authUtils.getCurrentUser as any).mockReturnValue(null);
+    render(
+      <JobInviteStatsDialog
+        open={true}
+        onClose={mockOnClose}
+        jobId="job-1"
+        jobTitle="Software Engineer"
+      />
+    );
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it("renders dialog title with job title", async () => {
     render(
       <JobInviteStatsDialog
@@ -133,7 +148,10 @@ describe("JobInviteStatsDialog", () => {
         "http://localhost:5000/api/job-invitations/details/job-1?userId=user-1",
         expect.objectContaining({
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer mock-id-token",
+          },
         })
       );
     });

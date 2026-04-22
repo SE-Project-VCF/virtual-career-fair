@@ -61,4 +61,12 @@ function createCollectionMock(config = {}) {
   return { collectionRef, docRef };
 }
 
-module.exports = { setupMocks, mockDocSnap, mockQuerySnap, createCollectionMock };
+function createTestApp(router, prefix = "/api") {
+  const express = require("express");
+  const app = express();
+  app.use(express.json());
+  app.use(prefix, router);
+  return app;
+}
+
+module.exports = { setupMocks, mockDocSnap, mockQuerySnap, createCollectionMock, createTestApp };

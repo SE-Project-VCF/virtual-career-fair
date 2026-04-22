@@ -21,6 +21,18 @@ describe("config", () => {
     expect(mod.API_URL).toBe("http://localhost:5000")
   })
 
+  it("API_URL strips trailing slashes", async () => {
+    vi.stubEnv("VITE_API_URL", "http://api.example:9000///")
+    const mod = await import("../config")
+    expect(mod.API_URL).toBe("http://api.example:9000")
+  })
+
+  it("API_URL strips trailing /api path case-insensitively", async () => {
+    vi.stubEnv("VITE_API_URL", "http://x:5000/api/")
+    const mod = await import("../config")
+    expect(mod.API_URL).toBe("http://x:5000")
+  })
+
   it("MAPBOX_ACCESS_TOKEN is empty when VITE_MAPBOX_ACCESS_TOKEN is not a string", async () => {
     vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", undefined as unknown as string)
     const mod = await import("../config")

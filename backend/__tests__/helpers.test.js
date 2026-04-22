@@ -288,6 +288,7 @@ describe("validateJobInput", () => {
     description: "Build great things.",
     majorsAssociated: "Computer Science",
     applicationLink: "https://example.com/apply",
+    locationIsRemote: true,
   };
 
   it("returns null for fully valid input", () => {
@@ -361,6 +362,35 @@ describe("validateJobInput", () => {
   it("returns null when applicationLink is undefined (optional)", () => {
     const { applicationLink, ...inputWithout } = validInput;
     expect(validateJobInput(inputWithout)).toBeNull();
+  });
+
+  it("returns error when locationIsRemote is not a boolean", () => {
+    expect(
+      validateJobInput({ ...validInput, locationIsRemote: "yes" })
+    ).toMatch(/Job location must be set/i);
+  });
+
+  it("returns error when on-site without city/state", () => {
+    expect(
+      validateJobInput({
+        ...validInput,
+        locationIsRemote: false,
+        locationCity: "",
+        locationState: "",
+      })
+    ).toMatch(/City and state are required/i);
+  });
+
+  it("returns null for on-site with city and state", () => {
+    expect(
+      validateJobInput({
+        ...validInput,
+        locationIsRemote: false,
+        locationCity: "Boston",
+        locationState: "MA",
+        location: "Boston, MA",
+      })
+    ).toBeNull();
   });
 });
 

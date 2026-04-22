@@ -224,7 +224,7 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
     expect(res.body.attendees).toEqual([]);
   });
 
-  it("returns attendee profiles for channel members", async () => {
+  it("returns attendee profiles for channel members except the requesting user", async () => {
     const studentProfile = {
       role: "student",
       firstName: "Jane",
@@ -250,7 +250,7 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
     });
 
     mockChannel.query.mockResolvedValueOnce({
-      members: [{ user_id: "student-uid" }, { user_id: "system" }],
+      members: [{ user_id: "student-uid" }, { user_id: "visible-uid" }, { user_id: "system" }],
     });
 
     const res = await request(app)
@@ -260,7 +260,7 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
     expect(res.status).toBe(200);
     expect(res.body.attendees).toHaveLength(1);
     expect(res.body.attendees[0]).toMatchObject({
-      uid: "student-uid",
+      uid: "visible-uid",
       firstName: "Jane",
       lastName: "Smith",
       major: "Computer Science",
@@ -276,7 +276,10 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
             if (uid === "rep-uid") {
               return { get: jest.fn().mockResolvedValue(mockDocSnap({ role: "representative" }, true, uid)) };
             }
-            return { get: jest.fn().mockResolvedValue(mockDocSnap({ role: "student", firstName: "A", lastName: "B", email: "a@b.com", major: "CS", skills: "" }, true, uid)) };
+            if (uid === "student-uid") {
+              return { get: jest.fn().mockResolvedValue(mockDocSnap({ role: "student", firstName: "A", lastName: "B", email: "a@b.com", major: "CS", skills: "" }, true, uid)) };
+            }
+            return { get: jest.fn().mockResolvedValue(mockDocSnap({ role: "student", firstName: "V", lastName: "S", email: "v@s.com", major: "Math", skills: "" }, true, uid)) };
           }),
         };
       }
@@ -284,7 +287,7 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
     });
 
     mockChannel.query.mockResolvedValueOnce({
-      members: [{ user_id: "student-uid" }, { user_id: "rep-uid" }],
+      members: [{ user_id: "student-uid" }, { user_id: "rep-uid" }, { user_id: "visible-uid" }],
     });
 
     const res = await request(app)
@@ -293,7 +296,7 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.attendees).toHaveLength(1);
-    expect(res.body.attendees[0].uid).toBe("student-uid");
+    expect(res.body.attendees[0].uid).toBe("visible-uid");
   });
 
   it("returns 500 when Stream query errors", async () => {
@@ -316,5 +319,41 @@ describe("GET /api/fairs/:fairId/lounge/attendees", () => {
 
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/failed to fetch/i);
+  });
+
+  it("excludes users with ghostMode: true", async () => {
+    mockChannel.query.mockResolvedValueOnce({
+      members: [
+        { user_id: "student-uid" },
+        { user_id: "visible-uid" },
+        { user_id: "ghost-uid" },
+      ],
+    });
+
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              id === "student-uid"
+                ? mockDocSnap({ role: "student" }, true, id)
+                : id === "visible-uid"
+                ? mockDocSnap({ role: "student", firstName: "Vi", ghostMode: false }, true, id)
+                : mockDocSnap({ role: "student", firstName: "Gh", ghostMode: true }, true, id)
+            ),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+    });
+
+    const res = await request(app)
+      .get("/api/fairs/fair1/lounge/attendees")
+      .set("Authorization", VALID_TOKEN);
+
+    expect(res.status).toBe(200);
+    const uids = res.body.attendees.map((a) => a.uid);
+    expect(uids).toContain("visible-uid");
+    expect(uids).not.toContain("ghost-uid");
   });
 });

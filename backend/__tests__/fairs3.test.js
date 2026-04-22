@@ -9,7 +9,7 @@ jest.mock("firebase-admin", () => {
     now: jest.fn(() => ({ toMillis: () => 1000000 })),
     fromMillis: jest.fn((ms) => ({ toMillis: () => ms })),
   };
-  function GeoPoint(lat, lng) {
+  function GeoPoint(lat, lng) { // NOSONAR - must be inside jest.mock factory
     this.latitude = lat;
     this.longitude = lng;
   }
@@ -697,6 +697,596 @@ describe("POST /api/fairs/:fairId/enroll – helper branches", () => {
     expect(res.body.error).toMatch(/not associated with a company/i);
   });
 
+  it("returns 400 COMPANY_ID_REQUIRED when company owner has multiple owned companies (resolveCompanyIdForEnrollment)", async () => {
+    db.batch.mockReturnValue(makeBatch());
+    const code = "MULTIOWN1";
+    const fairDocWithHmac = { ...FAIR_DATA, inviteCode: code.toUpperCase() };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(fairDocWithHmac, true, "fair-id")),
+            collection: jest.fn(() => ({
+              doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+              get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+            })),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue({
+            empty: false,
+            docs: [{ id: "fair-id", data: () => fairDocWithHmac }],
+          }),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ role: "companyOwner", companyId: null }, true, "owner-multi"),
+            ),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(
+            mockQuerySnap([
+              { id: "c-one", data: () => ({}) },
+              { id: "c-two", data: () => ({}) },
+            ]),
+          ),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("owner-multi"))
+      .send({ inviteCode: code });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("COMPANY_ID_REQUIRED");
+    expect(res.body.error).toMatch(/multiple companies/i);
+  });
+
+  it("returns 403 from ensureAdminOrCompanyAccess when user is not admin and not a company member", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+    db.batch.mockReturnValue(makeBatch());
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_DATA, true, "fair-id")),
+            collection: jest.fn(() => ({
+              doc: jest.fn(() => ({
+                get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+              })),
+              get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+            })),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                {
+                  ownerId: "someone-else",
+                  representativeIDs: [],
+                  companyName: "Other Co",
+                },
+                true,
+                id,
+              ),
+            ),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("stranger-uid"))
+      .send({ companyId: "evil-corp" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("Unauthorized: must be admin or company owner/rep");
+  });
+
+  it("allows enrollment when user is company owner of the company (ensureAdminOrCompanyAccess via verifyCompanyAccess)", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+    const batch = makeBatch();
+    db.batch.mockReturnValue(batch);
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ name: "Spring Fair" }, true, "fair-id")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "booths") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairBooth1" })),
+                };
+              }
+              if (sub === "jobs") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairJob1" })),
+                };
+              }
+              return { doc: jest.fn(() => ({ id: "x" })) };
+            }),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: "Acme", ownerId: "owner-enroll" }, true, "comp-enroll"),
+            ),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      if (name === "jobs") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("owner-enroll"))
+      .send({ companyId: "comp-enroll" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.fairId).toBe("fair-id");
+    expect(batch.commit).toHaveBeenCalled();
+  });
+
+  it("enrollment merges global booth doc into boothSnapshot when company has boothId (getCompanyAndBoothSnapshot)", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+    const batch = makeBatch();
+    db.batch.mockReturnValue(batch);
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ name: "Spring Fair" }, true, "fair-id")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "booths") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairBooth1" })),
+                };
+              }
+              if (sub === "jobs") {
+                return {
+                  doc: jest.fn(() => ({ id: "fairJob1" })),
+                };
+              }
+              return { doc: jest.fn(() => ({ id: "x" })) };
+            }),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                {
+                  companyName: "Acme",
+                  ownerId: "owner-booth",
+                  boothId: "global-booth-99",
+                },
+                true,
+                "comp-booth",
+              ),
+            ),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      if (name === "booths") {
+        return {
+          doc: jest.fn((bid) => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                {
+                  companyName: "From Global Booth",
+                  industry: "Software",
+                  companySize: "50",
+                  location: "Remote",
+                  locationIsRemote: true,
+                  locationCity: "Boston",
+                  locationState: "MA",
+                  description: "Desc",
+                  logoUrl: "https://logo",
+                  website: "https://w",
+                  careersPage: "https://c",
+                  contactName: "Pat",
+                  contactEmail: "p@x.com",
+                  contactPhone: "555",
+                  hiringFor: "Devs",
+                },
+                true,
+                bid,
+              ),
+            ),
+          })),
+        };
+      }
+      if (name === "jobs") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      return {
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("owner-booth"))
+      .send({ companyId: "comp-booth" });
+
+    expect(res.status).toBe(201);
+    expect(batch.set).toHaveBeenCalled();
+    const boothPayload = batch.set.mock.calls.find((c) => {
+      const data = c[1];
+      return data && data.companyName === "From Global Booth" && data.originalBoothId === "global-booth-99";
+    });
+    expect(boothPayload).toBeDefined();
+  });
+
+  it("resolveCompanyIdForEnrollment returns sole owned company for companyOwner (inviteCode)", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+    const batch = makeBatch();
+    db.batch.mockReturnValue(batch);
+    const code = "SINGLEOWN1";
+    const fairDocWithHmac = { ...FAIR_DATA, inviteCode: code.toUpperCase() };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(fairDocWithHmac, true, "fair-id")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "booths") {
+                return { doc: jest.fn(() => ({ id: "fairBooth1" })) };
+              }
+              if (sub === "jobs") {
+                return { doc: jest.fn(() => ({ id: "fairJob1" })) };
+              }
+              return { doc: jest.fn(() => ({ id: "x" })) };
+            }),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue({
+            empty: false,
+            docs: [{ id: "fair-id", data: () => fairDocWithHmac }],
+          }),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "companyOwner" }, true, "owner-solo")),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: "Solo Co", ownerId: "owner-solo" }, true, id),
+            ),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(
+            mockQuerySnap([{ id: "solo-co", data: () => ({ ownerId: "owner-solo" }) }]),
+          ),
+        };
+      }
+      if (name === "jobs") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("owner-solo"))
+      .send({ inviteCode: code });
+
+    expect(res.status).toBe(201);
+    expect(res.body.fairId).toBe("fair-id");
+    expect(batch.commit).toHaveBeenCalled();
+  });
+
+  it("resolveCompanyIdForEnrollment uses profile companyId when companyOwner has no owned rows (inviteCode)", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+    const batch = makeBatch();
+    db.batch.mockReturnValue(batch);
+    const code = "PROFILEO1";
+    const fairDocWithHmac = { ...FAIR_DATA, inviteCode: code.toUpperCase() };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(fairDocWithHmac, true, "fair-id")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "booths") {
+                return { doc: jest.fn(() => ({ id: "fairBooth1" })) };
+              }
+              if (sub === "jobs") {
+                return { doc: jest.fn(() => ({ id: "fairJob1" })) };
+              }
+              return { doc: jest.fn(() => ({ id: "x" })) };
+            }),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue({
+            empty: false,
+            docs: [{ id: "fair-id", data: () => fairDocWithHmac }],
+          }),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ role: "companyOwner", companyId: "profile-co" }, true, "owner-prof"),
+            ),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: "Profile Co", ownerId: "owner-prof" }, true, id),
+            ),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      if (name === "jobs") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("owner-prof"))
+      .send({ inviteCode: code });
+
+    expect(res.status).toBe(201);
+  });
+
+  it("returns 400 when companyOwner has no profile companyId and no owned companies (resolveCompanyId line 147)", async () => {
+    db.batch.mockReturnValue(makeBatch());
+    const code = "ORPHANOWN";
+    const fairDocWithHmac = { ...FAIR_DATA, inviteCode: code.toUpperCase() };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(fairDocWithHmac, true, "fair-id")),
+            collection: jest.fn(() => ({
+              doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+              get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+            })),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue({
+            empty: false,
+            docs: [{ id: "fair-id", data: () => fairDocWithHmac }],
+          }),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ role: "companyOwner" }, true, "owner-orphan"),
+            ),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("owner-orphan"))
+      .send({ inviteCode: code });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not associated with a company/i);
+  });
+
+  it("resolveCompanyIdForEnrollment returns profile company for representative (inviteCode, line 151)", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
+    const batch = makeBatch();
+    db.batch.mockReturnValue(batch);
+    const code = "REPINVITE1";
+    const fairDocWithHmac = { ...FAIR_DATA, inviteCode: code.toUpperCase() };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(fairDocWithHmac, true, "fair-id")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "booths") {
+                return { doc: jest.fn(() => ({ id: "fairBooth1" })) };
+              }
+              if (sub === "jobs") {
+                return { doc: jest.fn(() => ({ id: "fairJob1" })) };
+              }
+              return { doc: jest.fn(() => ({ id: "x" })) };
+            }),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue({
+            empty: false,
+            docs: [{ id: "fair-id", data: () => fairDocWithHmac }],
+          }),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                { role: "representative", companyId: "rep-co-enroll" },
+                true,
+                "rep-user-1",
+              ),
+            ),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                {
+                  companyName: "Rep Co",
+                  ownerId: "some-owner",
+                  representativeIDs: ["rep-user-1"],
+                },
+                true,
+                id,
+              ),
+            ),
+          })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      if (name === "jobs") {
+        return {
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        where: jest.fn().mockReturnThis(),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+      };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", authHeader("rep-user-1"))
+      .send({ inviteCode: code });
+
+    expect(res.status).toBe(201);
+    expect(batch.commit).toHaveBeenCalled();
+  });
+
   it("returns 500 when DB throws during enrollment", async () => {
     db.batch.mockReturnValue(makeBatch());
     db.collection.mockImplementation(() => ({
@@ -995,35 +1585,7 @@ describe("PUT /api/fairs/:fairId/booths/:boothId – error paths", () => {
     expect(res.status).toBe(500);
   });
 
-  it("returns 400 when locationCity exceeds 100 characters", async () => {
-    verifyAdmin.mockResolvedValue(null);
-    setupSimpleFairs({
-      boothData: { companyId: "company-id", companyName: "Acme" },
-      boothExists: true,
-    });
-    const res = await request(app)
-      .put("/api/fairs/fair-id/booths/booth-id")
-      .set("Authorization", authHeader())
-      .send({ locationCity: `${"C".repeat(101)}` });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/city must be 100/i);
-  });
-
-  it("returns 400 when locationState exceeds 100 characters", async () => {
-    verifyAdmin.mockResolvedValue(null);
-    setupSimpleFairs({
-      boothData: { companyId: "company-id", companyName: "Acme" },
-      boothExists: true,
-    });
-    const res = await request(app)
-      .put("/api/fairs/fair-id/booths/booth-id")
-      .set("Authorization", authHeader())
-      .send({ locationState: `${"S".repeat(101)}` });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/state must be 100/i);
-  });
-
-  it("nulls location city and state when locationIsRemote is true", async () => {
+  it("ignores legacy location fields on booth update", async () => {
     verifyAdmin.mockResolvedValue(null);
     const update = jest.fn().mockResolvedValue(undefined);
     setupSimpleFairs({
@@ -1071,14 +1633,18 @@ describe("PUT /api/fairs/:fairId/booths/:boothId – error paths", () => {
     const res = await request(app)
       .put("/api/fairs/fair-id/booths/booth-id")
       .set("Authorization", authHeader())
-      .send({ locationIsRemote: true, locationCity: "Remote City", locationState: "RS" });
+      .send({
+        companyName: "Acme2",
+        locationCity: "ShouldNotPersist",
+        locationIsRemote: true,
+      });
 
     expect(res.status).toBe(200);
     expect(update).toHaveBeenCalled();
     const payload = update.mock.calls[0][0];
-    expect(payload.locationIsRemote).toBe(true);
-    expect(payload.locationCity).toBeNull();
-    expect(payload.locationState).toBeNull();
+    expect(payload.companyName).toBe("Acme2");
+    expect(payload.locationCity).toBeUndefined();
+    expect(payload.locationIsRemote).toBeUndefined();
   });
 });
 
@@ -1295,10 +1861,13 @@ describe("DELETE /api/fairs/:fairId/leave", () => {
         };
       }
       if (name === "companies") {
+        const companySnap = mockDocSnap({ ownerId: "user-id", representativeIDs: [] }, true, "company-id");
         return {
           doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ ownerId: "user-id", representativeIDs: [] }, true, "company-id")),
+            get: jest.fn().mockResolvedValue(companySnap),
           })),
+          where: jest.fn().mockReturnThis(),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([companySnap])),
         };
       }
       if (name === "fairs") {

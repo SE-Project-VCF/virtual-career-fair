@@ -1,11 +1,18 @@
+vi.mock("../utils/consoleErrorFilter", () => ({
+  setupConsoleErrorFilter: vi.fn(),
+}))
+
 import { render, screen } from "@testing-library/react"
 import { describe, it, expect, vi, afterEach } from "vitest"
+import { setupConsoleErrorFilter } from "../utils/consoleErrorFilter"
 import App from "../App"
 
 vi.mock("../pages/RoleSelection", () => ({ default: () => <div>RoleSelection</div> }))
 vi.mock("../pages/Register", () => ({ default: () => <div>Register</div> }))
 vi.mock("../pages/Login", () => ({ default: () => <div>Login</div> }))
 vi.mock("../pages/Dashboard", () => ({ default: () => <div>Dashboard</div> }))
+vi.mock("../pages/FairyJobmotherPage", () => ({ default: () => <div>FairyJobmotherPage</div> }))
+vi.mock("../pages/FairAnnouncementsPage", () => ({ default: () => <div>FairAnnouncementsPage</div> }))
 vi.mock("../pages/CompanyManagement", () => ({ default: () => <div>CompanyManagement</div> }))
 vi.mock("../pages/Company", () => ({ default: () => <div>Company</div> }))
 vi.mock("../pages/BoothEditor", () => ({ default: () => <div>BoothEditor</div> }))
@@ -30,7 +37,8 @@ vi.mock("../pages/TailoredResumeViewPage", () => ({ default: () => <div>Tailored
 vi.mock("../pages/TailoredResumesPage", () => ({ default: () => <div>TailoredResumesPage</div> }))
 vi.mock("../pages/SubmissionsPage", () => ({ default: () => <div>SubmissionsPage</div> }))
 vi.mock("../pages/NetworkingLounge", () => ({ default: () => <div>NetworkingLounge</div> }))
-vi.mock("../pages/StudentProfilePage", () => ({ default: () => <div>StudentProfilePage</div> }))
+vi.mock("../pages/ProfilePage", () => ({ default: () => <div>ProfilePage</div> }))
+vi.mock("../pages/JobSearchPage", () => ({ default: () => <div>JobSearchPage</div> }))
 vi.mock("../pages/CallInvitationsPage", () => ({ default: () => <div>CallInvitationsPage</div> }))
 vi.mock("../pages/StudentCallInvitations", () => ({
   StudentCallInvitations: () => <div>StudentCallInvitations</div>,
@@ -52,6 +60,10 @@ vi.mock("../contexts/FairContext", () => ({
 describe("App", () => {
   afterEach(() => {
     globalThis.history.pushState({}, "", "/")
+  })
+
+  it("calls setupConsoleErrorFilter when the App module loads (TensorFlow console noise)", () => {
+    expect(vi.mocked(setupConsoleErrorFilter)).toHaveBeenCalled()
   })
 
   it("renders RoleSelection at /", () => {
@@ -143,10 +155,16 @@ describe("App", () => {
     expect(screen.getByText("NetworkingLounge")).toBeInTheDocument()
   })
 
-  it("renders StudentProfilePage at /profile", () => {
+  it("renders ProfilePage at /profile", () => {
     globalThis.history.pushState({}, "", "/profile")
     render(<App />)
-    expect(screen.getByText("StudentProfilePage")).toBeInTheDocument()
+    expect(screen.getByText("ProfilePage")).toBeInTheDocument()
+  })
+
+  it("renders JobSearchPage at /dashboard/job-search", () => {
+    globalThis.history.pushState({}, "", "/dashboard/job-search")
+    render(<App />)
+    expect(screen.getByText("JobSearchPage")).toBeInTheDocument()
   })
 
   it("renders Register at /register", () => {
@@ -165,6 +183,18 @@ describe("App", () => {
     globalThis.history.pushState({}, "", "/dashboard")
     render(<App />)
     expect(screen.getByText("Dashboard")).toBeInTheDocument()
+  })
+
+  it("renders FairyJobmotherPage at /dashboard/fairy-jobmother", () => {
+    globalThis.history.pushState({}, "", "/dashboard/fairy-jobmother")
+    render(<App />)
+    expect(screen.getByText("FairyJobmotherPage")).toBeInTheDocument()
+  })
+
+  it("renders FairAnnouncementsPage at /dashboard/fair-announcements", () => {
+    globalThis.history.pushState({}, "", "/dashboard/fair-announcements")
+    render(<App />)
+    expect(screen.getByText("FairAnnouncementsPage")).toBeInTheDocument()
   })
 
   it("renders AdminDashboard at /admin", () => {
