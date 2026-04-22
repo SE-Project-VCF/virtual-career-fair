@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <style>
+      * {
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      h1 {
+        text-align: center;
+      }
+      .group-header th {
+        font-size: 200%;
+      }
+      .sub-header th {
+        font-size: 150%;
+      }
+      table, th, td {
+        border: 1px solid black;
+        border-collapse: collapse;
+        white-space: nowrap;
+        padding: .3em;
+      }
+      table {
+        margin: 0 auto;
+      }
+      .severity {
+        text-align: center;
+        font-weight: bold;
+        color: #fafafa;
+      }
+      .severity-LOW .severity { background-color: #5fbb31; }
+      .severity-MEDIUM .severity { background-color: #e9c600; }
+      .severity-HIGH .severity { background-color: #ff8800; }
+      .severity-CRITICAL .severity { background-color: #e40000; }
+      .severity-UNKNOWN .severity { background-color: #747474; }
+      .severity-LOW { background-color: #5fbb3160; }
+      .severity-MEDIUM { background-color: #e9c60060; }
+      .severity-HIGH { background-color: #ff880060; }
+      .severity-CRITICAL { background-color: #e4000060; }
+      .severity-UNKNOWN { background-color: #74747460; }
+      table tr td:first-of-type {
+        font-weight: bold;
+      }
+      .links a,
+      .links[data-more-links=on] a {
+        display: block;
+      }
+      .links[data-more-links=off] a:nth-of-type(1n+5) {
+        display: none;
+      }
+      a.toggle-more-links { cursor: pointer; }
+    </style>
+    <title>backend/package-lock.json - Trivy Report - 2026-04-07 22:52:20.165825 -0500 CDT m=+2.525763459 </title>
+    <script>
+      window.onload = function() {
+        document.querySelectorAll('td.links').forEach(function(linkCell) {
+          var links = [].concat.apply([], linkCell.querySelectorAll('a'));
+          [].sort.apply(links, function(a, b) {
+            return a.href > b.href ? 1 : -1;
+          });
+          links.forEach(function(link, idx) {
+            if (links.length > 3 && 3 === idx) {
+              var toggleLink = document.createElement('a');
+              toggleLink.innerText = "Toggle more links";
+              toggleLink.href = "#toggleMore";
+              toggleLink.setAttribute("class", "toggle-more-links");
+              linkCell.appendChild(toggleLink);
+            }
+            linkCell.appendChild(link);
+          });
+        });
+        document.querySelectorAll('a.toggle-more-links').forEach(function(toggleLink) {
+          toggleLink.onclick = function() {
+            var expanded = toggleLink.parentElement.getAttribute("data-more-links");
+            toggleLink.parentElement.setAttribute("data-more-links", "on" === expanded ? "off" : "on");
+            return false;
+          };
+        });
+      };
+    </script>
+  </head>
+  <body>
+    <h1>backend/package-lock.json - Trivy Report - 2026-04-07 22:52:20.165841 -0500 CDT m=+2.525779043</h1>
+    <table>
+      <tr class="group-header"><th colspan="6">npm</th></tr>
+      <tr class="sub-header">
+        <th>Package</th>
+        <th>Vulnerability ID</th>
+        <th>Severity</th>
+        <th>Installed Version</th>
+        <th>Fixed Version</th>
+        <th>Links</th>
+      </tr>
+      <tr class="severity-LOW">
+        <td class="pkg-name">@tootallnate/once</td>
+        <td>CVE-2026-3449</td>
+        <td class="severity">LOW</td>
+        <td class="pkg-version">2.0.0</td>
+        <td>3.0.1</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-3449">https://access.redhat.com/security/cve/CVE-2026-3449</a>
+          <a href="https://github.com/TooTallNate/once">https://github.com/TooTallNate/once</a>
+          <a href="https://github.com/TooTallNate/once/commit/b9f43cc5259bee2952d91ad3cdbd201a82df448a">https://github.com/TooTallNate/once/commit/b9f43cc5259bee2952d91ad3cdbd201a82df448a</a>
+          <a href="https://github.com/TooTallNate/once/issues/8">https://github.com/TooTallNate/once/issues/8</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-3449">https://nvd.nist.gov/vuln/detail/CVE-2026-3449</a>
+          <a href="https://security.snyk.io/vuln/SNYK-JS-TOOTALLNATEONCE-15250612">https://security.snyk.io/vuln/SNYK-JS-TOOTALLNATEONCE-15250612</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-3449">https://www.cve.org/CVERecord?id=CVE-2026-3449</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">@xmldom/xmldom</td>
+        <td>CVE-2026-34601</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">0.8.11</td>
+        <td>0.8.12, 0.9.9</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-34601">https://access.redhat.com/security/cve/CVE-2026-34601</a>
+          <a href="https://github.com/xmldom/xmldom">https://github.com/xmldom/xmldom</a>
+          <a href="https://github.com/xmldom/xmldom/commit/2b852e836ab86dbbd6cbaf0537f584dd0b5ac184">https://github.com/xmldom/xmldom/commit/2b852e836ab86dbbd6cbaf0537f584dd0b5ac184</a>
+          <a href="https://github.com/xmldom/xmldom/releases/tag/0.8.12">https://github.com/xmldom/xmldom/releases/tag/0.8.12</a>
+          <a href="https://github.com/xmldom/xmldom/releases/tag/0.9.9">https://github.com/xmldom/xmldom/releases/tag/0.9.9</a>
+          <a href="https://github.com/xmldom/xmldom/security/advisories/GHSA-wh4c-j3r5-mjhp">https://github.com/xmldom/xmldom/security/advisories/GHSA-wh4c-j3r5-mjhp</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-34601">https://nvd.nist.gov/vuln/detail/CVE-2026-34601</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-34601">https://www.cve.org/CVERecord?id=CVE-2026-34601</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">express-rate-limit</td>
+        <td>CVE-2026-30827</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">8.2.1</td>
+        <td>8.2.2, 8.1.1, 8.0.2</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-30827">https://access.redhat.com/security/cve/CVE-2026-30827</a>
+          <a href="https://github.com/express-rate-limit/express-rate-limit">https://github.com/express-rate-limit/express-rate-limit</a>
+          <a href="https://github.com/express-rate-limit/express-rate-limit/commit/14e53888cdfd1b9798faf5b634c4206409e27fc4">https://github.com/express-rate-limit/express-rate-limit/commit/14e53888cdfd1b9798faf5b634c4206409e27fc4</a>
+          <a href="https://github.com/express-rate-limit/express-rate-limit/security/advisories/GHSA-46wh-pxpv-q5gq">https://github.com/express-rate-limit/express-rate-limit/security/advisories/GHSA-46wh-pxpv-q5gq</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-30827">https://nvd.nist.gov/vuln/detail/CVE-2026-30827</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-30827">https://www.cve.org/CVERecord?id=CVE-2026-30827</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">fast-xml-parser</td>
+        <td>CVE-2026-33036</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">5.4.1</td>
+        <td>5.5.6, 4.5.5</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33036">https://access.redhat.com/security/cve/CVE-2026-33036</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser">https://github.com/NaturalIntelligence/fast-xml-parser</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser/commit/bd26122c838e6a55e7d7ac49b4ccc01a49999a01">https://github.com/NaturalIntelligence/fast-xml-parser/commit/bd26122c838e6a55e7d7ac49b4ccc01a49999a01</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser/releases/tag/v4.5.5">https://github.com/NaturalIntelligence/fast-xml-parser/releases/tag/v4.5.5</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser/releases/tag/v5.5.6">https://github.com/NaturalIntelligence/fast-xml-parser/releases/tag/v5.5.6</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser/security/advisories/GHSA-8gc5-j5rx-235r">https://github.com/NaturalIntelligence/fast-xml-parser/security/advisories/GHSA-8gc5-j5rx-235r</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33036">https://nvd.nist.gov/vuln/detail/CVE-2026-33036</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33036">https://www.cve.org/CVERecord?id=CVE-2026-33036</a>
+        </td>
+      </tr>
+      <tr class="severity-MEDIUM">
+        <td class="pkg-name">fast-xml-parser</td>
+        <td>CVE-2026-33349</td>
+        <td class="severity">MEDIUM</td>
+        <td class="pkg-version">5.4.1</td>
+        <td>5.5.7</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33349">https://access.redhat.com/security/cve/CVE-2026-33349</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser">https://github.com/NaturalIntelligence/fast-xml-parser</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser/commit/239b64aa1fc5c5455ddebbbb54a187eb68c9fdb7">https://github.com/NaturalIntelligence/fast-xml-parser/commit/239b64aa1fc5c5455ddebbbb54a187eb68c9fdb7</a>
+          <a href="https://github.com/NaturalIntelligence/fast-xml-parser/security/advisories/GHSA-jp2q-39xq-3w4g">https://github.com/NaturalIntelligence/fast-xml-parser/security/advisories/GHSA-jp2q-39xq-3w4g</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33349">https://nvd.nist.gov/vuln/detail/CVE-2026-33349</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33349">https://www.cve.org/CVERecord?id=CVE-2026-33349</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">multer</td>
+        <td>CVE-2026-3520</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">2.1.0</td>
+        <td>2.1.1</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-3520">https://access.redhat.com/security/cve/CVE-2026-3520</a>
+          <a href="https://cna.openjsf.org/security-advisories.html">https://cna.openjsf.org/security-advisories.html</a>
+          <a href="https://github.com/expressjs/multer">https://github.com/expressjs/multer</a>
+          <a href="https://github.com/expressjs/multer/commit/7e66481f8b2e6c54b982b34c152479e096ce2752">https://github.com/expressjs/multer/commit/7e66481f8b2e6c54b982b34c152479e096ce2752</a>
+          <a href="https://github.com/expressjs/multer/security/advisories/GHSA-5528-5vmv-3xc2">https://github.com/expressjs/multer/security/advisories/GHSA-5528-5vmv-3xc2</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-3520">https://nvd.nist.gov/vuln/detail/CVE-2026-3520</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-3520">https://www.cve.org/CVERecord?id=CVE-2026-3520</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">node-forge</td>
+        <td>CVE-2026-33891</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">1.3.3</td>
+        <td>1.4.0</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33891">https://access.redhat.com/security/cve/CVE-2026-33891</a>
+          <a href="https://github.com/digitalbazaar/forge">https://github.com/digitalbazaar/forge</a>
+          <a href="https://github.com/digitalbazaar/forge/commit/9bb8d67b99d17e4ebb5fd7596cd699e11f25d023">https://github.com/digitalbazaar/forge/commit/9bb8d67b99d17e4ebb5fd7596cd699e11f25d023</a>
+          <a href="https://github.com/digitalbazaar/forge/security/advisories/GHSA-5m6q-g25r-mvwx">https://github.com/digitalbazaar/forge/security/advisories/GHSA-5m6q-g25r-mvwx</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33891">https://nvd.nist.gov/vuln/detail/CVE-2026-33891</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33891">https://www.cve.org/CVERecord?id=CVE-2026-33891</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">node-forge</td>
+        <td>CVE-2026-33894</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">1.3.3</td>
+        <td>1.4.0</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33894">https://access.redhat.com/security/cve/CVE-2026-33894</a>
+          <a href="https://datatracker.ietf.org/doc/html/rfc2313#section-8">https://datatracker.ietf.org/doc/html/rfc2313#section-8</a>
+          <a href="https://github.com/digitalbazaar/forge">https://github.com/digitalbazaar/forge</a>
+          <a href="https://github.com/digitalbazaar/forge/security/advisories/GHSA-cfm4-qjh2-4765">https://github.com/digitalbazaar/forge/security/advisories/GHSA-cfm4-qjh2-4765</a>
+          <a href="https://github.com/digitalbazaar/forge/security/advisories/GHSA-ppp5-5v6c-4jwp">https://github.com/digitalbazaar/forge/security/advisories/GHSA-ppp5-5v6c-4jwp</a>
+          <a href="https://mailarchive.ietf.org/arch/msg/openpgp/5rnE9ZRN1AokBVj3VqblGlP63QE">https://mailarchive.ietf.org/arch/msg/openpgp/5rnE9ZRN1AokBVj3VqblGlP63QE</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33894">https://nvd.nist.gov/vuln/detail/CVE-2026-33894</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33894">https://www.cve.org/CVERecord?id=CVE-2026-33894</a>
+          <a href="https://www.rfc-editor.org/rfc/rfc8017.html">https://www.rfc-editor.org/rfc/rfc8017.html</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">node-forge</td>
+        <td>CVE-2026-33895</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">1.3.3</td>
+        <td>1.4.0</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33895">https://access.redhat.com/security/cve/CVE-2026-33895</a>
+          <a href="https://datatracker.ietf.org/doc/html/rfc8032#section-8.4">https://datatracker.ietf.org/doc/html/rfc8032#section-8.4</a>
+          <a href="https://github.com/digitalbazaar/forge">https://github.com/digitalbazaar/forge</a>
+          <a href="https://github.com/digitalbazaar/forge/commit/bdecf11571c9f1a487cc0fe72fe78ff6dfa96b85">https://github.com/digitalbazaar/forge/commit/bdecf11571c9f1a487cc0fe72fe78ff6dfa96b85</a>
+          <a href="https://github.com/digitalbazaar/forge/security/advisories/GHSA-q67f-28xg-22rw">https://github.com/digitalbazaar/forge/security/advisories/GHSA-q67f-28xg-22rw</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2022-35961">https://nvd.nist.gov/vuln/detail/CVE-2022-35961</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-25793">https://nvd.nist.gov/vuln/detail/CVE-2026-25793</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33895">https://nvd.nist.gov/vuln/detail/CVE-2026-33895</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33895">https://www.cve.org/CVERecord?id=CVE-2026-33895</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">node-forge</td>
+        <td>CVE-2026-33896</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">1.3.3</td>
+        <td>1.4.0</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33896">https://access.redhat.com/security/cve/CVE-2026-33896</a>
+          <a href="https://github.com/digitalbazaar/forge">https://github.com/digitalbazaar/forge</a>
+          <a href="https://github.com/digitalbazaar/forge/commit/2e492832fb25227e6b647cbe1ac981c123171e90">https://github.com/digitalbazaar/forge/commit/2e492832fb25227e6b647cbe1ac981c123171e90</a>
+          <a href="https://github.com/digitalbazaar/forge/security/advisories/GHSA-2328-f5f3-gj25">https://github.com/digitalbazaar/forge/security/advisories/GHSA-2328-f5f3-gj25</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33896">https://nvd.nist.gov/vuln/detail/CVE-2026-33896</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33896">https://www.cve.org/CVERecord?id=CVE-2026-33896</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">path-to-regexp</td>
+        <td>CVE-2026-4926</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">8.3.0</td>
+        <td>8.4.0</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-4926">https://access.redhat.com/security/cve/CVE-2026-4926</a>
+          <a href="https://cna.openjsf.org/security-advisories.html">https://cna.openjsf.org/security-advisories.html</a>
+          <a href="https://github.com/pillarjs/path-to-regexp">https://github.com/pillarjs/path-to-regexp</a>
+          <a href="https://github.com/pillarjs/path-to-regexp/security/advisories/GHSA-j3q9-mxjg-w52f">https://github.com/pillarjs/path-to-regexp/security/advisories/GHSA-j3q9-mxjg-w52f</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-4926">https://nvd.nist.gov/vuln/detail/CVE-2026-4926</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-4926">https://www.cve.org/CVERecord?id=CVE-2026-4926</a>
+        </td>
+      </tr>
+      <tr class="severity-MEDIUM">
+        <td class="pkg-name">path-to-regexp</td>
+        <td>CVE-2026-4923</td>
+        <td class="severity">MEDIUM</td>
+        <td class="pkg-version">8.3.0</td>
+        <td>8.4.0</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-4923">https://access.redhat.com/security/cve/CVE-2026-4923</a>
+          <a href="https://cna.openjsf.org/security-advisories.html">https://cna.openjsf.org/security-advisories.html</a>
+          <a href="https://github.com/pillarjs/path-to-regexp">https://github.com/pillarjs/path-to-regexp</a>
+          <a href="https://github.com/pillarjs/path-to-regexp/security/advisories/GHSA-27v5-c462-wpq7">https://github.com/pillarjs/path-to-regexp/security/advisories/GHSA-27v5-c462-wpq7</a>
+          <a href="https://makenowjust-labs.github.io/recheck/playground">https://makenowjust-labs.github.io/recheck/playground</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-4923">https://nvd.nist.gov/vuln/detail/CVE-2026-4923</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-4923">https://www.cve.org/CVERecord?id=CVE-2026-4923</a>
+        </td>
+      </tr>
+      <tr><th colspan="6">No Misconfigurations found</th></tr>
+      <tr class="group-header"><th colspan="6">npm</th></tr>
+      <tr class="sub-header">
+        <th>Package</th>
+        <th>Vulnerability ID</th>
+        <th>Severity</th>
+        <th>Installed Version</th>
+        <th>Fixed Version</th>
+        <th>Links</th>
+      </tr>
+      <tr class="severity-MEDIUM">
+        <td class="pkg-name">yaml</td>
+        <td>CVE-2026-33532</td>
+        <td class="severity">MEDIUM</td>
+        <td class="pkg-version">1.10.2</td>
+        <td>2.8.3, 1.10.3</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33532">https://access.redhat.com/security/cve/CVE-2026-33532</a>
+          <a href="https://github.com/eemeli/yaml">https://github.com/eemeli/yaml</a>
+          <a href="https://github.com/eemeli/yaml/commit/1e84ebbea7ec35011a4c61bbb820a529ee4f359b">https://github.com/eemeli/yaml/commit/1e84ebbea7ec35011a4c61bbb820a529ee4f359b</a>
+          <a href="https://github.com/eemeli/yaml/releases/tag/v1.10.3">https://github.com/eemeli/yaml/releases/tag/v1.10.3</a>
+          <a href="https://github.com/eemeli/yaml/releases/tag/v2.8.3">https://github.com/eemeli/yaml/releases/tag/v2.8.3</a>
+          <a href="https://github.com/eemeli/yaml/security/advisories/GHSA-48c2-rrv3-qjmp">https://github.com/eemeli/yaml/security/advisories/GHSA-48c2-rrv3-qjmp</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33532">https://nvd.nist.gov/vuln/detail/CVE-2026-33532</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33532">https://www.cve.org/CVERecord?id=CVE-2026-33532</a>
+        </td>
+      </tr>
+      <tr><th colspan="6">No Misconfigurations found</th></tr>
+      <tr class="group-header"><th colspan="6">npm</th></tr>
+      <tr class="sub-header">
+        <th>Package</th>
+        <th>Vulnerability ID</th>
+        <th>Severity</th>
+        <th>Installed Version</th>
+        <th>Fixed Version</th>
+        <th>Links</th>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">multer</td>
+        <td>CVE-2026-3520</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">2.1.0</td>
+        <td>2.1.1</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-3520">https://access.redhat.com/security/cve/CVE-2026-3520</a>
+          <a href="https://cna.openjsf.org/security-advisories.html">https://cna.openjsf.org/security-advisories.html</a>
+          <a href="https://github.com/expressjs/multer">https://github.com/expressjs/multer</a>
+          <a href="https://github.com/expressjs/multer/commit/7e66481f8b2e6c54b982b34c152479e096ce2752">https://github.com/expressjs/multer/commit/7e66481f8b2e6c54b982b34c152479e096ce2752</a>
+          <a href="https://github.com/expressjs/multer/security/advisories/GHSA-5528-5vmv-3xc2">https://github.com/expressjs/multer/security/advisories/GHSA-5528-5vmv-3xc2</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-3520">https://nvd.nist.gov/vuln/detail/CVE-2026-3520</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-3520">https://www.cve.org/CVERecord?id=CVE-2026-3520</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">picomatch</td>
+        <td>CVE-2026-33671</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">4.0.3</td>
+        <td>4.0.4, 3.0.2, 2.3.2</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33671">https://access.redhat.com/security/cve/CVE-2026-33671</a>
+          <a href="https://github.com/micromatch/picomatch">https://github.com/micromatch/picomatch</a>
+          <a href="https://github.com/micromatch/picomatch/commit/5eceecd27543b8e056b9307d69e105ea03618a7d">https://github.com/micromatch/picomatch/commit/5eceecd27543b8e056b9307d69e105ea03618a7d</a>
+          <a href="https://github.com/micromatch/picomatch/security/advisories/GHSA-c2c7-rcm5-vvqj">https://github.com/micromatch/picomatch/security/advisories/GHSA-c2c7-rcm5-vvqj</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33671">https://nvd.nist.gov/vuln/detail/CVE-2026-33671</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33671">https://www.cve.org/CVERecord?id=CVE-2026-33671</a>
+        </td>
+      </tr>
+      <tr class="severity-MEDIUM">
+        <td class="pkg-name">picomatch</td>
+        <td>CVE-2026-33672</td>
+        <td class="severity">MEDIUM</td>
+        <td class="pkg-version">4.0.3</td>
+        <td>4.0.4, 3.0.2, 2.3.2</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-33672">https://access.redhat.com/security/cve/CVE-2026-33672</a>
+          <a href="https://github.com/micromatch/picomatch">https://github.com/micromatch/picomatch</a>
+          <a href="https://github.com/micromatch/picomatch/commit/4516eb521f13a46b2fe1a1d2c9ef6b20ddc0e903">https://github.com/micromatch/picomatch/commit/4516eb521f13a46b2fe1a1d2c9ef6b20ddc0e903</a>
+          <a href="https://github.com/micromatch/picomatch/security/advisories/GHSA-3v7f-55p6-f55p">https://github.com/micromatch/picomatch/security/advisories/GHSA-3v7f-55p6-f55p</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-33672">https://nvd.nist.gov/vuln/detail/CVE-2026-33672</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-33672">https://www.cve.org/CVERecord?id=CVE-2026-33672</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">rollup</td>
+        <td>CVE-2026-27606</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">4.57.1</td>
+        <td>2.80.0, 3.30.0, 4.59.0</td>
+        <td class="links" data-more-links="off">
+          <a href="https://access.redhat.com/security/cve/CVE-2026-27606">https://access.redhat.com/security/cve/CVE-2026-27606</a>
+          <a href="https://github.com/rollup/rollup">https://github.com/rollup/rollup</a>
+          <a href="https://github.com/rollup/rollup/commit/c60770d7aaf750e512c1b2774989ea4596e660b2">https://github.com/rollup/rollup/commit/c60770d7aaf750e512c1b2774989ea4596e660b2</a>
+          <a href="https://github.com/rollup/rollup/commit/c8cf1f9c48c516285758c1e11f08a54f304fd44e">https://github.com/rollup/rollup/commit/c8cf1f9c48c516285758c1e11f08a54f304fd44e</a>
+          <a href="https://github.com/rollup/rollup/commit/d6dee5e99bb82aac0bee1df4ab9efbde455452c3">https://github.com/rollup/rollup/commit/d6dee5e99bb82aac0bee1df4ab9efbde455452c3</a>
+          <a href="https://github.com/rollup/rollup/releases/tag/v2.80.0">https://github.com/rollup/rollup/releases/tag/v2.80.0</a>
+          <a href="https://github.com/rollup/rollup/releases/tag/v3.30.0">https://github.com/rollup/rollup/releases/tag/v3.30.0</a>
+          <a href="https://github.com/rollup/rollup/releases/tag/v4.59.0">https://github.com/rollup/rollup/releases/tag/v4.59.0</a>
+          <a href="https://github.com/rollup/rollup/security/advisories/GHSA-mw96-cpmx-2vgc">https://github.com/rollup/rollup/security/advisories/GHSA-mw96-cpmx-2vgc</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-27606">https://nvd.nist.gov/vuln/detail/CVE-2026-27606</a>
+          <a href="https://www.cve.org/CVERecord?id=CVE-2026-27606">https://www.cve.org/CVERecord?id=CVE-2026-27606</a>
+        </td>
+      </tr>
+      <tr class="severity-HIGH">
+        <td class="pkg-name">vite</td>
+        <td>CVE-2026-39363</td>
+        <td class="severity">HIGH</td>
+        <td class="pkg-version">6.4.1</td>
+        <td>8.0.5, 7.3.2, 6.4.2</td>
+        <td class="links" data-more-links="off">
+          <a href="https://github.com/vitejs/vite">https://github.com/vitejs/vite</a>
+          <a href="https://github.com/vitejs/vite/commit/f02d9fde0b195afe3ea2944414186962fbbe41e0">https://github.com/vitejs/vite/commit/f02d9fde0b195afe3ea2944414186962fbbe41e0</a>
+          <a href="https://github.com/vitejs/vite/pull/22159">https://github.com/vitejs/vite/pull/22159</a>
+          <a href="https://github.com/vitejs/vite/releases/tag/v6.4.2">https://github.com/vitejs/vite/releases/tag/v6.4.2</a>
+          <a href="https://github.com/vitejs/vite/releases/tag/v7.3.2">https://github.com/vitejs/vite/releases/tag/v7.3.2</a>
+          <a href="https://github.com/vitejs/vite/releases/tag/v8.0.5">https://github.com/vitejs/vite/releases/tag/v8.0.5</a>
+          <a href="https://github.com/vitejs/vite/security/advisories/GHSA-p9ff-h696-f583">https://github.com/vitejs/vite/security/advisories/GHSA-p9ff-h696-f583</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-39363">https://nvd.nist.gov/vuln/detail/CVE-2026-39363</a>
+        </td>
+      </tr>
+      <tr class="severity-MEDIUM">
+        <td class="pkg-name">vite</td>
+        <td>CVE-2026-39365</td>
+        <td class="severity">MEDIUM</td>
+        <td class="pkg-version">6.4.1</td>
+        <td>8.0.5, 7.3.2, 6.4.2</td>
+        <td class="links" data-more-links="off">
+          <a href="https://github.com/vitejs/vite">https://github.com/vitejs/vite</a>
+          <a href="https://github.com/vitejs/vite/commit/79f002f2286c03c88c7b74c511c7f9fc6dc46694">https://github.com/vitejs/vite/commit/79f002f2286c03c88c7b74c511c7f9fc6dc46694</a>
+          <a href="https://github.com/vitejs/vite/pull/22161">https://github.com/vitejs/vite/pull/22161</a>
+          <a href="https://github.com/vitejs/vite/releases/tag/v6.4.2">https://github.com/vitejs/vite/releases/tag/v6.4.2</a>
+          <a href="https://github.com/vitejs/vite/releases/tag/v7.3.2">https://github.com/vitejs/vite/releases/tag/v7.3.2</a>
+          <a href="https://github.com/vitejs/vite/releases/tag/v8.0.5">https://github.com/vitejs/vite/releases/tag/v8.0.5</a>
+          <a href="https://github.com/vitejs/vite/security/advisories/GHSA-4w7w-66w2-5vf9">https://github.com/vitejs/vite/security/advisories/GHSA-4w7w-66w2-5vf9</a>
+          <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-39365">https://nvd.nist.gov/vuln/detail/CVE-2026-39365</a>
+        </td>
+      </tr>
+      <tr><th colspan="6">No Misconfigurations found</th></tr>
+      <tr class="group-header"><th colspan="6"></th></tr>
+      <tr><th colspan="6">No Vulnerabilities found</th></tr>
+      <tr><th colspan="6">No Misconfigurations found</th></tr>
+    </table>
+  </body>
+</html>
