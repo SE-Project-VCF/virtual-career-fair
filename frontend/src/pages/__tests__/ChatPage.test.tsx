@@ -53,21 +53,36 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }));
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({
+    children,
+    pageTitle,
+    onHeaderBack,
+    headerActions,
+  }: {
+    children: React.ReactNode
+    pageTitle?: string
+    onHeaderBack?: () => void
+    headerActions?: React.ReactNode
+  }) => (
+    <div data-testid="base-layout">
+      {pageTitle && <span>{pageTitle}</span>}
+      {onHeaderBack && (
+        <button type="button" aria-label="Back to Dashboard" onClick={onHeaderBack}>
+          Back
+        </button>
+      )}
+      {headerActions}
+      {children}
+    </div>
+  ),
+}));
+
 vi.mock("stream-chat-react", () => ({
   Chat: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-chat">{children}</div>,
   Channel: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-channel">{children}</div>,
   Window: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-window">{children}</div>,
   MessageList: () => <div data-testid="message-list">Message List</div>,
-}));
-
-vi.mock("../../components/chat/ChatHeader", () => ({
-  default: ({ title, onNewChat, onBack }: { title: string; onNewChat: () => void; onBack: () => void }) => (
-    <div data-testid="chat-header">
-      <span>{title}</span>
-      <button onClick={onNewChat}>New Chat</button>
-      <button onClick={onBack}>Back</button>
-    </div>
-  ),
 }));
 
 vi.mock("../../components/chat/ChatSidebar", () => ({
@@ -149,7 +164,8 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
+        expect(screen.getByText("Messages")).toBeInTheDocument();
       });
     });
   });
@@ -170,7 +186,7 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
         expect(screen.getByTestId("chat-sidebar")).toBeInTheDocument();
         expect(screen.getByTestId("stream-chat")).toBeInTheDocument();
       });
@@ -242,7 +258,7 @@ describe("ChatPage", () => {
     });
   });
 
-  describe("Chat Header", () => {
+  describe("Chat page header (BaseLayout)", () => {
     it("displays Messages title", async () => {
       mockStreamClient.userID = "user-1";
       renderChatPage();
@@ -270,10 +286,10 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
       });
 
-      const backButton = screen.getByText("Back");
+      const backButton = screen.getByRole("button", { name: "Back to Dashboard" });
       await user.click(backButton);
 
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
@@ -288,10 +304,10 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByText("New Chat")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Start New Chat" })).toBeInTheDocument();
       });
 
-      const newChatButton = screen.getByText("New Chat");
+      const newChatButton = screen.getByRole("button", { name: "Start New Chat" });
       await user.click(newChatButton);
 
       expect(screen.getByTestId("new-chat-dialog")).toBeInTheDocument();
@@ -304,11 +320,11 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByText("New Chat")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Start New Chat" })).toBeInTheDocument();
       });
 
       // Open dialog
-      const newChatButton = screen.getByText("New Chat");
+      const newChatButton = screen.getByRole("button", { name: "Start New Chat" });
       await user.click(newChatButton);
 
       // Close dialog
@@ -706,7 +722,7 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
       });
 
       // Should not create a messaging channel

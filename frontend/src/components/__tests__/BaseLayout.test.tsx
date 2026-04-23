@@ -78,6 +78,23 @@ describe("BaseLayout", () => {
       expect(screen.getByText("My Page")).toBeInTheDocument()
     })
 
+    it("renders header back button and calls onHeaderBack when provided with pageTitle", async () => {
+      const user = userEvent.setup()
+      const onBack = vi.fn()
+      renderLayout({ children: <div />, pageTitle: "Chat", onHeaderBack: onBack })
+      await user.click(screen.getByRole("button", { name: "Back to Dashboard" }))
+      expect(onBack).toHaveBeenCalledTimes(1)
+    })
+
+    it("renders headerActions before the Chat button", () => {
+      renderLayout({
+        children: <div />,
+        pageTitle: "Messages",
+        headerActions: <span data-testid="extra-action">Extra</span>,
+      })
+      expect(screen.getByTestId("extra-action")).toBeInTheDocument()
+    })
+
     it("does not render a page title when prop is omitted", () => {
       renderLayout({ children: <div /> })
       // Only branding text should be present, no extra titles
