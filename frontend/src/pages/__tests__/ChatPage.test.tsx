@@ -27,6 +27,9 @@ const mockStreamClient = {
   off: vi.fn(),
 };
 
+/** Reassign in tests to simulate missing Stream API key (streamClient === null). */
+let streamClientExport: typeof mockStreamClient | null = mockStreamClient;
+
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
@@ -35,7 +38,7 @@ vi.mock("../../utils/auth", () => ({
 
 vi.mock("../../utils/streamClient", () => ({
   get streamClient() {
-    return mockStreamClient;
+    return streamClientExport;
   },
 }));
 
@@ -145,6 +148,7 @@ describe("ChatPage", () => {
     });
 
     // Reset stream client state
+    streamClientExport = mockStreamClient;
     mockStreamClient.userID = null;
     mockStreamClient.user = { total_unread_count: 0 };
   });
@@ -178,8 +182,18 @@ describe("ChatPage", () => {
       expect(screen.getByRole("progressbar")).toBeInTheDocument();
     });
 
-    // Removed the "shows 'Chat Not Available' when client is null" test
-    // as testing a null client is difficult with our current mock setup
+    it("shows 'Chat Not Available' when stream client is not configured", () => {
+      streamClientExport = null;
+      renderChatPage();
+
+      expect(screen.getByText("Chat Not Available")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Stream Chat API key is not configured. Please set VITE_STREAM_API_KEY in your environment variables."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getByText("Chat", { exact: true })).toBeInTheDocument();
+    });
 
     it("renders chat interface after client is ready", async () => {
       mockStreamClient.userID = "user-1";
