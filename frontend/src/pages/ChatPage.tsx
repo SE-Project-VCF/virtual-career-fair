@@ -69,6 +69,8 @@ export default function ChatPage() {
       return;
     }
 
+    let removeNotificationListeners: (() => void) | undefined;
+
     const init = async () => {
       try {
         // If Stream is connected as someone else → disconnect
@@ -121,7 +123,7 @@ export default function ChatPage() {
         client.on("notification.message_new", updateUnread);
         client.on("notification.mark_read", updateUnread);
 
-        return () => {
+        removeNotificationListeners = () => {
           client.off("notification.message_new", updateUnread);
           client.off("notification.mark_read", updateUnread);
         };
@@ -131,6 +133,9 @@ export default function ChatPage() {
     };
 
     void init();
+    return () => {
+      removeNotificationListeners?.();
+    };
   }, [user, client]);
 
   /*

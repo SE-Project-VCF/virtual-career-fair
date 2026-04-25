@@ -175,14 +175,21 @@ describe("ChatPage", () => {
   });
 
   describe("Loading States", () => {
-    it("shows loading spinner when client is not ready", () => {
+    it("shows loading spinner when client is not ready", async () => {
+      const user = userEvent.setup();
       mockStreamClient.userID = null;
       renderChatPage();
 
       expect(screen.getByRole("progressbar")).toBeInTheDocument();
+      expect(document.querySelector(".chat-loading-container")).toBeInTheDocument();
+
+      const back = screen.getByRole("button", { name: "Back to Dashboard" });
+      await user.click(back);
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
 
-    it("shows 'Chat Not Available' when stream client is not configured", () => {
+    it("shows 'Chat Not Available' when stream client is not configured", async () => {
+      const user = userEvent.setup();
       streamClientExport = null;
       renderChatPage();
 
@@ -193,6 +200,11 @@ describe("ChatPage", () => {
         )
       ).toBeInTheDocument();
       expect(screen.getByText("Chat", { exact: true })).toBeInTheDocument();
+      expect(document.querySelector(".chat-center-container")).toBeInTheDocument();
+
+      const back = screen.getByRole("button", { name: "Back to Dashboard" });
+      await user.click(back);
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
 
     it("renders chat interface after client is ready", async () => {
@@ -524,6 +536,20 @@ describe("ChatPage", () => {
           expect.any(Function)
         );
       });
+    });
+
+    it("unsubscribes stream notification listeners on unmount", async () => {
+      mockStreamClient.userID = "user-1";
+      const { unmount } = renderChatPage();
+
+      await waitFor(() => {
+        expect(mockStreamClient.on).toHaveBeenCalled();
+      });
+
+      unmount();
+
+      expect(mockStreamClient.off).toHaveBeenCalledWith("notification.message_new", expect.any(Function));
+      expect(mockStreamClient.off).toHaveBeenCalledWith("notification.mark_read", expect.any(Function));
     });
   });
 
