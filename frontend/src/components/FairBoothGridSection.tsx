@@ -9,7 +9,10 @@ import {
   Grid,
   CircularProgress,
   Alert,
+  Paper,
+  Stack,
 } from "@mui/material"
+import { alpha } from "@mui/material/styles"
 import BusinessIcon from "@mui/icons-material/Business"
 import PeopleIcon from "@mui/icons-material/People"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -18,6 +21,8 @@ import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
 import { API_URL } from "../config"
+
+const ACCENT_GREEN = "#388560"
 
 interface Booth {
   id: string
@@ -90,11 +95,37 @@ export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoot
   const heading =
     sectionTitle ?? `${fair?.name ?? "Career Fair"} — Booths`
 
+  const boothCountLine =
+    !loading && !error
+      ? booths.length === 1
+        ? "1 company"
+        : `${booths.length} companies`
+      : undefined
+
+  const subtitle =
+    isLive && !fairLoading
+      ? "Browse exhibitors and visit company booths."
+      : !fairLoading && !isLive && !isAdmin
+        ? "Booths unlock when the fair goes live."
+        : undefined
+
   return (
     <Box sx={{ mt: 4 }}>
-      <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
-        {heading}
-      </Typography>
+      <Stack spacing={0.75} sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h2" fontWeight={700}>
+          {heading}
+        </Typography>
+        {!loading && !error && boothCountLine && (
+          <Typography variant="body2" color="text.secondary">
+            {boothCountLine}
+          </Typography>
+        )}
+        {subtitle && (
+          <Typography variant="body2" color="text.secondary">
+            {subtitle}
+          </Typography>
+        )}
+      </Stack>
 
       {!fairLoading && !isLive && !isAdmin && (
         <Alert severity="info" sx={{ mb: 3 }}>
@@ -103,47 +134,80 @@ export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoot
       )}
 
       {(loading || fairLoading) && (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-          <CircularProgress />
+        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+          <CircularProgress sx={{ color: ACCENT_GREEN }} />
         </Box>
       )}
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
       {!loading && !error && booths.length === 0 && (isLive || isAdmin) && (
-        <Box sx={{ textAlign: "center", py: 8 }}>
-          <BusinessIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
+        <Paper
+          variant="outlined"
+          sx={{
+            textAlign: "center",
+            py: 6,
+            px: 2,
+            borderRadius: 2,
+            bgcolor: alpha(ACCENT_GREEN, 0.04),
+            borderColor: "divider",
+          }}
+        >
+          <BusinessIcon sx={{ fontSize: 56, color: "text.disabled", mb: 2 }} />
           <Typography variant="h6" color="text.secondary">
             No booths yet
           </Typography>
-        </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Check back soon for participating employers.
+          </Typography>
+        </Paper>
       )}
 
       <Grid container spacing={3}>
         {booths.map((booth) => (
           <Grid size={{ xs: 12, sm: 6, md: 4 }} key={booth.id}>
             <Card
+              variant="outlined"
               sx={{
                 height: "100%",
                 display: "flex",
                 flexDirection: "column",
+                borderRadius: 2,
                 cursor: "pointer",
-                "&:hover": { boxShadow: 4 },
+                overflow: "hidden",
+                transition: "box-shadow 0.2s ease",
+                "&:hover": {
+                  boxShadow: 3,
+                  borderColor: alpha(ACCENT_GREEN, 0.45),
+                },
               }}
               onClick={() => navigate(`/fair/${fairId}/booth/${booth.id}`)}
             >
-              <CardContent sx={{ flexGrow: 1 }}>
-                {booth.logoUrl && (
-                  <Box sx={{ mb: 2, display: "flex", justifyContent: "center" }}>
-                    <img
-                      src={booth.logoUrl}
-                      alt={booth.companyName}
-                      style={{ maxHeight: 60, objectFit: "contain" }}
-                    />
-                  </Box>
+              <Box
+                sx={{
+                  height: 88,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  bgcolor: "grey.50",
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                  px: 2,
+                }}
+              >
+                {booth.logoUrl ? (
+                  <img
+                    src={booth.logoUrl}
+                    alt={booth.companyName}
+                    style={{ maxHeight: 56, maxWidth: "100%", objectFit: "contain" }}
+                  />
+                ) : (
+                  <BusinessIcon sx={{ fontSize: 40, color: "grey.300" }} aria-hidden />
                 )}
+              </Box>
 
-                <Typography variant="h6" fontWeight="bold" gutterBottom>
+              <CardContent sx={{ flexGrow: 1, pt: 2 }}>
+                <Typography variant="subtitle1" fontWeight={700} gutterBottom component="div">
                   {booth.companyName}
                 </Typography>
 
@@ -171,14 +235,21 @@ export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoot
                 )}
               </CardContent>
 
-              <Box sx={{ p: 2, pt: 0 }}>
+              <Box sx={{ px: 2, pb: 2, pt: 0 }}>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   fullWidth
+                  disableElevation
                   endIcon={<ArrowForwardIcon />}
                   onClick={(e) => {
                     e.stopPropagation()
                     navigate(`/fair/${fairId}/booth/${booth.id}`)
+                  }}
+                  sx={{
+                    background: `linear-gradient(135deg, ${ACCENT_GREEN} 0%, #2d6b4d 100%)`,
+                    "&:hover": {
+                      background: `linear-gradient(135deg, #2f7351 0%, #245339 100%)`,
+                    },
                   }}
                 >
                   View Booth
