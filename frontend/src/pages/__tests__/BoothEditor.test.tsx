@@ -74,39 +74,21 @@ const renderBoothEditor = () => {
   );
 };
 
-/** Pick industry + size and fill city/state (and optional location details) for non-remote booths. */
-async function fillRequiredBoothLocation(
-  user: ReturnType<typeof userEvent.setup>,
-  opts?: { includeIndustrySize?: boolean; city?: string; state?: string; locationDetails?: string }
-) {
-  const {
-    includeIndustrySize = true,
-    city = "San Francisco",
-    state = "CA",
-    locationDetails,
-  } = opts ?? {};
+/** Pick industry + company size (required booth fields). */
+async function fillRequiredIndustryAndSize(user: ReturnType<typeof userEvent.setup>) {
+  const industrySelect = screen.getByRole("combobox", { name: /industry/i });
+  await user.click(industrySelect);
+  await waitFor(() => {
+    expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
+  });
+  await user.click(screen.getByRole("option", { name: /software development/i }));
 
-  if (includeIndustrySize) {
-    const industrySelect = screen.getByRole("combobox", { name: /industry/i });
-    await user.click(industrySelect);
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole("option", { name: /software development/i }));
-
-    const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
-    await user.click(sizeSelect);
-    await waitFor(() => {
-      expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
-  }
-
-  await user.type(screen.getByRole("textbox", { name: /^city$/i }), city);
-  await user.type(screen.getByRole("textbox", { name: /state \/ region/i }), state);
-  if (locationDetails) {
-    await user.type(screen.getByRole("textbox", { name: /location details/i }), locationDetails);
-  }
+  const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
+  await user.click(sizeSelect);
+  await waitFor(() => {
+    expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
+  });
+  await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
 }
 
 const mockCompanyDoc = {
@@ -126,10 +108,7 @@ const mockBoothDoc = {
     companyName: "Tech Company",
     industry: "software",
     companySize: "51-200",
-    locationIsRemote: false,
-    locationCity: "San Francisco",
-    locationState: "CA",
-    location: "SoMa",
+    location: "San Francisco, CA — SoMa",
     description: "We build innovative software solutions",
     website: "https://techcompany.com",
     careersPage: "https://techcompany.com/careers",
@@ -294,9 +273,8 @@ describe("BoothEditor", () => {
       });
       expect(screen.getByRole("combobox", { name: /industry/i })).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: /company size/i })).toBeInTheDocument();
-      expect(screen.getByRole("textbox", { name: /^city$/i })).toBeInTheDocument();
-      expect(screen.getByRole("textbox", { name: /state \/ region/i })).toBeInTheDocument();
-      expect(screen.getByRole("textbox", { name: /location details/i })).toBeInTheDocument();
+      expect(screen.getByText(/Office locations and the remote-employer setting/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /company page/i })).toHaveAttribute("href", "/company/company-1");
       expect(screen.getByRole("textbox", { name: /company description/i })).toBeInTheDocument();
       expect(screen.getByRole("textbox", { name: /contact person name/i })).toBeInTheDocument();
       expect(screen.getByRole("textbox", { name: /contact email/i })).toBeInTheDocument();
@@ -336,13 +314,6 @@ describe("BoothEditor", () => {
         const nameInput = screen.getByRole("textbox", { name: /company name/i });
         expect((nameInput as HTMLInputElement).value).toBe("Tech Company");
       });
-
-      const cityInput = screen.getByRole("textbox", { name: /^city$/i });
-      const stateInput = screen.getByRole("textbox", { name: /state \/ region/i });
-      const detailsInput = screen.getByRole("textbox", { name: /location details/i });
-      expect((cityInput as HTMLInputElement).value).toBe("San Francisco");
-      expect((stateInput as HTMLInputElement).value).toBe("CA");
-      expect((detailsInput as HTMLInputElement).value).toBe("SoMa");
 
       const descriptionInput = screen.getByRole("textbox", { name: /company description/i });
       expect((descriptionInput as HTMLInputElement).value).toBe("We build innovative software solutions");
@@ -398,29 +369,6 @@ describe("BoothEditor", () => {
       });
     });
 
-    it("allows user to fill in location", async () => {
-      const user = userEvent.setup();
-      renderBoothEditor();
-
-      await waitFor(() => {
-        expect(screen.getByRole("textbox", { name: /^city$/i })).toBeInTheDocument();
-      }, { timeout: 5000 });
-
-      const cityInput = screen.getByRole("textbox", { name: /^city$/i });
-      const stateInput = screen.getByRole("textbox", { name: /state \/ region/i });
-      const detailsInput = screen.getByRole("textbox", { name: /location details/i });
-      await user.clear(cityInput);
-      await user.type(cityInput, "New York");
-      await user.clear(stateInput);
-      await user.type(stateInput, "NY");
-      await user.clear(detailsInput);
-      await user.type(detailsInput, "Midtown");
-
-      expect((cityInput as HTMLInputElement).value).toBe("New York");
-      expect((stateInput as HTMLInputElement).value).toBe("NY");
-      expect((detailsInput as HTMLInputElement).value).toBe("Midtown");
-    }, 10000);
-
     it("allows user to fill in description", async () => {
       const user = userEvent.setup();
       renderBoothEditor();
@@ -463,7 +411,7 @@ describe("BoothEditor", () => {
       });
 
       await user.click(screen.getByRole("button", { name: /cancel/i }));
-      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1");
+      expect(mockNavigate).toHaveBeenCalledWith("/companies");
     });
 
     it("navigates back when back arrow is clicked", async () => {
@@ -474,7 +422,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("button", { name: /company/i })).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("button", { name: /company/i }));
+      await user.click(screen.getByRole("button", { name: /back to company profile/i }));
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1");
     });
   });
@@ -489,7 +437,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       }, { timeout: 5000 });
 
-      await fillRequiredBoothLocation(user, { city: "San Francisco", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "We build software");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
@@ -523,12 +471,9 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("heading", { name: "Edit Booth" })).toBeInTheDocument();
       }, { timeout: 5000 });
 
-      const cityInput = screen.getByRole("textbox", { name: /^city$/i });
-      const stateInput = screen.getByRole("textbox", { name: /state \/ region/i });
-      await user.clear(cityInput);
-      await user.type(cityInput, "New York");
-      await user.clear(stateInput);
-      await user.type(stateInput, "NY");
+      const descriptionInput = screen.getByRole("textbox", { name: /company description/i });
+      await user.clear(descriptionInput);
+      await user.type(descriptionInput, "Updated company story");
 
       const submitButton = screen.getByRole("button", { name: /update booth/i });
       await user.click(submitButton);
@@ -548,7 +493,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       }, { timeout: 5000 });
 
-      await fillRequiredBoothLocation(user, { city: "San Francisco", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test User");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "nonexistent@example.com");
@@ -575,7 +520,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       });
 
-      await fillRequiredBoothLocation(user, { city: "San Francisco", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Other User");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "other@example.com");
@@ -597,7 +542,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       });
 
-      await fillRequiredBoothLocation(user, { city: "San Francisco", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
@@ -620,7 +565,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       });
 
-      await fillRequiredBoothLocation(user, { city: "Testville", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
@@ -635,7 +580,7 @@ describe("BoothEditor", () => {
       if (resolveSubmit) resolveSubmit({ id: "booth-1" });
     });
 
-    it("shows validation error when city and state are empty for non-remote booth", async () => {
+    it("submits booth without legacy per-booth location fields", async () => {
       const user = userEvent.setup({ delay: null });
       renderBoothEditor();
 
@@ -643,50 +588,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       }, { timeout: 5000 });
 
-      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
-      await user.click(industrySelect);
-      await waitFor(() => {
-        expect(screen.getByRole("option", { name: /software development/i })).toBeInTheDocument();
-      });
-      await user.click(screen.getByRole("option", { name: /software development/i }));
-
-      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
-      await user.click(sizeSelect);
-      await waitFor(() => {
-        expect(screen.getByRole("option", { name: /51-200 employees/i })).toBeInTheDocument();
-      });
-      await user.click(screen.getByRole("option", { name: /51-200 employees/i }));
-
-      await user.type(screen.getByRole("textbox", { name: /company description/i }), "We build software");
-      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe");
-      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
-
-      await user.click(screen.getByRole("button", { name: /create booth/i }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/City and state are required unless you mark the booth as Remote/i),
-        ).toBeInTheDocument();
-      });
-    }, 20000);
-
-    it("submits remote booth with null location fields", async () => {
-      const user = userEvent.setup({ delay: null });
-      renderBoothEditor();
-
-      await waitFor(() => {
-        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
-      }, { timeout: 5000 });
-
-      const industrySelect = screen.getByRole("combobox", { name: /industry/i });
-      await user.click(industrySelect);
-      await user.click(await screen.findByRole("option", { name: /software development/i }));
-
-      const sizeSelect = screen.getByRole("combobox", { name: /company size/i });
-      await user.click(sizeSelect);
-      await user.click(await screen.findByRole("option", { name: /51-200 employees/i }));
-
-      await user.click(screen.getByRole("checkbox", { name: /remote employer/i }));
+      await fillRequiredIndustryAndSize(user);
 
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Remote-first");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Jane Doe");
@@ -698,10 +600,10 @@ describe("BoothEditor", () => {
         expect(firestore.addDoc).toHaveBeenCalled();
       });
       const payload = (firestore.addDoc as any).mock.calls[0][1];
-      expect(payload.locationIsRemote).toBe(true);
-      expect(payload.locationCity).toBeNull();
-      expect(payload.locationState).toBeNull();
-      expect(payload.location).toBeNull();
+      expect(payload.locationIsRemote).toBeUndefined();
+      expect(payload.locationCity).toBeUndefined();
+      expect(payload.locationState).toBeUndefined();
+      expect(payload.location).toBeUndefined();
     }, 20000);
   });
 
@@ -738,37 +640,40 @@ describe("BoothEditor", () => {
       });
     });
 
-    it("allows user to close success alerts", async () => {
-      const user = userEvent.setup();
-      renderBoothEditor();
+    it(
+      "allows user to close success alerts",
+      async () => {
+        const user = userEvent.setup();
+        renderBoothEditor();
 
-      await waitFor(() => {
-        expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
-      });
-
-      await fillRequiredBoothLocation(user, { city: "Testville", state: "CA" });
-      await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
-      await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
-      await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
-
-      await user.click(screen.getByRole("button", { name: /create booth/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
-      });
-
-      // Close the success alert
-      const closeButtons = screen.getAllByTitle("Close");
-      const successAlertCloseButton = closeButtons.find(btn =>
-        btn.closest('[class*="MuiAlert-standardSuccess"]')
-      );
-      if (successAlertCloseButton) {
-        await user.click(successAlertCloseButton);
         await waitFor(() => {
-          expect(screen.queryByText("Booth created successfully!")).not.toBeInTheDocument();
+          expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
         });
-      }
-    });
+
+        await fillRequiredIndustryAndSize(user);
+        await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
+        await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
+        await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
+
+        await user.click(screen.getByRole("button", { name: /create booth/i }));
+
+        await waitFor(() => {
+          expect(screen.getByText("Booth created successfully!")).toBeInTheDocument();
+        });
+
+        const closeButtons = screen.getAllByTitle("Close");
+        const successAlertCloseButton = closeButtons.find(btn =>
+          btn.closest('[class*="MuiAlert-standardSuccess"]')
+        );
+        if (successAlertCloseButton) {
+          await user.click(successAlertCloseButton);
+          await waitFor(() => {
+            expect(screen.queryByText("Booth created successfully!")).not.toBeInTheDocument();
+          });
+        }
+      },
+      30_000
+    );
 
     it("shows go back button on fatal error", async () => {
       const user = userEvent.setup();
@@ -936,7 +841,7 @@ describe("BoothEditor", () => {
         expect(screen.getByAltText("Selected logo preview")).toBeInTheDocument();
       });
 
-      await fillRequiredBoothLocation(user, { city: "Testville", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
@@ -971,7 +876,7 @@ describe("BoothEditor", () => {
       const input = document.querySelector('input[type="file"]') as HTMLInputElement;
       await user.upload(input, file);
 
-      await fillRequiredBoothLocation(user, { city: "Testville", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
@@ -994,7 +899,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       });
 
-      await fillRequiredBoothLocation(user, { city: "Testville", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "owner@company.com");
@@ -1062,11 +967,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       });
 
-      await fillRequiredBoothLocation(user, {
-        city: "San Francisco",
-        state: "CA",
-        locationDetails: "Financial District",
-      });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Description");
       await user.type(screen.getByRole("textbox", { name: /company website/i }), "https://example.com");
       await user.type(screen.getByRole("textbox", { name: /careers page/i }), "https://example.com/careers");
@@ -1146,7 +1047,7 @@ describe("BoothEditor", () => {
         expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument();
       });
 
-      await fillRequiredBoothLocation(user, { city: "Testville", state: "CA" });
+      await fillRequiredIndustryAndSize(user);
       await user.type(screen.getByRole("textbox", { name: /company description/i }), "Test");
       await user.type(screen.getByRole("textbox", { name: /contact person name/i }), "Rep User");
       await user.type(screen.getByRole("textbox", { name: /contact email/i }), "rep@company.com");

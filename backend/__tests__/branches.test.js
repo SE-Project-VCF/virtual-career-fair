@@ -146,6 +146,7 @@ describe("Input Validation Branch Coverage", () => {
           description: "Description",
           majorsAssociated: "CS",
           applicationLink: "   ",
+          locationIsRemote: true,
         });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);

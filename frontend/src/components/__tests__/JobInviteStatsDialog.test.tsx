@@ -8,7 +8,7 @@ import { authUtils } from "../../utils/auth";
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
-    getIdToken: vi.fn(),
+    getIdToken: vi.fn().mockResolvedValue("mock-id-token"),
   },
 }));
 
@@ -97,6 +97,20 @@ describe("JobInviteStatsDialog", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it("does not fetch when dialog is open but user is null", () => {
+    (authUtils.getCurrentUser as any).mockReturnValue(null);
+    render(
+      <JobInviteStatsDialog
+        open={true}
+        onClose={mockOnClose}
+        jobId="job-1"
+        jobTitle="Software Engineer"
+      />
+    );
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it("renders dialog title with job title", async () => {
     render(
       <JobInviteStatsDialog
@@ -124,7 +138,7 @@ describe("JobInviteStatsDialog", () => {
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
 
-  it("shows Not authenticated when getIdToken returns null", async () => {
+  it("shows session error when getIdToken returns null", async () => {
     (authUtils.getIdToken as any).mockResolvedValue(null);
 
     render(
@@ -137,7 +151,7 @@ describe("JobInviteStatsDialog", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Not authenticated")).toBeInTheDocument();
+      expect(screen.getByText(/Could not verify your session/i)).toBeInTheDocument();
     });
   });
 

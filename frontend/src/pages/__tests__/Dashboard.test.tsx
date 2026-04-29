@@ -623,10 +623,11 @@ describe("Dashboard", () => {
         </MemoryRouter>
       )
 
+      // Label "fairs enrolled" is shown even when count is still 0 (0 !== 1), so wait for the loaded count.
       await waitFor(() => {
-        expect(screen.getByText(/fairs enrolled/)).toBeInTheDocument()
+        expect(screen.getByText("2")).toBeInTheDocument()
       })
-      expect(screen.getByText("2")).toBeInTheDocument()
+      expect(screen.getByText(/fairs enrolled/)).toBeInTheDocument()
     })
   })
 

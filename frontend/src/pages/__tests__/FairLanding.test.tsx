@@ -7,7 +7,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { BrowserRouter } from "react-router-dom"
 import FairLanding from "../FairLanding"
 import * as authUtils from "../../utils/auth"
-import { auth } from "../../firebase"
 import { useFair } from "../../contexts/FairContext"
 
 const mockNavigate = vi.fn()
@@ -44,12 +43,26 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:5000",
 }))
 
+const fairLandingFirebaseMocks = vi.hoisted(() => {
+  const getIdToken = vi.fn().mockResolvedValue("mock-token")
+  const user = { getIdToken: () => getIdToken() as Promise<string> }
+  return {
+    getIdToken,
+    waitForFirebaseUser: vi.fn(() => Promise.resolve(user)),
+  }
+})
+
 vi.mock("../../firebase", () => ({
+  waitForFirebaseUser: fairLandingFirebaseMocks.waitForFirebaseUser,
   auth: {
     currentUser: {
-      getIdToken: vi.fn().mockResolvedValue("mock-token"),
+      getIdToken: fairLandingFirebaseMocks.getIdToken,
     },
   },
+}))
+
+vi.mock("../../utils/ownedCompanies", () => ({
+  fetchOwnedCompaniesForUser: vi.fn().mockResolvedValue([]),
 }))
 
 const renderFairLanding = () =>
@@ -64,6 +77,7 @@ describe("FairLanding", () => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
     globalThis.fetch = vi.fn()
+    fairLandingFirebaseMocks.getIdToken.mockResolvedValue("mock-token")
 
     // Default: non-company student user
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
@@ -225,7 +239,7 @@ describe("FairLanding", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1" }] }),
+      json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1", companyId: "company-1" }] }),
     })
 
     renderFairLanding()
@@ -622,7 +636,7 @@ describe("FairLanding", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1" }] }),
+      json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1", companyId: "company-1" }] }),
     })
 
     renderFairLanding()
@@ -656,7 +670,7 @@ describe("FairLanding", () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1" }] }),
+      json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1", companyId: "company-1" }] }),
     })
 
     renderFairLanding()
@@ -697,7 +711,7 @@ describe("FairLanding", () => {
     globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1" }] }),
+        json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1", companyId: "company-1" }] }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -742,7 +756,7 @@ describe("FairLanding", () => {
     globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1" }] }),
+        json: async () => ({ enrollments: [{ fairId: "f1", boothId: "booth-1", companyId: "company-1" }] }),
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -1128,7 +1142,7 @@ describe("FairLanding", () => {
     })
     const fetchMock = vi.fn()
     globalThis.fetch = fetchMock
-    vi.mocked(auth.currentUser!.getIdToken).mockResolvedValueOnce("" as unknown as string)
+    fairLandingFirebaseMocks.getIdToken.mockResolvedValueOnce("" as unknown as string)
     renderFairLanding()
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /join this fair/i })).toBeInTheDocument()

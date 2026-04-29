@@ -129,6 +129,65 @@ describe("FairBoothView", () => {
     await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
   })
 
+  it("renders Remote chip when booth is remote employer", async () => {
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Remote Co",
+          industry: "software",
+          companyId: "c-remote",
+          remoteEmployer: true,
+          officeLocations: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    renderFairBoothView()
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Remote Co").length).toBeGreaterThan(0)
+      expect(screen.getByText("Remote")).toBeInTheDocument()
+    })
+  })
+
+  it("renders office location chips with label fallback from city and state", async () => {
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          companyName: "Multi Site Co",
+          industry: "software",
+          companySize: "51-200",
+          companyId: "c-multi",
+          remoteEmployer: false,
+          officeLocations: [
+            { id: "o1", label: "Austin, TX", city: "Austin", state: "TX" },
+            { id: "o2", label: "", city: "Denver", state: "CO" },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ jobs: [] }),
+      })
+
+    renderFairBoothView()
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Multi Site Co").length).toBeGreaterThan(0)
+      expect(screen.getByText("Austin, TX")).toBeInTheDocument()
+      expect(screen.getByText("Denver, CO")).toBeInTheDocument()
+    })
+  })
+
   it("shows error on 403 (fair not live)", async () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ status: 403, ok: false })

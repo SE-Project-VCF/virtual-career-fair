@@ -145,3 +145,7 @@ backend/privateKey.json
 
 # Local test output captures (do not commit)
 **/test-output*.txt
+
+# Trivy scan reports
+**/trivy*.html
+**/trivity*.html

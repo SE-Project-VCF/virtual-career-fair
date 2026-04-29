@@ -7,6 +7,8 @@ module.exports = {
   collectCoverageFrom: [
     "server.js",
     "helpers.js",
+    "helpers/jobSearchHelpers.js",
+    "helpers/studentUserMapping.js",
     "console.js",
     "resumeParser.js",
     "resumeTailorSimple.js",
@@ -19,6 +21,9 @@ module.exports = {
     "lib/**/*.js",
     "services/**/*.js",
     "middleware/**/*.js",
+    /* Root-level modules used by routes; include explicitly so Sonar gets LCOV for them. */
+    "jobmotherIntentResolver.js",
+    "jobmotherUserState.js",
     "__tests__/testUtils.js",
     "jest.setup.js",
     "jestSetupConsole.js",

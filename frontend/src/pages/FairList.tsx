@@ -19,11 +19,15 @@ import {
   TextField,
   Autocomplete,
   FormControl,
+  FormLabel,
   InputLabel,
   Select,
   MenuItem,
   ToggleButton,
   ToggleButtonGroup,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from "@mui/material"
 import { alpha } from "@mui/material/styles"
 import EventIcon from "@mui/icons-material/Event"
@@ -39,6 +43,7 @@ import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
 import { useGeocodeSuggest } from "../hooks/useGeocodeSuggest"
+import { fetchOwnedCompaniesForUser, type OwnedCompanySummary } from "../utils/ownedCompanies"
 
 function waitForFirebaseUser(): Promise<typeof auth.currentUser> {
   if (auth.currentUser) return Promise.resolve(auth.currentUser)
@@ -112,14 +117,18 @@ export default function FairList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
-  // enrolledMap: fairId → boothId (null if enrolled but no booth yet)
-  const [enrolledMap, setEnrolledMap] = useState<Record<string, string | null>>({})
+  // fairId → enrollment details (companyId required for booth URL and leave)
+  const [enrolledByFair, setEnrolledByFair] = useState<
+    Record<string, { boothId: string | null; companyId: string }>
+  >({})
 
   // Join dialog state
   const [joinDialogFairId, setJoinDialogFairId] = useState<string | null>(null)
   const [inviteCode, setInviteCode] = useState("")
   const [joining, setJoining] = useState(false)
   const [joinError, setJoinError] = useState("")
+  const [joinCompanyId, setJoinCompanyId] = useState("")
+  const [ownedCompaniesForJoin, setOwnedCompaniesForJoin] = useState<OwnedCompanySummary[]>([])
 
   // Leave dialog state
   const [leaveDialogFairId, setLeaveDialogFairId] = useState<string | null>(null)
@@ -321,53 +330,99 @@ export default function FairList() {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) {
-          console.error("loadEnrollments: API returned", res.status, await res.text().catch(() => ""))
+          console.error("loadEnrollments: request failed", res.status)
           return
         }
         const data = await res.json()
-        const map: Record<string, string | null> = {}
+        const map: Record<string, { boothId: string | null; companyId: string }> = {}
         for (const e of data.enrollments || []) {
-          map[e.fairId] = e.boothId
+          const cid = e.companyId || user?.companyId
+          if (e.fairId && cid) {
+            map[e.fairId] = { boothId: e.boothId ?? null, companyId: cid }
+          }
         }
-        setEnrolledMap(map)
+        setEnrolledByFair(map)
       } catch (err) {
         console.error("Error loading enrollments:", err)
       }
     }
     loadEnrollments()
-  }, [isCompanyUser])
+  }, [isCompanyUser, user?.companyId])
+
+  useEffect(() => {
+    if (!joinDialogFairId || user?.role !== "companyOwner" || !user?.uid) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const list = await fetchOwnedCompaniesForUser(user.uid)
+        if (cancelled) return
+        setOwnedCompaniesForJoin(list)
+        if (list.length === 1) setJoinCompanyId(list[0].id)
+        else setJoinCompanyId("")
+      } catch {
+        if (!cancelled) setOwnedCompaniesForJoin([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [joinDialogFairId, user?.role, user?.uid])
 
   const handleOpenJoinDialog = (fairId: string) => {
     setJoinDialogFairId(fairId)
     setInviteCode("")
     setJoinError("")
+    setJoinCompanyId("")
   }
 
   const handleCloseJoinDialog = () => {
     setJoinDialogFairId(null)
     setInviteCode("")
     setJoinError("")
+    setJoinCompanyId("")
+    setOwnedCompaniesForJoin([])
   }
 
   const handleJoinFair = async () => {
     if (!inviteCode.trim() || !joinDialogFairId) return
+    if (user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && !joinCompanyId) {
+      setJoinError("Select which company is joining this fair.")
+      return
+    }
     setJoining(true)
     setJoinError("")
     try {
-      const token = await auth.currentUser?.getIdToken()
+      const firebaseUser = auth.currentUser ?? (await waitForFirebaseUser())
+      if (!firebaseUser) throw new Error("Not signed in.")
+      const token = await firebaseUser.getIdToken()
+      const body: { inviteCode: string; companyId?: string } = {
+        inviteCode: inviteCode.trim().toUpperCase(),
+      }
+      if (user?.role === "companyOwner") {
+        if (ownedCompaniesForJoin.length > 1) body.companyId = joinCompanyId
+        else if (ownedCompaniesForJoin.length === 1) body.companyId = ownedCompaniesForJoin[0].id
+      }
       const res = await fetch(`${API_URL}/api/fairs/${joinDialogFairId}/enroll`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ inviteCode: inviteCode.trim().toUpperCase() }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to join fair")
 
-      // Update local enrollment state and close dialog — user can click Edit Booth when ready
-      setEnrolledMap((prev) => ({ ...prev, [joinDialogFairId]: data.boothId || null }))
+      const resolvedCompanyId =
+        user?.role === "companyOwner"
+          ? body.companyId || ownedCompaniesForJoin[0]?.id || user?.companyId || ""
+          : user?.companyId || ""
+      if (!resolvedCompanyId) throw new Error("Could not determine company for enrollment.")
+
+      setEnrolledByFair((prev) => ({
+        ...prev,
+        [joinDialogFairId]: { boothId: data.boothId || null, companyId: resolvedCompanyId },
+      }))
       handleCloseJoinDialog()
     } catch (err: any) {
       setJoinError(err.message)
@@ -378,18 +433,25 @@ export default function FairList() {
 
   const handleLeaveFair = async () => {
     if (!leaveDialogFairId) return
+    const enc = enrolledByFair[leaveDialogFairId]
     setLeaving(true)
     setLeaveError("")
     try {
-      const token = await auth.currentUser?.getIdToken()
+      const firebaseUser = auth.currentUser ?? (await waitForFirebaseUser())
+      if (!firebaseUser) throw new Error("Not signed in.")
+      const token = await firebaseUser.getIdToken()
       const res = await fetch(`${API_URL}/api/fairs/${leaveDialogFairId}/leave`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(enc?.companyId ? { companyId: enc.companyId } : {}),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to leave fair")
 
-      setEnrolledMap((prev) => {
+      setEnrolledByFair((prev) => {
         const next = { ...prev }
         delete next[leaveDialogFairId]
         return next
@@ -684,8 +746,9 @@ export default function FairList() {
           {displayFairs.length > 0 && displayFairs.map((fair) => {
             const status = getFairStatus(fair)
             const isEnded = fair.endTime !== null && Date.now() > fair.endTime
-            const isEnrolled = fair.id in enrolledMap
-            const boothId = enrolledMap[fair.id]
+            const isEnrolled = fair.id in enrolledByFair
+            const enc = enrolledByFair[fair.id]
+            const boothId = enc?.boothId
 
             return (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={fair.id}>
@@ -780,8 +843,8 @@ export default function FairList() {
                             color="secondary"
                             onClick={() =>
                               navigate(
-                                boothId && user?.companyId
-                                  ? `/fair/${fair.id}/company/${user.companyId}/booth?bid=${boothId}`
+                                boothId && enc?.companyId
+                                  ? `/fair/${fair.id}/company/${enc.companyId}/booth?bid=${boothId}`
                                   : `/fair/${fair.id}`
                               )
                             }
@@ -829,6 +892,16 @@ export default function FairList() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Enter the invite code provided by the event organizer.
           </Typography>
+          {user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && (
+            <FormControl sx={{ mb: 2 }} component="fieldset" variant="standard" fullWidth>
+              <FormLabel component="legend">Company enrolling in this fair</FormLabel>
+              <RadioGroup value={joinCompanyId} onChange={(e) => setJoinCompanyId(e.target.value)}>
+                {ownedCompaniesForJoin.map((c) => (
+                  <FormControlLabel key={c.id} value={c.id} control={<Radio />} label={c.companyName} />
+                ))}
+              </RadioGroup>
+            </FormControl>
+          )}
           <TextField
             label="Invite Code"
             value={inviteCode}
@@ -849,7 +922,11 @@ export default function FairList() {
           <Button
             variant="contained"
             onClick={handleJoinFair}
-            disabled={joining || !inviteCode.trim()}
+            disabled={
+              joining ||
+              !inviteCode.trim() ||
+              (user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && !joinCompanyId)
+            }
           >
             {joining ? "Joining..." : "Join Fair"}
           </Button>

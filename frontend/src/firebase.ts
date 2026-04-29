@@ -1,7 +1,7 @@
 // src/firebase.ts
 import { initializeApp } from "firebase/app";
 
-import { getAuth, GoogleAuthProvider } from "firebase/auth"; // ✅ added GoogleAuthProvider
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, type User } from "firebase/auth"; // ✅ added GoogleAuthProvider
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -17,6 +17,22 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+
+/** Resolves when Firebase has restored `currentUser` (or null after timeout). Use before token calls after navigation. */
+export function waitForFirebaseUser(): Promise<User | null> {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5000);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        clearTimeout(timer);
+        unsub();
+        resolve(u);
+      }
+    });
+  });
+}
+
 export const storage = getStorage(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider(); // ✅ added this line

@@ -82,8 +82,7 @@ export default function JobInviteStatsDialog({
 
       const token = await authUtils.getIdToken();
       if (!token) {
-        setError("Not authenticated");
-        return;
+        throw new Error("Could not verify your session. Please sign in again.");
       }
 
       const response = await fetch(

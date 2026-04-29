@@ -14,6 +14,18 @@ const {
 const { streamServerClient } = require("../streamServerClient");
 const { forwardGeocode } = require("../services/mapboxGeocode");
 const { haversineMiles, venueFieldsFromDoc } = require("../services/geo");
+const { mergeFairBoothPayloadWithCompany } = require("../services/mergeFairBoothCompanyLocation");
+
+async function companyDataMapForBoothCompanyIds(boothRows) {
+  const ids = [...new Set(boothRows.map((b) => b.companyId).filter(Boolean))];
+  if (ids.length === 0) return new Map();
+  const snaps = await Promise.all(ids.map((id) => db.collection("companies").doc(id).get()));
+  const m = new Map();
+  snaps.forEach((s) => {
+    if (s.exists) m.set(s.id, s.data());
+  });
+  return m;
+}
 
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
 const enrollmentLimiter = rateLimit({
@@ -41,9 +53,10 @@ async function getRequestingRoleFromAuthHeader(authHeader) {
   return null;
 }
 
-function buildHttpError(status, message) {
+function buildHttpError(status, message, code) {
   const err = new Error(message);
   err.status = status;
+  if (code) err.code = code;
   return err;
 }
 
@@ -77,16 +90,65 @@ async function ensureFairExists(fairId) {
   if (!fairDoc.exists) throw buildHttpError(404, "Fair not found");
 }
 
+/** Millisecond fair window for clients (e.g. “past fair” badges). Omit or pass null fields when unknown. */
+function fairScheduleFromFairData(fairData) {
+  if (!fairData) return {};
+  return {
+    fairStartTime: fairData.startTime ? fairData.startTime.toMillis() : null,
+    fairEndTime: fairData.endTime ? fairData.endTime.toMillis() : null,
+  };
+}
+
+/** Serialize a fair announcement Firestore doc for JSON responses (title + optional description; sorted by createdAt elsewhere). */
+function serializeAnnouncementDoc(doc, fairId, fairName, fairSchedule) {
+  const d = doc.data() || {};
+  const title = d.title != null ? String(d.title).trim() : "";
+  const description = d.description != null ? String(d.description).trim() : "";
+  const sched = fairSchedule && typeof fairSchedule === "object" ? fairSchedule : {};
+  return {
+    id: doc.id,
+    fairId,
+    fairName: fairName ?? null,
+    title,
+    description,
+    published: Boolean(d.published),
+    publishedAt: d.publishedAt ? d.publishedAt.toMillis() : null,
+    createdAt: d.createdAt ? d.createdAt.toMillis() : null,
+    updatedAt: d.updatedAt ? d.updatedAt.toMillis() : null,
+    createdBy: d.createdBy || null,
+    fairStartTime: sched.fairStartTime ?? null,
+    fairEndTime: sched.fairEndTime ?? null,
+  };
+}
+
 async function resolveCompanyIdForEnrollment(requestingUid, companyId) {
   if (companyId) return companyId;
 
   const userDoc = await db.collection("users").doc(requestingUid).get();
   if (!userDoc.exists) throw buildHttpError(404, "User not found");
+  const userData = userDoc.data();
+  const role = userData.role;
+  const profileCompanyId = userData.companyId || null;
 
-  const resolvedCompanyId = userDoc.data().companyId;
-  if (!resolvedCompanyId) throw buildHttpError(400, "User is not associated with a company");
+  if (role === "companyOwner") {
+    const ownedSnap = await db.collection("companies").where("ownerId", "==", requestingUid).get();
+    const ownedIds = ownedSnap.docs.map((d) => d.id);
+    if (ownedIds.length > 1) {
+      throw buildHttpError(
+        400,
+        "You manage multiple companies. Select which company to enroll in this fair.",
+        "COMPANY_ID_REQUIRED",
+      );
+    }
+    if (ownedIds.length === 1) {
+      return ownedIds[0];
+    }
+    if (profileCompanyId) return profileCompanyId;
+    throw buildHttpError(400, "User is not associated with a company");
+  }
 
-  return resolvedCompanyId;
+  if (!profileCompanyId) throw buildHttpError(400, "User is not associated with a company");
+  return profileCompanyId;
 }
 
 
@@ -327,24 +389,114 @@ router.get("/fairs/my-enrollments", verifyFirebaseToken, async (req, res) => {
   try {
     const userDoc = await db.collection("users").doc(req.user.uid).get();
     if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
-    const companyId = userDoc.data().companyId;
-    if (!companyId) return res.json({ enrollments: [] });
+    const userData = userDoc.data();
+    const role = userData.role;
+    const profileCompanyId = userData.companyId || null;
+
+    const companyIds = new Set();
+    if (profileCompanyId) companyIds.add(profileCompanyId);
+    if (role === "companyOwner") {
+      const ownedSnap = await db.collection("companies").where("ownerId", "==", req.user.uid).get();
+      ownedSnap.docs.forEach((d) => companyIds.add(d.id));
+    } else if (role === "representative" && profileCompanyId) {
+      companyIds.clear();
+      companyIds.add(profileCompanyId);
+    }
+
+    if (companyIds.size === 0) return res.json({ enrollments: [] });
 
     const fairsSnap = await db.collection("fairs").get();
-    const enrollmentChecks = fairsSnap.docs.map((fairDoc) =>
-      db.collection("fairs").doc(fairDoc.id).collection("enrollments").doc(companyId).get()
-        .then((enrollDoc) => enrollDoc.exists ? {
-          fairId: fairDoc.id,
-          boothId: enrollDoc.data().boothId || null,
-          enrolledAt: enrollDoc.data().enrolledAt ? enrollDoc.data().enrolledAt.toMillis() : null,
-        } : null)
-    );
-    const enrollments = (await Promise.all(enrollmentChecks)).filter(Boolean);
+    const enrollments = [];
+
+    for (const fairDoc of fairsSnap.docs) {
+      for (const cid of companyIds) {
+        const enrollDoc = await db
+          .collection("fairs")
+          .doc(fairDoc.id)
+          .collection("enrollments")
+          .doc(cid)
+          .get();
+        if (enrollDoc.exists) {
+          enrollments.push({
+            fairId: fairDoc.id,
+            companyId: cid,
+            boothId: enrollDoc.data().boothId || null,
+            enrolledAt: enrollDoc.data().enrolledAt ? enrollDoc.data().enrolledAt.toMillis() : null,
+          });
+        }
+      }
+    }
 
     return res.json({ enrollments });
   } catch (err) {
     console.error("GET /api/fairs/my-enrollments error:", err);
     return res.status(500).json({ error: "Failed to fetch enrollments" });
+  }
+});
+
+/* GET /api/fairs/my-announcements — company owner / rep: published announcements for enrolled fairs */
+router.get("/fairs/my-announcements", verifyFirebaseToken, async (req, res) => {
+  try {
+    const userDoc = await db.collection("users").doc(req.user.uid).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    const userData = userDoc.data();
+    const role = userData.role;
+    const profileCompanyId = userData.companyId || null;
+
+    if (role !== "companyOwner" && role !== "representative") {
+      return res.json({ announcements: [] });
+    }
+
+    const companyIds = new Set();
+    if (profileCompanyId) companyIds.add(profileCompanyId);
+    if (role === "companyOwner") {
+      const ownedSnap = await db.collection("companies").where("ownerId", "==", req.user.uid).get();
+      ownedSnap.docs.forEach((d) => companyIds.add(d.id));
+    } else if (role === "representative" && profileCompanyId) {
+      companyIds.clear();
+      companyIds.add(profileCompanyId);
+    }
+
+    if (companyIds.size === 0) return res.json({ announcements: [] });
+
+    const fairsSnap = await db.collection("fairs").get();
+    const perFair = await Promise.all(
+      fairsSnap.docs.map(async (fairDoc) => {
+        let isEnrolled = false;
+        for (const cid of companyIds) {
+          const enrollDoc = await db
+            .collection("fairs")
+            .doc(fairDoc.id)
+            .collection("enrollments")
+            .doc(cid)
+            .get();
+          if (enrollDoc.exists) {
+            isEnrolled = true;
+            break;
+          }
+        }
+        if (!isEnrolled) return [];
+
+        const fairData = fairDoc.data() || {};
+        const fairName = fairData.name || null;
+        const fairSchedule = fairScheduleFromFairData(fairData);
+        const annSnap = await db.collection("fairs").doc(fairDoc.id).collection("announcements").get();
+        const items = [];
+        annSnap.docs.forEach((annDoc) => {
+          const ann = annDoc.data() || {};
+          if (!ann.published) return;
+          items.push(serializeAnnouncementDoc(annDoc, fairDoc.id, fairName, fairSchedule));
+        });
+        return items;
+      })
+    );
+
+    const announcements = perFair.flat();
+    announcements.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    return res.json({ announcements });
+  } catch (err) {
+    console.error("GET /api/fairs/my-announcements error:", err);
+    return res.status(500).json({ error: "Failed to fetch announcements" });
   }
 });
 
@@ -394,6 +546,139 @@ router.get("/fairs/:fairId/status", async (req, res) => {
     if (err.message === "Fair not found") return res.status(404).json({ error: "Fair not found" });
     console.error("GET /api/fairs/:fairId/status error:", err);
     return res.status(500).json({ error: "Failed to get fair status" });
+  }
+});
+
+/* GET /api/fairs/:fairId/announcements — admin: list announcements (drafts + published) */
+router.get("/fairs/:fairId/announcements", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const adminError = await verifyAdmin(req.user.uid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    await ensureFairExists(fairId);
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    const fairData = fairDoc.data() || {};
+    const fairName = fairData.name || null;
+    const fairSchedule = fairScheduleFromFairData(fairData);
+    const snap = await db.collection("fairs").doc(fairId).collection("announcements").get();
+    const announcements = snap.docs.map((doc) => serializeAnnouncementDoc(doc, fairId, fairName, fairSchedule));
+    announcements.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    return res.json({ announcements });
+  } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
+    console.error("GET /api/fairs/:fairId/announcements error:", err);
+    return res.status(500).json({ error: "Failed to list announcements" });
+  }
+});
+
+/* POST /api/fairs/:fairId/announcements — admin: create announcement */
+router.post("/fairs/:fairId/announcements", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const adminError = await verifyAdmin(req.user.uid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  const { title, description, published } = req.body;
+  if (!title || !String(title).trim()) {
+    return res.status(400).json({ error: "title is required" });
+  }
+
+  try {
+    await ensureFairExists(fairId);
+
+    const now = admin.firestore.Timestamp.now();
+    const isPublished = Boolean(published);
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    const fairDataPost = fairDoc.data() || {};
+    const fairName = fairDataPost.name || null;
+    const fairSchedulePost = fairScheduleFromFairData(fairDataPost);
+
+    const descTrim = description != null ? String(description).trim() : "";
+    const payload = removeUndefined({
+      title: String(title).trim(),
+      ...(descTrim ? { description: descTrim } : {}),
+      published: isPublished,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: req.user.uid,
+      ...(isPublished ? { publishedAt: now } : {}),
+    });
+
+    const colRef = db.collection("fairs").doc(fairId).collection("announcements");
+    const docRef = await colRef.add(payload);
+    const created = await docRef.get();
+    return res.status(201).json(serializeAnnouncementDoc(created, fairId, fairName, fairSchedulePost));
+  } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
+    console.error("POST /api/fairs/:fairId/announcements error:", err);
+    return res.status(500).json({ error: "Failed to create announcement" });
+  }
+});
+
+/* PUT /api/fairs/:fairId/announcements/:announcementId — admin: update announcement */
+router.put("/fairs/:fairId/announcements/:announcementId", verifyFirebaseToken, async (req, res) => {
+  const { fairId, announcementId } = req.params;
+  const adminError = await verifyAdmin(req.user.uid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    await ensureFairExists(fairId);
+    const annRef = db.collection("fairs").doc(fairId).collection("announcements").doc(announcementId);
+    const annDoc = await annRef.get();
+    if (!annDoc.exists) return res.status(404).json({ error: "Announcement not found" });
+
+    const prev = annDoc.data() || {};
+    const updates = { updatedAt: admin.firestore.Timestamp.now() };
+
+    if (req.body.title !== undefined) {
+      if (!String(req.body.title).trim()) {
+        return res.status(400).json({ error: "title cannot be empty" });
+      }
+      updates.title = String(req.body.title).trim();
+    }
+    if (req.body.description !== undefined) {
+      const t = req.body.description === null || req.body.description === "" ? "" : String(req.body.description).trim();
+      updates.description = t;
+    }
+    if (req.body.published !== undefined) {
+      const nextPub = Boolean(req.body.published);
+      updates.published = nextPub;
+      if (nextPub && !prev.published) {
+        updates.publishedAt = admin.firestore.Timestamp.now();
+      }
+    }
+
+    await annRef.update(removeUndefined(updates));
+    const after = await annRef.get();
+    const fairDoc = await db.collection("fairs").doc(fairId).get();
+    const fairDataPut = fairDoc.data() || {};
+    const fairName = fairDataPut.name || null;
+    const fairSchedulePut = fairScheduleFromFairData(fairDataPut);
+    return res.json(serializeAnnouncementDoc(after, fairId, fairName, fairSchedulePut));
+  } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
+    console.error("PUT /api/fairs/:fairId/announcements/:announcementId error:", err);
+    return res.status(500).json({ error: "Failed to update announcement" });
+  }
+});
+
+/* DELETE /api/fairs/:fairId/announcements/:announcementId — admin: delete announcement */
+router.delete("/fairs/:fairId/announcements/:announcementId", verifyFirebaseToken, async (req, res) => {
+  const { fairId, announcementId } = req.params;
+  const adminError = await verifyAdmin(req.user.uid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    await ensureFairExists(fairId);
+    const annRef = db.collection("fairs").doc(fairId).collection("announcements").doc(announcementId);
+    const annDoc = await annRef.get();
+    if (!annDoc.exists) return res.status(404).json({ error: "Announcement not found" });
+    await annRef.delete();
+    return res.status(204).send();
+  } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: err.message });
+    console.error("DELETE /api/fairs/:fairId/announcements/:announcementId error:", err);
+    return res.status(500).json({ error: "Failed to delete announcement" });
   }
 });
 
@@ -793,7 +1078,12 @@ router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, asy
 
     return res.status(201).json({ boothId, fairId: resolvedFairId });
   } catch (err) {
-    if (err.status) return res.status(err.status).json({ error: err.message });
+    if (err.status) {
+      return res.status(err.status).json({
+        error: err.message,
+        ...(err.code ? { code: err.code } : {}),
+      });
+    }
     console.error("POST /api/fairs/:fairId/enroll error:", err);
     return res.status(500).json({ error: "Failed to enroll company" });
   }
@@ -956,7 +1246,11 @@ router.get("/fairs/:fairId/booths", async (req, res) => {
     }
 
     const booths = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    return res.json({ booths });
+    const companyMap = await companyDataMapForBoothCompanyIds(booths);
+    const merged = booths.map((b) =>
+      mergeFairBoothPayloadWithCompany(b, b.companyId ? companyMap.get(b.companyId) : null),
+    );
+    return res.json({ booths: merged });
   } catch (err) {
     if (err.message === "Fair not found") return res.status(404).json({ error: "Fair not found" });
     console.error("GET /api/fairs/:fairId/booths error:", err);
@@ -985,7 +1279,14 @@ router.get("/fairs/:fairId/booths/:boothId", async (req, res) => {
       .get();
     if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
 
-    return res.json({ id: boothDoc.id, ...boothDoc.data() });
+    const raw = boothDoc.data();
+    let companyData = null;
+    if (raw.companyId) {
+      const cDoc = await db.collection("companies").doc(raw.companyId).get();
+      if (cDoc.exists) companyData = cDoc.data();
+    }
+    const payload = mergeFairBoothPayloadWithCompany({ id: boothDoc.id, ...raw }, companyData);
+    return res.json(payload);
   } catch (err) {
     if (err.message === "Fair not found") return res.status(404).json({ error: "Fair not found" });
     console.error("GET /api/fairs/:fairId/booths/:boothId error:", err);
@@ -1017,23 +1318,13 @@ router.put("/fairs/:fairId/booths/:boothId", verifyFirebaseToken, async (req, re
     }
 
     const allowedFields = [
-      "companyName", "industry", "companySize", "location", "description",
+      "companyName", "industry", "companySize", "description",
       "logoUrl", "website", "careersPage", "contactName", "contactEmail",
-      "contactPhone", "hiringFor", "locationIsRemote", "locationCity", "locationState",
+      "contactPhone", "hiringFor",
     ];
     const updates = {};
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
-    }
-    if (updates.locationIsRemote === true) {
-      updates.locationCity = null;
-      updates.locationState = null;
-    }
-    if (updates.locationCity != null && String(updates.locationCity).length > 100) {
-      return res.status(400).json({ error: "City must be 100 characters or less" });
-    }
-    if (updates.locationState != null && String(updates.locationState).length > 100) {
-      return res.status(400).json({ error: "State must be 100 characters or less" });
     }
     updates.updatedAt = admin.firestore.Timestamp.now();
 
@@ -1252,12 +1543,45 @@ router.get("/companies/:companyId/fairs", verifyFirebaseToken, async (req, res) 
 router.delete("/fairs/:fairId/leave", verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
   const requestingUid = req.user.uid;
+  const bodyCompanyId =
+    req.body && typeof req.body.companyId === "string" ? req.body.companyId.trim() : null;
 
   try {
     const userDoc = await db.collection("users").doc(requestingUid).get();
     if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+    const userData = userDoc.data();
+    const role = userData.role;
+    const profileCompanyId = userData.companyId || null;
 
-    const companyId = userDoc.data().companyId;
+    let companyId = bodyCompanyId || null;
+
+    if (!companyId && role === "companyOwner") {
+      const ownedSnap = await db.collection("companies").where("ownerId", "==", requestingUid).get();
+      const ownedIds = ownedSnap.docs.map((d) => d.id);
+      const enrolledIds = [];
+      for (const cid of ownedIds) {
+        const ed = await db
+          .collection("fairs")
+          .doc(fairId)
+          .collection("enrollments")
+          .doc(cid)
+          .get();
+        if (ed.exists) enrolledIds.push(cid);
+      }
+      if (enrolledIds.length === 1) {
+        companyId = enrolledIds[0];
+      } else if (enrolledIds.length > 1) {
+        return res.status(400).json({
+          error: "You have multiple companies enrolled in this fair. Choose which company to remove.",
+          code: "COMPANY_ID_REQUIRED",
+        });
+      }
+    }
+
+    if (!companyId) {
+      companyId = profileCompanyId;
+    }
+
     if (!companyId) return res.status(400).json({ error: "You are not associated with a company" });
 
     // Must be owner or rep of the company
@@ -1343,7 +1667,10 @@ router.get("/fairs/:fairId/company/:companyId/booth", verifyFirebaseToken, async
       return res.status(404).json({ error: "Booth not found" });
     }
 
-    return res.json({ boothId, ...boothDoc.data() });
+    const raw = boothDoc.data();
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    const companyData = companyDoc.exists ? companyDoc.data() : null;
+    return res.json(mergeFairBoothPayloadWithCompany({ boothId, ...raw }, companyData));
   } catch (err) {
     console.error("GET /api/fairs/:fairId/company/:companyId/booth error:", err);
     return res.status(500).json({ error: "Failed to load fair booth" });
@@ -1417,7 +1744,13 @@ router.get("/fairs/:fairId/lounge/attendees", verifyFirebaseToken, async (req, r
     );
 
     const attendees = profileDocs
-      .filter((doc) => doc.exists && doc.data().role === "student")
+      .filter(
+        (doc) =>
+          doc.exists &&
+          doc.id !== uid &&
+          doc.data().role === "student" &&
+          doc.data().ghostMode !== true
+      )
       .map((doc) => {
         const data = doc.data();
         return {
@@ -1438,5 +1771,13 @@ router.get("/fairs/:fairId/lounge/attendees", verifyFirebaseToken, async (req, r
     return res.status(500).json({ error: "Failed to fetch lounge attendees" });
   }
 });
+
+if (process.env.NODE_ENV === "test") {
+  router.testHelpers = {
+    fairScheduleFromFairData,
+    serializeAnnouncementDoc,
+    getCompanyAndBoothSnapshot,
+  };
+}
 
 module.exports = router;
