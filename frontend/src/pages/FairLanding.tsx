@@ -21,10 +21,10 @@ import {
 } from "@mui/material"
 import EventIcon from "@mui/icons-material/Event"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ForumIcon from "@mui/icons-material/Forum"
 import BaseLayout from "../components/BaseLayout"
+import FairBoothGridSection from "../components/FairBoothGridSection"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { waitForFirebaseUser } from "../firebase"
@@ -206,10 +206,22 @@ export default function FairLanding() {
 
   return (
     <BaseLayout pageTitle={fair.name}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/fairs")} sx={{ mb: 3 }}>
-          Back to Fairs
-        </Button>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/fairs")}>
+            Back to Fairs
+          </Button>
+          {user?.role === "student" && isLive && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ForumIcon />}
+              onClick={() => navigate(`/fair/${fairId}/lounge`)}
+            >
+              Networking Lounge
+            </Button>
+          )}
+        </Box>
 
         <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 2 }}>
           <Typography variant="h3" fontWeight="bold">
@@ -256,30 +268,8 @@ export default function FairLanding() {
           </Alert>
         )}
 
-        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-          <Button
-            variant="contained"
-            size="large"
-            endIcon={<ArrowForwardIcon />}
-            onClick={() => navigate(`/fair/${fairId}/booths`)}
-            disabled={!isLive}
-          >
-            {isLive ? "Browse Booths" : "Fair Not Live Yet"}
-          </Button>
-
-          {!isCompanyUser && (
-            <Button
-              variant="outlined"
-              size="large"
-              startIcon={<ForumIcon />}
-              onClick={() => navigate(`/fair/${fairId}/lounge`)}
-              disabled={!isLive}
-            >
-              Networking Lounge
-            </Button>
-          )}
-
-          {isCompanyUser && (
+        {isCompanyUser && (
+          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 0 }}>
             <Button
               variant="outlined"
               size="large"
@@ -289,8 +279,10 @@ export default function FairLanding() {
             >
               {isEnrolled ? "Leave Fair" : "Join This Fair"}
             </Button>
-          )}
-        </Box>
+          </Box>
+        )}
+
+        <FairBoothGridSection sectionTitle="Booths" />
       </Container>
 
       <Dialog

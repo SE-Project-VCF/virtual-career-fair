@@ -317,10 +317,10 @@ export default function FairBoothView() {
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate(`/fair/${fairId}/booths`)}
+          onClick={() => navigate(`/fair/${fairId}`)}
           sx={{ mb: 3 }}
         >
-          Back to {`${fair?.name ?? "Fair"} Booths`}
+          Back to Fair
         </Button>
 
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
