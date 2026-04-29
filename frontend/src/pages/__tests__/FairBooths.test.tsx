@@ -8,6 +8,16 @@ function FairLandingProbe() {
 }
 
 describe("FairBooths", () => {
+  it("renders nothing when fairId param is missing", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <FairBooths />
+      </MemoryRouter>
+    )
+
+    expect(container.firstChild).toBeNull()
+  })
+
   it("redirects /fair/:fairId/booths to /fair/:fairId", () => {
     render(
       <MemoryRouter initialEntries={["/fair/xyz/booths"]}>
