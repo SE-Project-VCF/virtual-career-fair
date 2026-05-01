@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BrowserRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
@@ -265,6 +265,14 @@ describe("Company", () => {
   it("BoothReviewsSection shows no reviews when ratings HTTP response is not ok", async () => {
     globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
       const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/booths") && u.includes("companyId=") && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            booths: [{ id: "booth-1", boothName: "Main Booth" }],
+          }),
+        });
+      }
       if (u.includes("/api/booths/") && u.includes("/ratings")) {
         return Promise.resolve({
           ok: false,
@@ -279,23 +287,67 @@ describe("Company", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Booth Reviews")).toBeInTheDocument();
-      expect(screen.getByText("No reviews yet.")).toBeInTheDocument();
     });
+    // The accordion summary still renders "No reviews yet" for the booth
+    expect(screen.getAllByText(/No reviews/i).length).toBeGreaterThan(0);
   });
 
-  it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
+  it("BoothReviewsSection groups reviews by fair within each booth", async () => {
     globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
       const u = typeof url === "string" ? url : String(url);
-      if (u.includes("/api/booths/") && u.includes("/ratings")) {
+      if (u.includes("/api/booths") && u.includes("companyId=") && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            booths: [
+              { id: "booth-1", boothName: "Main Booth" },
+              { id: "booth-2", boothName: "Engineering Booth" },
+            ],
+          }),
+        });
+      }
+      if (u.includes("/api/booths/booth-1/ratings")) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
             ratings: [
-              { rating: 5, comment: "Excellent booth!", createdAt: 1000000 },
-              { rating: 4, comment: null, createdAt: null },
+              {
+                rating: 5,
+                comment: "Excellent at Spring",
+                createdAt: 2000,
+                fairId: "fair-spring",
+                fairName: "Spring 2026",
+                fairStartTime: 50000,
+              },
+              {
+                rating: 4,
+                comment: "Decent at Fall",
+                createdAt: 1000,
+                fairId: "fair-fall",
+                fairName: "Fall 2025",
+                fairStartTime: 40000,
+              },
+              {
+                rating: 3,
+                comment: "Legacy review",
+                createdAt: 500,
+                fairId: null,
+                fairName: null,
+                fairStartTime: null,
+              },
             ],
-            totalRatings: 2,
-            averageRating: 4.5,
+            totalRatings: 3,
+            averageRating: 4,
+          }),
+        });
+      }
+      if (u.includes("/api/booths/booth-2/ratings")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            ratings: [],
+            totalRatings: 0,
+            averageRating: null,
           }),
         });
       }
@@ -304,11 +356,37 @@ describe("Company", () => {
 
     renderComp();
 
+    // Booth Reviews section renders both booth accordions
     await waitFor(() => {
       expect(screen.getByText("Booth Reviews")).toBeInTheDocument();
-      expect(screen.getByText("Excellent booth!")).toBeInTheDocument();
-      expect(screen.getByText(/2 reviews/)).toBeInTheDocument();
-    }, { timeout: 5000 });
+    });
+    const reviewsHeader = screen.getByText("Booth Reviews");
+    const reviewsSection = reviewsHeader.closest(".MuiCard-root") as HTMLElement;
+    expect(reviewsSection).not.toBeNull();
+    const reviewsScope = within(reviewsSection);
+
+    await waitFor(() => {
+      expect(reviewsScope.getByText("Main Booth")).toBeInTheDocument();
+      expect(reviewsScope.getByText("Engineering Booth")).toBeInTheDocument();
+    });
+
+    // Expand Main Booth to reveal grouped reviews
+    fireEvent.click(reviewsScope.getByText("Main Booth"));
+
+    await waitFor(() => {
+      expect(reviewsScope.getByText("Spring 2026")).toBeInTheDocument();
+      expect(reviewsScope.getByText("Fall 2025")).toBeInTheDocument();
+      expect(reviewsScope.getByText("Other")).toBeInTheDocument();
+    });
+
+    // Group ordering: most-recent fair first; "Other" last
+    const groupHeaders = reviewsScope.getAllByTestId("review-fair-group-header").map((el) => el.textContent);
+    expect(groupHeaders).toEqual(["Spring 2026", "Fall 2025", "Other"]);
+
+    // Reviews are rendered under the right groups
+    expect(reviewsScope.getByText("Excellent at Spring")).toBeInTheDocument();
+    expect(reviewsScope.getByText("Decent at Fall")).toBeInTheDocument();
+    expect(reviewsScope.getByText("Legacy review")).toBeInTheDocument();
   });
 
   it("redirects unauthenticated users to login", () => {
@@ -1878,10 +1956,15 @@ describe("Company", () => {
       renderComp();
 
       await waitFor(() => {
-        expect(screen.getByText("Alpha")).toBeInTheDocument();
-        expect(screen.getByText("Beta")).toBeInTheDocument();
+        expect(screen.getByText("Booth Management")).toBeInTheDocument();
       });
-      expect(screen.getByText("Tech")).toBeInTheDocument();
+      const mgmt = screen.getByText("Booth Management").closest(".MuiCard-root") as HTMLElement;
+      const mgmtScope = within(mgmt);
+      await waitFor(() => {
+        expect(mgmtScope.getByText("Alpha")).toBeInTheDocument();
+        expect(mgmtScope.getByText("Beta")).toBeInTheDocument();
+      });
+      expect(mgmtScope.getByText("Tech")).toBeInTheDocument();
     });
 
     it("falls back to 'Untitled Booth' when booth has no name", async () => {
@@ -1898,8 +1981,13 @@ describe("Company", () => {
       setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
-      await user.click(screen.getByRole("button", { name: /^edit$/i }));
+      await waitFor(() =>
+        expect(screen.getByText("Booth Management")).toBeInTheDocument()
+      );
+      const mgmt = screen.getByText("Booth Management").closest(".MuiCard-root") as HTMLElement;
+      const mgmtScope = within(mgmt);
+      await waitFor(() => expect(mgmtScope.getByText("Alpha")).toBeInTheDocument());
+      await user.click(mgmtScope.getByRole("button", { name: /^edit$/i }));
 
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth/b1");
     });
@@ -1917,10 +2005,16 @@ describe("Company", () => {
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth");
     });
 
+    function getBoothManagementScope() {
+      const mgmt = screen.getByText("Booth Management").closest(".MuiCard-root") as HTMLElement;
+      return within(mgmt);
+    }
     function getBoothDeleteButton() {
-      // The booth Delete button lives inside the row containing the booth name "Alpha".
-      // Scope by row to avoid clashing with Delete Job / Delete Company buttons.
-      const alphaRow = screen.getByText("Alpha").closest("div")!.parentElement!;
+      // The booth Delete button lives inside the BoothManagementCard row containing "Alpha".
+      // Scope to BoothManagementCard to avoid clashing with the BoothReviewsSection accordion
+      // (which also renders booth names) and Delete Job / Delete Company buttons.
+      const mgmtScope = getBoothManagementScope();
+      const alphaRow = mgmtScope.getByText("Alpha").closest("div")!.parentElement!;
       return within(alphaRow).getByRole("button", { name: /^delete$/i });
     }
 
@@ -1930,11 +2024,13 @@ describe("Company", () => {
       setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(getBoothManagementScope().getByText("Alpha")).toBeInTheDocument()
+      );
       await user.click(getBoothDeleteButton());
 
       await waitFor(() => {
-        expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+        expect(getBoothManagementScope().queryByText("Alpha")).not.toBeInTheDocument();
       });
       confirmSpy.mockRestore();
     });
@@ -1957,7 +2053,9 @@ describe("Company", () => {
       globalThis.fetch = fetchSpy;
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(getBoothManagementScope().getByText("Alpha")).toBeInTheDocument()
+      );
       const deleteCallsBefore = fetchSpy.mock.calls.filter((c) =>
         (c[1] as any)?.method === "DELETE"
       ).length;
@@ -1967,7 +2065,7 @@ describe("Company", () => {
         (c[1] as any)?.method === "DELETE"
       ).length;
       expect(deleteCallsAfter).toBe(deleteCallsBefore);
-      expect(screen.getByText("Alpha")).toBeInTheDocument();
+      expect(getBoothManagementScope().getByText("Alpha")).toBeInTheDocument();
       confirmSpy.mockRestore();
     });
 
@@ -1995,11 +2093,13 @@ describe("Company", () => {
       });
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(getBoothManagementScope().getByText("Alpha")).toBeInTheDocument()
+      );
       await user.click(getBoothDeleteButton());
 
       await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Cannot delete"));
-      expect(screen.getByText("Alpha")).toBeInTheDocument();
+      expect(getBoothManagementScope().getByText("Alpha")).toBeInTheDocument();
       confirmSpy.mockRestore();
       alertSpy.mockRestore();
     });
