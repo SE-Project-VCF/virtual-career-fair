@@ -1136,6 +1136,76 @@ describe("GET /api/booths/:boothId/ratings/me", () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to fetch rating/i);
   });
+
+  it("includes fairId and fairName when the rating has a fairId", async () => {
+    const ratingDocSnap = mockDocSnap(
+      { rating: 5, comment: "ok", createdAt: { toMillis: () => 1000 }, fairId: "fair-1" },
+      true,
+      "test-uid"
+    );
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            collection: jest.fn(() => ({
+              doc: jest.fn(() => ({
+                get: jest.fn().mockResolvedValue(ratingDocSnap),
+              })),
+            })),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ name: "Spring Fair" }, true, "fair-1")
+            ),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/booths/booth-1/ratings/me")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.rating).toMatchObject({
+      rating: 5,
+      fairId: "fair-1",
+      fairName: "Spring Fair",
+    });
+  });
+
+  it("returns null fairId/fairName for legacy ratings without fairId", async () => {
+    const ratingDocSnap = mockDocSnap(
+      { rating: 4, comment: null, createdAt: { toMillis: () => 1000 } },
+      true,
+      "test-uid"
+    );
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            collection: jest.fn(() => ({
+              doc: jest.fn(() => ({
+                get: jest.fn().mockResolvedValue(ratingDocSnap),
+              })),
+            })),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/booths/booth-1/ratings/me")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.rating).toMatchObject({
+      fairId: null,
+      fairName: null,
+    });
+  });
 });
 
 /* ============================================================

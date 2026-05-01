@@ -594,11 +594,22 @@ router.get("/booths/:boothId/ratings/me", verifyFirebaseToken, async (req, res) 
     if (!ratingDoc.exists) return res.json({ rating: null });
 
     const data = ratingDoc.data();
+    const fairId = data.fairId || null;
+    let fairName = null;
+    if (fairId) {
+      const fairDoc = await db.collection("fairs").doc(fairId).get();
+      if (fairDoc.exists) {
+        fairName = fairDoc.data().name || null;
+      }
+    }
+
     return res.json({
       rating: {
         rating: data.rating,
         comment: data.comment || null,
-        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : null,
+        fairId,
+        fairName,
       },
     });
   } catch (err) {
