@@ -33,6 +33,7 @@ vi.mock("../../utils/auth", () => ({
     isAuthenticated: vi.fn(() => true),
     deleteCompany: vi.fn(),
     updateInviteCode: vi.fn(),
+    getIdToken: vi.fn(() => Promise.resolve("mock-token")),
   },
 }));
 
@@ -1120,6 +1121,7 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
+      (authUtils.getIdToken as any).mockResolvedValue("mock-token");
       globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
         const u = typeof url === "string" ? url : String(url);
         if (u.includes("/ratings")) {
@@ -1129,6 +1131,31 @@ describe("Company", () => {
           });
         }
         return defaultFetchImpl(url, init);
+      });
+    });
+
+    it("does not request job-invitations stats when getIdToken returns null", async () => {
+      (authUtils.getIdToken as any).mockResolvedValue(null);
+
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls).toHaveLength(0);
       });
     });
 
@@ -1165,6 +1192,60 @@ describe("Company", () => {
           expect.any(Object)
         );
       }, { timeout: 5000 });
+    });
+
+    it("ignores job invitation stats payload when response is not ok", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({ ok: false, json: async () => ({ error: "forbidden" }) });
+        }
+        return defaultFetchImpl(url, init);
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls.length).toBeGreaterThan(0);
+      });
+    });
+
+    it("still renders company when job invitation stats fetch throws", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.reject(new Error("network down"));
+        }
+        return defaultFetchImpl(url, init);
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls.length).toBeGreaterThan(0);
+      });
     });
 
     it("displays View Details button when invitations exist", async () => {
@@ -2163,8 +2244,7 @@ describe("Company", () => {
       return card as HTMLElement
     }
 
-    it("logs when fetchJobStats rejects (per-job stats fetch)", async () => {
-      const logSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    it("handles rejected job invitation stats fetch without breaking the Company page", async () => {
       globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
         const u = typeof url === "string" ? url : String(url)
         if (u.includes("/api/job-invitations/stats/")) {
@@ -2177,9 +2257,11 @@ describe("Company", () => {
       await screen.findByRole("heading", { name: /Tech Corp/i })
 
       await waitFor(() => {
-        expect(logSpy).toHaveBeenCalled()
+        const statsCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        )
+        expect(statsCalls.length).toBeGreaterThan(0)
       })
-      logSpy.mockRestore()
     })
 
     it("opens invite dialog when Send is clicked and titles the mock dialog", async () => {

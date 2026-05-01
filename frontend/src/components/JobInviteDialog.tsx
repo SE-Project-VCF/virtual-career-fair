@@ -203,8 +203,8 @@ export default function JobInviteDialog({
         throw new Error("You must be logged in");
       }
 
-      const idToken = await authUtils.getIdToken();
-      if (!idToken) {
+      const idTokenSend = await authUtils.getIdToken();
+      if (!idTokenSend) {
         throw new Error("Could not verify your session. Please sign in again.");
       }
 
@@ -212,7 +212,7 @@ export default function JobInviteDialog({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
+          Authorization: `Bearer ${idTokenSend}`,
         },
         body: JSON.stringify({
           jobId,

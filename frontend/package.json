@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:job-invitations": "vitest run --coverage src/components/__tests__/NotificationBell.test.tsx src/pages/__tests__/JobInvitations.test.tsx src/pages/__tests__/Dashboard.test.tsx src/components/__tests__/JobInviteDialog.test.tsx src/components/__tests__/JobInviteStatsDialog.test.tsx src/pages/__tests__/Company.test.tsx src/utils/__tests__/jobInvitationStatsFetch.test.ts --coverage.include=src/components/NotificationBell.tsx --coverage.include=src/pages/JobInvitations.tsx --coverage.include=src/pages/Dashboard.tsx --coverage.include=src/components/JobInviteDialog.tsx --coverage.include=src/components/JobInviteStatsDialog.tsx --coverage.include=src/utils/jobInvitationStatsFetch.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",

@@ -22,6 +22,7 @@ import {
   Checkbox,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { fetchJobInvitationStats } from "../utils/jobInvitationStatsFetch"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc } from "firebase/firestore"
 import { db, auth } from "../firebase"
@@ -1096,26 +1097,15 @@ export default function Company() {
   }
 
   const fetchJobStats = async (jobId: string) => {
-    if (!userId) return
-
     try {
-      const token = await auth.currentUser?.getIdToken()
-      if (!token) return
-
-      const response = await fetch(
-        `${API_URL}/api/job-invitations/stats/${jobId}?userId=${userId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const result = await fetchJobInvitationStats<JobInvitationStats>(
+        API_URL,
+        jobId,
+        userId || "",
+        () => authUtils.getIdToken()
       )
-
-      if (response.ok) {
-        const stats = await response.json()
-        setJobStats((prev) => ({ ...prev, [jobId]: stats }))
+      if (result.ok) {
+        setJobStats((prev) => ({ ...prev, [jobId]: result.stats }))
       }
     } catch (error: unknown) {
       logClientError("Error fetching job invitation stats", error)
