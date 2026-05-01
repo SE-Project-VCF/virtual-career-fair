@@ -27,6 +27,9 @@ const mockStreamClient = {
   off: vi.fn(),
 };
 
+/** Reassign in tests to simulate missing Stream API key (streamClient === null). */
+let streamClientExport: typeof mockStreamClient | null = mockStreamClient;
+
 vi.mock("../../utils/auth", () => ({
   authUtils: {
     getCurrentUser: vi.fn(),
@@ -35,7 +38,7 @@ vi.mock("../../utils/auth", () => ({
 
 vi.mock("../../utils/streamClient", () => ({
   get streamClient() {
-    return mockStreamClient;
+    return streamClientExport;
   },
 }));
 
@@ -53,21 +56,36 @@ vi.mock("../../config", () => ({
   API_URL: "http://localhost:3000",
 }));
 
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({
+    children,
+    pageTitle,
+    onHeaderBack,
+    headerActions,
+  }: {
+    children: React.ReactNode
+    pageTitle?: string
+    onHeaderBack?: () => void
+    headerActions?: React.ReactNode
+  }) => (
+    <div data-testid="base-layout">
+      {pageTitle && <span>{pageTitle}</span>}
+      {onHeaderBack && (
+        <button type="button" aria-label="Back to Dashboard" onClick={onHeaderBack}>
+          Back
+        </button>
+      )}
+      {headerActions}
+      {children}
+    </div>
+  ),
+}));
+
 vi.mock("stream-chat-react", () => ({
   Chat: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-chat">{children}</div>,
   Channel: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-channel">{children}</div>,
   Window: ({ children }: { children: React.ReactNode }) => <div data-testid="stream-window">{children}</div>,
   MessageList: () => <div data-testid="message-list">Message List</div>,
-}));
-
-vi.mock("../../components/chat/ChatHeader", () => ({
-  default: ({ title, onNewChat, onBack }: { title: string; onNewChat: () => void; onBack: () => void }) => (
-    <div data-testid="chat-header">
-      <span>{title}</span>
-      <button onClick={onNewChat}>New Chat</button>
-      <button onClick={onBack}>Back</button>
-    </div>
-  ),
 }));
 
 vi.mock("../../components/chat/ChatSidebar", () => ({
@@ -130,6 +148,7 @@ describe("ChatPage", () => {
     });
 
     // Reset stream client state
+    streamClientExport = mockStreamClient;
     mockStreamClient.userID = null;
     mockStreamClient.user = { total_unread_count: 0 };
   });
@@ -149,28 +168,51 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
+        expect(screen.getByText("Messages")).toBeInTheDocument();
       });
     });
   });
 
   describe("Loading States", () => {
-    it("shows loading spinner when client is not ready", () => {
+    it("shows loading spinner when client is not ready", async () => {
+      const user = userEvent.setup();
       mockStreamClient.userID = null;
       renderChatPage();
 
       expect(screen.getByRole("progressbar")).toBeInTheDocument();
+      expect(document.querySelector(".chat-loading-container")).toBeInTheDocument();
+
+      const back = screen.getByRole("button", { name: "Back to Dashboard" });
+      await user.click(back);
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
     });
 
-    // Removed the "shows 'Chat Not Available' when client is null" test
-    // as testing a null client is difficult with our current mock setup
+    it("shows 'Chat Not Available' when stream client is not configured", async () => {
+      const user = userEvent.setup();
+      streamClientExport = null;
+      renderChatPage();
+
+      expect(screen.getByText("Chat Not Available")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Stream Chat API key is not configured. Please set VITE_STREAM_API_KEY in your environment variables."
+        )
+      ).toBeInTheDocument();
+      expect(screen.getByText("Chat", { exact: true })).toBeInTheDocument();
+      expect(document.querySelector(".chat-center-container")).toBeInTheDocument();
+
+      const back = screen.getByRole("button", { name: "Back to Dashboard" });
+      await user.click(back);
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+    });
 
     it("renders chat interface after client is ready", async () => {
       mockStreamClient.userID = "user-1";
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
         expect(screen.getByTestId("chat-sidebar")).toBeInTheDocument();
         expect(screen.getByTestId("stream-chat")).toBeInTheDocument();
       });
@@ -242,7 +284,7 @@ describe("ChatPage", () => {
     });
   });
 
-  describe("Chat Header", () => {
+  describe("Chat page header (BaseLayout)", () => {
     it("displays Messages title", async () => {
       mockStreamClient.userID = "user-1";
       renderChatPage();
@@ -270,10 +312,10 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
       });
 
-      const backButton = screen.getByText("Back");
+      const backButton = screen.getByRole("button", { name: "Back to Dashboard" });
       await user.click(backButton);
 
       expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
@@ -288,10 +330,10 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByText("New Chat")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Start New Chat" })).toBeInTheDocument();
       });
 
-      const newChatButton = screen.getByText("New Chat");
+      const newChatButton = screen.getByRole("button", { name: "Start New Chat" });
       await user.click(newChatButton);
 
       expect(screen.getByTestId("new-chat-dialog")).toBeInTheDocument();
@@ -304,11 +346,11 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByText("New Chat")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Start New Chat" })).toBeInTheDocument();
       });
 
       // Open dialog
-      const newChatButton = screen.getByText("New Chat");
+      const newChatButton = screen.getByRole("button", { name: "Start New Chat" });
       await user.click(newChatButton);
 
       // Close dialog
@@ -494,6 +536,20 @@ describe("ChatPage", () => {
           expect.any(Function)
         );
       });
+    });
+
+    it("unsubscribes stream notification listeners on unmount", async () => {
+      mockStreamClient.userID = "user-1";
+      const { unmount } = renderChatPage();
+
+      await waitFor(() => {
+        expect(mockStreamClient.on).toHaveBeenCalled();
+      });
+
+      unmount();
+
+      expect(mockStreamClient.off).toHaveBeenCalledWith("notification.message_new", expect.any(Function));
+      expect(mockStreamClient.off).toHaveBeenCalledWith("notification.mark_read", expect.any(Function));
     });
   });
 
@@ -706,7 +762,7 @@ describe("ChatPage", () => {
       renderChatPage();
 
       await waitFor(() => {
-        expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
       });
 
       // Should not create a messaging channel
