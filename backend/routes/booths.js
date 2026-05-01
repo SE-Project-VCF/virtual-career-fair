@@ -609,13 +609,12 @@ router.get("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => 
 
     const adminErr = await verifyAdmin(userId);
     if (adminErr) {
-      // Not admin — must be owner/rep of the company that owns this booth
-      const userDoc = await db.collection("users").doc(userId).get();
-      if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
-      const companyId = userDoc.data().companyId;
-      if (!companyId) return res.status(403).json({ error: "Unauthorized" });
-      const companyDoc = await db.collection("companies").doc(companyId).get();
-      if (!companyDoc.exists || companyDoc.data().boothId !== boothId) {
+      const boothData = boothDoc.data();
+      if (!boothData.companyId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      const auth = await checkCompanyAuthorization(boothData.companyId, userId);
+      if (!auth.authorized) {
         return res.status(403).json({ error: "Unauthorized" });
       }
     }

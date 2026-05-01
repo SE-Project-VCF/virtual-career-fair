@@ -1058,35 +1058,7 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.body.totalRatings).toBe(1);
   });
 
-  it("returns 404 when non-admin user does not exist", async () => {
-    mockCollections({
-      boothDoc: mockDocSnap({ companyId: "company-1" }, true, "booth-1"),
-      userDoc: mockDocSnap(null, false),
-    });
-    verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
-
-    const res = await request(app)
-      .get("/api/booths/booth-1/ratings")
-      .set("Authorization", authHeader());
-    expect(res.status).toBe(404);
-    expect(res.body.error).toMatch(/User not found/i);
-  });
-
-  it("returns 403 when non-admin user has no companyId", async () => {
-    mockCollections({
-      boothDoc: mockDocSnap({ companyId: "company-1" }, true, "booth-1"),
-      userDoc: mockDocSnap({ role: "student" }, true), // no companyId
-    });
-    verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
-
-    const res = await request(app)
-      .get("/api/booths/booth-1/ratings")
-      .set("Authorization", authHeader());
-    expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/Unauthorized/i);
-  });
-
-  it("returns 403 when company does not own the booth", async () => {
+  it("returns 403 when user's company does not own the booth", async () => {
     db.collection.mockImplementation((name) => {
       if (name === "booths") {
         return {
@@ -1100,21 +1072,16 @@ describe("GET /api/booths/:boothId/ratings", () => {
           })),
         };
       }
-      if (name === "users") {
-        return {
-          doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(
-              mockDocSnap({ companyId: "company-2" }, true, "test-uid")
-            ),
-          })),
-        };
-      }
       if (name === "companies") {
+        // Booth's company exists; the requester is NOT owner or rep
         return {
           doc: jest.fn(() => ({
             get: jest.fn().mockResolvedValue(
-              // boothId does NOT match
-              mockDocSnap({ boothId: "some-other-booth" }, true, "company-2")
+              mockDocSnap(
+                { ownerId: "different-owner", representativeIDs: ["different-rep"] },
+                true,
+                "company-1"
+              )
             ),
           })),
         };
@@ -1129,9 +1096,9 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.body.error).toMatch(/Unauthorized/i);
   });
 
-  it("returns ratings for authorized company rep", async () => {
+  it("returns ratings for owner of the booth's company", async () => {
     const ratingDoc = mockDocSnap(
-      { rating: 3, comment: null, createdAt: { toMillis: () => 2000000 } },
+      { rating: 3, comment: null, createdAt: { toMillis: () => 2000000 }, fairId: null },
       true,
       "rating-2"
     );
@@ -1148,20 +1115,15 @@ describe("GET /api/booths/:boothId/ratings", () => {
           })),
         };
       }
-      if (name === "users") {
-        return {
-          doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(
-              mockDocSnap({ companyId: "company-1" }, true, "test-uid")
-            ),
-          })),
-        };
-      }
       if (name === "companies") {
         return {
           doc: jest.fn(() => ({
             get: jest.fn().mockResolvedValue(
-              mockDocSnap({ boothId: "booth-1" }, true, "company-1")
+              mockDocSnap(
+                { ownerId: "test-uid", representativeIDs: [] },
+                true,
+                "company-1"
+              )
             ),
           })),
         };
@@ -1175,8 +1137,49 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.status).toBe(200);
     expect(res.body.totalRatings).toBe(1);
     expect(res.body.averageRating).toBe(3);
-    // Ratings returned anonymously — no studentId
     expect(res.body.ratings[0]).not.toHaveProperty("studentId");
+  });
+
+  it("returns ratings for representative of the booth's company", async () => {
+    const ratingDoc = mockDocSnap(
+      { rating: 4, comment: "ok", createdAt: { toMillis: () => 2000000 }, fairId: null },
+      true,
+      "rating-3"
+    );
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyId: "company-1" }, true, "booth-1")
+            ),
+            collection: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue(mockQuerySnap([ratingDoc])),
+            })),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                { ownerId: "some-other-uid", representativeIDs: ["test-uid"] },
+                true,
+                "company-1"
+              )
+            ),
+          })),
+        };
+      }
+    });
+    verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
+
+    const res = await request(app)
+      .get("/api/booths/booth-1/ratings")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.totalRatings).toBe(1);
   });
 
   it("returns averageRating null when there are no ratings", async () => {
