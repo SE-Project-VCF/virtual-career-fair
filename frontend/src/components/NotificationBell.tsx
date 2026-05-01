@@ -17,7 +17,6 @@ import NotificationsIcon from "@mui/icons-material/Notifications";
 import WorkIcon from "@mui/icons-material/Work";
 import VideoCallIcon from "@mui/icons-material/VideoCall";
 import { authUtils } from "../utils/auth";
-import { auth } from "../firebase";
 import { API_URL } from "../config";
 
 interface JobInvitation {
