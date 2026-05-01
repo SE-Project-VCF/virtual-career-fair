@@ -1326,4 +1326,132 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Failed to fetch ratings/i);
   });
+
+  it("annotates ratings with fairName and fairStartTime when fairId is set", async () => {
+    const ratingDoc1 = mockDocSnap(
+      { rating: 5, comment: "great", createdAt: { toMillis: () => 1000 }, fairId: "fair-1" },
+      true,
+      "rating-a"
+    );
+    const ratingDoc2 = mockDocSnap(
+      { rating: 4, comment: null, createdAt: { toMillis: () => 2000 }, fairId: "fair-1" },
+      true,
+      "rating-b"
+    );
+    const ratingDoc3 = mockDocSnap(
+      { rating: 3, comment: "ok", createdAt: { toMillis: () => 3000 }, fairId: "fair-2" },
+      true,
+      "rating-c"
+    );
+    const fairDocs = {
+      "fair-1": mockDocSnap({ name: "Spring Fair", startTime: { toMillis: () => 50000 } }, true, "fair-1"),
+      "fair-2": mockDocSnap({ name: "Fall Fair", startTime: { toMillis: () => 40000 } }, true, "fair-2"),
+    };
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyId: "company-1" }, true, "booth-1")),
+            collection: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue(mockQuerySnap([ratingDoc1, ratingDoc2, ratingDoc3])),
+            })),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        return {
+          doc: jest.fn((id) => ({
+            get: jest.fn().mockResolvedValue(fairDocs[id]),
+          })),
+        };
+      }
+    });
+    verifyAdmin.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get("/api/booths/booth-1/ratings")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.ratings).toHaveLength(3);
+
+    const byFair = res.body.ratings.reduce((acc, r) => {
+      acc[r.fairId] = acc[r.fairId] || [];
+      acc[r.fairId].push(r);
+      return acc;
+    }, {});
+    expect(byFair["fair-1"]).toHaveLength(2);
+    expect(byFair["fair-1"][0].fairName).toBe("Spring Fair");
+    expect(byFair["fair-1"][0].fairStartTime).toBe(50000);
+    expect(byFair["fair-2"]).toHaveLength(1);
+    expect(byFair["fair-2"][0].fairName).toBe("Fall Fair");
+  });
+
+  it("returns null fair fields for ratings without fairId", async () => {
+    const ratingDoc = mockDocSnap(
+      { rating: 5, comment: "legacy", createdAt: { toMillis: () => 1000 } },
+      true,
+      "rating-legacy"
+    );
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyId: "company-1" }, true, "booth-1")),
+            collection: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue(mockQuerySnap([ratingDoc])),
+            })),
+          })),
+        };
+      }
+    });
+    verifyAdmin.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get("/api/booths/booth-1/ratings")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.ratings[0]).toMatchObject({
+      fairId: null,
+      fairName: null,
+      fairStartTime: null,
+    });
+  });
+
+  it("returns null fairName when fair has been deleted", async () => {
+    const ratingDoc = mockDocSnap(
+      { rating: 5, comment: "x", createdAt: { toMillis: () => 1000 }, fairId: "deleted-fair" },
+      true,
+      "rating-x"
+    );
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ companyId: "company-1" }, true, "booth-1")),
+            collection: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue(mockQuerySnap([ratingDoc])),
+            })),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+          })),
+        };
+      }
+    });
+    verifyAdmin.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get("/api/booths/booth-1/ratings")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.ratings[0]).toMatchObject({
+      fairId: "deleted-fair",
+      fairName: null,
+      fairStartTime: null,
+    });
+  });
 });

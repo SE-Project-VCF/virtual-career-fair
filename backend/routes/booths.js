@@ -633,12 +633,38 @@ router.get("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => 
     }
 
     const ratingsSnap = await db.collection("booths").doc(boothId).collection("ratings").get();
-    const ratings = ratingsSnap.docs.map((doc) => {
-      const data = doc.data();
+    const rawRatings = ratingsSnap.docs.map((doc) => doc.data());
+
+    const fairIds = [...new Set(rawRatings.map((r) => r.fairId).filter(Boolean))];
+    const fairMap = {};
+    if (fairIds.length > 0) {
+      const fairSnaps = await Promise.all(
+        fairIds.map((id) => db.collection("fairs").doc(id).get())
+      );
+      fairSnaps.forEach((snap, idx) => {
+        const id = fairIds[idx];
+        if (snap.exists) {
+          const data = snap.data();
+          fairMap[id] = {
+            name: data.name || null,
+            startTime: data.startTime?.toMillis ? data.startTime.toMillis() : null,
+          };
+        } else {
+          fairMap[id] = { name: null, startTime: null };
+        }
+      });
+    }
+
+    const ratings = rawRatings.map((data) => {
+      const fairId = data.fairId || null;
+      const fairInfo = fairId ? fairMap[fairId] : null;
       return {
         rating: data.rating,
         comment: data.comment || null,
-        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : null,
+        fairId,
+        fairName: fairInfo ? fairInfo.name : null,
+        fairStartTime: fairInfo ? fairInfo.startTime : null,
       };
     });
 
