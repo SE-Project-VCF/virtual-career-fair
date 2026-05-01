@@ -13,6 +13,8 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  FormGroup,
+  Checkbox,
   FormControl,
   FormLabel,
   RadioGroup,
@@ -55,8 +57,19 @@ export default function FairLanding() {
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState("")
   const [leaveSuccess, setLeaveSuccess] = useState(false)
+  const [companyBooths, setCompanyBooths] = useState<{ id: string; boothName?: string }[]>([])
+  const [selectedBoothIds, setSelectedBoothIds] = useState<string[]>([])
+  const [loadingBooths, setLoadingBooths] = useState(false)
 
   const isCompanyUser = user?.role === "companyOwner" || user?.role === "representative"
+
+  const toggleBoothSelection = (boothId: string) => {
+    setSelectedBoothIds((prev) =>
+      prev.includes(boothId)
+        ? prev.filter((id) => id !== boothId)
+        : [...prev, boothId]
+    )
+  }
 
   useEffect(() => {
     if (!isCompanyUser || !fairId) return
@@ -88,6 +101,31 @@ export default function FairLanding() {
 
     loadEnrollment()
   }, [fairId, isCompanyUser])
+
+  useEffect(() => {
+    if (!joinDialogOpen || !user?.companyId) return
+    const fetchBooths = async () => {
+      setLoadingBooths(true)
+      try {
+        const firebaseUser = await waitForFirebaseUser()
+        const token = await firebaseUser?.getIdToken()
+        const res = await fetch(`${API_URL}/api/booths?companyId=${user.companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const booths = data.booths || []
+          setCompanyBooths(booths)
+          setSelectedBoothIds(booths.map((b: { id: string }) => b.id))
+        }
+      } catch (err) {
+        console.error("Error fetching booths:", err)
+      } finally {
+        setLoadingBooths(false)
+      }
+    }
+    fetchBooths()
+  }, [joinDialogOpen, user?.companyId])
 
   useEffect(() => {
     if (!joinDialogOpen || user?.role !== "companyOwner" || !user?.uid) return
@@ -133,7 +171,10 @@ export default function FairLanding() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          ...(selectedBoothIds.length > 0 && { boothIds: selectedBoothIds }),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to join fair")
@@ -146,8 +187,8 @@ export default function FairLanding() {
       setIsEnrolled(true)
       setEnrolledCompanyId(navCompanyId ?? null)
       setJoinDialogOpen(false)
-      if (data.boothId && navCompanyId) {
-        navigate(`/fair/${data.fairId || fairId}/company/${navCompanyId}/booth`)
+      if (navCompanyId || user?.companyId) {
+        navigate(`/company/${navCompanyId || user?.companyId}`)
       }
     } catch (err: any) {
       setJoinError(err.message)
@@ -326,9 +367,35 @@ export default function FairLanding() {
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
             fullWidth
-            slotProps={{ htmlInput: { maxLength: 8 } }}
+            slotProps={{ htmlInput: { maxLength: 20 } }}
           />
           {joinError && <Alert severity="error" sx={{ mt: 2 }}>{joinError}</Alert>}
+          {companyBooths.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Select booths to bring to this fair:
+              </Typography>
+              <FormGroup>
+                {companyBooths.map((booth) => (
+                  <FormControlLabel
+                    key={booth.id}
+                    control={
+                      <Checkbox
+                        checked={selectedBoothIds.includes(booth.id)}
+                        onChange={() => toggleBoothSelection(booth.id)}
+                      />
+                    }
+                    label={booth.boothName || "Untitled Booth"}
+                  />
+                ))}
+              </FormGroup>
+            </Box>
+          )}
+          {companyBooths.length === 0 && !loadingBooths && joinDialogOpen && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              No booths found. Create a booth on your company dashboard first.
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
           <Button

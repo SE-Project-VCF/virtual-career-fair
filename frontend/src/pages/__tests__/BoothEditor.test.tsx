@@ -8,11 +8,13 @@ import * as firestore from "firebase/firestore";
 
 const mockNavigate = vi.fn();
 
+let mockParams: Record<string, string> = { companyId: "company-1" };
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
   return {
     ...actual,
-    useParams: () => ({ companyId: "company-1" }),
+    useParams: () => mockParams,
     useNavigate: () => mockNavigate,
   };
 });
@@ -74,8 +76,11 @@ const renderBoothEditor = () => {
   );
 };
 
-/** Pick industry + company size (required booth fields). */
+
+/** Pick industry + company size + booth name (all required booth fields). */
 async function fillRequiredIndustryAndSize(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByRole("textbox", { name: /booth name/i }), "Engineering");
+
   const industrySelect = screen.getByRole("combobox", { name: /industry/i });
   await user.click(industrySelect);
   await waitFor(() => {
@@ -105,6 +110,7 @@ const mockBoothDoc = {
   exists: () => true,
   id: "booth-1",
   data: () => ({
+    boothName: "Engineering",
     companyName: "Tech Company",
     industry: "software",
     companySize: "51-200",
@@ -122,6 +128,7 @@ describe("BoothEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
+    mockParams = { companyId: "company-1" };
     (authUtils.authUtils.getCurrentUser as any).mockReturnValue({
       uid: "user-1",
       role: "companyOwner",
@@ -300,11 +307,10 @@ describe("BoothEditor", () => {
     });
 
     it("loads and displays existing booth data when editing", async () => {
+      mockParams = { companyId: "company-1", boothId: "booth-1" };
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         return Promise.resolve(
-          ref._id === "company-1"
-            ? { ...mockCompanyDoc, data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" }) }
-            : mockBoothDoc
+          ref._id === "company-1" ? mockCompanyDoc : mockBoothDoc
         );
       });
 
@@ -456,12 +462,11 @@ describe("BoothEditor", () => {
     }, 20000);
 
     it("submits form and updates existing booth successfully", async () => {
+      mockParams = { companyId: "company-1", boothId: "booth-1" };
       const user = userEvent.setup();
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         return Promise.resolve(
-          ref._id === "company-1"
-            ? { ...mockCompanyDoc, data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" }) }
-            : mockBoothDoc
+          ref._id === "company-1" ? mockCompanyDoc : mockBoothDoc
         );
       });
 
@@ -793,10 +798,12 @@ describe("BoothEditor", () => {
     });
 
     it("displays existing logo when booth has logoUrl", async () => {
+      mockParams = { companyId: "company-1", boothId: "booth-1" };
+
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         return Promise.resolve(
           ref._id === "company-1"
-            ? { ...mockCompanyDoc, data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" }) }
+            ? mockCompanyDoc
             : { ...mockBoothDoc, data: () => ({ ...mockBoothDoc.data(), logoUrl: "https://example.com/logo.png" }) }
         );
       });
@@ -1105,14 +1112,12 @@ describe("BoothEditor", () => {
   // Edge Cases for Booth Loading
   describe("Booth Loading Edge Cases", () => {
     it("handles error when loading booth fails", async () => {
+      mockParams = { companyId: "company-1", boothId: "booth-1" };
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         if (ref._id === "company-1") {
-          return Promise.resolve({
-            ...mockCompanyDoc,
-            data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" })
-          });
+          return Promise.resolve(mockCompanyDoc);
         }
         // Booth fetch fails
         return Promise.reject(new Error("Booth load error"));
@@ -1129,12 +1134,11 @@ describe("BoothEditor", () => {
     });
 
     it("handles missing booth data gracefully", async () => {
+      mockParams = { companyId: "company-1", boothId: "booth-1" };
+
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         if (ref._id === "company-1") {
-          return Promise.resolve({
-            ...mockCompanyDoc,
-            data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" })
-          });
+          return Promise.resolve(mockCompanyDoc);
         }
         // Booth doesn't exist
         return Promise.resolve({ exists: () => false });
@@ -1148,12 +1152,11 @@ describe("BoothEditor", () => {
     });
 
     it("handles booth with missing optional fields", async () => {
+      mockParams = { companyId: "company-1", boothId: "booth-1" };
+
       (firestore.getDoc as any).mockImplementation((ref: any) => {
         if (ref._id === "company-1") {
-          return Promise.resolve({
-            ...mockCompanyDoc,
-            data: () => ({ ...mockCompanyDoc.data(), boothId: "booth-1" })
-          });
+          return Promise.resolve(mockCompanyDoc);
         }
         return Promise.resolve({
           exists: () => true,

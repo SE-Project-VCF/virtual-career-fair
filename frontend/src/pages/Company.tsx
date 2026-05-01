@@ -44,7 +44,6 @@ import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
-import VisibilityIcon from "@mui/icons-material/Visibility"
 import BaseLayout from "../components/BaseLayout"
 import { useGeocodeSuggest, type LocationSuggestOption } from "../hooks/useGeocodeSuggest"
 import JobInviteDialog from "../components/JobInviteDialog"
@@ -567,11 +566,61 @@ function OfficeLocationsOwnerCard({
   )
 }
 
-function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
+function BoothManagementCard({ companyId, navigate }: Readonly<{
   companyId: string
-  boothId?: string
   navigate: ReturnType<typeof useNavigate>
 }>) {
+  const [booths, setBooths] = useState<{ id: string; boothName?: string; industry?: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  const handleDeleteBooth = async (boothId: string) => {
+    if (!globalThis.confirm("Are you sure you want to delete this booth?")) return
+    setDeleting(boothId)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        alert("Session expired. Please log in again.")
+        return
+      }
+      const res = await fetch(`${API_URL}/api/booths/${boothId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        setBooths((prev) => prev.filter((b) => b.id !== boothId))
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || "Failed to delete booth")
+      }
+    } catch (err) {
+      console.error("Error deleting booth:", err)
+      alert("Failed to delete booth. Please try again.")
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  useEffect(() => {
+    const fetchBooths = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        const res = await fetch(`${API_URL}/api/booths?companyId=${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setBooths(data.booths || [])
+        }
+      } catch (err) {
+        console.error("Error fetching booths:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchBooths()
+  }, [companyId])
+
   return (
     <Grid size={{ xs: 12, md: 6 }}>
       <Card sx={{ height: "100%", border: "1px solid rgba(56, 133, 96, 0.3)" }}>
@@ -581,57 +630,74 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
             Booth Management
           </Typography>
 
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Manage your company booth - a student-facing landing page where students can learn about your company and interact with representatives.
-          </Typography>
+          {loading && <CircularProgress size={24} />}
+
+          {!loading && booths.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              No booths created yet. Create your first booth to get started.
+            </Typography>
+          )}
+
+          <Box sx={{ maxHeight: 210, overflowY: "auto" }}>
+          {!loading && booths.map((booth) => (
+            <Box
+              key={booth.id}
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                p: 1.5,
+                mb: 1,
+                border: "1px solid #e0e0e0",
+                borderRadius: 1,
+              }}
+            >
+              <Box>
+                <Typography variant="body1" fontWeight={600}>
+                  {booth.boothName || "Untitled Booth"}
+                </Typography>
+                {booth.industry && (
+                  <Typography variant="body2" color="text.secondary">
+                    {booth.industry}
+                  </Typography>
+                )}
+              </Box>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Button
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => navigate(`/company/${companyId}/booth/${booth.id}`)}
+                  sx={{ color: "#388560" }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => handleDeleteBooth(booth.id)}
+                  disabled={deleting === booth.id}
+                  sx={{ color: "#d32f2f" }}
+                >
+                  {deleting === booth.id ? "..." : "Delete"}
+                </Button>
+              </Box>
+            </Box>
+          ))}
+          </Box>
 
           <Button
             variant="contained"
-            startIcon={<EditIcon />}
             onClick={() => navigate(`/company/${companyId}/booth`)}
             sx={{
+              mt: 2,
               background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
               "&:hover": {
                 background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
               },
             }}
           >
-            {boothId ? "Edit Booth" : "Create Booth"}
+            Create New Booth
           </Button>
-
-          {boothId && (
-            <Box sx={{ mt: 2, display: "flex", gap: 2, flexDirection: "column" }}>
-              <Button
-                variant="outlined"
-                onClick={() => navigate(`/booth/${boothId}`)}
-                sx={{
-                  borderColor: "#388560",
-                  color: "#388560",
-                  "&:hover": {
-                    borderColor: "#2d6b4d",
-                    bgcolor: "rgba(56, 133, 96, 0.05)",
-                  },
-                }}
-              >
-                View Public Booth
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<VisibilityIcon />}
-                onClick={() => navigate(`/booth/${boothId}/visitors`)}
-                sx={{
-                  borderColor: "#b03a6c",
-                  color: "#b03a6c",
-                  "&:hover": {
-                    borderColor: "#8b2854",
-                    bgcolor: "rgba(176, 58, 108, 0.05)",
-                  },
-                }}
-              >
-                View Visitors Analytics
-              </Button>
-            </Box>
-          )}
         </CardContent>
       </Card>
     </Grid>
@@ -885,7 +951,9 @@ export default function Company() {
 
       fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
-      fetchInviteCode(companyInfo.id)
+      if (userRole === "companyOwner" && companyInfo.ownerId === userId) {
+        fetchInviteCode(companyInfo.id)
+      }
     } catch (error: unknown) {
       logClientError("Error fetching company", error)
       setError("Failed to load company")
@@ -1542,7 +1610,6 @@ export default function Company() {
           {/* Booth Management Card */}
           <BoothManagementCard
             companyId={company.id}
-            boothId={company.boothId}
             navigate={navigate}
           />
 
