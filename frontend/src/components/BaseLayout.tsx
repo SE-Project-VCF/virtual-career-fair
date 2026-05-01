@@ -16,6 +16,7 @@ import {
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
 import CloseIcon from "@mui/icons-material/Close"
+import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ChatIcon from "@mui/icons-material/Chat"
 import DashboardIcon from "@mui/icons-material/Dashboard"
 import EventIcon from "@mui/icons-material/Event"
@@ -108,6 +109,10 @@ export interface BaseLayoutProps {
   pageTitle?: string
   /** When false, hides the floating Fairy Jobmother help widget. Default true. */
   showJobmotherAssistant?: boolean
+  /** Shown before the page title (after the divider), e.g. navigate back from chat. */
+  onHeaderBack?: () => void
+  /** Extra controls in the header action row (before the global Chat button). */
+  headerActions?: React.ReactNode
 }
 
 export default function BaseLayout({
@@ -115,6 +120,8 @@ export default function BaseLayout({
   showChat = true,
   pageTitle,
   showJobmotherAssistant = true,
+  onHeaderBack,
+  headerActions,
 }: Readonly<BaseLayoutProps>) {
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -197,6 +204,22 @@ export default function BaseLayout({
               {pageTitle && (
                 <>
                   <Box sx={{ width: "1px", height: 32, bgcolor: "rgba(255,255,255,0.3)", mx: 0.5 }} />
+                  {onHeaderBack && (
+                    <Tooltip title="Back to Dashboard">
+                      <IconButton
+                        onClick={onHeaderBack}
+                        aria-label="Back to Dashboard"
+                        sx={{
+                          color: "white",
+                          background: "rgba(255,255,255,0.15)",
+                          border: "1px solid rgba(255,255,255,0.3)",
+                          "&:hover": { background: "rgba(255,255,255,0.25)" },
+                        }}
+                      >
+                        <ArrowBackIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Typography
                     variant="h6"
                     sx={{ fontWeight: 600, color: "white", letterSpacing: "-0.3px" }}
@@ -209,6 +232,7 @@ export default function BaseLayout({
 
             {/* Right: actions */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              {headerActions}
               {showChat && (
                 <Tooltip title="Open Chat">
                   <Button
