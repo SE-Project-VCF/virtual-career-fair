@@ -894,7 +894,127 @@ describe("POST /api/booths/:boothId/ratings", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(ratingsDocRef.set).toHaveBeenCalledWith(
-      expect.objectContaining({ rating: 5, comment: "Excellent booth!" })
+      expect.objectContaining({
+        studentId: "test-uid",
+        rating: 5,
+        comment: "Excellent booth!",
+        fairId: null,
+      })
+    );
+  });
+
+  it("stores fairId when valid fairId is provided", async () => {
+    const ratingsDocRef = {
+      get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+      set: jest.fn().mockResolvedValue(undefined),
+    };
+    const ratingsCollectionRef = {
+      doc: jest.fn(() => ratingsDocRef),
+    };
+
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({}, true, "booth-1")),
+            collection: jest.fn(() => ratingsCollectionRef),
+          })),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "student" }, true, "test-uid")),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ name: "Spring Fair" }, true, "fair-1")),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .post("/api/booths/booth-1/ratings")
+      .set("Authorization", authHeader())
+      .send({ rating: 5, comment: "Great", fairId: "fair-1" });
+
+    expect(res.status).toBe(200);
+    expect(ratingsDocRef.set).toHaveBeenCalledWith(
+      expect.objectContaining({ fairId: "fair-1" })
+    );
+  });
+
+  it("returns 400 when fairId is provided but fair does not exist", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({}, true, "booth-1")),
+            collection: jest.fn(() => ({ doc: jest.fn(() => ({ set: jest.fn() })) })),
+          })),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "student" }, true, "test-uid")),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .post("/api/booths/booth-1/ratings")
+      .set("Authorization", authHeader())
+      .send({ rating: 4, fairId: "nonexistent-fair" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Invalid fairId/i);
+  });
+
+  it("stores fairId as null when no fairId provided", async () => {
+    const ratingsDocRef = {
+      get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+      set: jest.fn().mockResolvedValue(undefined),
+    };
+    const ratingsCollectionRef = { doc: jest.fn(() => ratingsDocRef) };
+    db.collection.mockImplementation((name) => {
+      if (name === "booths") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({}, true, "booth-1")),
+            collection: jest.fn(() => ratingsCollectionRef),
+          })),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "student" }, true, "test-uid")),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .post("/api/booths/booth-1/ratings")
+      .set("Authorization", authHeader())
+      .send({ rating: 5 });
+
+    expect(res.status).toBe(200);
+    expect(ratingsDocRef.set).toHaveBeenCalledWith(
+      expect.objectContaining({ fairId: null })
     );
   });
 

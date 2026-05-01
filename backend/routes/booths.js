@@ -546,9 +546,21 @@ router.post("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =>
     if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
     if (userDoc.data().role !== "student") return res.status(403).json({ error: "Only students can submit ratings" });
 
-    const { rating, comment } = req.body;
+    const { rating, comment, fairId } = req.body;
     if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "rating must be a number between 1 and 5" });
+    }
+
+    let resolvedFairId = null;
+    if (fairId !== undefined && fairId !== null) {
+      if (typeof fairId !== "string" || fairId.trim() === "") {
+        return res.status(400).json({ error: "Invalid fairId" });
+      }
+      const fairDoc = await db.collection("fairs").doc(fairId).get();
+      if (!fairDoc.exists) {
+        return res.status(400).json({ error: "Invalid fairId" });
+      }
+      resolvedFairId = fairId;
     }
 
     const boothDoc = await db.collection("booths").doc(boothId).get();
@@ -559,6 +571,7 @@ router.post("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =>
       rating,
       comment: comment?.trim() || null,
       createdAt: admin.firestore.Timestamp.now(),
+      fairId: resolvedFairId,
     });
 
     return res.json({ success: true });
