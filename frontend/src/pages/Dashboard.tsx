@@ -270,7 +270,7 @@ function EmployerVideoChatSection({ navigate }: Readonly<{
   return (
     <Box sx={{ mb: 6 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        📹 Recruitment & Video Chat
+        Recruitment & Video Chat
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -308,7 +308,7 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
     <>
       <Box sx={{ mb: 6 }}>
         <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-          💼 Company Management
+          Company Management
         </Typography>
       <Grid container spacing={3}>
         {!user.companyId && (
@@ -394,7 +394,7 @@ function AdminSection({ navigate }: Readonly<{
   return (
     <Box sx={{ mb: 6 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        ⚙️ Administrator Controls
+        Administrator Controls
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -426,7 +426,7 @@ function StudentSection({
   return (
     <Box sx={{ mb: 6 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        🎯 Career Opportunities
+        Career Opportunities
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -504,7 +504,7 @@ function StatsSection({
   return (
     <Box sx={{ mt: 6, mb: 2 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        📊 Quick Stats
+        Quick Stats
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -549,7 +549,7 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledF
     <>
       <Box sx={{ mb: 6 }}>
         <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-          💼 Company Management
+          Company Management
         </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, sm: 6, md: 6 }}>
