@@ -78,6 +78,59 @@ describe("ChatSidebar", () => {
     channelListSpy.mockRestore();
   });
 
+  it("filters out networking lounge channels via channelRenderFilterFn", () => {
+    const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
+    render(
+      <ChatSidebar
+        client={mockClient}
+        onSelectChannel={mockOnSelectChannel}
+        activeChannel={null}
+      />
+    );
+
+    const filterFn = channelListSpy.mock.calls[0]?.[0]?.channelRenderFilterFn as
+      | ((channels: any[]) => any[])
+      | undefined;
+    expect(filterFn).toBeTypeOf("function");
+
+    const channels = [
+      { id: "user1-user2", cid: "messaging:user1-user2" },
+      { id: "lounge-fair1", cid: "messaging:lounge-fair1" },
+      { id: "lounge-fair2", cid: "messaging:lounge-fair2" },
+      { id: "abc123", cid: "messaging:abc123" },
+    ];
+    const filtered = filterFn!(channels);
+
+    expect(filtered).toHaveLength(2);
+    expect(filtered.map((c) => c.id)).toEqual(["user1-user2", "abc123"]);
+
+    channelListSpy.mockRestore();
+  });
+
+  it("channelRenderFilterFn handles channels with missing id safely", () => {
+    const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
+    render(
+      <ChatSidebar
+        client={mockClient}
+        onSelectChannel={mockOnSelectChannel}
+        activeChannel={null}
+      />
+    );
+
+    const filterFn = channelListSpy.mock.calls[0]?.[0]?.channelRenderFilterFn as
+      | ((channels: any[]) => any[])
+      | undefined;
+    const filtered = filterFn!([
+      { cid: "messaging:no-id" },
+      { id: "lounge-fair1" },
+      { id: "regular" },
+    ]);
+
+    expect(filtered.map((c) => c.id ?? null)).toEqual([null, "regular"]);
+
+    channelListSpy.mockRestore();
+  });
+
   it("calls onSelectChannel when a channel is selected", () => {
     const channelListSpy = vi.spyOn(streamChatReact, "ChannelList");
     const mockSetActiveChannel = vi.fn();
