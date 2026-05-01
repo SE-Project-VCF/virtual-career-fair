@@ -76,13 +76,101 @@ function virtualFairGeocodeQuery(city, state, zip) {
   return z ? `${head} ${z}` : head;
 }
 
+/** Pick a venue part: use the incoming value if provided, otherwise fall back to previous. */
+function pickVenuePart(incoming, fallback) {
+  return incoming === undefined ? trimVenuePart(fallback) : trimVenuePart(incoming);
+}
+
+/**
+ * Resolve all venue update fields for PUT /api/fairs/:fairId.
+ * Returns { fields } on success, or { error, status } on validation failure.
+ */
+async function resolveVenueUpdates(prev, { venueCity, venueState, venueZip, venueGeocodeQuery }) {
+  const FieldValue = admin.firestore.FieldValue;
+  const sentGeo = venueGeocodeQuery === undefined ? null : trimVenuePart(venueGeocodeQuery);
+  const useGeoQuery = Boolean(sentGeo && sentGeo.length > 0);
+
+  if (useGeoQuery) {
+    const result = await resolveVenueFromGeoQuery(sentGeo, true, null, null, null);
+    if (result.error) return result;
+    return { fields: { ...result.venueFields, venueAddress: FieldValue.delete() } };
+  }
+
+  const city = pickVenuePart(venueCity, prev.venueCity);
+  const state = pickVenuePart(venueState, prev.venueState);
+  const zip = pickVenuePart(venueZip, prev.venueZip);
+
+  if (!city && !state && !zip) {
+    return {
+      fields: {
+        venueAddress: FieldValue.delete(),
+        venueCity: FieldValue.delete(),
+        venueState: FieldValue.delete(),
+        venueZip: FieldValue.delete(),
+        venueCountry: FieldValue.delete(),
+        venueGeo: FieldValue.delete(),
+        venueMapboxId: FieldValue.delete(),
+      },
+    };
+  }
+
+  if (zip.length > 20) {
+    return { error: "ZIP or postal code must be 20 characters or less.", status: 400 };
+  }
+  const geoQuery = virtualFairGeocodeQuery(city, state, zip);
+  if (!trimVenuePart(geoQuery)) {
+    return { error: "Enter a location, ZIP, or place to verify with search.", status: 400 };
+  }
+  const result = await resolveVenueFromGeoQuery(geoQuery, false, city, state, zip);
+  if (result.error) return result;
+  return { fields: { ...result.venueFields, venueAddress: FieldValue.delete() } };
+}
+
+/**
+ * Resolve venue fields from geocoding input.
+ * Used by both POST and PUT /api/fairs to avoid duplicated geocoding logic.
+ * Returns { venueFields } on success, or { error, status } on validation failure.
+ */
+async function resolveVenueFromGeoQuery(geoQuery, fromSingleQuery, city, state, zip) {
+  if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+    return { error: "Location search text is too long.", status: 400 };
+  }
+  if (!process.env.MAPBOX_ACCESS_TOKEN) {
+    return { error: "Geocoding is not configured", status: 503 };
+  }
+  const g = await forwardGeocode(geoQuery);
+  if (!g) {
+    return { error: "Could not verify this location. Try search suggestions or a fuller address.", status: 400 };
+  }
+  const finalCity = fromSingleQuery ? g.city || null : g.city || city || null;
+  const finalState = fromSingleQuery ? g.state || null : g.state || state || null;
+  const finalZip = fromSingleQuery ? g.postcode || null : zip || g.postcode || null;
+  if (!finalCity || !finalState) {
+    return { error: "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.", status: 400 };
+  }
+  const zipOut = finalZip || null;
+  if (zipOut && zipOut.length > 20) {
+    return { error: "ZIP or postal code must be 20 characters or less.", status: 400 };
+  }
+  return {
+    venueFields: removeUndefined({
+      venueCity: finalCity,
+      venueState: finalState,
+      venueZip: zipOut,
+      venueCountry: g.country,
+      venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
+      venueMapboxId: g.mapboxId,
+    }),
+  };
+}
+
 async function resolveFairIdFromInviteCode(fairId, inviteCode) {
-  if (!inviteCode) return fairId;
-
-  const fairSnap = await db.collection("fairs").where("inviteCode", "==", inviteCode.toUpperCase()).get();
-  if (fairSnap.empty) throw buildHttpError(400, "Invalid invite code");
-
-  return fairSnap.docs[0].id;
+  if (inviteCode) {
+    const fairSnap = await db.collection("fairs").where("inviteCode", "==", inviteCode.toUpperCase()).get();
+    if (fairSnap.empty) throw buildHttpError(400, "Invalid invite code");
+    return fairSnap.docs[0].id;
+  }
+  return fairId;
 }
 
 async function ensureFairExists(fairId) {
@@ -161,7 +249,7 @@ async function ensureAdminOrCompanyAccess(requestingUid, companyId) {
   return { error: "Unauthorized: must be admin or company owner/rep", status: 403 };
 }
 
-async function getCompanyAndBoothSnapshot(companyId) {
+async function getCompanyAndBoothSnapshot(companyId, boothId) {
   const companyDoc = await db.collection("companies").doc(companyId).get();
   if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
 
@@ -185,13 +273,16 @@ async function getCompanyAndBoothSnapshot(companyId) {
     hiringFor: null,
   };
 
-  if (company.boothId) {
-    const boothDoc = await db.collection("booths").doc(company.boothId).get();
+  // Use explicit boothId if provided, otherwise fall back to company.boothId
+  const resolvedBoothId = boothId || company.boothId;
+  if (resolvedBoothId) {
+    const boothDoc = await db.collection("booths").doc(resolvedBoothId).get();
     if (boothDoc.exists) {
       const bData = boothDoc.data();
       boothSnapshot = {
         companyId,
-        originalBoothId: company.boothId,
+        originalBoothId: resolvedBoothId,
+        boothName: bData.boothName || null,
         companyName: bData.companyName || company.companyName || "",
         industry: bData.industry || null,
         companySize: bData.companySize || null,
@@ -214,22 +305,26 @@ async function getCompanyAndBoothSnapshot(companyId) {
   return { company, boothSnapshot };
 }
 
-async function createEnrollmentWithBooth({
+async function createEnrollmentWithBooths({
   fairId,
   companyId,
   companyName,
-  boothSnapshot,
+  boothSnapshots,
   enrolledBy,
   enrollmentMethod,
 }) {
-  const fairBoothRef = db.collection("fairs").doc(fairId).collection("booths").doc();
   const batch = db.batch();
+  const fairBoothIds = [];
 
-  batch.set(fairBoothRef, {
-    ...removeUndefined(boothSnapshot),
-    enrolledAt: admin.firestore.Timestamp.now(),
-    enrolledBy,
-  });
+  for (const snapshot of boothSnapshots) {
+    const fairBoothRef = db.collection("fairs").doc(fairId).collection("booths").doc();
+    batch.set(fairBoothRef, {
+      ...removeUndefined(snapshot),
+      enrolledAt: admin.firestore.Timestamp.now(),
+      enrolledBy,
+    });
+    fairBoothIds.push(fairBoothRef.id);
+  }
 
   batch.set(db.collection("fairs").doc(fairId).collection("enrollments").doc(companyId), {
     companyId,
@@ -237,11 +332,11 @@ async function createEnrollmentWithBooth({
     enrolledAt: admin.firestore.Timestamp.now(),
     enrolledBy,
     enrollmentMethod,
-    boothId: fairBoothRef.id,
+    boothIds: fairBoothIds,
   });
 
   await batch.commit();
-  return fairBoothRef.id;
+  return fairBoothIds;
 }
 
 async function snapshotCompanyJobsToFair(fairId, companyId) {
@@ -315,12 +410,12 @@ function buildFairListItem(doc, data, now, searchOrigin) {
 }
 
 async function resolveSearchOriginFromQuery(query) {
-  const radiusMiles = query.radiusMiles !== undefined && query.radiusMiles !== ""
-    ? Number.parseFloat(String(query.radiusMiles))
-    : NaN;
+  const radiusMiles = query.radiusMiles === undefined || query.radiusMiles === ""
+    ? Number.NaN
+    : Number.parseFloat(String(query.radiusMiles));
   if (Number.isNaN(radiusMiles) || radiusMiles <= 0) return null;
 
-  const address = query.address != null ? String(query.address).trim() : "";
+  const address = query.address == null ? "" : String(query.address).trim();
   if (address) {
     const g = await forwardGeocode(address);
     if (!g) {
@@ -348,7 +443,7 @@ async function resolveSearchOriginFromQuery(query) {
 /* GET /api/fairs - public: list fairs; optional geo filter: lat,lng,radiusMiles or address,radiusMiles */
 router.get("/fairs", async (req, res) => {
   try {
-    const hasRadius = req.query.radiusMiles !== undefined && String(req.query.radiusMiles).trim() !== "";
+    const hasRadius = req.query.radiusMiles != null && String(req.query.radiusMiles).trim().length > 0;
     let search = null;
     if (hasRadius) {
       try {
@@ -717,9 +812,6 @@ router.post("/fairs", verifyFirebaseToken, async (req, res) => {
       let geoQuery;
       let fromSingleQuery = false;
       if (useGeoQuery) {
-        if (geoQField.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-          return res.status(400).json({ error: "Location search text is too long." });
-        }
         geoQuery = geoQField;
         fromSingleQuery = true;
       } else {
@@ -732,40 +824,10 @@ router.post("/fairs", verifyFirebaseToken, async (req, res) => {
             error: "Enter a location, ZIP, or place to verify with search.",
           });
         }
-        if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-          return res.status(400).json({ error: "Location search text is too long." });
-        }
       }
-      if (!process.env.MAPBOX_ACCESS_TOKEN) {
-        return res.status(503).json({ error: "Geocoding is not configured" });
-      }
-      const g = await forwardGeocode(geoQuery);
-      if (!g) {
-        return res.status(400).json({
-          error: "Could not verify this location. Try search suggestions or a fuller address.",
-        });
-      }
-      const finalCity = fromSingleQuery ? g.city || null : g.city || city || null;
-      const finalState = fromSingleQuery ? g.state || null : g.state || state || null;
-      const finalZip = fromSingleQuery ? g.postcode || null : zip || g.postcode || null;
-      if (!finalCity || !finalState) {
-        return res.status(400).json({
-          error:
-            "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
-        });
-      }
-      const zipOut = finalZip || null;
-      if (zipOut && zipOut.length > 20) {
-        return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-      }
-      venueFields = removeUndefined({
-        venueCity: finalCity,
-        venueState: finalState,
-        venueZip: zipOut,
-        venueCountry: g.country,
-        venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
-        venueMapboxId: g.mapboxId,
-      });
+      const result = await resolveVenueFromGeoQuery(geoQuery, fromSingleQuery, city, state, zip);
+      if (result.error) return res.status(result.status).json({ error: result.error });
+      venueFields = result.venueFields;
     }
 
     const rawCode = generateInviteCode();
@@ -816,117 +878,11 @@ router.put("/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
     if (startTime !== undefined) updates.startTime = startTime ? parseUTCToTimestamp(startTime) : null;
     if (endTime !== undefined) updates.endTime = endTime ? parseUTCToTimestamp(endTime) : null;
 
-    const hubTouched =
-      venueCity !== undefined ||
-      venueState !== undefined ||
-      venueZip !== undefined ||
-      venueGeocodeQuery !== undefined;
+    const hubTouched = [venueCity, venueState, venueZip, venueGeocodeQuery].some((v) => v !== undefined);
     if (hubTouched) {
-      const prev = fairDoc.data() || {};
-      const sentGeo =
-        venueGeocodeQuery !== undefined ? trimVenuePart(venueGeocodeQuery) : null;
-      const useGeoQuery = sentGeo !== null && sentGeo.length > 0;
-
-      if (useGeoQuery) {
-        if (sentGeo.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-          return res.status(400).json({ error: "Location search text is too long." });
-        }
-        if (!process.env.MAPBOX_ACCESS_TOKEN) {
-          return res.status(503).json({ error: "Geocoding is not configured" });
-        }
-        const g = await forwardGeocode(sentGeo);
-        if (!g) {
-          return res.status(400).json({
-            error: "Could not verify this location. Try search suggestions or a fuller address.",
-          });
-        }
-        const finalCity = g.city || null;
-        const finalState = g.state || null;
-        const finalZip = g.postcode || null;
-        if (!finalCity || !finalState) {
-          return res.status(400).json({
-            error:
-              "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
-          });
-        }
-        if (finalZip && finalZip.length > 20) {
-          return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-        }
-        Object.assign(
-          updates,
-          removeUndefined({
-            venueCity: finalCity,
-            venueState: finalState,
-            venueZip: finalZip || null,
-            venueCountry: g.country,
-            venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
-            venueMapboxId: g.mapboxId,
-          }),
-        );
-        updates.venueAddress = FieldValue.delete();
-      } else {
-        const city = venueCity !== undefined ? trimVenuePart(venueCity) : trimVenuePart(prev.venueCity);
-        const state = venueState !== undefined ? trimVenuePart(venueState) : trimVenuePart(prev.venueState);
-        const zip = venueZip !== undefined ? trimVenuePart(venueZip) : trimVenuePart(prev.venueZip);
-        const hasAnyHubPart = Boolean(city || state || zip);
-
-        if (!hasAnyHubPart) {
-          updates.venueAddress = FieldValue.delete();
-          updates.venueCity = FieldValue.delete();
-          updates.venueState = FieldValue.delete();
-          updates.venueZip = FieldValue.delete();
-          updates.venueCountry = FieldValue.delete();
-          updates.venueGeo = FieldValue.delete();
-          updates.venueMapboxId = FieldValue.delete();
-        } else {
-          if (zip.length > 20) {
-            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-          }
-          const geoQuery = virtualFairGeocodeQuery(city, state, zip);
-          if (!trimVenuePart(geoQuery)) {
-            return res.status(400).json({
-              error: "Enter a location, ZIP, or place to verify with search.",
-            });
-          }
-          if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-            return res.status(400).json({ error: "Location search text is too long." });
-          }
-          if (!process.env.MAPBOX_ACCESS_TOKEN) {
-            return res.status(503).json({ error: "Geocoding is not configured" });
-          }
-          const g = await forwardGeocode(geoQuery);
-          if (!g) {
-            return res.status(400).json({
-              error: "Could not verify this location. Try search suggestions or a fuller address.",
-            });
-          }
-          const finalCity = g.city || city || null;
-          const finalState = g.state || state || null;
-          const finalZip = zip || g.postcode || null;
-          if (!finalCity || !finalState) {
-            return res.status(400).json({
-              error:
-                "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
-            });
-          }
-          const zipOut = finalZip || null;
-          if (zipOut && zipOut.length > 20) {
-            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-          }
-          Object.assign(
-            updates,
-            removeUndefined({
-              venueCity: finalCity,
-              venueState: finalState,
-              venueZip: zipOut,
-              venueCountry: g.country,
-              venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
-              venueMapboxId: g.mapboxId,
-            }),
-          );
-          updates.venueAddress = FieldValue.delete();
-        }
-      }
+      const venueResult = await resolveVenueUpdates(fairDoc.data() || {}, { venueCity, venueState, venueZip, venueGeocodeQuery });
+      if (venueResult.error) return res.status(venueResult.status).json({ error: venueResult.error });
+      Object.assign(updates, venueResult.fields);
     }
 
     if (updates.startTime && updates.endTime && updates.startTime.toMillis() >= updates.endTime.toMillis()) {
@@ -1038,11 +994,18 @@ router.post("/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (re
 /* POST /api/fairs/:fairId/enroll - enroll company in fair */
 router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
-  const { companyId, inviteCode } = req.body;
+  const { companyId, inviteCode, boothIds } = req.body;
   const requestingUid = req.user.uid;
 
   if (!companyId && !inviteCode) {
     return res.status(400).json({ error: "Either companyId or inviteCode is required" });
+  }
+
+  // Validate boothIds if provided
+  if (boothIds !== undefined) {
+    if (!Array.isArray(boothIds) || boothIds.length === 0) {
+      return res.status(400).json({ error: "boothIds must be a non-empty array" });
+    }
   }
 
   try {
@@ -1062,21 +1025,44 @@ router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, asy
       .get();
     if (enrollmentDoc.exists) return res.status(400).json({ error: "Company is already enrolled in this fair" });
 
-    const { company, boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId);
-    const enrollmentMethod = inviteCode ? "inviteCode" : "admin";
+    const companyDoc = await db.collection("companies").doc(resolvedCompanyId).get();
+    if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
+    const company = companyDoc.data();
 
-    const boothId = await createEnrollmentWithBooth({
+    const enrollmentMethod = inviteCode ? "inviteCode" : "admin";
+    let boothSnapshots = [];
+
+    if (boothIds && boothIds.length > 0) {
+      // Multi-booth: validate and snapshot each selected booth
+      for (const bid of boothIds) {
+        const boothDoc = await db.collection("booths").doc(bid).get();
+        if (!boothDoc.exists) {
+          return res.status(400).json({ error: `Booth ${bid} not found` });
+        }
+        if (boothDoc.data().companyId !== resolvedCompanyId) {
+          return res.status(403).json({ error: `Booth ${bid} does not belong to this company` });
+        }
+        const { boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId, bid);
+        boothSnapshots.push(boothSnapshot);
+      }
+    } else {
+      // Legacy single-booth: use company.boothId fallback
+      const { boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId);
+      boothSnapshots.push(boothSnapshot);
+    }
+
+    const fairBoothIds = await createEnrollmentWithBooths({
       fairId: resolvedFairId,
       companyId: resolvedCompanyId,
       companyName: company.companyName || "",
-      boothSnapshot,
+      boothSnapshots,
       enrolledBy: requestingUid,
       enrollmentMethod,
     });
 
     await snapshotCompanyJobsToFair(resolvedFairId, resolvedCompanyId);
 
-    return res.status(201).json({ boothId, fairId: resolvedFairId });
+    return res.status(201).json({ boothIds: fairBoothIds, fairId: resolvedFairId });
   } catch (err) {
     if (err.status) {
       return res.status(err.status).json({

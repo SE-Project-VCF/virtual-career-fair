@@ -585,7 +585,8 @@ describe("POST /api/fairs/:fairId/enroll", () => {
       .set("Authorization", authHeader())
       .send({ companyId: "company-id" });
     expect(res.status).toBe(201);
-    expect(res.body.boothId).toBeDefined();
+    expect(res.body.boothIds).toBeDefined();
+    expect(Array.isArray(res.body.boothIds)).toBe(true);
     expect(res.body.fairId).toBe("fair-id");
   });
 });

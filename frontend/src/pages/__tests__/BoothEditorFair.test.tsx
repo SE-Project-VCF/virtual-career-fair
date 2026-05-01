@@ -18,16 +18,17 @@ import { useFair } from "../../contexts/FairContext"
 const mockNavigate = vi.fn()
 
 // Mutable holders so individual tests can change values without re-mocking modules
-const mockParams: { companyId: string | undefined } = { companyId: "company-1" }
-const mockSearchParams: { instance: URLSearchParams } = { instance: new URLSearchParams() }
+const mockParams: { companyId: string | undefined; boothId: string | undefined } = {
+  companyId: "company-1",
+  boothId: undefined,
+}
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom")
   return {
     ...actual,
-    useParams: () => ({ companyId: mockParams.companyId }),
+    useParams: () => ({ companyId: mockParams.companyId, boothId: mockParams.boothId }),
     useNavigate: () => mockNavigate,
-    useSearchParams: () => [mockSearchParams.instance, vi.fn()],
   }
 })
 
@@ -95,6 +96,7 @@ const mockCompanyDoc = {
 
 const fairBoothPayload = {
   boothId: "fair-booth-1",
+  boothName: "Engineering",
   companyName: "Tech Company",
   industry: "software",
   companySize: "51-200",
@@ -120,7 +122,7 @@ describe("BoothEditor – fair-scoped", () => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
     mockParams.companyId = "company-1"
-    mockSearchParams.instance = new URLSearchParams()
+    mockParams.boothId = undefined
 
     vi.mocked(useFair).mockReturnValue({
       setFair: vi.fn(), fairId: "fair-1", fair: null, isLive: false, loading: false })
@@ -200,7 +202,7 @@ describe("BoothEditor – fair-scoped", () => {
     })
 
     it("uses urlBoothId fallback and prefills name when fetch throws and bid param is set", async () => {
-      mockSearchParams.instance = new URLSearchParams("bid=url-booth-1")
+      mockParams.boothId = "url-booth-1"
       globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"))
       const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
 
@@ -314,6 +316,8 @@ describe("BoothEditor – fair-scoped", () => {
         await waitFor(() =>
           expect(screen.getByRole("textbox", { name: /company name/i })).toBeInTheDocument()
         )
+
+        await user.type(screen.getByRole("textbox", { name: /booth name/i }), "Engineering")
 
         const industrySelect = screen.getByRole("combobox", { name: /industry/i })
         await user.click(industrySelect)

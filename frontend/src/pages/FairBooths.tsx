@@ -26,6 +26,7 @@ import { API_URL } from "../config"
 interface Booth {
   id: string
   companyName: string
+  boothName?: string | null
   industry: string | null
   companySize: string | null
   location: string | null
@@ -162,8 +163,14 @@ export default function FairBooths() {
                   )}
 
                   <Typography variant="h6" fontWeight="bold" gutterBottom>
-                    {booth.companyName}
+                    {booth.boothName || booth.companyName}
                   </Typography>
+
+                  {booth.boothName && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                      {booth.companyName}
+                    </Typography>
+                  )}
 
                   {booth.industry && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "text.secondary", mb: 0.5 }}>
