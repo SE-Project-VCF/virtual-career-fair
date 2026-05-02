@@ -346,10 +346,10 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.body.averageRating).toBe(3);
   });
 
-  it("returns 403 when non-admin user has no companyId", async () => {
+  it("returns 403 when booth has no companyId", async () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
-      userData: { role: "student", companyId: null },
+      userData: { role: "student" },
       boothData: { companyName: "Acme" },
     });
     const res = await request(app)
@@ -358,12 +358,12 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.status).toBe(403);
   });
 
-  it("returns 403 when company does not own this booth", async () => {
+  it("returns 403 when user is not owner or rep of the booth's company", async () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
-      userData: { role: "companyOwner", companyId: "company-1" },
-      boothData: { companyName: "Acme" },
-      companyData: { boothId: "different-booth" },
+      userData: { role: "companyOwner" },
+      boothData: { companyName: "Acme", companyId: "company-1" },
+      companyData: { ownerId: "different-owner", representativeIDs: ["different-rep"] },
     });
     const res = await request(app)
       .get("/api/booths/booth-1/ratings")
@@ -375,8 +375,8 @@ describe("GET /api/booths/:boothId/ratings", () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
       userData: { role: "companyOwner", companyId: "company-1" },
-      boothData: { companyName: "Acme" },
-      companyData: { boothId: "booth-1" },
+      boothData: { companyName: "Acme", companyId: "company-1" },
+      companyData: { ownerId: "owner-uid" },
       ratingsSnap: [
         { id: "s1", data: () => ({ rating: 5, comment: "Excellent", createdAt: { toMillis: () => 2000 } }) },
       ],
@@ -388,5 +388,22 @@ describe("GET /api/booths/:boothId/ratings", () => {
     expect(res.body.totalRatings).toBe(1);
     expect(res.body.averageRating).toBe(5);
     expect(res.body.ratings[0].comment).toBe("Excellent");
+  });
+
+  it("returns ratings for representative of the booth's company", async () => {
+    verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
+    setupBoothsMock({
+      userData: { role: "representative", companyId: "company-1" },
+      boothData: { companyName: "Acme", companyId: "company-1" },
+      companyData: { ownerId: "some-other-uid", representativeIDs: ["rep-uid"] },
+      ratingsSnap: [
+        { id: "s1", data: () => ({ rating: 4, comment: "Solid", createdAt: { toMillis: () => 1500 } }) },
+      ],
+    });
+    const res = await request(app)
+      .get("/api/booths/booth-1/ratings")
+      .set("Authorization", authAs("rep-uid"));
+    expect(res.status).toBe(200);
+    expect(res.body.totalRatings).toBe(1);
   });
 });
