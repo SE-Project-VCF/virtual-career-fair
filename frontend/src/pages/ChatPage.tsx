@@ -176,13 +176,14 @@ export default function ChatPage() {
   */
   useEffect(() => {
     if (!clientReady) return;
-    if (!client?.userID) return;
+    const streamUserId = client?.userID;
+    if (!streamUserId) return;
     if (!dmStudentId) return;
-    if (dmStudentId === client.userID) return;
+    if (dmStudentId === streamUserId) return;
 
     const openStudentDm = async () => {
       try {
-        const channel = await getOrCreateDirectChannel(client.userID, dmStudentId);
+        const channel = await getOrCreateDirectChannel(streamUserId, dmStudentId);
         setActiveChannel(channel);
         navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
       } catch (err) {
