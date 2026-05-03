@@ -82,8 +82,20 @@ export default function FairAdminDashboard() {
   const [success, setSuccess] = useState("")
 
   // Add company dialog
+  type CompanySearchResult = {
+    companyId: string
+    companyName: string
+    logoUrl: string | null
+    industry: string | null
+    primaryLocation: string | null
+    alreadyEnrolled: boolean
+  }
   const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [addCompanyId, setAddCompanyId] = useState("")
+  const [companyQuery, setCompanyQuery] = useState("")
+  const [companyOptions, setCompanyOptions] = useState<CompanySearchResult[]>([])
+  const [companySearchLoading, setCompanySearchLoading] = useState(false)
+  const [companySearchError, setCompanySearchError] = useState("")
+  const [selectedCompany, setSelectedCompany] = useState<CompanySearchResult | null>(null)
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState("")
 
@@ -145,6 +157,49 @@ export default function FairAdminDashboard() {
       })
     }
   }, [fair, editDialogOpen])
+
+  useEffect(() => {
+    if (!addDialogOpen) return
+    const trimmed = companyQuery.trim()
+    if (trimmed.length < 2) {
+      setCompanyOptions([])
+      setCompanySearchError("")
+      setCompanySearchLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setCompanySearchLoading(true)
+    setCompanySearchError("")
+
+    const timer = setTimeout(async () => {
+      try {
+        const token = await getToken()
+        const url = `${API_URL}/api/companies/search?q=${encodeURIComponent(trimmed)}&fairId=${encodeURIComponent(fairId || "")}`
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        if (cancelled) return
+        if (!res.ok) {
+          setCompanyOptions([])
+          setCompanySearchError(data.error || "Search failed — try again")
+          return
+        }
+        setCompanyOptions(data.results || [])
+      } catch {
+        if (!cancelled) {
+          setCompanyOptions([])
+          setCompanySearchError("Search failed — try again")
+        }
+      } finally {
+        if (!cancelled) setCompanySearchLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [companyQuery, addDialogOpen, fairId])
 
   function toLocalDatetime(ms: number): string {
     const d = new Date(ms)
@@ -399,7 +454,7 @@ export default function FairAdminDashboard() {
   }
 
   const handleAddCompany = async () => {
-    if (!addCompanyId.trim()) return
+    if (!selectedCompany || selectedCompany.alreadyEnrolled) return
     setAdding(true)
     setAddError("")
     try {
@@ -407,12 +462,14 @@ export default function FairAdminDashboard() {
       const res = await fetch(`${API_URL}/api/fairs/${fairId}/enroll`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ companyId: addCompanyId.trim() }),
+        body: JSON.stringify({ companyId: selectedCompany.companyId }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to add company")
       setAddDialogOpen(false)
-      setAddCompanyId("")
+      setCompanyQuery("")
+      setSelectedCompany(null)
+      setCompanyOptions([])
       setSuccess("Company enrolled successfully")
       loadEnrollments()
     } catch (err: any) {
@@ -997,24 +1054,99 @@ export default function FairAdminDashboard() {
       </Dialog>
 
       {/* Add Company Dialog */}
-      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={addDialogOpen}
+        onClose={() => {
+          setAddDialogOpen(false)
+          setCompanyQuery("")
+          setSelectedCompany(null)
+          setCompanyOptions([])
+          setAddError("")
+          setCompanySearchError("")
+        }}
+        maxWidth="sm"
+        fullWidth
+        transitionDuration={0}
+      >
         <DialogTitle>Add Company to Fair</DialogTitle>
         <DialogContent>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Enter the Firestore company ID to enroll them in this fair.
+            Search for a company by name and select it from the list.
           </Typography>
-          <TextField
-            label="Company ID"
-            value={addCompanyId}
-            onChange={(e) => setAddCompanyId(e.target.value)}
-            fullWidth
-            placeholder="e.g. abc123def456"
+          <Autocomplete
+            options={companyOptions}
+            value={selectedCompany}
+            onChange={(_, value) => setSelectedCompany(value)}
+            inputValue={companyQuery}
+            onInputChange={(_, value) => setCompanyQuery(value)}
+            loading={companySearchLoading}
+            filterOptions={(opts) => opts}
+            getOptionLabel={(opt) => opt.companyName}
+            isOptionEqualToValue={(a, b) => a.companyId === b.companyId}
+            getOptionDisabled={(opt) => opt.alreadyEnrolled}
+            noOptionsText={
+              companyQuery.trim().length < 2
+                ? "Type at least 2 characters"
+                : companySearchError || "No companies found"
+            }
+            renderOption={(props, option) => (
+              <li {...props} key={option.companyId}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, width: "100%" }}>
+                  <Box
+                    component="img"
+                    src={option.logoUrl || ""}
+                    alt=""
+                    sx={{ width: 32, height: 32, borderRadius: 1, objectFit: "cover", bgcolor: "grey.200", flexShrink: 0 }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }}
+                  />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" noWrap>{option.companyName}</Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {option.alreadyEnrolled
+                        ? "Already enrolled in this fair"
+                        : [option.industry, option.primaryLocation].filter(Boolean).join(" • ") || "—"}
+                    </Typography>
+                  </Box>
+                </Box>
+              </li>
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Search company"
+                placeholder="Start typing a company name"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {companySearchLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
           />
           {addError && <Alert severity="error" sx={{ mt: 2 }}>{addError}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setAddDialogOpen(false); setAddCompanyId(""); setAddError("") }}>Cancel</Button>
-          <Button variant="contained" onClick={handleAddCompany} disabled={adding || !addCompanyId.trim()}>
+          <Button
+            onClick={() => {
+              setAddDialogOpen(false)
+              setCompanyQuery("")
+              setSelectedCompany(null)
+              setCompanyOptions([])
+              setAddError("")
+              setCompanySearchError("")
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAddCompany}
+            disabled={adding || !selectedCompany || selectedCompany.alreadyEnrolled}
+          >
             {adding ? "Adding..." : "Add Company"}
           </Button>
         </DialogActions>
