@@ -40,6 +40,15 @@ import { auth } from "../firebase"
 import { API_URL } from "../config"
 import { useGeocodeSuggest } from "../hooks/useGeocodeSuggest"
 
+type CompanySearchResult = {
+  companyId: string
+  companyName: string
+  logoUrl: string | null
+  industry: string | null
+  primaryLocation: string | null
+  alreadyEnrolled: boolean
+}
+
 type FairAnnouncementRow = {
   id: string
   fairId: string
@@ -82,14 +91,6 @@ export default function FairAdminDashboard() {
   const [success, setSuccess] = useState("")
 
   // Add company dialog
-  type CompanySearchResult = {
-    companyId: string
-    companyName: string
-    logoUrl: string | null
-    industry: string | null
-    primaryLocation: string | null
-    alreadyEnrolled: boolean
-  }
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [companyQuery, setCompanyQuery] = useState("")
   const [companyOptions, setCompanyOptions] = useState<CompanySearchResult[]>([])
@@ -180,8 +181,10 @@ export default function FairAdminDashboard() {
         const data = await res.json()
         if (cancelled) return
         if (!res.ok) {
-          setCompanyOptions([])
-          setCompanySearchError(data.error || "Search failed — try again")
+          if (!cancelled) {
+            setCompanyOptions([])
+            setCompanySearchError(data.error || "Search failed — try again")
+          }
           return
         }
         setCompanyOptions(data.results || [])
@@ -1066,7 +1069,6 @@ export default function FairAdminDashboard() {
         }}
         maxWidth="sm"
         fullWidth
-        transitionDuration={0}
       >
         <DialogTitle>Add Company to Fair</DialogTitle>
         <DialogContent>

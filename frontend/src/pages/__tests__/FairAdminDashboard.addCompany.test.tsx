@@ -154,6 +154,7 @@ describe("FairAdminDashboard — Add Company search", () => {
     await screen.findByText("Acme Corp")
 
     await user.click(screen.getByRole("button", { name: /cancel/i }))
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
 
     // Re-open — input should be empty
     await user.click(await screen.findByRole("button", { name: /add company/i }))
