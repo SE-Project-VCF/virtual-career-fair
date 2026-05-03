@@ -29,16 +29,18 @@ router.post("/companies", verifyFirebaseToken, async (req, res) => {
     const companyRef = db.collection("companies").doc();
     const companyId = companyRef.id;
 
+    const trimmedName = companyName.trim();
     await companyRef.set(removeUndefined({
       companyId,
-      companyName: companyName.trim(),
+      companyName: trimmedName,
+      companyNameLower: trimmedName.toLowerCase(),
       ownerId,
       inviteCode: rawCode,
       createdAt: admin.firestore.Timestamp.now(),
     }));
 
     // Update user doc with companyId (no invite code stored on user)
-    await db.collection("users").doc(ownerId).update({ companyId, companyName: companyName.trim() });
+    await db.collection("users").doc(ownerId).update({ companyId, companyName: trimmedName });
 
     return res.status(201).json({ companyId, inviteCode: rawCode });
   } catch (err) {
