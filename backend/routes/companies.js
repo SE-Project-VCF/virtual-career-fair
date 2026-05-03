@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { db } = require("../firebase");
 const admin = require("firebase-admin");
-const { verifyFirebaseToken, generateInviteCode, removeUndefined } = require("../helpers");
+const { verifyFirebaseToken, generateInviteCode, removeUndefined, verifyAdmin } = require("../helpers");
 const { verifyOfficeLocationInput } = require("../services/verifiedOfficeLocation");
 
 const MAX_OFFICE_LOCATIONS = 40;
@@ -227,6 +227,85 @@ router.put("/companies/:companyId/locations", verifyFirebaseToken, async (req, r
   } catch (err) {
     console.error("PUT /api/companies/:companyId/locations error:", err);
     return res.status(500).json({ error: "Failed to update office locations" });
+  }
+});
+
+/* ----------------------------------------------------
+   SEARCH COMPANIES BY NAME PREFIX (admin only)
+   GET /api/companies/search?q=<prefix>&fairId=<id>&limit=20
+---------------------------------------------------- */
+router.get("/companies/search", verifyFirebaseToken, async (req, res) => {
+  try {
+    const adminError = await verifyAdmin(req.user.uid);
+    if (adminError) {
+      return res.status(adminError.status).json({ error: adminError.error });
+    }
+
+    const rawQ = (req.query.q ?? "").toString().trim();
+    if (!rawQ) {
+      return res.status(400).json({ error: "Query parameter 'q' is required" });
+    }
+    const fairId = (req.query.fairId ?? "").toString().trim();
+    if (!fairId) {
+      return res.status(400).json({ error: "Query parameter 'fairId' is required" });
+    }
+    const requestedLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(50, requestedLimit))
+      : 20;
+
+    const q = rawQ.toLowerCase();
+    const prefixEnd = q + "";
+
+    const querySnap = await db
+      .collection("companies")
+      .where("companyNameLower", ">=", q)
+      .where("companyNameLower", "<", prefixEnd)
+      .orderBy("companyNameLower")
+      .limit(limit)
+      .get();
+
+    const enrollmentDocs = await Promise.all(
+      querySnap.docs.map((d) =>
+        db.collection("fairs").doc(fairId).collection("enrollments").doc(d.id).get()
+      )
+    );
+
+    const results = querySnap.docs.map((d, i) => {
+      const data = d.data();
+      const office = Array.isArray(data.officeLocations) ? data.officeLocations[0] : null;
+      let primaryLocation = null;
+      if (data.remoteEmployer) {
+        primaryLocation = "Remote";
+      } else if (office && office.city && office.state) {
+        primaryLocation = `${office.city}, ${office.state}`;
+      } else if (office && office.city) {
+        primaryLocation = office.city;
+      }
+
+      if (typeof data.companyNameLower !== "string") {
+        const expected = (data.companyName || "").trim().toLowerCase();
+        if (expected) {
+          d.ref
+            .update({ companyNameLower: expected })
+            .catch((err) => console.error("companyNameLower backfill failed:", err));
+        }
+      }
+
+      return {
+        companyId: d.id,
+        companyName: data.companyName || "",
+        logoUrl: data.logoUrl || null,
+        industry: data.industry || null,
+        primaryLocation,
+        alreadyEnrolled: enrollmentDocs[i].exists,
+      };
+    });
+
+    return res.json({ results });
+  } catch (err) {
+    console.error("GET /api/companies/search error:", err);
+    return res.status(500).json({ error: "Failed to search companies" });
   }
 });
 
