@@ -1904,6 +1904,18 @@ describe("Company", () => {
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth/b1");
     });
 
+    it("navigates to booth visitor analytics when Visitor analytics is clicked", async () => {
+      const user = userEvent.setup();
+      setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
+      renderComp();
+
+      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      const alphaRow = screen.getByText("Alpha").closest("div")!.parentElement!;
+      await user.click(within(alphaRow).getByRole("button", { name: /visitor analytics/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/b1/visitors");
+    });
+
     it("navigates to create booth when 'Create New Booth' is clicked", async () => {
       const user = userEvent.setup();
       setBoothListFetch([]);

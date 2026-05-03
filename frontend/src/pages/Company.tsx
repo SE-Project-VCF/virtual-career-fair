@@ -662,7 +662,7 @@ function BoothManagementCard({ companyId, navigate }: Readonly<{
                   </Typography>
                 )}
               </Box>
-              <Box sx={{ display: "flex", gap: 1 }}>
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <Button
                   size="small"
                   startIcon={<EditIcon />}
@@ -670,6 +670,14 @@ function BoothManagementCard({ companyId, navigate }: Readonly<{
                   sx={{ color: "#388560" }}
                 >
                   Edit
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<BarChartIcon />}
+                  onClick={() => navigate(`/booth/${booth.id}/visitors`)}
+                  sx={{ color: "#388560" }}
+                >
+                  Visitor analytics
                 </Button>
                 <Button
                   size="small"
