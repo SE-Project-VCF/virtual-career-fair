@@ -20,9 +20,20 @@ vi.mock("../../utils/auth", () => ({
 vi.mock("../../firebase", () => ({
   auth: {
     currentUser: {
+      uid: "student-test-uid",
       getIdToken: vi.fn().mockResolvedValue("mock-token"),
     },
   },
+}))
+
+vi.mock("../../components/JobApplicationFormDialog", () => ({
+  default: ({
+    open,
+    job,
+  }: {
+    open: boolean
+    job: { id: string; name: string }
+  }) => (open ? <div data-testid="job-apply-dialog">{job.id}:{job.name}</div> : null),
 }))
 
 vi.mock("../../components/BaseLayout", () => ({
@@ -199,7 +210,7 @@ describe("JobSearchPage", () => {
     })
   })
 
-  it("renders Apply link when applicationLink is present", async () => {
+  it("renders external apply link when applicationLink is present", async () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => defaultListResponse,
@@ -207,16 +218,16 @@ describe("JobSearchPage", () => {
 
     renderPage()
 
-    const apply = await screen.findByRole("link", { name: /apply/i })
+    const apply = await screen.findByRole("link", { name: /apply on company site/i })
     expect(apply).toHaveAttribute("href", "https://example.com/apply")
   })
 
-  it("does not render Apply when applicationLink is null", async () => {
+  it("does not render apply actions when there is no link and no published form", async () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
         ...defaultListResponse,
-        jobs: [{ ...defaultListResponse.jobs[0], applicationLink: null }],
+        jobs: [{ ...defaultListResponse.jobs[0], applicationLink: null, applicationForm: null }],
       }),
     })
 
@@ -226,7 +237,51 @@ describe("JobSearchPage", () => {
       expect(screen.getByText("Software Engineer")).toBeInTheDocument()
     })
 
-    expect(screen.queryByRole("link", { name: /apply/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: /apply on company site/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /apply on this site/i })).not.toBeInTheDocument()
+  })
+
+  it("renders internal apply and opens dialog when published applicationForm exists", async () => {
+    const user = userEvent.setup()
+    const publishedForm = {
+      title: "Application",
+      status: "published" as const,
+      fields: [{ id: "email", type: "shortText" as const, label: "Email", required: true }],
+    }
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...defaultListResponse,
+        jobs: [{ ...defaultListResponse.jobs[0], applicationLink: null, applicationForm: publishedForm }],
+      }),
+    })
+
+    renderPage()
+
+    await user.click(await screen.findByRole("button", { name: /apply on this site/i }))
+    expect(await screen.findByTestId("job-apply-dialog")).toHaveTextContent("j1:Software Engineer")
+  })
+
+  it("shows both apply options when link and published form exist", async () => {
+    const publishedForm = {
+      title: "Application",
+      status: "published" as const,
+      fields: [{ id: "email", type: "shortText" as const, label: "Email", required: true }],
+    }
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...defaultListResponse,
+        jobs: [{ ...defaultListResponse.jobs[0], applicationForm: publishedForm }],
+      }),
+    })
+
+    renderPage()
+
+    expect(await screen.findByText(/two application options/i)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /apply on this site/i })).toBeInTheDocument()
+    const external = screen.getByRole("link", { name: /apply on company site/i })
+    expect(external).toHaveAttribute("href", "https://example.com/apply")
   })
 
   it("truncates long descriptions", async () => {
