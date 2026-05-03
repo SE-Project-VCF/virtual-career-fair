@@ -161,6 +161,7 @@ export default function FairAdminDashboard() {
 
   useEffect(() => {
     if (!addDialogOpen) return
+    if (!fairId) return
     const trimmed = companyQuery.trim()
     if (trimmed.length < 2) {
       setCompanyOptions([])
@@ -176,6 +177,10 @@ export default function FairAdminDashboard() {
     const timer = setTimeout(async () => {
       try {
         const token = await getToken()
+        if (!token) {
+          if (!cancelled) setCompanySearchError("Session expired — please reload")
+          return
+        }
         const url = `${API_URL}/api/companies/search?q=${encodeURIComponent(trimmed)}&fairId=${encodeURIComponent(fairId || "")}`
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
         const data = await res.json()
@@ -1129,6 +1134,7 @@ export default function FairAdminDashboard() {
               />
             )}
           />
+          {companySearchError && <Alert severity="error" sx={{ mt: 2 }}>{companySearchError}</Alert>}
           {addError && <Alert severity="error" sx={{ mt: 2 }}>{addError}</Alert>}
         </DialogContent>
         <DialogActions>

@@ -138,7 +138,9 @@ describe("FairAdminDashboard — Add Company search", () => {
     await user.type(await screen.findByLabelText(/search company/i), "xyz")
 
     await waitFor(() => {
-      expect(screen.getByText(/search failed/i)).toBeInTheDocument()
+      // Error appears in both the persistent Alert and the noOptionsText — use getAllByText
+      const matches = screen.getAllByText(/search failed/i)
+      expect(matches.length).toBeGreaterThanOrEqual(1)
     })
   })
 
