@@ -49,8 +49,10 @@ const { verifyAdmin } = require("../helpers");
 const VALID_TOKEN = "Bearer valid-token";
 
 beforeEach(() => {
-  jest.resetAllMocks();
+  jest.clearAllMocks();
+  auth.verifyIdToken.mockReset();
   auth.verifyIdToken.mockResolvedValue({ uid: "owner-uid", email: "o@test.com" });
+  verifyAdmin.mockResolvedValue(null);
 });
 
 describe("POST /api/companies — companyNameLower write", () => {
@@ -340,9 +342,17 @@ describe("GET /api/companies/search", () => {
         };
         return chain;
       }
-      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            collection: jest.fn(() => ({
+              doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue({ exists: false }) })),
+            })),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue({ exists: false }) })) };
     });
-    verifyAdmin.mockResolvedValue(null);
 
     await request(app)
       .get("/api/companies/search?q=a&fairId=f1&limit=999")
@@ -365,5 +375,19 @@ describe("GET /api/companies/search", () => {
     expect(res.status).toBe(200);
     await new Promise((r) => setImmediate(r));
     expect(updateSpy).toHaveBeenCalledWith({ companyNameLower: "acme" });
+  });
+
+  it("returns 500 when Firestore throws unexpectedly", async () => {
+    verifyAdmin.mockResolvedValue(null);
+    db.collection.mockImplementation(() => {
+      throw new Error("Firestore exploded");
+    });
+
+    const res = await request(app)
+      .get("/api/companies/search?q=acme&fairId=f1")
+      .set("Authorization", VALID_TOKEN);
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/failed to search/i);
   });
 });

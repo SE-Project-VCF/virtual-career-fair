@@ -255,7 +255,7 @@ router.get("/companies/search", verifyFirebaseToken, async (req, res) => {
       : 20;
 
     const q = rawQ.toLowerCase();
-    const prefixEnd = q + "";
+    const prefixEnd = q + "\uF8FF"; //  — high private-use char, sorts after all normal text in Firestore prefix queries
 
     const querySnap = await db
       .collection("companies")
