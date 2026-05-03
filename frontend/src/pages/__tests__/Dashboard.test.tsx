@@ -166,7 +166,7 @@ describe("Dashboard", () => {
       })
     })
 
-    it("displays Browse Company Booths card for students", async () => {
+    it("displays Booth History card for students", async () => {
       mockGetCurrentUser.mockReturnValue({
         uid: "u1",
         email: "student@test.com",
@@ -180,14 +180,15 @@ describe("Dashboard", () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByText("Browse Company Booths")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /view booth history/i })).toBeInTheDocument()
       })
 
-      const viewBoothsButton = screen.getByRole("button", { name: /browse all fairs/i })
-      expect(viewBoothsButton).toBeEnabled()
+      const historyButton = screen.getByRole("button", { name: /view booth history/i })
+      expect(historyButton).toBeEnabled()
     })
 
-    it("navigates to booths page when button clicked (when fair is live)", async () => {
+    it("navigates to booth history when student clicks View Booth History", async () => {
+      const user = userEvent.setup()
       mockGetCurrentUser.mockReturnValue({
         uid: "u1",
         email: "student@test.com",
@@ -204,8 +205,8 @@ describe("Dashboard", () => {
         expect(screen.getByText(/Career Opportunities/)).toBeInTheDocument()
       })
 
-      // Note: button is disabled when fair not live, so this just verifies it exists
-      expect(screen.getByRole("button", { name: /browse all fairs/i })).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: /view booth history/i }))
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard/booth-history")
     })
 
     it("does not fetch job invitations when getIdToken returns null", async () => {
@@ -540,7 +541,7 @@ describe("Dashboard", () => {
       expect(mockNavigate).toHaveBeenCalledWith("/companies")
     })
 
-    it("displays Browse All Booths card with disabled state when fair not live", async () => {
+    it("does not show View Booths or Booth History on company owner dashboard", async () => {
       mockGetCurrentUser.mockReturnValue({
         uid: "u2",
         email: "owner@test.com",
@@ -554,43 +555,11 @@ describe("Dashboard", () => {
       )
 
       await waitFor(() => {
-        const viewBoothsButtons = screen.getAllByRole("button", { name: /view booths/i })
-        expect(viewBoothsButtons[0]).toBeDisabled()
-      })
-    })
-
-    it("navigates to booth history when Booth History clicked (company owner)", async () => {
-      const user = userEvent.setup()
-      mockGetCurrentUser.mockReturnValue({
-        uid: "u2",
-        email: "owner@test.com",
-        role: "companyOwner",
-      })
-      vi.mocked(globalThis.fetch).mockImplementation((input: string | Request | URL) => {
-        const url = getFetchUrl(input)
-        if (url.includes("/api/fairs")) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({ fairs: [{ isLive: true }] }),
-          }) as Promise<Response>
-        }
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) }) as Promise<Response>
+        expect(screen.getByText("Team Members")).toBeInTheDocument()
       })
 
-      render(
-        <MemoryRouter>
-          <Dashboard />
-        </MemoryRouter>
-      )
-
-      await waitFor(() => {
-        const boothHistoryBtn = screen.getByRole("button", { name: /booth history/i })
-        expect(boothHistoryBtn).toBeInTheDocument()
-        expect(boothHistoryBtn).toBeEnabled()
-      })
-
-      await user.click(screen.getByRole("button", { name: /booth history/i }))
-      expect(mockNavigate).toHaveBeenCalledWith("/dashboard/booth-history")
+      expect(screen.queryByRole("button", { name: /view booths/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /booth history/i })).not.toBeInTheDocument()
     })
 
     it("displays enrolled fairs count for company owner", async () => {
