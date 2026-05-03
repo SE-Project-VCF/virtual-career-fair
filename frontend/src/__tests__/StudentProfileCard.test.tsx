@@ -1,8 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import StudentProfileCard from "../components/StudentProfileCard"
 import * as authUtilsModule from "../utils/auth"
 import * as firestoreModule from "firebase/firestore"
+
+const navMock = vi.hoisted(() => ({
+  navigate: vi.fn(),
+}))
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>()
+  return {
+    ...actual,
+    useNavigate: () => navMock.navigate,
+  }
+})
 
 // Mock Firestore
 vi.mock("firebase/firestore", () => ({
@@ -17,6 +30,7 @@ vi.mock("../firebase", () => ({
 vi.mock("../utils/auth", () => ({
   authUtils: {
     getIdToken: vi.fn(),
+    getCurrentUser: vi.fn(),
   },
 }))
 
@@ -24,6 +38,8 @@ describe("StudentProfileCard", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     global.fetch = vi.fn()
+    navMock.navigate.mockClear()
+    vi.mocked(authUtilsModule.authUtils.getCurrentUser).mockReturnValue(null)
   })
 
   describe("Loading State", () => {
@@ -635,6 +651,117 @@ describe("StudentProfileCard", () => {
         const alert = container.querySelector("[role='alert']")
         expect(alert).toBeTruthy()
       })
+    })
+  })
+
+  describe("Employer messaging", () => {
+    beforeEach(() => {
+      vi.mocked(authUtilsModule.authUtils.getCurrentUser).mockReturnValue({
+        uid: "employer-1",
+        email: "employer@example.com",
+      } as any)
+    })
+
+    it("shows Open messages when enableEmployerMessaging is true", async () => {
+      const mockGetDoc = vi.mocked(firestoreModule.getDoc)
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          firstName: "John",
+          lastName: "Doe",
+          email: "john@example.com",
+        }),
+      } as any)
+
+      render(<StudentProfileCard studentId="student-123" enableEmployerMessaging />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /open messages/i })).toBeInTheDocument()
+      })
+    })
+
+    it("navigates to chat with dmStudentId when Open messages is clicked", async () => {
+      const user = userEvent.setup()
+      const mockGetDoc = vi.mocked(firestoreModule.getDoc)
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          firstName: "John",
+          lastName: "Doe",
+          email: "john@example.com",
+        }),
+      } as any)
+
+      render(<StudentProfileCard studentId="student-123" enableEmployerMessaging />)
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /open messages/i })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole("button", { name: /open messages/i }))
+
+      expect(navMock.navigate).toHaveBeenCalledWith("/dashboard/chat", {
+        state: { dmStudentId: "student-123" },
+      })
+    })
+
+    it("does not show Open messages when viewer is the same user as the profile", async () => {
+      vi.mocked(authUtilsModule.authUtils.getCurrentUser).mockReturnValue({
+        uid: "student-123",
+        email: "self@example.com",
+      } as any)
+
+      const mockGetDoc = vi.mocked(firestoreModule.getDoc)
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          firstName: "Self",
+          lastName: "User",
+          email: "self@example.com",
+        }),
+      } as any)
+
+      render(<StudentProfileCard studentId="student-123" enableEmployerMessaging />)
+
+      await waitFor(() => {
+        expect(screen.getByText("Self User")).toBeInTheDocument()
+      })
+
+      expect(screen.queryByRole("button", { name: /open messages/i })).not.toBeInTheDocument()
+    })
+
+    it("calls onBeforeNavigateToChat before navigating", async () => {
+      const user = userEvent.setup()
+      const onBefore = vi.fn()
+      const mockGetDoc = vi.mocked(firestoreModule.getDoc)
+      mockGetDoc.mockResolvedValue({
+        exists: () => true,
+        data: () => ({
+          firstName: "John",
+          lastName: "Doe",
+          email: "john@example.com",
+        }),
+      } as any)
+
+      render(
+        <StudentProfileCard
+          studentId="student-123"
+          enableEmployerMessaging
+          onBeforeNavigateToChat={onBefore}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /open messages/i })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole("button", { name: /open messages/i }))
+
+      expect(onBefore).toHaveBeenCalled()
+      expect(navMock.navigate).toHaveBeenCalled()
+      expect(onBefore.mock.invocationCallOrder[0]).toBeLessThan(
+        navMock.navigate.mock.invocationCallOrder[0]!
+      )
     })
   })
 

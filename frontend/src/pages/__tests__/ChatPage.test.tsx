@@ -8,7 +8,24 @@ import ChatPage from "../ChatPage";
 import * as authUtils from "../../utils/auth";
 
 const mockNavigate = vi.fn();
-let mockLocationState: { state: { repId?: string } | null } = { state: null };
+
+/** Partial location; ChatPage reads `state`, `pathname`, and `search`. */
+const mockLocationState = {
+  pathname: "/",
+  search: "",
+  hash: "",
+  key: "test",
+  state: null as { repId?: string; dmStudentId?: string } | null,
+};
+
+const chatDmMock = vi.hoisted(() => ({
+  getOrCreateDirectChannel: vi.fn(),
+}));
+
+vi.mock("../../utils/chat", () => ({
+  getOrCreateDirectChannel: (uid: string, sid: string) =>
+    chatDmMock.getOrCreateDirectChannel(uid, sid),
+}));
 
 // Define mocks before using them
 const mockChannel = {
@@ -128,7 +145,12 @@ describe("ChatPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNavigate.mockClear();
-    mockLocationState = { state: null };
+    mockLocationState.pathname = "/";
+    mockLocationState.search = "";
+    mockLocationState.state = null;
+
+    chatDmMock.getOrCreateDirectChannel.mockReset();
+    chatDmMock.getOrCreateDirectChannel.mockResolvedValue(mockChannel);
 
     // Reset mock channel
     mockChannel.watch.mockClear();
@@ -743,7 +765,7 @@ describe("ChatPage", () => {
   describe("Auto-DM from Booth", () => {
     it("creates DM channel when repId is provided in location state", async () => {
       mockStreamClient.userID = "user-1";
-      mockLocationState = { state: { repId: "rep-123" } };
+      mockLocationState.state = { repId: "rep-123" };
 
       renderChatPage();
 
@@ -757,7 +779,7 @@ describe("ChatPage", () => {
 
     it("does not create DM when no repId is provided", async () => {
       mockStreamClient.userID = "user-1";
-      mockLocationState = { state: null };
+      mockLocationState.state = null;
 
       renderChatPage();
 
@@ -775,7 +797,7 @@ describe("ChatPage", () => {
     it("handles error when auto-DM creation fails", async () => {
       const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       mockStreamClient.userID = "user-1";
-      mockLocationState = { state: { repId: "rep-123" } };
+      mockLocationState.state = { repId: "rep-123" };
       
       // Make channel.watch fail
       mockChannel.watch.mockRejectedValueOnce(new Error("Failed to create channel"));
@@ -785,6 +807,67 @@ describe("ChatPage", () => {
       await waitFor(() => {
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           "CHAT: auto-DM failed",
+          expect.any(Error)
+        );
+      });
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe("Student DM from profile / shortlist", () => {
+    it("opens DM via getOrCreateDirectChannel when dmStudentId is in location state", async () => {
+      mockStreamClient.userID = "user-1";
+      mockLocationState.state = { dmStudentId: "student-99" };
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(chatDmMock.getOrCreateDirectChannel).toHaveBeenCalledWith("user-1", "student-99");
+        expect(mockNavigate).toHaveBeenCalledWith("/", {
+          replace: true,
+          state: {},
+        });
+      });
+    });
+
+    it("does not call getOrCreateDirectChannel when dmStudentId is absent", async () => {
+      mockStreamClient.userID = "user-1";
+      mockLocationState.state = null;
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
+      });
+
+      expect(chatDmMock.getOrCreateDirectChannel).not.toHaveBeenCalled();
+    });
+
+    it("skips student DM when dmStudentId matches current user", async () => {
+      mockStreamClient.userID = "user-1";
+      mockLocationState.state = { dmStudentId: "user-1" };
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("base-layout")).toBeInTheDocument();
+      });
+
+      expect(chatDmMock.getOrCreateDirectChannel).not.toHaveBeenCalled();
+    });
+
+    it("logs when open student DM fails", async () => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      mockStreamClient.userID = "user-1";
+      mockLocationState.state = { dmStudentId: "student-99" };
+      chatDmMock.getOrCreateDirectChannel.mockRejectedValueOnce(new Error("dm failed"));
+
+      renderChatPage();
+
+      await waitFor(() => {
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          "CHAT: open student DM failed",
           expect.any(Error)
         );
       });
