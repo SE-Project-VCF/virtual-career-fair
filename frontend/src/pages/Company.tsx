@@ -566,8 +566,10 @@ function OfficeLocationsOwnerCard({
   )
 }
 
-function BoothManagementCard({ companyId, navigate }: Readonly<{
+function BoothManagementCard({ companyId, legacyBoothId, navigate }: Readonly<{
   companyId: string
+  /** Fallback when /api/booths returns no rows but company still has legacy boothId */
+  legacyBoothId?: string | null
   navigate: ReturnType<typeof useNavigate>
 }>) {
   const [booths, setBooths] = useState<{ id: string; boothName?: string; industry?: string }[]>([])
@@ -706,6 +708,18 @@ function BoothManagementCard({ companyId, navigate }: Readonly<{
           >
             Create New Booth
           </Button>
+
+          {!loading && booths.map((booth) => (
+            <BoothReviewsSection
+              key={`reviews-${booth.id}`}
+              boothId={booth.id}
+              boothTitle={booth.boothName?.trim() || "Untitled booth"}
+            />
+          ))}
+
+          {!loading && booths.length === 0 && legacyBoothId && (
+            <BoothReviewsSection boothId={legacyBoothId} />
+          )}
         </CardContent>
       </Card>
     </Grid>
@@ -755,13 +769,14 @@ const JOB_FIELDS = [
   { id: "job-application-link", name: "jobApplicationLink", label: "Application URL (Optional)", key: "applicationLink" as const, placeholder: "https://company.com/apply", helperText: "External link where students can apply directly" },
 ]
 
-function BoothReviewsSection({ boothId }: Readonly<{ boothId: string }>) {
+function BoothReviewsSection({ boothId, boothTitle }: Readonly<{ boothId: string; boothTitle?: string }>) {
   const [reviews, setReviews] = useState<{ rating: number; comment: string | null; createdAt: number | null }[]>([])
   const [totalRatings, setTotalRatings] = useState(0)
   const [averageRating, setAverageRating] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     const load = async () => {
       try {
         const token = await auth.currentUser?.getIdToken()
@@ -783,12 +798,17 @@ function BoothReviewsSection({ boothId }: Readonly<{ boothId: string }>) {
 
   return (
     <Grid size={{ xs: 12 }}>
-      <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+      <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)", mt: 2 }}>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: boothTitle ? 0.5 : 3, display: "flex", alignItems: "center", gap: 1 }}>
             <BarChartIcon sx={{ color: "#388560" }} />
             Booth Reviews
           </Typography>
+          {boothTitle && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {boothTitle}
+            </Typography>
+          )}
 
           {loading && <CircularProgress size={24} />}
 
@@ -1618,6 +1638,7 @@ export default function Company() {
           {/* Booth Management Card */}
           <BoothManagementCard
             companyId={company.id}
+            legacyBoothId={company.boothId}
             navigate={navigate}
           />
 
@@ -1920,11 +1941,6 @@ export default function Company() {
               </CardContent>
             </Card>
           </Grid>
-
-          {/* Booth Reviews */}
-          {company.boothId && (
-            <BoothReviewsSection boothId={company.boothId} />
-          )}
 
           {/* Delete Company Card (Owner only) */}
           <DeleteCompanyCard
