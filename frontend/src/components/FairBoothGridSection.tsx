@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, type ElementType, type ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Box,
@@ -46,13 +46,111 @@ const INDUSTRY_LABELS: Record<string, string> = {
   other: "Other",
 }
 
+const META_ROW_SX = {
+  display: "flex",
+  alignItems: "center",
+  gap: 0.5,
+  color: "text.secondary",
+  mb: 0.5,
+} as const
+
+function BoothMetaRow({ Icon, label }: Readonly<{ Icon: ElementType; label: ReactNode }>) {
+  return (
+    <Box sx={META_ROW_SX}>
+      <Icon fontSize="small" />
+      <Typography variant="body2">{label}</Typography>
+    </Box>
+  )
+}
+
+function FairBoothCard({ booth, fairId }: Readonly<{ booth: Booth; fairId: string }>) {
+  const navigate = useNavigate()
+  const boothPath = `/fair/${fairId}/booth/${booth.id}`
+  const goToBooth = () => navigate(boothPath)
+
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        borderRadius: 2,
+        cursor: "pointer",
+        overflow: "hidden",
+        transition: "box-shadow 0.2s ease",
+        "&:hover": {
+          boxShadow: 3,
+          borderColor: alpha(ACCENT_GREEN, 0.45),
+        },
+      }}
+      onClick={goToBooth}
+    >
+      <Box
+        sx={{
+          height: 88,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "grey.50",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          px: 2,
+        }}
+      >
+        {booth.logoUrl ? (
+          <img
+            src={booth.logoUrl}
+            alt={booth.companyName}
+            style={{ maxHeight: 56, maxWidth: "100%", objectFit: "contain" }}
+          />
+        ) : (
+          <BusinessIcon sx={{ fontSize: 40, color: "grey.300" }} aria-hidden />
+        )}
+      </Box>
+
+      <CardContent sx={{ flexGrow: 1, pt: 2 }}>
+        <Typography variant="subtitle1" fontWeight={700} gutterBottom component="div">
+          {booth.companyName}
+        </Typography>
+
+        {booth.industry && (
+          <BoothMetaRow Icon={BusinessIcon} label={INDUSTRY_LABELS[booth.industry] ?? booth.industry} />
+        )}
+        {booth.companySize && <BoothMetaRow Icon={PeopleIcon} label={booth.companySize} />}
+        {booth.location && <BoothMetaRow Icon={LocationOnIcon} label={booth.location} />}
+      </CardContent>
+
+      <Box sx={{ px: 2, pb: 2, pt: 0 }}>
+        <Button
+          variant="contained"
+          fullWidth
+          disableElevation
+          endIcon={<ArrowForwardIcon />}
+          onClick={(e) => {
+            e.stopPropagation()
+            goToBooth()
+          }}
+          sx={{
+            background: `linear-gradient(135deg, ${ACCENT_GREEN} 0%, #2d6b4d 100%)`,
+            "&:hover": {
+              background: `linear-gradient(135deg, #2f7351 0%, #245339 100%)`,
+            },
+          }}
+        >
+          View Booth
+        </Button>
+      </Box>
+    </Card>
+  )
+}
+
 export interface FairBoothGridSectionProps {
   /** Heading above the grid (default: "{fair name} — Booths") */
   sectionTitle?: string
 }
 
 export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoothGridSectionProps>) {
-  const navigate = useNavigate()
   const { fair, isLive, loading: fairLoading, fairId } = useFair()
   const user = authUtils.getCurrentUser()
   const [booths, setBooths] = useState<Booth[]>([])
@@ -164,100 +262,12 @@ export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoot
       )}
 
       <Grid container spacing={3}>
-        {booths.map((booth) => (
-          <Grid size={{ xs: 12, sm: 6, md: 4 }} key={booth.id}>
-            <Card
-              variant="outlined"
-              sx={{
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                borderRadius: 2,
-                cursor: "pointer",
-                overflow: "hidden",
-                transition: "box-shadow 0.2s ease",
-                "&:hover": {
-                  boxShadow: 3,
-                  borderColor: alpha(ACCENT_GREEN, 0.45),
-                },
-              }}
-              onClick={() => navigate(`/fair/${fairId}/booth/${booth.id}`)}
-            >
-              <Box
-                sx={{
-                  height: 88,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  bgcolor: "grey.50",
-                  borderBottom: "1px solid",
-                  borderColor: "divider",
-                  px: 2,
-                }}
-              >
-                {booth.logoUrl ? (
-                  <img
-                    src={booth.logoUrl}
-                    alt={booth.companyName}
-                    style={{ maxHeight: 56, maxWidth: "100%", objectFit: "contain" }}
-                  />
-                ) : (
-                  <BusinessIcon sx={{ fontSize: 40, color: "grey.300" }} aria-hidden />
-                )}
-              </Box>
-
-              <CardContent sx={{ flexGrow: 1, pt: 2 }}>
-                <Typography variant="subtitle1" fontWeight={700} gutterBottom component="div">
-                  {booth.companyName}
-                </Typography>
-
-                {booth.industry && (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "text.secondary", mb: 0.5 }}>
-                    <BusinessIcon fontSize="small" />
-                    <Typography variant="body2">
-                      {INDUSTRY_LABELS[booth.industry] ?? booth.industry}
-                    </Typography>
-                  </Box>
-                )}
-
-                {booth.companySize && (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "text.secondary", mb: 0.5 }}>
-                    <PeopleIcon fontSize="small" />
-                    <Typography variant="body2">{booth.companySize}</Typography>
-                  </Box>
-                )}
-
-                {booth.location && (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "text.secondary", mb: 0.5 }}>
-                    <LocationOnIcon fontSize="small" />
-                    <Typography variant="body2">{booth.location}</Typography>
-                  </Box>
-                )}
-              </CardContent>
-
-              <Box sx={{ px: 2, pb: 2, pt: 0 }}>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  disableElevation
-                  endIcon={<ArrowForwardIcon />}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    navigate(`/fair/${fairId}/booth/${booth.id}`)
-                  }}
-                  sx={{
-                    background: `linear-gradient(135deg, ${ACCENT_GREEN} 0%, #2d6b4d 100%)`,
-                    "&:hover": {
-                      background: `linear-gradient(135deg, #2f7351 0%, #245339 100%)`,
-                    },
-                  }}
-                >
-                  View Booth
-                </Button>
-              </Box>
-            </Card>
-          </Grid>
-        ))}
+        {fairId &&
+          booths.map((booth) => (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={booth.id}>
+              <FairBoothCard booth={booth} fairId={fairId} />
+            </Grid>
+          ))}
       </Grid>
     </Box>
   )
