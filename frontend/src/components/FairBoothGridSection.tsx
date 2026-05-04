@@ -19,8 +19,8 @@ import LocationOnIcon from "@mui/icons-material/LocationOn"
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
-import { auth } from "../firebase"
-import { API_URL } from "../config"
+import { INDUSTRY_LABELS } from "../utils/boothConstants"
+import { fetchFairBoothsForFair } from "../utils/fairBoothsApi"
 
 const ACCENT_GREEN = "#388560"
 
@@ -32,18 +32,6 @@ interface Booth {
   location: string | null
   logoUrl?: string | null
   companyId: string
-}
-
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
 }
 
 const META_ROW_SX = {
@@ -145,6 +133,18 @@ function FairBoothCard({ booth, fairId }: Readonly<{ booth: Booth; fairId: strin
   )
 }
 
+function resolveBoothCountLine(loading: boolean, error: string, boothCount: number): string | undefined {
+  if (loading || error) return undefined
+  return boothCount === 1 ? "1 company" : `${boothCount} companies`
+}
+
+function resolveFairBoothSubtitle(isLive: boolean, fairLoading: boolean, isAdmin: boolean): string | undefined {
+  if (fairLoading) return undefined
+  if (isLive) return "Browse exhibitors and visit company booths."
+  if (!isAdmin) return "Booths unlock when the fair goes live."
+  return undefined
+}
+
 export interface FairBoothGridSectionProps {
   /** Heading above the grid (default: "{fair name} — Booths") */
   sectionTitle?: string
@@ -163,27 +163,15 @@ export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoot
   }, [fairLoading, fairId])
 
   const fetchBooths = async () => {
+    setLoading(true)
+    setError("")
     try {
-      setLoading(true)
-      setError("")
-
-      const headers: Record<string, string> = {}
-      const token = await auth.currentUser?.getIdToken()
-      if (token) headers.Authorization = `Bearer ${token}`
-
-      const res = await fetch(`${API_URL}/api/fairs/${fairId}/booths`, { headers })
-
-      if (res.status === 403) {
-        setError("The career fair is not currently live.")
+      const result = await fetchFairBoothsForFair<Booth>(fairId!)
+      if (!result.ok) {
+        setError(result.error)
         return
       }
-      if (!res.ok) throw new Error("Failed to load booths")
-
-      const data = await res.json()
-      setBooths(data.booths || [])
-    } catch (err) {
-      console.error(err)
-      setError("Failed to load booths")
+      setBooths(result.booths)
     } finally {
       setLoading(false)
     }
@@ -193,19 +181,13 @@ export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoot
   const heading =
     sectionTitle ?? `${fair?.name ?? "Career Fair"} — Booths`
 
-  const boothCountLine =
-    !loading && !error
-      ? booths.length === 1
-        ? "1 company"
-        : `${booths.length} companies`
-      : undefined
+  const boothCountLine = resolveBoothCountLine(loading, error, booths.length)
 
-  const subtitle =
-    isLive && !fairLoading
-      ? "Browse exhibitors and visit company booths."
-      : !fairLoading && !isLive && !isAdmin
-        ? "Booths unlock when the fair goes live."
-        : undefined
+  const subtitle = resolveFairBoothSubtitle(isLive, fairLoading, isAdmin)
+
+  const secondaryHeadingLines = [boothCountLine, subtitle].filter(
+    (line): line is string => Boolean(line)
+  )
 
   return (
     <Box sx={{ mt: 4 }}>
@@ -213,16 +195,11 @@ export default function FairBoothGridSection({ sectionTitle }: Readonly<FairBoot
         <Typography variant="h5" component="h2" fontWeight={700}>
           {heading}
         </Typography>
-        {!loading && !error && boothCountLine && (
-          <Typography variant="body2" color="text.secondary">
-            {boothCountLine}
+        {secondaryHeadingLines.map((line) => (
+          <Typography key={line} variant="body2" color="text.secondary">
+            {line}
           </Typography>
-        )}
-        {subtitle && (
-          <Typography variant="body2" color="text.secondary">
-            {subtitle}
-          </Typography>
-        )}
+        ))}
       </Stack>
 
       {!fairLoading && !isLive && !isAdmin && (
