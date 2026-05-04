@@ -27,6 +27,7 @@ import {
   IconButton,
   Chip,
   InputAdornment,
+  Badge,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -83,6 +84,12 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
   const [dateTo, setDateTo] = useState("")
   const [sortColumn, setSortColumn] = useState<SortColumn>("status")
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc")
+  const [pendingRequestCounts, setPendingRequestCounts] = useState<Record<string, number>>({})
+
+  const totalPendingEnrollmentRequests = useMemo(
+    () => Object.values(pendingRequestCounts).reduce((a, n) => a + n, 0),
+    [pendingRequestCounts],
+  )
 
   const toggleStatus = (status: FairStatus) => {
     setActiveStatuses((prev) => {
@@ -168,6 +175,20 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
       if (res.ok) {
         const data = await res.json()
         setFairs(data.fairs || [])
+      }
+      const token = await auth.currentUser?.getIdToken()
+      if (token) {
+        const cRes = await fetch(`${API_URL}/api/fairs/pending-enrollment-request-counts`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (cRes.ok) {
+          const cData = await cRes.json()
+          setPendingRequestCounts(cData.counts && typeof cData.counts === "object" ? cData.counts : {})
+        } else {
+          setPendingRequestCounts({})
+        }
+      } else {
+        setPendingRequestCounts({})
       }
     } finally {
       setLoadingFairs(false)
@@ -286,6 +307,13 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
         </Box>
 
         {toggleError && <Alert severity="error" sx={{ mb: 2 }}>{toggleError}</Alert>}
+
+        {!loadingFairs && totalPendingEnrollmentRequests > 0 && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {totalPendingEnrollmentRequests} pending enrollment request
+            {totalPendingEnrollmentRequests === 1 ? "" : "s"} across fairs — open <strong>Manage</strong> for a fair to review.
+          </Alert>
+        )}
 
         {loadingFairs && <CircularProgress size={24} />}
         {!loadingFairs && fairs.length === 0 && (
@@ -414,7 +442,24 @@ function FairsManagementPanel({ navigate }: Readonly<{ navigate: ReturnType<type
                       }
                       return (
                         <TableRow key={fair.id}>
-                          <TableCell>{fair.name}</TableCell>
+                          <TableCell>
+                            <Badge
+                              color="error"
+                              badgeContent={pendingRequestCounts[fair.id] || 0}
+                              invisible={(pendingRequestCounts[fair.id] || 0) === 0}
+                              sx={{
+                                "& .MuiBadge-badge": {
+                                  fontWeight: 700,
+                                  right: -10,
+                                  top: 4,
+                                },
+                              }}
+                            >
+                              <Typography component="span" sx={{ pr: (pendingRequestCounts[fair.id] || 0) > 0 ? 1.5 : 0 }}>
+                                {fair.name}
+                              </Typography>
+                            </Badge>
+                          </TableCell>
                           <TableCell>
                             <Chip label={status} size="small" color={chipColor[status]} />
                           </TableCell>

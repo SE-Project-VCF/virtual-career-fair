@@ -38,6 +38,17 @@ function formatDate(ms: number | null): string {
   return new Date(ms).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })
 }
 
+/** Matches backend: requests only before fair start (when scheduled) and not after end. */
+function fairAllowsEnrollmentRequest(f: {
+  startTime: number | null
+  endTime: number | null
+}): boolean {
+  const now = Date.now()
+  if (f.endTime != null && now >= f.endTime) return false
+  if (f.startTime != null && now >= f.startTime) return false
+  return true
+}
+
 export default function FairLanding() {
   const navigate = useNavigate()
   const { fair, isLive, loading, fairId } = useFair()
@@ -60,6 +71,13 @@ export default function FairLanding() {
   const [companyBooths, setCompanyBooths] = useState<{ id: string; boothName?: string }[]>([])
   const [selectedBoothIds, setSelectedBoothIds] = useState<string[]>([])
   const [loadingBooths, setLoadingBooths] = useState(false)
+  const [joinMode, setJoinMode] = useState<"invite" | "request">("invite")
+  const [requestMessage, setRequestMessage] = useState("")
+  const [requestSubmitting, setRequestSubmitting] = useState(false)
+  const [pendingEnrollment, setPendingEnrollment] = useState<{
+    status: string
+    rejectReason?: string | null
+  } | null>(null)
 
   const isCompanyUser = user?.role === "companyOwner" || user?.role === "representative"
 
@@ -92,6 +110,11 @@ export default function FairLanding() {
           | undefined
         setIsEnrolled(!!entry)
         setEnrolledCompanyId(entry?.companyId ?? null)
+
+        const pend = (data.pendingEnrollmentRequests || []).find(
+          (p: { fairId: string }) => p.fairId === fairId,
+        ) as { status?: string; rejectReason?: string | null } | undefined
+        setPendingEnrollment(pend ? { status: pend.status || "pending", rejectReason: pend.rejectReason } : null)
       } catch (err) {
         console.error("Error loading enrollment:", err)
       } finally {
@@ -102,14 +125,19 @@ export default function FairLanding() {
     loadEnrollment()
   }, [fairId, isCompanyUser])
 
+  const effectiveJoinCompanyId =
+    user?.role === "companyOwner"
+      ? joinCompanyId || ownedCompanies[0]?.id || ""
+      : user?.companyId || ""
+
   useEffect(() => {
-    if (!joinDialogOpen || !user?.companyId) return
+    if (!joinDialogOpen || !effectiveJoinCompanyId) return
     const fetchBooths = async () => {
       setLoadingBooths(true)
       try {
         const firebaseUser = await waitForFirebaseUser()
         const token = await firebaseUser?.getIdToken()
-        const res = await fetch(`${API_URL}/api/booths?companyId=${user.companyId}`, {
+        const res = await fetch(`${API_URL}/api/booths?companyId=${effectiveJoinCompanyId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (res.ok) {
@@ -125,7 +153,7 @@ export default function FairLanding() {
       }
     }
     fetchBooths()
-  }, [joinDialogOpen, user?.companyId])
+  }, [joinDialogOpen, effectiveJoinCompanyId, user?.role])
 
   useEffect(() => {
     if (!joinDialogOpen || user?.role !== "companyOwner" || !user?.uid) return
@@ -145,6 +173,11 @@ export default function FairLanding() {
       cancelled = true
     }
   }, [joinDialogOpen, user?.role, user?.uid])
+
+  useEffect(() => {
+    if (!joinDialogOpen || !fair) return
+    if (!fairAllowsEnrollmentRequest(fair)) setJoinMode("invite")
+  }, [joinDialogOpen, fair])
 
   const handleJoinFair = async () => {
     if (!inviteCode.trim()) return
@@ -194,6 +227,60 @@ export default function FairLanding() {
       setJoinError(err.message)
     } finally {
       setJoining(false)
+    }
+  }
+
+  const handleRequestEnrollment = async () => {
+    if (!fairId || !fair) return
+    if (user?.role === "companyOwner" && ownedCompanies.length > 1 && !joinCompanyId) {
+      setJoinError("Select which company is requesting to join this fair.")
+      return
+    }
+    setRequestSubmitting(true)
+    setJoinError("")
+    try {
+      const firebaseUser = await waitForFirebaseUser()
+      if (!firebaseUser) throw new Error("Not signed in.")
+      const token = await firebaseUser.getIdToken()
+      const body: { companyId?: string; boothIds?: string[]; message?: string } = {}
+      if (user?.role === "companyOwner") {
+        if (ownedCompanies.length > 1) body.companyId = joinCompanyId
+        else if (ownedCompanies.length === 1) body.companyId = ownedCompanies[0].id
+      }
+      if (selectedBoothIds.length > 0) body.boothIds = selectedBoothIds
+      const trimmed = requestMessage.trim()
+      if (trimmed) body.message = trimmed
+      const res = await fetch(`${API_URL}/api/fairs/${fairId}/enrollment-requests`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      })
+      const raw = await res.text()
+      let data: { error?: string } = {}
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data
+        } catch {
+          /* non-JSON */
+        }
+      }
+      if (!res.ok) {
+        const hint =
+          res.status === 404 && !data.error
+            ? "Not found. If the fair exists in the app, restart the API server so it loads the latest routes."
+            : undefined
+        throw new Error(data.error || hint || `Request failed (${res.status})`)
+      }
+      setPendingEnrollment({ status: "pending" })
+      setJoinDialogOpen(false)
+      setRequestMessage("")
+    } catch (err: unknown) {
+      setJoinError(err instanceof Error ? err.message : "Failed to submit request")
+    } finally {
+      setRequestSubmitting(false)
     }
   }
 
@@ -297,16 +384,31 @@ export default function FairLanding() {
           </Alert>
         )}
 
+        {pendingEnrollment?.status === "pending" && !isEnrolled && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Your enrollment request is pending admin approval.
+          </Alert>
+        )}
+
+        {pendingEnrollment?.status === "rejected" && !isEnrolled && (
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            Your enrollment request was not approved
+            {pendingEnrollment.rejectReason ? `: ${pendingEnrollment.rejectReason}` : "."}
+          </Alert>
+        )}
+
         <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-          <Button
-            variant="contained"
-            size="large"
-            endIcon={<ArrowForwardIcon />}
-            onClick={() => navigate(`/fair/${fairId}/booths`)}
-            disabled={!isLive}
-          >
-            {isLive ? "Browse Booths" : "Fair Not Live Yet"}
-          </Button>
+          {user?.role !== "representative" && (
+            <Button
+              variant="contained"
+              size="large"
+              endIcon={<ArrowForwardIcon />}
+              onClick={() => navigate(`/fair/${fairId}/booths`)}
+              disabled={!isLive}
+            >
+              {isLive ? "Browse Booths" : "Fair Not Live Yet"}
+            </Button>
+          )}
 
           {!isCompanyUser && (
             <Button
@@ -325,10 +427,22 @@ export default function FairLanding() {
               variant="outlined"
               size="large"
               color={isEnrolled ? "error" : "primary"}
-              onClick={() => (isEnrolled ? setLeaveDialogOpen(true) : setJoinDialogOpen(true))}
-              disabled={enrollmentLoading}
+              onClick={() => {
+                if (isEnrolled) setLeaveDialogOpen(true)
+                else {
+                  setJoinMode("invite")
+                  setJoinError("")
+                  setRequestMessage("")
+                  setJoinDialogOpen(true)
+                }
+              }}
+              disabled={enrollmentLoading || (!!pendingEnrollment && pendingEnrollment.status === "pending" && !isEnrolled)}
             >
-              {isEnrolled ? "Leave Fair" : "Join This Fair"}
+              {isEnrolled
+                ? "Leave Fair"
+                : pendingEnrollment?.status === "pending"
+                  ? "Request pending"
+                  : "Join This Fair"}
             </Button>
           )}
         </Box>
@@ -340,15 +454,40 @@ export default function FairLanding() {
           setJoinDialogOpen(false)
           setJoinCompanyId("")
           setOwnedCompanies([])
+          setJoinMode("invite")
+          setJoinError("")
         }}
         maxWidth="sm"
         fullWidth
       >
         <DialogTitle>Join Career Fair</DialogTitle>
         <DialogContent>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Enter the fair invite code provided by the event organizer.
-          </Typography>
+          {fair && fairAllowsEnrollmentRequest(fair) && (
+            <RadioGroup
+              row
+              value={joinMode}
+              onChange={(e) => {
+                setJoinMode(e.target.value as "invite" | "request")
+                setJoinError("")
+              }}
+              sx={{ mb: 2 }}
+            >
+              <FormControlLabel value="invite" control={<Radio />} label="I have an invite code" />
+              <FormControlLabel value="request" control={<Radio />} label="Request to join" />
+            </RadioGroup>
+          )}
+
+          {joinMode === "invite" && (
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              Enter the fair invite code provided by the event organizer.
+            </Typography>
+          )}
+          {joinMode === "request" && (
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              Submit a request for an administrator to approve your company&apos;s enrollment before the fair starts.
+            </Typography>
+          )}
+
           {user?.role === "companyOwner" && ownedCompanies.length > 1 && (
             <FormControl sx={{ mb: 2 }} component="fieldset" variant="standard" fullWidth>
               <FormLabel component="legend">Company enrolling in this fair</FormLabel>
@@ -362,39 +501,55 @@ export default function FairLanding() {
               </RadioGroup>
             </FormControl>
           )}
-          <TextField
-            label="Fair Invite Code"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-            fullWidth
-            slotProps={{ htmlInput: { maxLength: 20 } }}
-          />
-          {joinError && <Alert severity="error" sx={{ mt: 2 }}>{joinError}</Alert>}
-          {companyBooths.length > 0 && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Select booths to bring to this fair:
-              </Typography>
-              <FormGroup>
-                {companyBooths.map((booth) => (
-                  <FormControlLabel
-                    key={booth.id}
-                    control={
-                      <Checkbox
-                        checked={selectedBoothIds.includes(booth.id)}
-                        onChange={() => toggleBoothSelection(booth.id)}
-                      />
-                    }
-                    label={booth.boothName || "Untitled Booth"}
-                  />
-                ))}
-              </FormGroup>
-            </Box>
+          {joinMode === "invite" && (
+            <TextField
+              label="Fair Invite Code"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              fullWidth
+              slotProps={{ htmlInput: { maxLength: 20 } }}
+            />
           )}
-          {companyBooths.length === 0 && !loadingBooths && joinDialogOpen && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              No booths found. Create a booth on your company dashboard first.
-            </Typography>
+          {joinMode === "request" && (
+            <TextField
+              label="Message to organizers (optional)"
+              value={requestMessage}
+              onChange={(e) => setRequestMessage(e.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+          )}
+          {joinError && <Alert severity="error" sx={{ mt: 2 }}>{joinError}</Alert>}
+          {(joinMode === "invite" || joinMode === "request") && (
+            <>
+              {companyBooths.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Select booths to bring to this fair:
+                  </Typography>
+                  <FormGroup>
+                    {companyBooths.map((booth) => (
+                      <FormControlLabel
+                        key={booth.id}
+                        control={
+                          <Checkbox
+                            checked={selectedBoothIds.includes(booth.id)}
+                            onChange={() => toggleBoothSelection(booth.id)}
+                          />
+                        }
+                        label={booth.boothName || "Untitled Booth"}
+                      />
+                    ))}
+                  </FormGroup>
+                </Box>
+              )}
+              {companyBooths.length === 0 && !loadingBooths && joinDialogOpen && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                  No booths found. Create a booth on your company dashboard first.
+                </Typography>
+              )}
+            </>
           )}
         </DialogContent>
         <DialogActions>
@@ -403,21 +558,37 @@ export default function FairLanding() {
               setJoinDialogOpen(false)
               setJoinCompanyId("")
               setOwnedCompanies([])
+              setJoinMode("invite")
+              setJoinError("")
             }}
           >
             Cancel
           </Button>
-          <Button
-            variant="contained"
-            onClick={handleJoinFair}
-            disabled={
-              joining ||
-              !inviteCode.trim() ||
-              (user?.role === "companyOwner" && ownedCompanies.length > 1 && !joinCompanyId)
-            }
-          >
-            {joining ? "Joining..." : "Join Fair"}
-          </Button>
+          {joinMode === "invite" ? (
+            <Button
+              variant="contained"
+              onClick={handleJoinFair}
+              disabled={
+                joining ||
+                !inviteCode.trim() ||
+                (user?.role === "companyOwner" && ownedCompanies.length > 1 && !joinCompanyId)
+              }
+            >
+              {joining ? "Joining..." : "Join Fair"}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={handleRequestEnrollment}
+              disabled={
+                requestSubmitting ||
+                (user?.role === "companyOwner" && ownedCompanies.length > 1 && !joinCompanyId) ||
+                !fairAllowsEnrollmentRequest(fair ?? { startTime: null, endTime: null })
+              }
+            >
+              {requestSubmitting ? "Submitting..." : "Submit request"}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

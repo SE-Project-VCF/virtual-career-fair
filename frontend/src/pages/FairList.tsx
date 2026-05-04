@@ -28,6 +28,8 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Checkbox,
+  FormGroup,
 } from "@mui/material"
 import { alpha } from "@mui/material/styles"
 import EventIcon from "@mui/icons-material/Event"
@@ -89,6 +91,13 @@ function formatDate(ms: number | null): string {
   })
 }
 
+function fairAllowsEnrollmentRequest(f: Fair): boolean {
+  const now = Date.now()
+  if (f.endTime != null && now >= f.endTime) return false
+  if (f.startTime != null && now >= f.startTime) return false
+  return true
+}
+
 /** Live first, then upcoming, then ended; within each group by start time (see inline comments). */
 function sortFairsByStatus(fairsList: Fair[]): Fair[] {
   const now = Date.now()
@@ -129,8 +138,16 @@ export default function FairList() {
   const [joinError, setJoinError] = useState("")
   const [joinCompanyId, setJoinCompanyId] = useState("")
   const [ownedCompaniesForJoin, setOwnedCompaniesForJoin] = useState<OwnedCompanySummary[]>([])
+  const [joinMode, setJoinMode] = useState<"invite" | "request">("invite")
+  const [joinRequestMessage, setJoinRequestMessage] = useState("")
+  const [requestSubmitting, setRequestSubmitting] = useState(false)
+  const [companyBoothsJoin, setCompanyBoothsJoin] = useState<{ id: string; boothName?: string }[]>([])
+  const [selectedBoothIdsJoin, setSelectedBoothIdsJoin] = useState<string[]>([])
+  const [loadingBoothsJoin, setLoadingBoothsJoin] = useState(false)
 
-  // Leave dialog state
+  const [pendingByFair, setPendingByFair] = useState<
+    Record<string, { status: string; rejectReason?: string | null }>
+  >({})
   const [leaveDialogFairId, setLeaveDialogFairId] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState("")
@@ -342,6 +359,17 @@ export default function FairList() {
           }
         }
         setEnrolledByFair(map)
+
+        const pendMap: Record<string, { status: string; rejectReason?: string | null }> = {}
+        for (const p of data.pendingEnrollmentRequests || []) {
+          if (p.fairId) {
+            pendMap[p.fairId] = {
+              status: p.status || "pending",
+              rejectReason: p.rejectReason ?? null,
+            }
+          }
+        }
+        setPendingByFair(pendMap)
       } catch (err) {
         console.error("Error loading enrollments:", err)
       }
@@ -368,11 +396,53 @@ export default function FairList() {
     }
   }, [joinDialogFairId, user?.role, user?.uid])
 
+  const effectiveJoinCompanyId =
+    user?.role === "companyOwner"
+      ? joinCompanyId || ownedCompaniesForJoin[0]?.id || ""
+      : user?.companyId || ""
+
+  useEffect(() => {
+    if (!joinDialogFairId || !effectiveJoinCompanyId) return
+    let cancelled = false
+    void (async () => {
+      setLoadingBoothsJoin(true)
+      try {
+        const firebaseUser = auth.currentUser ?? (await waitForFirebaseUser())
+        const token = await firebaseUser?.getIdToken()
+        const res = await fetch(`${API_URL}/api/booths?companyId=${effectiveJoinCompanyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!cancelled && res.ok) {
+          const data = await res.json()
+          const booths = data.booths || []
+          setCompanyBoothsJoin(booths)
+          setSelectedBoothIdsJoin(booths.map((b: { id: string }) => b.id))
+        }
+      } catch {
+        if (!cancelled) setCompanyBoothsJoin([])
+      } finally {
+        if (!cancelled) setLoadingBoothsJoin(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [joinDialogFairId, effectiveJoinCompanyId, user?.role])
+
+  const joinDialogFair = fairs.find((f) => f.id === joinDialogFairId)
+
+  useEffect(() => {
+    if (!joinDialogFairId || !joinDialogFair) return
+    if (!fairAllowsEnrollmentRequest(joinDialogFair)) setJoinMode("invite")
+  }, [joinDialogFairId, joinDialogFair])
+
   const handleOpenJoinDialog = (fairId: string) => {
     setJoinDialogFairId(fairId)
     setInviteCode("")
     setJoinError("")
     setJoinCompanyId("")
+    setJoinMode("invite")
+    setJoinRequestMessage("")
   }
 
   const handleCloseJoinDialog = () => {
@@ -381,6 +451,16 @@ export default function FairList() {
     setJoinError("")
     setJoinCompanyId("")
     setOwnedCompaniesForJoin([])
+    setJoinMode("invite")
+    setJoinRequestMessage("")
+    setCompanyBoothsJoin([])
+    setSelectedBoothIdsJoin([])
+  }
+
+  const toggleBoothJoin = (boothId: string) => {
+    setSelectedBoothIdsJoin((prev) =>
+      prev.includes(boothId) ? prev.filter((id) => id !== boothId) : [...prev, boothId],
+    )
   }
 
   const handleJoinFair = async () => {
@@ -408,7 +488,10 @@ export default function FairList() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          ...(selectedBoothIdsJoin.length > 0 && { boothIds: selectedBoothIdsJoin }),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to join fair")
@@ -421,13 +504,76 @@ export default function FairList() {
 
       setEnrolledByFair((prev) => ({
         ...prev,
-        [joinDialogFairId]: { boothId: data.boothId || null, companyId: resolvedCompanyId },
+        [joinDialogFairId]: {
+          boothId: (data.boothIds && data.boothIds[0]) || data.boothId || null,
+          companyId: resolvedCompanyId,
+        },
       }))
       handleCloseJoinDialog()
     } catch (err: any) {
       setJoinError(err.message)
     } finally {
       setJoining(false)
+    }
+  }
+
+  const handleRequestJoinFair = async () => {
+    if (!joinDialogFairId || !joinDialogFair) return
+    if (user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && !joinCompanyId) {
+      setJoinError("Select which company is submitting this request.")
+      return
+    }
+    if (!fairAllowsEnrollmentRequest(joinDialogFair)) {
+      setJoinError("Enrollment requests are only available before this fair starts.")
+      return
+    }
+    setRequestSubmitting(true)
+    setJoinError("")
+    try {
+      const firebaseUser = auth.currentUser ?? (await waitForFirebaseUser())
+      if (!firebaseUser) throw new Error("Not signed in.")
+      const token = await firebaseUser.getIdToken()
+      const body: { companyId?: string; boothIds?: string[]; message?: string } = {}
+      if (user?.role === "companyOwner") {
+        if (ownedCompaniesForJoin.length > 1) body.companyId = joinCompanyId
+        else if (ownedCompaniesForJoin.length === 1) body.companyId = ownedCompaniesForJoin[0].id
+      }
+      if (selectedBoothIdsJoin.length > 0) body.boothIds = selectedBoothIdsJoin
+      const msg = joinRequestMessage.trim()
+      if (msg) body.message = msg
+      const res = await fetch(`${API_URL}/api/fairs/${joinDialogFairId}/enrollment-requests`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      })
+      const raw = await res.text()
+      let data: { error?: string; code?: string } = {}
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data
+        } catch {
+          /* non-JSON (e.g. proxy/HTML) */
+        }
+      }
+      if (!res.ok) {
+        const hint =
+          res.status === 404 && !data.error
+            ? "Not found. If the fair exists in the app, restart the API server so it loads the latest routes."
+            : undefined
+        throw new Error(data.error || hint || `Request failed (${res.status})`)
+      }
+      setPendingByFair((prev) => ({
+        ...prev,
+        [joinDialogFairId]: { status: "pending" },
+      }))
+      handleCloseJoinDialog()
+    } catch (err: unknown) {
+      setJoinError(err instanceof Error ? err.message : "Failed to submit request")
+    } finally {
+      setRequestSubmitting(false)
     }
   }
 
@@ -464,7 +610,6 @@ export default function FairList() {
     }
   }
 
-  const joinDialogFair = fairs.find((f) => f.id === joinDialogFairId)
   const leaveDialogFair = fairs.find((f) => f.id === leaveDialogFairId)
 
   const handleExploreViewChange = (_: unknown, next: "search" | "map" | null) => {
@@ -749,6 +894,8 @@ export default function FairList() {
             const isEnrolled = fair.id in enrolledByFair
             const enc = enrolledByFair[fair.id]
             const boothId = enc?.boothId
+            const pendingInfo = pendingByFair[fair.id]
+            const isPendingRequest = pendingInfo?.status === "pending"
 
             return (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={fair.id}>
@@ -758,15 +905,25 @@ export default function FairList() {
                   flexDirection: "column",
                   borderRadius: 2,
                   border: "1px solid",
-                  borderColor: isEnrolled ? theme.palette.secondary.main : theme.palette.divider,
+                  borderColor: isEnrolled
+                    ? theme.palette.secondary.main
+                    : isPendingRequest
+                      ? theme.palette.info.main
+                      : theme.palette.divider,
                   boxShadow: "none",
                   transition: "border-color 0.2s ease, box-shadow 0.2s ease",
                   "&:hover": {
-                    borderColor: isEnrolled ? theme.palette.secondary.dark : alpha(theme.palette.primary.main, 0.45),
+                    borderColor: isEnrolled
+                      ? theme.palette.secondary.dark
+                      : isPendingRequest
+                        ? theme.palette.info.dark
+                        : alpha(theme.palette.primary.main, 0.45),
                     boxShadow: `0 10px 28px ${alpha(theme.palette.common.black, 0.07)}`,
                   },
-                  ...(isEnrolled && {
-                    bgcolor: alpha(theme.palette.secondary.main, 0.06),
+                  ...((isEnrolled || isPendingRequest) && {
+                    bgcolor: isEnrolled
+                      ? alpha(theme.palette.secondary.main, 0.06)
+                      : alpha(theme.palette.info.main, 0.06),
                   }),
                 })}>
                   {isEnrolled && (
@@ -782,6 +939,22 @@ export default function FairList() {
                       <CheckCircleIcon sx={{ fontSize: 16 }} />
                       <Typography variant="caption" fontWeight="bold" sx={{ letterSpacing: 0.5 }}>
                         {user?.companyName ? `${user.companyName} is enrolled` : "Your company is enrolled"}
+                      </Typography>
+                    </Box>
+                  )}
+                  {!isEnrolled && isPendingRequest && (
+                    <Box sx={(theme) => ({
+                      background: `linear-gradient(90deg, ${theme.palette.info.dark} 0%, ${theme.palette.info.main} 100%)`,
+                      color: theme.palette.info.contrastText,
+                      px: 2,
+                      py: 0.75,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    })}>
+                      <CheckCircleIcon sx={{ fontSize: 16 }} />
+                      <Typography variant="caption" fontWeight="bold" sx={{ letterSpacing: 0.5 }}>
+                        Enrollment request pending approval
                       </Typography>
                     </Box>
                   )}
@@ -861,6 +1034,10 @@ export default function FairList() {
                             Leave Fair
                           </Button>
                         </>
+                      ) : isPendingRequest ? (
+                        <Button variant="outlined" color="info" disabled sx={{ flexGrow: 1 }}>
+                          Request pending
+                        </Button>
                       ) : (
                         <Button
                           variant="outlined"
@@ -884,14 +1061,37 @@ export default function FairList() {
       <Dialog
         open={joinDialogFairId !== null}
         onClose={handleCloseJoinDialog}
-        maxWidth="xs"
+        maxWidth="sm"
         fullWidth
       >
         <DialogTitle>Join {joinDialogFair?.name ?? "Fair"}</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Enter the invite code provided by the event organizer.
-          </Typography>
+          {joinDialogFair && fairAllowsEnrollmentRequest(joinDialogFair) && (
+            <RadioGroup
+              row
+              value={joinMode}
+              onChange={(e) => {
+                setJoinMode(e.target.value as "invite" | "request")
+                setJoinError("")
+              }}
+              sx={{ mb: 2 }}
+            >
+              <FormControlLabel value="invite" control={<Radio />} label="I have an invite code" />
+              <FormControlLabel value="request" control={<Radio />} label="Request to join" />
+            </RadioGroup>
+          )}
+
+          {joinMode === "invite" && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Enter the invite code provided by the event organizer.
+            </Typography>
+          )}
+          {joinMode === "request" && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Submit a request for an administrator to approve your company&apos;s enrollment before the fair starts.
+            </Typography>
+          )}
+
           {user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && (
             <FormControl sx={{ mb: 2 }} component="fieldset" variant="standard" fullWidth>
               <FormLabel component="legend">Company enrolling in this fair</FormLabel>
@@ -902,15 +1102,60 @@ export default function FairList() {
               </RadioGroup>
             </FormControl>
           )}
-          <TextField
-            label="Invite Code"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value.toUpperCase().slice(0, 12))}
-            fullWidth
-            autoFocus
-            slotProps={{ htmlInput: { maxLength: 12, style: { textTransform: "uppercase", letterSpacing: 2 } } }}
-            onKeyDown={(e) => { if (e.key === "Enter") handleJoinFair() }}
-          />
+
+          {joinMode === "invite" && (
+            <TextField
+              label="Invite Code"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase().slice(0, 12))}
+              fullWidth
+              autoFocus
+              slotProps={{ htmlInput: { maxLength: 12, style: { textTransform: "uppercase", letterSpacing: 2 } } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && joinMode === "invite") handleJoinFair()
+              }}
+            />
+          )}
+
+          {joinMode === "request" && (
+            <TextField
+              label="Message to organizers (optional)"
+              value={joinRequestMessage}
+              onChange={(e) => setJoinRequestMessage(e.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+            />
+          )}
+
+          {companyBoothsJoin.length > 0 && (joinMode === "invite" || joinMode === "request") && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Booths to include:
+              </Typography>
+              <FormGroup>
+                {companyBoothsJoin.map((booth) => (
+                  <FormControlLabel
+                    key={booth.id}
+                    control={
+                      <Checkbox
+                        checked={selectedBoothIdsJoin.includes(booth.id)}
+                        onChange={() => toggleBoothJoin(booth.id)}
+                      />
+                    }
+                    label={booth.boothName || "Untitled booth"}
+                  />
+                ))}
+              </FormGroup>
+            </Box>
+          )}
+
+          {companyBoothsJoin.length === 0 && !loadingBoothsJoin && joinDialogFairId && effectiveJoinCompanyId && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              No booths on file for this company. Create a booth on your company dashboard first.
+            </Typography>
+          )}
+
           {joinError && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {joinError}
@@ -919,17 +1164,31 @@ export default function FairList() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseJoinDialog}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleJoinFair}
-            disabled={
-              joining ||
-              !inviteCode.trim() ||
-              (user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && !joinCompanyId)
-            }
-          >
-            {joining ? "Joining..." : "Join Fair"}
-          </Button>
+          {joinMode === "invite" ? (
+            <Button
+              variant="contained"
+              onClick={handleJoinFair}
+              disabled={
+                joining ||
+                !inviteCode.trim() ||
+                (user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && !joinCompanyId)
+              }
+            >
+              {joining ? "Joining..." : "Join Fair"}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={handleRequestJoinFair}
+              disabled={
+                requestSubmitting ||
+                (user?.role === "companyOwner" && ownedCompaniesForJoin.length > 1 && !joinCompanyId) ||
+                !(joinDialogFair && fairAllowsEnrollmentRequest(joinDialogFair))
+              }
+            >
+              {requestSubmitting ? "Submitting..." : "Submit request"}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
       {/* Leave Fair confirmation dialog */}

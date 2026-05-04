@@ -459,6 +459,7 @@ describe("GET /api/fairs/my-enrollments", () => {
       .set("Authorization", authHeader());
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toEqual([]);
+    expect(res.body.pendingEnrollmentRequests).toEqual([]);
   });
 
   it("returns enrollments for user's company when enrolled", async () => {
@@ -529,6 +530,7 @@ describe("GET /api/fairs/my-enrollments", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toHaveLength(1);
+    expect(res.body.pendingEnrollmentRequests).toEqual([]);
     expect(res.body.enrollments[0].fairId).toBe("fair-id");
     expect(res.body.enrollments[0].companyId).toBe("company-id");
     expect(res.body.enrollments[0].boothId).toBe("booth-abc");
@@ -594,6 +596,7 @@ describe("GET /api/fairs/my-enrollments", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toEqual([]);
+    expect(res.body.pendingEnrollmentRequests).toEqual([]);
   });
 
   it("for companyOwner with no profile companyId, aggregates enrollments from owned companies query", async () => {
@@ -668,6 +671,7 @@ describe("GET /api/fairs/my-enrollments", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toHaveLength(1);
+    expect(res.body.pendingEnrollmentRequests).toEqual([]);
     expect(res.body.enrollments[0].companyId).toBe("owned-co-1");
     expect(res.body.enrollments[0].boothId).toBe("booth-owned");
   });
@@ -739,6 +743,7 @@ describe("GET /api/fairs/my-enrollments", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toHaveLength(1);
+    expect(res.body.pendingEnrollmentRequests).toEqual([]);
     expect(res.body.enrollments[0].companyId).toBe("rep-company");
   });
 
@@ -816,6 +821,7 @@ describe("GET /api/fairs/my-enrollments", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.enrollments).toHaveLength(2);
+    expect(res.body.pendingEnrollmentRequests).toEqual([]);
     const ids = res.body.enrollments.map((e) => e.companyId).sort();
     expect(ids).toEqual(["co-a", "co-b"]);
   });
