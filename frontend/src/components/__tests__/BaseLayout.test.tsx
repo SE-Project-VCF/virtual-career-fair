@@ -299,17 +299,18 @@ describe("BaseLayout", () => {
       await openDrawer()
       expect(screen.getByText("Manage Booth")).toBeInTheDocument()
       expect(screen.getByText("Submissions")).toBeInTheDocument()
-      expect(screen.getByText("Browse Booths")).toBeInTheDocument()
+      expect(screen.getByText("Fair announcements")).toBeInTheDocument()
+      expect(screen.queryByText("Browse Booths")).not.toBeInTheDocument()
     })
 
-    it("shows only Browse Booths for representative without companyId", async () => {
+    it("shows Fair announcements for representative without companyId", async () => {
       vi.mocked(authModule.authUtils.getCurrentUser).mockReturnValue(
         makeUser({ role: "representative", companyId: undefined })
       )
       await openDrawer()
       expect(screen.queryByText("Manage Booth")).not.toBeInTheDocument()
       expect(screen.queryByText("Submissions")).not.toBeInTheDocument()
-      expect(screen.getByText("Browse Booths")).toBeInTheDocument()
+      expect(screen.getByText("Fair announcements")).toBeInTheDocument()
     })
 
     it("shows administrator-specific items", async () => {

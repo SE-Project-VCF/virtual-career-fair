@@ -8,6 +8,7 @@ import { BrowserRouter } from "react-router-dom"
 import FairLanding from "../FairLanding"
 import * as authUtils from "../../utils/auth"
 import { useFair } from "../../contexts/FairContext"
+import { fetchOwnedCompaniesForUser } from "../../utils/ownedCompanies"
 
 const mockNavigate = vi.fn()
 
@@ -479,6 +480,10 @@ describe("FairLanding", () => {
   it("handleJoinFair: shows error when API returns an error", async () => {
     const user = userEvent.setup()
 
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
+
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
       email: "owner@company.com",
@@ -530,6 +535,10 @@ describe("FairLanding", () => {
   it("handleJoinFair: navigates to company dashboard on success when companyId is present", async () => {
     const user = userEvent.setup()
 
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
+
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
       email: "owner@company.com",
@@ -579,6 +588,10 @@ describe("FairLanding", () => {
 
   it("handleJoinFair: navigates to company dashboard when companyId is present even without boothId", async () => {
     const user = userEvent.setup()
+
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
@@ -1090,6 +1103,10 @@ describe("FairLanding", () => {
   it("handleJoinFair: navigates to company dashboard when response has boothId but no fairId", async () => {
     const user = userEvent.setup()
 
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
+
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
       email: "owner@company.com",
@@ -1224,6 +1241,9 @@ describe("FairLanding", () => {
       isLive: false,
       fairId: "f1",
     })
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
   }
 
   it("renders the company's booths as checkboxes when the join dialog opens", async () => {
