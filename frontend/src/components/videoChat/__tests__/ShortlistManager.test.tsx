@@ -184,4 +184,30 @@ describe("ShortlistManager", () => {
 
     expect(onSchedule).toHaveBeenCalledWith("stu-1", "Sam");
   });
+
+  it("calls onViewStudent when a shortlist row is clicked", async () => {
+    const onViewStudent = vi.fn();
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        shortlist: [
+          {
+            studentId: "stu-1",
+            studentName: "Sam",
+            studentEmail: "sam@test.com",
+            notes: "",
+            addedAt: 1,
+          },
+        ],
+      }),
+    });
+
+    const user = userEvent.setup();
+    render(<ShortlistManager onViewStudent={onViewStudent} />);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Sam/i })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /Sam/i }));
+
+    expect(onViewStudent).toHaveBeenCalledWith("stu-1");
+  });
 });

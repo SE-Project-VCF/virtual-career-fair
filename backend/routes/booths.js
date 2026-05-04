@@ -443,18 +443,15 @@ router.get("/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) => 
     const boothData = boothResult.data;
     const boothCompanyId = boothData.companyId;
 
-    // Get user data to verify authorization
-    const userDoc = await db.collection("users").doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ success: false, error: "User not found" });
+    if (!boothCompanyId) {
+      return res.status(400).json({ success: false, error: "Booth has no associated company" });
     }
 
-    const userData = userDoc.data();
-    const userCompanyId = userData.companyId;
-
-    // Check authorization: user's company must match booth's company
-    if (userCompanyId !== boothCompanyId) {
-      console.log(`[GET-VISITORS] Auth failed: company mismatch`);
+    // Owner or representative for this booth's company (not user.profile companyId alone —
+    // users linked to multiple companies often keep a single primary companyId on the user doc)
+    const authResult = await checkCompanyAuthorization(boothCompanyId, userId);
+    if (!authResult.authorized) {
+      console.log(`[GET-VISITORS] Auth failed: ${authResult.error}`);
       return res.status(403).json({ success: false, error: "Not authorized to view booth visitors" });
     }
 
@@ -609,13 +606,12 @@ router.get("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => 
 
     const adminErr = await verifyAdmin(userId);
     if (adminErr) {
-      // Not admin — must be owner/rep of the company that owns this booth
-      const userDoc = await db.collection("users").doc(userId).get();
-      if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
-      const companyId = userDoc.data().companyId;
-      if (!companyId) return res.status(403).json({ error: "Unauthorized" });
-      const companyDoc = await db.collection("companies").doc(companyId).get();
-      if (!companyDoc.exists || companyDoc.data().boothId !== boothId) {
+      const boothCompanyId = boothDoc.data().companyId;
+      if (!boothCompanyId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      const authResult = await checkCompanyAuthorization(boothCompanyId, userId);
+      if (!authResult.authorized) {
         return res.status(403).json({ error: "Unauthorized" });
       }
     }

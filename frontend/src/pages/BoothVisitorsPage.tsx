@@ -433,7 +433,11 @@ export default function BoothVisitorsPage() {
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
           {selectedStudent && (
-            <StudentProfileCard studentId={selectedStudent.studentId} />
+            <StudentProfileCard
+              studentId={selectedStudent.studentId}
+              enableEmployerMessaging
+              onBeforeNavigateToChat={() => setProfileDialogOpen(false)}
+            />
           )}
         </DialogContent>
         <DialogActions>

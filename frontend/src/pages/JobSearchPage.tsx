@@ -12,12 +12,16 @@ import {
   CircularProgress,
   Alert,
   Pagination,
+  Stack,
 } from "@mui/material"
 import WorkIcon from "@mui/icons-material/Work"
 import BusinessIcon from "@mui/icons-material/Business"
 import SearchIcon from "@mui/icons-material/Search"
 import LaunchIcon from "@mui/icons-material/Launch"
+import AssignmentIcon from "@mui/icons-material/Assignment"
 import BaseLayout from "../components/BaseLayout"
+import JobApplicationFormDialog from "../components/JobApplicationFormDialog"
+import type { ApplicationForm } from "../types/applicationForm"
 import { API_URL } from "../config"
 import { authUtils } from "../utils/auth"
 import { auth } from "../firebase"
@@ -45,6 +49,7 @@ interface SearchJob {
   description: string
   majorsAssociated: string
   applicationLink: string | null
+  applicationForm?: ApplicationForm | null
   locationIsRemote?: boolean
   locationCity?: string | null
   locationState?: string | null
@@ -63,6 +68,8 @@ export default function JobSearchPage() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false)
+  const [jobForApply, setJobForApply] = useState<SearchJob | null>(null)
   const fetchJobsRef = useRef<(pageNum: number) => Promise<void>>(async () => {})
 
   const { options: locationOptions, loading: locationSuggestLoading } = useGeocodeSuggest(
@@ -332,22 +339,61 @@ export default function JobSearchPage() {
                         </Typography>
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "flex-start" }}>
-                        {job.applicationLink && (
-                          <Button
-                            component="a"
-                            href={job.applicationLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            variant="contained"
-                            size="small"
-                            startIcon={<LaunchIcon />}
-                            sx={{
-                              background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
-                              fontWeight: 600,
-                            }}
-                          >
-                            Apply
-                          </Button>
+                        {(job.applicationForm?.status === "published" || job.applicationLink) && (
+                          <Stack spacing={1} sx={{ minWidth: { xs: "100%", sm: 200 }, maxWidth: 280 }}>
+                            {job.applicationForm?.status === "published" && job.applicationLink && (
+                              <Typography variant="caption" color="text.secondary">
+                                This role has two application options—choose the one you prefer.
+                              </Typography>
+                            )}
+                            {job.applicationForm?.status === "published" && (
+                              <Button
+                                type="button"
+                                variant="contained"
+                                size="small"
+                                startIcon={<AssignmentIcon />}
+                                title="Submit using this career fair's built-in application form (you stay on this site)."
+                                onClick={() => {
+                                  setJobForApply(job)
+                                  setApplyDialogOpen(true)
+                                }}
+                                sx={{
+                                  width: "100%",
+                                  background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Apply on this site
+                              </Button>
+                            )}
+                            {job.applicationLink && (
+                              <Button
+                                component="a"
+                                href={job.applicationLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                variant={job.applicationForm?.status === "published" ? "outlined" : "contained"}
+                                size="small"
+                                startIcon={<LaunchIcon />}
+                                title="Opens the employer's own application page in a new browser tab."
+                                sx={{
+                                  width: "100%",
+                                  fontWeight: 600,
+                                  ...(job.applicationForm?.status === "published"
+                                    ? {
+                                        borderColor: "#388560",
+                                        color: "#388560",
+                                        "&:hover": { borderColor: "#2d6b4d", bgcolor: "rgba(56, 133, 96, 0.06)" },
+                                      }
+                                    : {
+                                        background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                      }),
+                                }}
+                              >
+                                Apply on company site
+                              </Button>
+                            )}
+                          </Stack>
                         )}
                       </Box>
                     </Box>
@@ -372,6 +418,18 @@ export default function JobSearchPage() {
           </>
         )}
       </Container>
+
+      {jobForApply && (
+        <JobApplicationFormDialog
+          open={applyDialogOpen}
+          onClose={() => {
+            setApplyDialogOpen(false)
+            setJobForApply(null)
+          }}
+          job={jobForApply}
+          studentId={auth.currentUser?.uid ?? null}
+        />
+      )}
     </BaseLayout>
   )
 }

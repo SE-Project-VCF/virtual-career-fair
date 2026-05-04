@@ -22,6 +22,7 @@ import BaseLayout from "../components/BaseLayout";
 import { authUtils } from "../utils/auth";
 import { auth } from "../firebase";
 import { streamClient } from "../utils/streamClient";
+import { getOrCreateDirectChannel } from "../utils/chat";
 import "./ChatPage.css";
 
 const CHAT_SHELL_SX = {
@@ -34,6 +35,8 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const repIdFromBooth = location.state?.repId || null;
+  const dmStudentId =
+    typeof location.state?.dmStudentId === "string" ? location.state.dmStudentId : null;
 
   const [clientReady, setClientReady] = useState(false);
   const [activeChannel, setActiveChannel] = useState<StreamChannel | null>(null);
@@ -165,6 +168,31 @@ export default function ChatPage() {
 
     startDM();
 }, [clientReady, repIdFromBooth, client]);
+
+  /*
+  ============================================================
+   OPEN DM FROM SHORTLIST / VISITOR PROFILE (stable channel id)
+  ============================================================
+  */
+  useEffect(() => {
+    if (!clientReady) return;
+    const streamUserId = client?.userID;
+    if (!streamUserId) return;
+    if (!dmStudentId) return;
+    if (dmStudentId === streamUserId) return;
+
+    const openStudentDm = async () => {
+      try {
+        const channel = await getOrCreateDirectChannel(streamUserId, dmStudentId);
+        setActiveChannel(channel);
+        navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+      } catch (err) {
+        console.error("CHAT: open student DM failed", err);
+      }
+    };
+
+    void openStudentDm();
+  }, [clientReady, dmStudentId, client, navigate, location.pathname, location.search]);
 
 
   /* Select a channel */

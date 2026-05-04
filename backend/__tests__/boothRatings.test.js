@@ -350,7 +350,8 @@ describe("GET /api/booths/:boothId/ratings", () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
       userData: { role: "student", companyId: null },
-      boothData: { companyName: "Acme" },
+      boothData: { companyName: "Acme", companyId: "company-1" },
+      companyData: { ownerId: "owner-uid", representativeIDs: [] },
     });
     const res = await request(app)
       .get("/api/booths/booth-1/ratings")
@@ -362,8 +363,8 @@ describe("GET /api/booths/:boothId/ratings", () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
       userData: { role: "companyOwner", companyId: "company-1" },
-      boothData: { companyName: "Acme" },
-      companyData: { boothId: "different-booth" },
+      boothData: { companyName: "Acme", companyId: "company-2" },
+      companyData: { ownerId: "someone-else", representativeIDs: [] },
     });
     const res = await request(app)
       .get("/api/booths/booth-1/ratings")
@@ -375,8 +376,8 @@ describe("GET /api/booths/:boothId/ratings", () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
       userData: { role: "companyOwner", companyId: "company-1" },
-      boothData: { companyName: "Acme" },
-      companyData: { boothId: "booth-1" },
+      boothData: { companyName: "Acme", companyId: "company-1" },
+      companyData: { ownerId: "owner-uid", representativeIDs: [] },
       ratingsSnap: [
         { id: "s1", data: () => ({ rating: 5, comment: "Excellent", createdAt: { toMillis: () => 2000 } }) },
       ],

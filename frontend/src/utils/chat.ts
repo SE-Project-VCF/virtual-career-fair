@@ -1,28 +1,29 @@
 import { streamClient } from "./streamClient";
 
-export async function getOrCreateDirectChannel(
-  currentUserId: string,
-  repUserId: string
-) {
+/**
+ * Open or create a 1:1 messaging channel between two users.
+ * Uses a stable channel id (sorted member ids) so it matches NewChatDialog and avoids duplicates.
+ */
+export async function getOrCreateDirectChannel(currentUserId: string, otherUserId: string) {
   if (!streamClient) throw new Error("Stream client not initialized.");
 
-  // Look for an existing 1-on-1 messaging channel between these two users
-  const result = await streamClient.queryChannels({
-    type: "messaging",
-    member_count: 2,
-    members: { $in: [currentUserId, repUserId] },
-  });
+  const sorted = [currentUserId, otherUserId].sort((a, b) => a.localeCompare(b));
+  const channelId = `dm-${sorted[0]}-${sorted[1]}`;
 
-  if (result.length > 0) {
-    const existing = result[0];
-    await existing.watch();
-    return existing;
+  const existing = await streamClient.queryChannels(
+    { type: "messaging", cid: `messaging:${channelId}` },
+    {},
+    { limit: 1 }
+  );
+
+  if (existing.length > 0) {
+    const ch = existing[0];
+    await ch.watch();
+    return ch;
   }
 
-  // No existing channel → create a new one
-  const channelId = `dm_${currentUserId}_${repUserId}`;
   const channel = streamClient.channel("messaging", channelId, {
-    members: [currentUserId, repUserId],
+    members: sorted,
   });
 
   await channel.create();
