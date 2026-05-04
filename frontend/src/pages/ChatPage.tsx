@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type React from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
+import AddCommentIcon from "@mui/icons-material/AddComment";
 import { useNavigate, useLocation } from "react-router-dom";
 import { API_URL } from "../config";
 import type { Channel as StreamChannel } from "stream-chat";
@@ -14,19 +15,28 @@ import {
 
 import "stream-chat-react/dist/css/v2/index.css";
 
-import ChatHeader from "../components/chat/ChatHeader";
 import ChatSidebar from "../components/chat/ChatSidebar";
 import NewChatDialog from "../components/chat/NewChatDialog";
+import BaseLayout from "../components/BaseLayout";
 
 import { authUtils } from "../utils/auth";
 import { auth } from "../firebase";
 import { streamClient } from "../utils/streamClient";
+import { getOrCreateDirectChannel } from "../utils/chat";
 import "./ChatPage.css";
+
+const CHAT_SHELL_SX = {
+  minHeight: "calc(100vh - var(--base-layout-header-height, 88px))",
+  display: "flex",
+  flexDirection: "column" as const,
+};
 
 export default function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const repIdFromBooth = location.state?.repId || null;
+  const dmStudentId =
+    typeof location.state?.dmStudentId === "string" ? location.state.dmStudentId : null;
 
   const [clientReady, setClientReady] = useState(false);
   const [activeChannel, setActiveChannel] = useState<StreamChannel | null>(null);
@@ -61,6 +71,8 @@ export default function ChatPage() {
       }
       return;
     }
+
+    let removeNotificationListeners: (() => void) | undefined;
 
     const init = async () => {
       try {
@@ -114,7 +126,7 @@ export default function ChatPage() {
         client.on("notification.message_new", updateUnread);
         client.on("notification.mark_read", updateUnread);
 
-        return () => {
+        removeNotificationListeners = () => {
           client.off("notification.message_new", updateUnread);
           client.off("notification.mark_read", updateUnread);
         };
@@ -124,6 +136,9 @@ export default function ChatPage() {
     };
 
     void init();
+    return () => {
+      removeNotificationListeners?.();
+    };
   }, [user, client]);
 
   /*
@@ -153,6 +168,31 @@ export default function ChatPage() {
 
     startDM();
 }, [clientReady, repIdFromBooth, client]);
+
+  /*
+  ============================================================
+   OPEN DM FROM SHORTLIST / VISITOR PROFILE (stable channel id)
+  ============================================================
+  */
+  useEffect(() => {
+    if (!clientReady) return;
+    const streamUserId = client?.userID;
+    if (!streamUserId) return;
+    if (!dmStudentId) return;
+    if (dmStudentId === streamUserId) return;
+
+    const openStudentDm = async () => {
+      try {
+        const channel = await getOrCreateDirectChannel(streamUserId, dmStudentId);
+        setActiveChannel(channel);
+        navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+      } catch (err) {
+        console.error("CHAT: open student DM failed", err);
+      }
+    };
+
+    void openStudentDm();
+  }, [clientReady, dmStudentId, client, navigate, location.pathname, location.search]);
 
 
   /* Select a channel */
@@ -223,104 +263,130 @@ export default function ChatPage() {
   // If streamClient is missing entirely
   if (!client) {
     return (
-      <Box className="chat-center-container">
-        <Box className="chat-center-content">
-          <Typography variant="h6" className="chat-not-available">
-            Chat Not Available
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Stream Chat API key is not configured. Please set VITE_STREAM_API_KEY in your environment variables.
-          </Typography>
+      <BaseLayout pageTitle="Chat" showChat={false} onHeaderBack={() => navigate("/dashboard")}>
+        <Box sx={CHAT_SHELL_SX}>
+          <Box className="chat-center-container">
+            <Box className="chat-center-content">
+              <Typography variant="h6" className="chat-not-available">
+                Chat Not Available
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Stream Chat API key is not configured. Please set VITE_STREAM_API_KEY in your environment variables.
+              </Typography>
+            </Box>
+          </Box>
         </Box>
-      </Box>
+      </BaseLayout>
     );
   }
 
   // SAFE LOADING RETURN (NO HOOKS HERE)
   if (!clientReady || !client.userID) {
     return (
-      <Box className="chat-loading-container">
-        <CircularProgress />
-      </Box>
+      <BaseLayout pageTitle="Chat" showChat={false} onHeaderBack={() => navigate("/dashboard")}>
+        <Box sx={CHAT_SHELL_SX}>
+          <Box className="chat-loading-container">
+            <CircularProgress />
+          </Box>
+        </Box>
+      </BaseLayout>
     );
   }
 
   // Main chat UI
   const titleSuffix = unreadCount ? ` (${unreadCount})` : "";
   return (
-    <Box className="chat-page">
-      <ChatHeader
-        title={`Messages${titleSuffix}`}
-        onNewChat={() => setDialogOpen(true)}
-        onBack={() => navigate("/dashboard")}
-      />
+    <BaseLayout
+      pageTitle={`Messages${titleSuffix}`}
+      showChat={false}
+      onHeaderBack={() => navigate("/dashboard")}
+      headerActions={
+        <Tooltip title="Start New Chat">
+          <IconButton
+            onClick={() => setDialogOpen(true)}
+            aria-label="Start New Chat"
+            sx={{
+              color: "white",
+              background: "rgba(255,255,255,0.15)",
+              border: "1px solid rgba(255,255,255,0.3)",
+              "&:hover": { background: "rgba(255,255,255,0.25)" },
+            }}
+          >
+            <AddCommentIcon />
+          </IconButton>
+        </Tooltip>
+      }
+    >
+      <Box sx={CHAT_SHELL_SX}>
+        <Box className="chat-page">
+          <Box className="chat-main-wrapper">
+            <Chat client={client} theme="messaging light">
+              <ChatSidebar
+                client={client}
+                onSelectChannel={handleSelectChannel}
+                activeChannel={activeChannel}
+              />
 
-      <Box className="chat-main-wrapper">
-        <Chat client={client} theme="messaging light">
-          <ChatSidebar
-            client={client}
-            onSelectChannel={handleSelectChannel}
-            activeChannel={activeChannel}
-          />
+              <Box className="chat-messages-wrapper">
+                {activeChannel ? (
+                  <Channel channel={activeChannel}>
+                    <Window>
+                      <Box className="chat-messages-container">
+                        {/* MESSAGE LIST */}
+                        <Box className="chat-message-list">
+                          <MessageList />
+                        </Box>
 
-          <Box className="chat-messages-wrapper">
-            {activeChannel ? (
-              <Channel channel={activeChannel}>
-                <Window>
-                  <Box className="chat-messages-container">
-                    {/* MESSAGE LIST */}
-                    <Box className="chat-message-list">
-                      <MessageList />
-                    </Box>
+                        {/* INPUT BAR */}
+                        <Box className="chat-input-bar">
+                          {/* FILE UPLOAD */}
+                          <label className="chat-file-upload-label">
+                            {"📎"}
+                            <input
+                              type="file"
+                              multiple
+                              className="chat-file-upload-input"
+                              onChange={(e) => {
+                                if (e.target.files) {
+                                  void sendFiles(e.target.files);
+                                  e.target.value = "";
+                                }
+                              }}
+                            />
+                          </label>
 
-                    {/* INPUT BAR */}
-                    <Box className="chat-input-bar">
-                      {/* FILE UPLOAD */}
-                      <label className="chat-file-upload-label">
-                        {"📎"}
-                        <input
-                          type="file"
-                          multiple
-                          className="chat-file-upload-input"
-                          onChange={(e) => {
-                            if (e.target.files) {
-                              void sendFiles(e.target.files);
-                              e.target.value = "";
-                            }
-                          }}
-                        />
-                      </label>
-
-                      {/* TEXTAREA */}
-                      <textarea
-                        placeholder="Begin typing to send a message..."
-                        value={draftMessage}
-                        onChange={(e) => setDraftMessage(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onInput={handleInput}
-                        className="chat-textarea"
-                      />
-                    </Box>
+                          {/* TEXTAREA */}
+                          <textarea
+                            placeholder="Begin typing to send a message..."
+                            value={draftMessage}
+                            onChange={(e) => setDraftMessage(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            onInput={handleInput}
+                            className="chat-textarea"
+                          />
+                        </Box>
+                      </Box>
+                    </Window>
+                  </Channel>
+                ) : (
+                  <Box className="chat-empty-state">
+                    Select a chat or start a new one
                   </Box>
-                </Window>
-              </Channel>
-            ) : (
-              <Box className="chat-empty-state">
-                Select a chat or start a new one
+                )}
               </Box>
-            )}
+            </Chat>
           </Box>
-        </Chat>
-      </Box>
 
-      <NewChatDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        client={client}
-        currentUser={user}
-        clientReady={clientReady}
-        onSelectChannel={handleSelectChannel}
-      />
-    </Box>
+          <NewChatDialog
+            open={dialogOpen}
+            onClose={() => setDialogOpen(false)}
+            client={client}
+            currentUser={user}
+            clientReady={clientReady}
+            onSelectChannel={handleSelectChannel}
+          />
+        </Box>
+      </Box>
+    </BaseLayout>
   );
 }

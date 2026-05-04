@@ -1,6 +1,6 @@
 /// <reference types="vitest/globals" />
 /// <reference types="@testing-library/jest-dom" />
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { BrowserRouter } from "react-router-dom"
@@ -78,6 +78,23 @@ describe("BaseLayout", () => {
       expect(screen.getByText("My Page")).toBeInTheDocument()
     })
 
+    it("renders header back button and calls onHeaderBack when provided with pageTitle", async () => {
+      const user = userEvent.setup()
+      const onBack = vi.fn()
+      renderLayout({ children: <div />, pageTitle: "Chat", onHeaderBack: onBack })
+      await user.click(screen.getByRole("button", { name: "Back to Dashboard" }))
+      expect(onBack).toHaveBeenCalledTimes(1)
+    })
+
+    it("renders headerActions before the Chat button", () => {
+      renderLayout({
+        children: <div />,
+        pageTitle: "Messages",
+        headerActions: <span data-testid="extra-action">Extra</span>,
+      })
+      expect(screen.getByTestId("extra-action")).toBeInTheDocument()
+    })
+
     it("does not render a page title when prop is omitted", () => {
       renderLayout({ children: <div /> })
       // Only branding text should be present, no extra titles
@@ -143,6 +160,37 @@ describe("BaseLayout", () => {
   it("renders the ProfileMenu", () => {
     renderLayout()
     expect(screen.getByTestId("profile-menu")).toBeInTheDocument()
+  })
+
+  // ─── Header height (ResizeObserver) ───────────────────────────────────────
+
+  describe("header ResizeObserver", () => {
+    let observeSpy: ReturnType<typeof vi.fn>
+    let disconnectSpy: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      observeSpy = vi.fn()
+      disconnectSpy = vi.fn()
+      function MockResizeObserver(
+        this: { observe: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> },
+        _cb: ResizeObserverCallback
+      ) {
+        this.observe = observeSpy
+        this.disconnect = disconnectSpy
+      }
+      vi.stubGlobal("ResizeObserver", MockResizeObserver)
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it("attaches ResizeObserver to the header and disconnects on unmount", () => {
+      const { unmount } = renderLayout()
+      expect(observeSpy).toHaveBeenCalled()
+      unmount()
+      expect(disconnectSpy).toHaveBeenCalled()
+    })
   })
 
   // ─── Navigation drawer ─────────────────────────────────────────────────────

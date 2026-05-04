@@ -157,7 +157,7 @@ describe("POST /api/fairs/:fairId/enroll", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.fairId).toBe("fair1");
-    expect(res.body.boothId).toBe("fairBooth1");
+    expect(res.body.boothIds[0]).toBe("fairBooth1");
     expect(batch.commit).toHaveBeenCalled();
   });
 

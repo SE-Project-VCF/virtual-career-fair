@@ -266,18 +266,36 @@ function setupDbForBoothVisitors(options = {}) {
     visitors = [],
     userCompanyId = "company-A",
     boothCompanyId = "company-A",
+    authUserId = "company-rep",
+    companyOwnerId,
+    companyRepresentativeIds = [],
   } = options;
+
+  const ownerId = companyOwnerId !== undefined ? companyOwnerId : authUserId;
+  const representativeIDs = companyRepresentativeIds;
 
   const visitorDocs = visitors.map((v) =>
     mockDocSnap(v, true, v.studentId)
   );
 
   db.collection.mockImplementation((collName) => {
+    if (collName === "companies") {
+      return {
+        doc: jest.fn((cid) => ({
+          get: jest.fn().mockResolvedValue(
+            cid === boothCompanyId
+              ? mockDocSnap({ ownerId, representativeIDs }, true, cid)
+              : mockDocSnap(null, false, cid)
+          ),
+        })),
+      };
+    }
+
     if (collName === "users") {
       return {
         doc: jest.fn(() => ({
           get: jest.fn().mockResolvedValue(
-            mockDocSnap({ companyId: userCompanyId }, true, "company-rep")
+            mockDocSnap({ companyId: userCompanyId }, true, authUserId)
           ),
         })),
       };
@@ -584,21 +602,17 @@ describe("GET /api/booth-visitors/:boothId - Company Analytics with Filtering/So
     expect(res.status).toBe(404);
   });
 
-  it("returns 404 when user not found", async () => {
+  it("returns 400 when booth has no associated company", async () => {
     db.collection.mockImplementation((collName) => {
-      if (collName === "users") {
-        return {
-          doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
-          })),
-        };
-      }
       if (collName === "booths") {
         return {
           doc: jest.fn(() => ({
             get: jest.fn().mockResolvedValue(
-              mockDocSnap({ companyId: "company-A" }, true)
+              mockDocSnap({ currentVisitors: [] }, true, "booth-123")
             ),
+            collection: jest.fn(() => ({
+              get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+            })),
           })),
         };
       }
@@ -614,13 +628,16 @@ describe("GET /api/booth-visitors/:boothId - Company Analytics with Filtering/So
       .get("/api/booth-visitors/booth-123")
       .set("Authorization", companyAuth());
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no associated company/i);
   });
 
-  it("returns 403 when company IDs don't match", async () => {
+  it("returns 403 when user is not owner or representative of booth company", async () => {
     setupDbForBoothVisitors({
       userCompanyId: "company-A",
       boothCompanyId: "company-B",
+      companyOwnerId: "some-other-owner",
+      companyRepresentativeIds: [],
     });
 
     const res = await request(app)
@@ -628,6 +645,22 @@ describe("GET /api/booth-visitors/:boothId - Company Analytics with Filtering/So
       .set("Authorization", companyAuth());
 
     expect(res.status).toBe(403);
+  });
+
+  it("returns 200 when user.companyId differs but user is a representative of booth company", async () => {
+    setupDbForBoothVisitors({
+      userCompanyId: "company-A",
+      boothCompanyId: "company-B",
+      companyOwnerId: "some-owner",
+      companyRepresentativeIds: ["company-rep"],
+    });
+
+    const res = await request(app)
+      .get("/api/booth-visitors/booth-123")
+      .set("Authorization", companyAuth());
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 
   it("returns all visitors when authorized", async () => {

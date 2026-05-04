@@ -159,6 +159,10 @@ describe("POST /api/job-invitations/send", () => {
     setupDbMock({
       jobs: { docData: { companyId: "c1", name: "Developer" }, docExists: true },
       users: { docData: { role: "companyOwner", companyId: "c2" }, docExists: true },
+      companies: {
+        docData: { ownerId: "someone-else", representativeIDs: [] },
+        docExists: true,
+      },
     });
 
     const res = await request(app)
@@ -211,7 +215,13 @@ describe("POST /api/job-invitations/send", () => {
       if (name === "companies") {
         return {
           doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ companyName: "Tech Corp" }, true, "c1")),
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap(
+                { companyName: "Tech Corp", ownerId: "u1", representativeIDs: [] },
+                true,
+                "c1"
+              )
+            ),
           })),
         };
       }
@@ -512,6 +522,15 @@ describe("GET /api/job-invitations/sent", () => {
           get: jest.fn().mockResolvedValue(mockQuerySnap([])),
         };
       }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ ownerId: "u1", representativeIDs: [] }, true, "c1")
+            ),
+          })),
+        };
+      }
       return {
         doc: jest.fn(() => ({
           get: jest.fn().mockResolvedValue(mockDocSnap({ role: "companyOwner", companyId: "c1" }, true)),
@@ -603,6 +622,15 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
         return {
           doc: jest.fn(() => ({
             get: jest.fn().mockResolvedValue(mockDocSnap({ role: "companyOwner", companyId: "c1" }, true, "u1")),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ ownerId: "u1", representativeIDs: [] }, true, "c1")
+            ),
           })),
         };
       }
@@ -698,6 +726,15 @@ describe("GET /api/job-invitations/details/:jobId", () => {
               ),
             };
           }),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ ownerId: "u1", representativeIDs: [] }, true, "c1")
+            ),
+          })),
         };
       }
       return {

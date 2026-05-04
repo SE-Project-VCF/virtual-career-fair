@@ -273,9 +273,16 @@ async function verifyRepOrOwner(userId, companyId) {
     return { error: "Only representatives and company owners can send invitations", status: 403 };
   }
 
-  // If companyId is provided, verify the user belongs to that company
-  if (companyId && userData.companyId !== companyId) {
-    return { error: "You can only send invitations for your own company", status: 403 };
+  // If companyId is provided, verify owner/representative on that company document (not user.companyId
+  // alone — users linked to multiple companies often keep one primary companyId on the user doc).
+  if (companyId) {
+    const auth = await checkCompanyAuthorization(companyId, userId);
+    if (!auth.authorized) {
+      const status = auth.error === "Invalid company ID" ? 404 : 403;
+      const error =
+        status === 404 ? "Company not found" : "You can only send invitations for your own company";
+      return { error, status };
+    }
   }
 
   return null;
