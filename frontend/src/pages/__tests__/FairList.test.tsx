@@ -296,7 +296,7 @@ describe("FairList", () => {
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
 
-    expect(screen.getByLabelText(/invite code/i)).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: /^invite code$/i })).toBeInTheDocument()
   })
 })
 
@@ -839,7 +839,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    await user.type(screen.getByLabelText(/invite code/i), "BADCODE")
+    await user.type(screen.getByRole("textbox", { name: /^invite code$/i }), "BADCODE")
     await user.click(screen.getByRole("button", { name: /^join fair$/i }))
 
     await waitFor(() => {
@@ -869,7 +869,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    await user.type(screen.getByLabelText(/invite code/i), "GOODCODE")
+    await user.type(screen.getByRole("textbox", { name: /^invite code$/i }), "GOODCODE")
     await user.click(screen.getByRole("button", { name: /^join fair$/i }))
 
     // After success: join dialog closes and company is marked enrolled → Edit Booth button appears
@@ -988,7 +988,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    const inviteInput = screen.getByLabelText(/invite code/i)
+    const inviteInput = screen.getByRole("textbox", { name: /^invite code$/i })
     await user.type(inviteInput, "ENTERCODE{Enter}")
 
     await waitFor(() => {
@@ -1085,7 +1085,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    await user.type(screen.getByLabelText(/invite code/i), "ABCDEF")
+    await user.type(screen.getByRole("textbox", { name: /^invite code$/i }), "ABCDEF")
 
     await user.click(screen.getByRole("button", { name: /cancel/i }))
 
@@ -1094,7 +1094,7 @@ describe("FairList — join fair flow", () => {
 
     // Re-open: invite code field should be empty
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    expect(screen.getByLabelText(/invite code/i)).toHaveValue("")
+    expect(screen.getByRole("textbox", { name: /^invite code$/i })).toHaveValue("")
   })
 })
 
