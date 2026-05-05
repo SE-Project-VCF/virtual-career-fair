@@ -27,6 +27,65 @@ async function companyDataMapForBoothCompanyIds(boothRows) {
   return m;
 }
 
+function normFairBoothField(v) {
+  if (v == null) return "";
+  return String(v).trim().toLowerCase();
+}
+
+/**
+ * Fair booth docs normally store originalBoothId (root /booths doc) for ratings and tracking.
+ * Legacy rows may omit it; resolve from company booths (+ boothName / hiringFor / industry when multiple).
+ */
+async function resolveOriginalBoothIdForFairSnapshot(raw) {
+  if (!raw || raw.originalBoothId) return raw?.originalBoothId ?? null;
+  if (!raw.companyId) return null;
+  try {
+    const snap = await db.collection("booths").where("companyId", "==", raw.companyId).get();
+    const docs = snap.docs;
+
+    if (docs.length === 0) {
+      const cDoc = await db.collection("companies").doc(raw.companyId).get();
+      if (!cDoc.exists) return null;
+      const legacyBid = cDoc.data().boothId;
+      if (!legacyBid) return null;
+      const bDoc = await db.collection("booths").doc(legacyBid).get();
+      return bDoc.exists ? bDoc.id : null;
+    }
+
+    if (docs.length === 1) return docs[0].id;
+
+    const wantedBoothName = normFairBoothField(raw.boothName);
+    const wantedCompanyName = normFairBoothField(raw.companyName);
+    const fairLabel = wantedBoothName || wantedCompanyName;
+    if (fairLabel) {
+      const match = docs.find((d) => {
+        const data = d.data();
+        const bn = normFairBoothField(data.boothName);
+        const cn = normFairBoothField(data.companyName);
+        return bn === fairLabel || cn === fairLabel || bn === wantedCompanyName;
+      });
+      if (match) return match.id;
+    }
+
+    const wantedHiring = normFairBoothField(raw.hiringFor);
+    if (wantedHiring) {
+      const hfMatches = docs.filter((d) => normFairBoothField(d.data().hiringFor) === wantedHiring);
+      if (hfMatches.length === 1) return hfMatches[0].id;
+    }
+
+    const wantedIndustry = normFairBoothField(raw.industry);
+    if (wantedIndustry) {
+      const indMatches = docs.filter((d) => normFairBoothField(d.data().industry) === wantedIndustry);
+      if (indMatches.length === 1) return indMatches[0].id;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn("resolveOriginalBoothIdForFairSnapshot:", err.message);
+  }
+  return null;
+}
+
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
 const enrollmentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -1615,12 +1674,17 @@ router.get("/fairs/:fairId/booths/:boothId", async (req, res) => {
     if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
 
     const raw = boothDoc.data();
+    const resolvedOriginalBoothId = await resolveOriginalBoothIdForFairSnapshot(raw);
+    const mergedRaw = {
+      ...raw,
+      ...(resolvedOriginalBoothId ? { originalBoothId: resolvedOriginalBoothId } : {}),
+    };
     let companyData = null;
     if (raw.companyId) {
       const cDoc = await db.collection("companies").doc(raw.companyId).get();
       if (cDoc.exists) companyData = cDoc.data();
     }
-    const payload = mergeFairBoothPayloadWithCompany({ id: boothDoc.id, ...raw }, companyData);
+    const payload = mergeFairBoothPayloadWithCompany({ id: boothDoc.id, ...mergedRaw }, companyData);
     return res.json(payload);
   } catch (err) {
     if (err.message === "Fair not found") return res.status(404).json({ error: "Fair not found" });

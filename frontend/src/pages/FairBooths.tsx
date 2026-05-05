@@ -20,8 +20,8 @@ import ForumIcon from "@mui/icons-material/Forum"
 import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
-import { auth } from "../firebase"
-import { API_URL } from "../config"
+import { INDUSTRY_LABELS } from "../utils/boothConstants"
+import { fetchFairBoothsForFair } from "../utils/fairBoothsApi"
 
 interface Booth {
   id: string
@@ -33,18 +33,6 @@ interface Booth {
   description: string | null
   logoUrl?: string | null
   companyId: string
-}
-
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
 }
 
 export default function FairBooths() {
@@ -65,27 +53,15 @@ export default function FairBooths() {
   }, [fairLoading, fairId, user?.role, navigate])
 
   const fetchBooths = async () => {
+    setLoading(true)
+    setError("")
     try {
-      setLoading(true)
-      setError("")
-
-      const headers: Record<string, string> = {}
-      const token = await auth.currentUser?.getIdToken()
-      if (token) headers.Authorization = `Bearer ${token}`
-
-      const res = await fetch(`${API_URL}/api/fairs/${fairId}/booths`, { headers })
-
-      if (res.status === 403) {
-        setError("The career fair is not currently live.")
+      const result = await fetchFairBoothsForFair<Booth>(fairId!)
+      if (!result.ok) {
+        setError(result.error)
         return
       }
-      if (!res.ok) throw new Error("Failed to load booths")
-
-      const data = await res.json()
-      setBooths(data.booths || [])
-    } catch (err) {
-      console.error(err)
-      setError("Failed to load booths")
+      setBooths(result.booths)
     } finally {
       setLoading(false)
     }

@@ -1846,6 +1846,13 @@ describe("Company", () => {
   });
 
   describe("BoothManagementCard", () => {
+    /** Booth name appears in the management row and again under Booth Reviews; row is always first in document order */
+    function firstBoothNameNode(name: string) {
+      const nodes = screen.getAllByText(name);
+      expect(nodes.length).toBeGreaterThanOrEqual(1);
+      return nodes[0];
+    }
+
     function setBoothListFetch(booths: any[], ok = true) {
       globalThis.fetch = vi.fn().mockImplementation((url: string, init?: any) => {
         if (url.includes("/api/companies/") && url.includes("/invite-code")) {
@@ -1878,8 +1885,8 @@ describe("Company", () => {
       renderComp();
 
       await waitFor(() => {
-        expect(screen.getByText("Alpha")).toBeInTheDocument();
-        expect(screen.getByText("Beta")).toBeInTheDocument();
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Beta").length).toBeGreaterThanOrEqual(1);
       });
       expect(screen.getByText("Tech")).toBeInTheDocument();
     });
@@ -1898,7 +1905,9 @@ describe("Company", () => {
       setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
       await user.click(screen.getByRole("button", { name: /^edit$/i }));
 
       expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth/b1");
@@ -1909,8 +1918,10 @@ describe("Company", () => {
       setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
-      const alphaRow = screen.getByText("Alpha").closest("div")!.parentElement!;
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
+      const alphaRow = firstBoothNameNode("Alpha").closest("div")!.parentElement!;
       await user.click(within(alphaRow).getByRole("button", { name: /visitor analytics/i }));
 
       expect(mockNavigate).toHaveBeenCalledWith("/booth/b1/visitors");
@@ -1932,7 +1943,7 @@ describe("Company", () => {
     function getBoothDeleteButton() {
       // The booth Delete button lives inside the row containing the booth name "Alpha".
       // Scope by row to avoid clashing with Delete Job / Delete Company buttons.
-      const alphaRow = screen.getByText("Alpha").closest("div")!.parentElement!;
+      const alphaRow = firstBoothNameNode("Alpha").closest("div")!.parentElement!;
       return within(alphaRow).getByRole("button", { name: /^delete$/i });
     }
 
@@ -1942,11 +1953,13 @@ describe("Company", () => {
       setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
       await user.click(getBoothDeleteButton());
 
       await waitFor(() => {
-        expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+        expect(screen.queryAllByText("Alpha")).toHaveLength(0);
       });
       confirmSpy.mockRestore();
     });
@@ -1969,7 +1982,9 @@ describe("Company", () => {
       globalThis.fetch = fetchSpy;
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
       const deleteCallsBefore = fetchSpy.mock.calls.filter((c) =>
         (c[1] as any)?.method === "DELETE"
       ).length;
@@ -1979,7 +1994,7 @@ describe("Company", () => {
         (c[1] as any)?.method === "DELETE"
       ).length;
       expect(deleteCallsAfter).toBe(deleteCallsBefore);
-      expect(screen.getByText("Alpha")).toBeInTheDocument();
+      expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
       confirmSpy.mockRestore();
     });
 
@@ -2007,11 +2022,13 @@ describe("Company", () => {
       });
       renderComp();
 
-      await waitFor(() => expect(screen.getByText("Alpha")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
       await user.click(getBoothDeleteButton());
 
       await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Cannot delete"));
-      expect(screen.getByText("Alpha")).toBeInTheDocument();
+      expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
       confirmSpy.mockRestore();
       alertSpy.mockRestore();
     });

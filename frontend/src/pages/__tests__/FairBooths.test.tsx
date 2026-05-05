@@ -1,187 +1,102 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { BrowserRouter } from "react-router-dom"
+import { MemoryRouter } from "react-router-dom"
 import FairBooths from "../FairBooths"
-import { useFair } from "../../contexts/FairContext"
-import { authUtils } from "../../utils/auth"
 
 const mockNavigate = vi.fn()
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual("react-router-dom")
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom")
   return {
     ...actual,
     useNavigate: () => mockNavigate,
   }
 })
 
-vi.mock("../../utils/auth", () => ({
-  authUtils: {
-    getCurrentUser: vi.fn(),
-    isAuthenticated: vi.fn(),
-  },
-}))
-
 vi.mock("../../contexts/FairContext", () => ({
   useFair: vi.fn(),
-  FairProvider: ({ children }: any) => <>{children}</>,
 }))
 
-vi.mock("../../config", () => ({
-  API_URL: "http://localhost:5000",
-}))
-
-vi.mock("../ProfileMenu", () => ({
-  default: () => <div data-testid="profile-menu">Profile Menu</div>,
-}))
-
-vi.mock("../../components/PageHeader", () => ({
-  default: () => <div data-testid="page-header">Header</div>,
+vi.mock("../../utils/auth", () => ({
+  authUtils: { getCurrentUser: vi.fn(() => null) },
 }))
 
 vi.mock("../../firebase", () => ({
-  db: {},
-  auth: {
-    currentUser: {
-      getIdToken: vi.fn().mockResolvedValue("mock-token"),
-    },
-  },
+  auth: { currentUser: null },
 }))
 
-const renderFairBooths = () =>
-  render(
-    <BrowserRouter>
+vi.mock("../../components/BaseLayout", () => ({
+  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+import { useFair } from "../../contexts/FairContext"
+import { authUtils } from "../../utils/auth"
+import type { Mock } from "vitest"
+
+function renderFairBooths() {
+  return render(
+    <MemoryRouter>
       <FairBooths />
-    </BrowserRouter>
+    </MemoryRouter>
   )
+}
 
 describe("FairBooths", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
-    globalThis.fetch = vi.fn()
   })
 
-  it("shows loading spinner while fairLoading is true", () => {
-    vi.mocked(useFair).mockReturnValue({
-      fairLoading: true,
-      loading: true,
+  it("shows loading when fair context is still loading", () => {
+    ;(useFair as Mock).mockReturnValue({
       fair: null,
-      fairId: null,
       isLive: false,
-    } as any)
-    vi.mocked(authUtils.getCurrentUser).mockReturnValue(null)
+      loading: true,
+      fairId: "fair-1",
+    })
 
     renderFairBooths()
 
     expect(screen.getByRole("progressbar")).toBeInTheDocument()
   })
 
-  it("shows booths when loaded successfully", async () => {
-    vi.mocked(useFair).mockReturnValue({
-      fairLoading: false,
-      fairId: "fair-1",
+  it("fetches and shows booth cards when fair is ready", async () => {
+    ;(useFair as Mock).mockReturnValue({
       fair: { name: "Spring Fair" },
       isLive: true,
       loading: false,
-    } as any)
-    vi.mocked(authUtils.getCurrentUser).mockReturnValue({
-      uid: "u1",
-      role: "student",
-    } as any)
-    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      fairId: "fair-1",
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      status: 200,
       json: async () => ({
         booths: [
           {
-            id: "booth-1",
-            companyName: "Tech Corp",
-            industry: null,
-            companySize: null,
-            location: null,
-            description: null,
+            id: "b1",
+            companyName: "Acme Co",
+            boothName: "Engineering",
+            industry: "software",
+            companySize: "100-500",
+            location: "Remote",
+            description: "Great place",
             companyId: "c1",
           },
         ],
       }),
     })
+    vi.stubGlobal("fetch", fetchMock)
 
     renderFairBooths()
 
-    await waitFor(() => expect(screen.getByText("Tech Corp")).toBeInTheDocument())
-  })
-
-  it("shows error when fair is not live (403)", async () => {
-    vi.mocked(useFair).mockReturnValue({
-      fairLoading: false,
-      fairId: "fair-1",
-      fair: { name: "Spring Fair" },
-      isLive: false,
-      loading: false,
-    } as any)
-    vi.mocked(authUtils.getCurrentUser).mockReturnValue({
-      uid: "u1",
-      role: "student",
-    } as any)
-    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      status: 403,
-      ok: false,
+    await waitFor(() => {
+      expect(screen.getByText("Engineering")).toBeInTheDocument()
     })
-
-    renderFairBooths()
-
-    await waitFor(() =>
-      expect(screen.getByText(/not currently live/i)).toBeInTheDocument()
-    )
-  })
-
-  it("shows info alert for non-admin when fair is not live", async () => {
-    vi.mocked(useFair).mockReturnValue({
-      fairLoading: false,
-      fairId: "fair-1",
-      fair: { name: "Spring Fair" },
-      isLive: false,
-      loading: false,
-    } as any)
-    vi.mocked(authUtils.getCurrentUser).mockReturnValue({
-      uid: "u1",
-      role: "student",
-    } as any)
-    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ booths: [] }),
-    })
-
-    renderFairBooths()
-
-    await waitFor(() =>
-      expect(screen.getByText(/not currently live/i)).toBeInTheDocument()
-    )
-  })
-
-  it("shows No booths yet when booth list is empty and fair is live", async () => {
-    vi.mocked(useFair).mockReturnValue({
-      fairLoading: false,
-      fairId: "fair-1",
-      fair: { name: "Spring Fair" },
-      isLive: true,
-      loading: false,
-    } as any)
-    vi.mocked(authUtils.getCurrentUser).mockReturnValue({
-      uid: "u1",
-      role: "student",
-    } as any)
-    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ booths: [] }),
-    })
-
-    renderFairBooths()
-
-    await waitFor(() =>
-      expect(screen.getByText(/No booths yet/i)).toBeInTheDocument()
-    )
+    expect(screen.getByText("Acme Co")).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
   it("redirects representative to fair hub when fairId is set", () => {

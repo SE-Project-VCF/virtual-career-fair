@@ -66,6 +66,12 @@ vi.mock("../../utils/ownedCompanies", () => ({
   fetchOwnedCompaniesForUser: vi.fn().mockResolvedValue([]),
 }))
 
+vi.mock("../../components/FairBoothGridSection", () => ({
+  default: ({ sectionTitle }: { sectionTitle?: string }) => (
+    <div data-testid="fair-booth-grid-section">{sectionTitle ?? "Booths"}</div>
+  ),
+}))
+
 const renderFairLanding = () =>
   render(
     <BrowserRouter>
@@ -159,7 +165,7 @@ describe("FairLanding", () => {
     expect(screen.getByText("Live Now")).toBeInTheDocument()
   })
 
-  it("Browse Booths button is disabled when fair not live", () => {
+  it("renders Booths section below fair details", () => {
     vi.mocked(useFair).mockReturnValue({
       setFair: vi.fn(),
       loading: false,
@@ -177,9 +183,7 @@ describe("FairLanding", () => {
 
     renderFairLanding()
 
-    // When not live the button text is "Fair Not Live Yet"
-    const browseButton = screen.getByRole("button", { name: /browse booths|fair not live/i })
-    expect(browseButton).toBeDisabled()
+    expect(screen.getByTestId("fair-booth-grid-section")).toHaveTextContent("Booths")
   })
 
   it("shows Join This Fair button for company owner", async () => {
@@ -847,34 +851,6 @@ describe("FairLanding", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/fairs")
   })
 
-  it("Browse Booths button navigates when fair is live", async () => {
-    const user = userEvent.setup()
-
-    vi.mocked(useFair).mockReturnValue({
-      setFair: vi.fn(),
-      loading: false,
-      fair: {
-        id: "f1",
-        name: "Spring Fair",
-        description: null,
-        startTime: null,
-        endTime: null,
-        isLive: true,
-      },
-      isLive: true,
-      fairId: "f1",
-    })
-
-    renderFairLanding()
-
-    const browseButton = screen.getByRole("button", { name: /browse booths/i })
-    expect(browseButton).not.toBeDisabled()
-
-    await user.click(browseButton)
-
-    expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/booths")
-  })
-
   it("does not show Join/Leave button for non-company users (student)", async () => {
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "student-1",
@@ -937,7 +913,7 @@ describe("FairLanding", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/lounge")
   })
 
-  it("Networking Lounge button is disabled when fair is not live", () => {
+  it("does not show Networking Lounge when fair is not live", () => {
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "student-1",
       email: "student@example.com",
@@ -961,8 +937,7 @@ describe("FairLanding", () => {
 
     renderFairLanding()
 
-    const loungeButton = screen.getByRole("button", { name: /networking lounge/i })
-    expect(loungeButton).toBeDisabled()
+    expect(screen.queryByRole("button", { name: /networking lounge/i })).not.toBeInTheDocument()
   })
 
   it("does not show Networking Lounge button for company users", async () => {

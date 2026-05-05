@@ -20,18 +20,26 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Paper,
+  Stack,
+  Divider,
 } from "@mui/material"
+import { alpha } from "@mui/material/styles"
 import EventIcon from "@mui/icons-material/Event"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward"
 import ForumIcon from "@mui/icons-material/Forum"
 import BaseLayout from "../components/BaseLayout"
+import FairBoothGridSection from "../components/FairBoothGridSection"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
 import { waitForFirebaseUser } from "../firebase"
 import { API_URL } from "../config"
 import { fetchOwnedCompaniesForUser, type OwnedCompanySummary } from "../utils/ownedCompanies"
+
+const ACCENT_GREEN = "#388560"
+const ACCENT_BURGUNDY = "#b03a6c"
 
 function formatDate(ms: number | null): string {
   if (!ms) return "TBD"
@@ -334,118 +342,171 @@ export default function FairLanding() {
 
   return (
     <BaseLayout pageTitle={fair.name}>
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/fairs")} sx={{ mb: 3 }}>
-          Back to Fairs
-        </Button>
-
-        <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 2 }}>
-          <Typography variant="h3" fontWeight="bold">
-            {fair.name}
-          </Typography>
-          <Chip
-            label={isLive ? "Live Now" : "Not Live"}
-            color={isLive ? "success" : "default"}
-          />
-        </Box>
-
-        {fair.description && (
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            {fair.description}
-          </Typography>
-        )}
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, color: "text.secondary", mb: 2 }}>
-          <EventIcon />
-          <Typography>
-            {formatDate(fair.startTime)} – {formatDate(fair.endTime)}
-          </Typography>
-        </Box>
-
-        {(fair.venueCity || fair.venueState || fair.venueZip) && (
-          <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, color: "text.secondary", mb: 4 }}>
-            <LocationOnIcon sx={{ mt: 0.25 }} />
-            <Typography fontWeight={600}>
-              {[fair.venueCity, fair.venueState].filter(Boolean).join(", ")}
-              {fair.venueZip ? ` ${fair.venueZip}` : ""}
-            </Typography>
-          </Box>
-        )}
-
-        {joinSuccess && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            Successfully joined the fair! You can now set up your booth.
-          </Alert>
-        )}
-
-        {leaveSuccess && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            You have left this fair.
-          </Alert>
-        )}
-
-        {pendingEnrollment?.status === "pending" && !isEnrolled && (
-          <Alert severity="info" sx={{ mb: 3 }}>
-            Your enrollment request is pending admin approval.
-          </Alert>
-        )}
-
-        {pendingEnrollment?.status === "rejected" && !isEnrolled && (
-          <Alert severity="warning" sx={{ mb: 3 }}>
-            Your enrollment request was not approved
-            {pendingEnrollment.rejectReason ? `: ${pendingEnrollment.rejectReason}` : "."}
-          </Alert>
-        )}
-
-        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-          {user?.role !== "representative" && (
-            <Button
-              variant="contained"
-              size="large"
-              endIcon={<ArrowForwardIcon />}
-              onClick={() => navigate(`/fair/${fairId}/booths`)}
-              disabled={!isLive}
-            >
-              {isLive ? "Browse Booths" : "Fair Not Live Yet"}
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Stack spacing={3}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+            <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/fairs")}>
+              Back to Fairs
             </Button>
+            {!isCompanyUser && isLive && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ForumIcon />}
+                onClick={() => navigate(`/fair/${fairId}/lounge`)}
+                sx={{
+                  borderColor: ACCENT_GREEN,
+                  color: ACCENT_GREEN,
+                  "&:hover": {
+                    borderColor: ACCENT_GREEN,
+                    bgcolor: alpha(ACCENT_GREEN, 0.06),
+                  },
+                }}
+              >
+                Networking Lounge
+              </Button>
+            )}
+          </Stack>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 2, md: 3 },
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              background: `linear-gradient(135deg, ${alpha(ACCENT_GREEN, 0.08)} 0%, ${alpha(ACCENT_BURGUNDY, 0.06)} 100%)`,
+            }}
+          >
+            <Stack spacing={2}>
+              <Stack direction="row" alignItems="center" flexWrap="wrap" gap={1.5}>
+                <Typography variant="h3" component="h1" fontWeight="bold">
+                  {fair.name}
+                </Typography>
+                <Chip
+                  label={isLive ? "Live Now" : "Not Live"}
+                  color={isLive ? "success" : "default"}
+                  size="small"
+                  sx={{ fontWeight: 600 }}
+                />
+              </Stack>
+
+              {fair.description && (
+                <Typography variant="body1" color="text.secondary">
+                  {fair.description}
+                </Typography>
+              )}
+
+              <Stack direction="row" flexWrap="wrap" alignItems="center" gap={2} useFlexGap>
+                <Stack direction="row" spacing={0.75} alignItems="center" sx={{ color: "text.secondary" }}>
+                  <EventIcon fontSize="small" sx={{ color: ACCENT_GREEN }} />
+                  <Typography variant="body2">
+                    {formatDate(fair.startTime)} – {formatDate(fair.endTime)}
+                  </Typography>
+                </Stack>
+                {(fair.venueCity || fair.venueState || fair.venueZip) && (
+                  <Stack direction="row" spacing={0.75} alignItems="flex-start" sx={{ color: "text.secondary" }}>
+                    <LocationOnIcon fontSize="small" sx={{ mt: 0.15, color: ACCENT_BURGUNDY }} />
+                    <Typography variant="body2" fontWeight={600}>
+                      {[fair.venueCity, fair.venueState].filter(Boolean).join(", ")}
+                      {fair.venueZip ? ` ${fair.venueZip}` : ""}
+                    </Typography>
+                  </Stack>
+                )}
+              </Stack>
+            </Stack>
+          </Paper>
+
+          {joinSuccess && (
+            <Alert severity="success">
+              Successfully joined the fair! You can now set up your booth.
+            </Alert>
           )}
 
-          {!isCompanyUser && (
-            <Button
-              variant="outlined"
-              size="large"
-              startIcon={<ForumIcon />}
-              onClick={() => navigate(`/fair/${fairId}/lounge`)}
-              disabled={!isLive}
-            >
-              Networking Lounge
-            </Button>
+          {leaveSuccess && (
+            <Alert severity="success">
+              You have left this fair.
+            </Alert>
+          )}
+
+          {pendingEnrollment?.status === "pending" && !isEnrolled && (
+            <Alert severity="info">
+              Your enrollment request is pending admin approval.
+            </Alert>
+          )}
+
+          {pendingEnrollment?.status === "rejected" && !isEnrolled && (
+            <Alert severity="warning">
+              Your enrollment request was not approved
+              {pendingEnrollment.rejectReason ? `: ${pendingEnrollment.rejectReason}` : "."}
+            </Alert>
+          )}
+
+          {user?.role !== "representative" && (
+            <Stack direction="row" flexWrap="wrap" gap={2}>
+              <Button
+                variant="contained"
+                size="large"
+                endIcon={<ArrowForwardIcon />}
+                onClick={() => navigate(`/fair/${fairId}/booths`)}
+                disabled={!isLive}
+                sx={
+                  isLive
+                    ? { bgcolor: ACCENT_GREEN, "&:hover": { bgcolor: alpha(ACCENT_GREEN, 0.85) } }
+                    : undefined
+                }
+              >
+                {isLive ? "Browse Booths" : "Fair Not Live Yet"}
+              </Button>
+            </Stack>
           )}
 
           {isCompanyUser && (
-            <Button
-              variant="outlined"
-              size="large"
-              color={isEnrolled ? "error" : "primary"}
-              onClick={() => {
-                if (isEnrolled) setLeaveDialogOpen(true)
-                else {
-                  setJoinMode("invite")
-                  setJoinError("")
-                  setRequestMessage("")
-                  setJoinDialogOpen(true)
-                }
-              }}
-              disabled={enrollmentLoading || (!!pendingEnrollment && pendingEnrollment.status === "pending" && !isEnrolled)}
-            >
-              {isEnrolled
-                ? "Leave Fair"
-                : pendingEnrollment?.status === "pending"
-                  ? "Request pending"
-                  : "Join This Fair"}
-            </Button>
+            <>
+              <Divider sx={{ borderColor: "divider" }} />
+              <Stack direction="row" flexWrap="wrap" gap={2}>
+                <Button
+                  variant="outlined"
+                  size="large"
+                  color={isEnrolled ? "error" : "primary"}
+                  onClick={() => {
+                    if (isEnrolled) setLeaveDialogOpen(true)
+                    else {
+                      setJoinMode("invite")
+                      setJoinError("")
+                      setRequestMessage("")
+                      setJoinDialogOpen(true)
+                    }
+                  }}
+                  disabled={
+                    enrollmentLoading ||
+                    (!!pendingEnrollment && pendingEnrollment.status === "pending" && !isEnrolled)
+                  }
+                  sx={
+                    isEnrolled
+                      ? undefined
+                      : {
+                          borderColor: ACCENT_GREEN,
+                          color: ACCENT_GREEN,
+                          "&:hover": {
+                            borderColor: ACCENT_GREEN,
+                            bgcolor: alpha(ACCENT_GREEN, 0.06),
+                          },
+                        }
+                  }
+                >
+                  {isEnrolled
+                    ? "Leave Fair"
+                    : pendingEnrollment?.status === "pending"
+                      ? "Request pending"
+                      : "Join This Fair"}
+                </Button>
+              </Stack>
+            </>
           )}
-        </Box>
+
+          <FairBoothGridSection sectionTitle="Booths" />
+        </Stack>
       </Container>
 
       <Dialog

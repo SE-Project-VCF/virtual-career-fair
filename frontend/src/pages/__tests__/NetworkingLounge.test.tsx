@@ -238,7 +238,7 @@ describe("NetworkingLounge", () => {
 
     expect(screen.getByTestId("message-list")).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/chat with other students/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /back to booths/i })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /back to fair/i })).toBeInTheDocument()
   })
 
   it("sends message on Enter key and clears input", async () => {
@@ -290,7 +290,7 @@ describe("NetworkingLounge", () => {
     expect(mockChannel.sendMessage).not.toHaveBeenCalled()
   })
 
-  it("navigates back to booths when Back to Booths is clicked", async () => {
+  it("navigates back to fair from lounge header when Back to Fair is clicked", async () => {
     const user = userEvent.setup()
     mockStreamClient.userID = "user-1"
 
@@ -304,12 +304,12 @@ describe("NetworkingLounge", () => {
     await renderNetworkingLounge()
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /back to booths/i })).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: /back to fair/i })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole("button", { name: /back to booths/i }))
+    await user.click(screen.getByRole("button", { name: /back to fair/i }))
 
-    expect(mockNavigate).toHaveBeenCalledWith("/fair/f1/booths")
+    expect(mockNavigate).toHaveBeenCalledWith("/fair/f1")
   })
 
   it("shows fair name in page title when fair is loaded", async () => {

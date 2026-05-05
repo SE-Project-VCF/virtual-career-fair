@@ -70,6 +70,9 @@ export default function ChatSidebar({
           sort={{ last_message_at: -1 as const }}
           options={{ state: true, watch: true, presence: true }}
           Preview={CustomPreview}
+          channelRenderFilterFn={(channels) =>
+            channels.filter((c) => !c.id?.startsWith("lounge-"))
+          }
         />
       </Box>
     </Box>
