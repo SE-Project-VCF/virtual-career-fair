@@ -83,7 +83,10 @@ export default function FairAdminDashboard() {
 
   // Add company dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [addCompanyId, setAddCompanyId] = useState("")
+  const [selectedCompany, setSelectedCompany] = useState<{ id: string; companyName: string } | null>(null)
+  const [companySearchInput, setCompanySearchInput] = useState("")
+  const [companySearchResults, setCompanySearchResults] = useState<{ id: string; companyName: string }[]>([])
+  const [companySearchLoading, setCompanySearchLoading] = useState(false)
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState("")
 
@@ -122,6 +125,32 @@ export default function FairAdminDashboard() {
   const [annSaving, setAnnSaving] = useState(false)
   const [annError, setAnnError] = useState("")
   const [publishingAnnId, setPublishingAnnId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!companySearchInput.trim() || !addDialogOpen) {
+      setCompanySearchResults([])
+      return
+    }
+    const timer = setTimeout(async () => {
+      setCompanySearchLoading(true)
+      try {
+        const token = await getToken()
+        const res = await fetch(
+          `${API_URL}/api/companies/search?q=${encodeURIComponent(companySearchInput.trim())}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (res.ok) {
+          const data = await res.json()
+          setCompanySearchResults(data)
+        }
+      } catch {
+        // silently ignore search errors
+      } finally {
+        setCompanySearchLoading(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [companySearchInput, addDialogOpen])
 
   useEffect(() => {
     if (user?.role !== "administrator") {
@@ -399,21 +428,33 @@ export default function FairAdminDashboard() {
   }
 
   const handleAddCompany = async () => {
-    if (!addCompanyId.trim()) return
+    if (!selectedCompany) return
     setAdding(true)
     setAddError("")
+    const token = await getToken()
+    const isEnrolled = enrollments.some((e) => e.id === selectedCompany.id)
     try {
-      const token = await getToken()
+      if (isEnrolled) {
+        const delRes = await fetch(`${API_URL}/api/fairs/${fairId}/enrollments/${selectedCompany.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!delRes.ok) {
+          const d = await delRes.json().catch(() => ({}))
+          throw new Error(d.error || "Failed to remove existing enrollment")
+        }
+      }
       const res = await fetch(`${API_URL}/api/fairs/${fairId}/enroll`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ companyId: addCompanyId.trim() }),
+        body: JSON.stringify({ companyId: selectedCompany.id }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to add company")
       setAddDialogOpen(false)
-      setAddCompanyId("")
-      setSuccess("Company enrolled successfully")
+      setSelectedCompany(null)
+      setCompanySearchInput("")
+      setSuccess(isEnrolled ? "Company re-enrolled successfully" : "Company enrolled successfully")
       loadEnrollments()
     } catch (err: any) {
       setAddError(err.message)
@@ -1005,16 +1046,18 @@ export default function FairAdminDashboard() {
           </Typography>
           <TextField
             label="Company ID"
-            value={addCompanyId}
-            onChange={(e) => setAddCompanyId(e.target.value)}
+            value={""}
+            onChange={() => {}}
             fullWidth
             placeholder="e.g. abc123def456"
+            disabled={companySearchLoading}
+            inputProps={{ "data-results": companySearchResults.length }}
           />
           {addError && <Alert severity="error" sx={{ mt: 2 }}>{addError}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setAddDialogOpen(false); setAddCompanyId(""); setAddError("") }}>Cancel</Button>
-          <Button variant="contained" onClick={handleAddCompany} disabled={adding || !addCompanyId.trim()}>
+          <Button onClick={() => { setAddDialogOpen(false); setSelectedCompany(null); setCompanySearchInput(""); setAddError("") }}>Cancel</Button>
+          <Button variant="contained" onClick={handleAddCompany} disabled={adding || !selectedCompany}>
             {adding ? "Adding..." : "Add Company"}
           </Button>
         </DialogActions>
