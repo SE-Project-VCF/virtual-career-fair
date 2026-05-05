@@ -1066,7 +1066,7 @@ export default function FairAdminDashboard() {
             loading={companySearchLoading}
             filterOptions={(x) => x}
             isOptionEqualToValue={(a, b) => a.id === b.id}
-            disablePortal
+            slotProps={{ popper: { style: { zIndex: 1400 } } }}
             renderOption={(props, option) => {
               const isEnrolled = enrollments.some((e) => e.id === option.id)
               return (
