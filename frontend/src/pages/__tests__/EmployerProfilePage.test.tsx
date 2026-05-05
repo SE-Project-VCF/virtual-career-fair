@@ -142,7 +142,12 @@ describe("EmployerProfilePage", () => {
       expect(screen.getByText(/Company owner/i)).toBeInTheDocument()
     })
 
-    const goCompany = screen.getByRole("button", { name: /Go to company/i })
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Go to company & booth/i }),
+      ).toBeInTheDocument()
+    })
+    const goCompany = screen.getByRole("button", { name: /Go to company & booth/i })
     await userEvent.click(goCompany)
     expect(mockNavigate).toHaveBeenCalledWith("/company/company-99")
   })
@@ -160,7 +165,9 @@ describe("EmployerProfilePage", () => {
       expect(screen.getByLabelText(/First name/i)).toBeInTheDocument()
     })
 
-    expect(screen.queryByRole("button", { name: /Go to company/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Go to company & booth/i }),
+    ).not.toBeInTheDocument()
   })
 
   it("shows representative role label for representatives", async () => {

@@ -107,8 +107,10 @@ describe("AdminDashboard — create fair hub / geocode", () => {
     const user = userEvent.setup()
     globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "new-fair" }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
 
     renderAdminDashboard()
 
@@ -146,8 +148,10 @@ describe("AdminDashboard — create fair hub / geocode", () => {
     const user = userEvent.setup()
     globalThis.fetch = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "new-fair" }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
 
     renderAdminDashboard()
 

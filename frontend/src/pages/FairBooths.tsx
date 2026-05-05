@@ -44,9 +44,13 @@ export default function FairBooths() {
   const [error, setError] = useState("")
 
   useEffect(() => {
+    if (user?.role === "representative") {
+      navigate(fairId ? `/fair/${fairId}` : "/dashboard", { replace: true })
+      return
+    }
     if (fairLoading || !fairId) return
     fetchBooths()
-  }, [fairLoading, fairId])
+  }, [fairLoading, fairId, user?.role, navigate])
 
   const fetchBooths = async () => {
     setLoading(true)
