@@ -180,6 +180,139 @@ describe("POST /api/fairs/:fairId/enrollment-requests", () => {
     expect(res.body.success).toBe(true);
     expect(setFn).toHaveBeenCalled();
   });
+
+  it("returns 400 when boothIds is provided as empty array", async () => {
+    const res = await request(app)
+      .post("/api/fairs/f1/enrollment-requests")
+      .set("Authorization", VALID)
+      .send({ boothIds: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/non-empty array/i);
+  });
+
+  it("returns 200 with alreadyPending when duplicate pending request exists", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_UPCOMING, true, "f1")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "enrollmentRequests") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(
+                      mockDocSnap({ status: "pending", companyName: "Acme" }, true, "c1"),
+                    ),
+                  })),
+                };
+              }
+              return { doc: jest.fn(() => ({ get: jest.fn() })) };
+            }),
+          })),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ role: "representative", companyId: "c1" }, true, "rep-uid"),
+            ),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: "Acme", ownerId: "o1", representativeIDs: ["rep-uid"] }, true, "c1"),
+            ),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/f1/enrollment-requests")
+      .set("Authorization", VALID)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.alreadyPending).toBe(true);
+    expect(res.body.success).toBe(true);
+  });
+
+  it("returns 403 when boothIds includes a booth for another company", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_UPCOMING, true, "f1")),
+            collection: jest.fn((sub) => {
+              if (sub === "enrollments") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              if (sub === "enrollmentRequests") {
+                return {
+                  doc: jest.fn(() => ({
+                    get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                  })),
+                };
+              }
+              return { doc: jest.fn(() => ({ get: jest.fn() })) };
+            }),
+          })),
+        };
+      }
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ role: "representative", companyId: "c1" }, true, "rep-uid"),
+            ),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyName: "Acme", ownerId: "o1", representativeIDs: ["rep-uid"] }, true, "c1"),
+            ),
+          })),
+        };
+      }
+      if (name === "booths") {
+        return {
+          doc: jest.fn((bid) => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ companyId: "other-co", boothName: "X" }, true, bid),
+            ),
+          })),
+        };
+      }
+      return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })) };
+    });
+
+    const res = await request(app)
+      .post("/api/fairs/f1/enrollment-requests")
+      .set("Authorization", VALID)
+      .send({ boothIds: ["b-other"] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/does not belong/i);
+  });
 });
 
 describe("GET /api/fairs/:fairId/enrollment-requests", () => {

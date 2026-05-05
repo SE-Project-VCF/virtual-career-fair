@@ -152,6 +152,50 @@ describe("AdminDashboard", () => {
     });
   });
 
+  describe("Fairs management — pending enrollment requests", () => {
+    it("shows warning banner and loads pending-request counts", async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            fairs: [{ id: "fair-a", name: "Spring", isLive: false, startTime: null, endTime: null }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ counts: { "fair-a": 2 } }),
+        });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/2 pending enrollment requests across fairs/i)).toBeInTheDocument();
+      });
+      const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes("/api/fairs/pending-enrollment-request-counts"))).toBe(true);
+    });
+
+    it("uses singular copy for a single pending request", async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            fairs: [{ id: "f-x", name: "Solo Fair", isLive: true, startTime: null, endTime: null }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ counts: { "f-x": 1 } }),
+        });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/1 pending enrollment request across fairs/i)).toBeInTheDocument();
+      });
+    });
+  });
+
   // Fairs Management Tests
   describe("Fairs Management", () => {
     it("displays Manage Career Fairs section", async () => {

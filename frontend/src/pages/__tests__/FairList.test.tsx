@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { BrowserRouter } from "react-router-dom"
 import FairList from "../FairList"
 import * as authUtils from "../../utils/auth"
+import * as ownedCompanies from "../../utils/ownedCompanies"
 
 const mockNavigate = vi.fn()
 
@@ -1382,5 +1383,159 @@ describe("FairList — distance and location search", () => {
       const geoUrl = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])).find((u) => u.includes("radiusMiles=100"))
       expect(geoUrl).toBeDefined()
     })
+  })
+})
+
+describe("FairList — enrollment request to join", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    vi.mocked(ownedCompanies.fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "co1", companyName: "Acme Labs" },
+    ])
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@test.com",
+      role: "companyOwner",
+    })
+  })
+
+  it("submits enrollment request for upcoming fair with booths and message", async () => {
+    const user = userEvent.setup()
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          booths: [{ id: "b1", boothName: "Main booth" }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+
+    await waitFor(() => expect(screen.getByRole("radio", { name: /request to join/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("radio", { name: /request to join/i }))
+
+    await user.type(screen.getByLabelText(/message to organizers/i), "We would love to participate.")
+
+    await user.click(screen.getByRole("button", { name: /submit request/i }))
+
+    await waitFor(() => {
+      const post = vi.mocked(globalThis.fetch).mock.calls.find(
+        (c) =>
+          String(c[0]).includes("/api/fairs/f1/enrollment-requests") &&
+          (c[1] as RequestInit | undefined)?.method === "POST",
+      )
+      expect(post).toBeDefined()
+      const body = JSON.parse((post![1] as RequestInit).body as string)
+      expect(body).toMatchObject({
+        companyId: "co1",
+        message: "We would love to participate.",
+        boothIds: ["b1"],
+      })
+    })
+  })
+
+  it("shows enrollment request pending banner from my-enrollments", async () => {
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          enrollments: [],
+          pendingEnrollmentRequests: [{ fairId: "f1", status: "pending" }],
+        }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => {
+      expect(screen.getByText(/Enrollment request pending approval/i)).toBeInTheDocument()
+    })
+  })
+
+  it("hides request-to-join option when fair has already started", async () => {
+    const user = userEvent.setup()
+    const pastStart = Date.now() - 86_400_000
+    const futureEnd = Date.now() + 5 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Started Fair",
+              description: null,
+              isLive: false,
+              startTime: pastStart,
+              endTime: futureEnd,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ booths: [] }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+
+    // No "request" radio when fair already started — only invite flow
+    expect(screen.queryByRole("radio", { name: /request to join/i })).not.toBeInTheDocument()
   })
 })
