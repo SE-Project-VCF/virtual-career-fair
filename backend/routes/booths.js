@@ -543,7 +543,7 @@ router.post("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =>
     if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
     if (userDoc.data().role !== "student") return res.status(403).json({ error: "Only students can submit ratings" });
 
-    const { rating, comment } = req.body;
+    const { rating, comment, fairId } = req.body;
     if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "rating must be a number between 1 and 5" });
     }
@@ -551,12 +551,24 @@ router.post("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =>
     const boothDoc = await db.collection("booths").doc(boothId).get();
     if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
 
-    await db.collection("booths").doc(boothId).collection("ratings").doc(studentId).set({
+    let fairName = null;
+    if (fairId && typeof fairId === "string") {
+      const fairDoc = await db.collection("fairs").doc(fairId).get();
+      if (fairDoc.exists) fairName = fairDoc.data().name || null;
+    }
+
+    const ratingData = {
       studentId,
       rating,
       comment: comment?.trim() || null,
       createdAt: admin.firestore.Timestamp.now(),
-    });
+    };
+    if (fairId && typeof fairId === "string") {
+      ratingData.fairId = fairId;
+      ratingData.fairName = fairName;
+    }
+
+    await db.collection("booths").doc(boothId).collection("ratings").doc(studentId).set(ratingData);
 
     return res.json({ success: true });
   } catch (err) {
@@ -623,6 +635,8 @@ router.get("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => 
         rating: data.rating,
         comment: data.comment || null,
         createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        fairId: data.fairId || null,
+        fairName: data.fairName || null,
       };
     });
 

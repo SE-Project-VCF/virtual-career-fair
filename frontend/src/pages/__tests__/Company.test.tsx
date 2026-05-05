@@ -286,6 +286,9 @@ describe("Company", () => {
   it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
     globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
       const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/booths?companyId=")) {
+        return Promise.resolve({ ok: true, json: async () => ({ booths: [{ id: "booth-1", boothName: "Alpha Booth" }] }) });
+      }
       if (u.includes("/api/booths/") && u.includes("/ratings")) {
         return Promise.resolve({
           ok: true,
