@@ -593,6 +593,21 @@ describe("POST /api/fairs/:fairId/toggle-status – error path", () => {
 describe("POST /api/fairs/:fairId/enroll – helper branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("returns 403 when non-admin sends only companyId without invite code", async () => {
+    verifyAdmin.mockResolvedValue({ error: "No", status: 403 });
+    setupSimpleFairs({
+      userData: { role: "companyOwner", companyId: "comp1" },
+      companyData: { ownerId: "owner-x", companyName: "Co", representativeIDs: [] },
+    });
+    auth.verifyIdToken.mockResolvedValue({ uid: "owner-x", email: "x@test.com" });
+    const res = await request(app)
+      .post("/api/fairs/fair-id/enroll")
+      .set("Authorization", "Bearer t")
+      .send({ companyId: "comp1" });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("INVITE_OR_REQUEST_REQUIRED");
+  });
+
   it("returns 400 when inviteCode does not match any fair", async () => {
     db.batch.mockReturnValue(makeBatch());
     db.collection.mockImplementation((name) => {
@@ -812,16 +827,23 @@ describe("POST /api/fairs/:fairId/enroll – helper branches", () => {
     expect(res.body.error).toBe("Unauthorized: must be admin or company owner/rep");
   });
 
-  it("allows enrollment when user is company owner of the company (ensureAdminOrCompanyAccess via verifyCompanyAccess)", async () => {
+  it("allows enrollment when user is company owner with valid invite code (ensureAdminOrCompanyAccess via verifyCompanyAccess)", async () => {
     verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
     const batch = makeBatch();
     db.batch.mockReturnValue(batch);
+    const INVITE = "OWNENROLL01";
+    const fairFields = { name: "Spring Fair", inviteCode: INVITE };
 
     db.collection.mockImplementation((name) => {
       if (name === "fairs") {
         return {
+          where: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockQuerySnap([{ id: "fair-id", data: () => fairFields }]),
+            ),
+          })),
           doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ name: "Spring Fair" }, true, "fair-id")),
+            get: jest.fn().mockResolvedValue(mockDocSnap(fairFields, true, "fair-id")),
             collection: jest.fn((sub) => {
               if (sub === "enrollments") {
                 return {
@@ -872,23 +894,30 @@ describe("POST /api/fairs/:fairId/enroll – helper branches", () => {
     const res = await request(app)
       .post("/api/fairs/fair-id/enroll")
       .set("Authorization", authHeader("owner-enroll"))
-      .send({ companyId: "comp-enroll" });
+      .send({ companyId: "comp-enroll", inviteCode: INVITE });
 
     expect(res.status).toBe(201);
     expect(res.body.fairId).toBe("fair-id");
     expect(batch.commit).toHaveBeenCalled();
   });
 
-  it("enrollment merges global booth doc into boothSnapshot when company has boothId (getCompanyAndBoothSnapshot)", async () => {
+  it("enrollment merges global booth doc into boothSnapshot when company has boothId and invite code (getCompanyAndBoothSnapshot)", async () => {
     verifyAdmin.mockResolvedValue({ error: "Only administrators can manage schedules", status: 403 });
     const batch = makeBatch();
     db.batch.mockReturnValue(batch);
+    const INVITE = "BOOTHMERGE1";
+    const fairFields = { name: "Spring Fair", inviteCode: INVITE };
 
     db.collection.mockImplementation((name) => {
       if (name === "fairs") {
         return {
+          where: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockQuerySnap([{ id: "fair-id", data: () => fairFields }]),
+            ),
+          })),
           doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ name: "Spring Fair" }, true, "fair-id")),
+            get: jest.fn().mockResolvedValue(mockDocSnap(fairFields, true, "fair-id")),
             collection: jest.fn((sub) => {
               if (sub === "enrollments") {
                 return {
@@ -976,7 +1005,7 @@ describe("POST /api/fairs/:fairId/enroll – helper branches", () => {
     const res = await request(app)
       .post("/api/fairs/fair-id/enroll")
       .set("Authorization", authHeader("owner-booth"))
-      .send({ companyId: "comp-booth" });
+      .send({ companyId: "comp-booth", inviteCode: INVITE });
 
     expect(res.status).toBe(201);
     expect(batch.set).toHaveBeenCalled();

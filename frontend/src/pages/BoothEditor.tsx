@@ -11,7 +11,6 @@ import {
   TextField,
   Alert,
   CircularProgress,
-  IconButton,
   Select,
   MenuItem,
   FormControl,
@@ -35,14 +34,13 @@ import {
 import { db, auth } from "../firebase"
 import { useFair } from "../contexts/FairContext"
 import { API_URL } from "../config"
+import BaseLayout from "../components/BaseLayout"
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import RestartAltIcon from "@mui/icons-material/RestartAlt"
-import ProfileMenu from "./ProfileMenu"
 
 interface BoothData {
   boothName: string
@@ -598,34 +596,38 @@ export default function BoothEditor() {
   // Loading state
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
-        <CircularProgress />
-      </Box>
+      <BaseLayout pageTitle="Booth editor">
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh" }}>
+          <CircularProgress />
+        </Box>
+      </BaseLayout>
     )
   }
 
   // Fatal error state (company didn't load)
   if (error && !company) {
     return (
-      <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Card sx={{ p: 4, maxWidth: 500 }}>
-          <Alert 
-            severity="error" 
-            sx={{ mb: 2 }}
-            onClose={() => setError("")}
-            slotProps={{
-              closeButton: {
-                title: "Close"
-              }
-            }}
-          >
-            {error}
-          </Alert>
-          <Button onClick={() => navigate("/companies")} variant="contained">
-            Go Back
-          </Button>
-        </Card>
-      </Box>
+      <BaseLayout pageTitle="Booth editor">
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", py: 4, px: 2 }}>
+          <Card sx={{ p: 4, maxWidth: 500 }}>
+            <Alert
+              severity="error"
+              sx={{ mb: 2 }}
+              onClose={() => setError("")}
+              slotProps={{
+                closeButton: {
+                  title: "Close",
+                },
+              }}
+            >
+              {error}
+            </Alert>
+            <Button onClick={() => navigate("/companies")} variant="contained">
+              Go Back
+            </Button>
+          </Card>
+        </Box>
+      </BaseLayout>
     )
   }
 
@@ -692,44 +694,16 @@ export default function BoothEditor() {
   const boothPageTitle = resolvedBoothId ? "Edit Booth" : "Create Booth"
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton
-                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
-                sx={{ color: "white" }}
-                aria-label={fairId ? "Back to fairs" : "Back to company profile"}
-              >
-                <ArrowBackIcon />
-              </IconButton>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Box>
-                <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: "white" }}>
-                  {boothPageTitle}
-                </Typography>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
-                  Set up your company presence at the virtual career fair
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout
+      pageTitle={boothPageTitle}
+      onHeaderBack={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
+      headerBackAriaLabel={fairId ? "Back to fairs" : "Back to company profile"}
+      headerBackTooltip={fairId ? "Back to fairs" : "Back to company profile"}
+    >
       <Container maxWidth="md" sx={{ py: 4 }}>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          Set up your company presence at the virtual career fair
+        </Typography>
         {error && (
           <Alert 
             severity="error" 
@@ -1129,6 +1103,6 @@ export default function BoothEditor() {
           </Typography>
         </Box>
       </Container>
-    </Box>
-  );
+    </BaseLayout>
+  )
 }

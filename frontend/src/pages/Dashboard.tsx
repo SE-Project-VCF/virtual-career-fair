@@ -237,33 +237,6 @@ function DashboardCard({
   );
 }
 
-// Reusable Browse Booths Card
-function BrowseBoothsCard({ navigate, isLive, showHistory }: Readonly<{
-  navigate: ReturnType<typeof useNavigate>
-  isLive: boolean
-  showHistory?: boolean
-}>) {
-  return (
-    <Grid size={{ xs: 12, md: showHistory ? undefined : 6, sm: showHistory ? 6 : undefined }}>
-      <DashboardCard
-        icon={<BusinessIcon sx={{ fontSize: showHistory ? 28 : 32, color: "#388560" }} />}
-        title={showHistory ? "Browse Booths" : "Browse All Booths"}
-        description={isLive
-          ? "Explore other companies' booths at the virtual career fair."
-          : "The career fair is not currently live. You can only view your own company's booth."}
-        buttonLabel={showHistory ? "View Booths" : "View All Booths"}
-        buttonOnClick={() => navigate("/booths")}
-        buttonDisabled={!isLive}
-        secondaryButton={showHistory ? {
-          label: "Booth History",
-          onClick: () => { navigate("/dashboard/booth-history"); },
-          disabled: !isLive
-        } : undefined}
-      />
-    </Grid>
-  );
-}
-
 // Component for Employer Video Chat section (Shortlist, Q&A Sessions)
 function EmployerVideoChatSection({ navigate }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
@@ -299,10 +272,9 @@ function EmployerVideoChatSection({ navigate }: Readonly<{
 }
 
 // Component for Representative section
-function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen }: Readonly<{
+function RepresentativeSection({ navigate, user, setInviteCodeDialogOpen }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
   user: any
-  isLive: boolean
   setInviteCodeDialogOpen: (open: boolean) => void
 }>) {
   return (
@@ -381,7 +353,6 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
             />
           </Grid>
         )}
-        <BrowseBoothsCard navigate={navigate} isLive={isLive} />
       </Grid>
     </Box>
     <EmployerVideoChatSection navigate={navigate} />
@@ -617,7 +588,6 @@ function renderRoleSection(
         <RepresentativeSection 
           navigate={navigate}
           user={props.user}
-          isLive={props.isLive}
           setInviteCodeDialogOpen={props.setInviteCodeDialogOpen}
         />
       )

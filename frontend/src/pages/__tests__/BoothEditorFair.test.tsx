@@ -395,8 +395,7 @@ describe("BoothEditor – fair-scoped", () => {
         expect(screen.getByRole("heading", { name: /create booth/i })).toBeInTheDocument()
       )
 
-      // First button in the header is the ArrowBack icon button
-      await user.click(screen.getAllByRole("button")[0])
+      await user.click(screen.getByRole("button", { name: /back to fairs/i }))
       expect(mockNavigate).toHaveBeenCalledWith("/fairs")
     })
 

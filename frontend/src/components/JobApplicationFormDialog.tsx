@@ -38,6 +38,8 @@ interface JobApplicationFormDialogProps {
   onClose: () => void;
   job: JobForApply;
   boothId?: string;
+  /** When applying from a fair booth job (fairs/{fairId}/jobs), set so Firestore rules can validate the listing. */
+  fairId?: string;
   studentId: string | null;
 }
 
@@ -130,6 +132,7 @@ export default function JobApplicationFormDialog({
   onClose,
   job,
   boothId,
+  fairId,
   studentId,
 }: Readonly<JobApplicationFormDialogProps>) {
   const form = job.applicationForm;
@@ -294,6 +297,7 @@ export default function JobApplicationFormDialog({
         companyId: job.companyId,
         studentId,
         ...(boothId ? { boothId } : {}),
+        ...(fairId ? { fairId } : {}),
         responses,
         ...(Object.keys(fileUrls).length > 0 ? { fileUrls } : {}),
         ...resumeFields,

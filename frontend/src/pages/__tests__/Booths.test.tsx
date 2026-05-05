@@ -338,15 +338,16 @@ describe("Booths", () => {
     });
   });
 
-  it("shows different views based on user role", async () => {
+  it("redirects representatives to the dashboard", async () => {
     (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
       uid: "user-1",
       role: "representative",
     });
     renderBooths();
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard", { replace: true });
     });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("fetches and displays booths when fair is live", async () => {
@@ -571,7 +572,7 @@ describe("Booths", () => {
     });
   });
 
-  it("fetches booths for representative with companyId when fair is not live", async () => {
+  it("does not load booths for representative when fair is not live (redirects to dashboard)", async () => {
     (authUtils.authUtils.getCurrentUser as Mock).mockReturnValue({
       uid: "rep1",
       role: "representative",
@@ -582,45 +583,12 @@ describe("Booths", () => {
       json: async () => ({ fairs: [] }),
     });
 
-    const mockCompany = { id: "company1", boothId: "booth1" };
-    const mockBooth = {
-      id: "booth1",
-      companyName: "Rep Company",
-      industry: "finance",
-      companySize: "500+",
-      location: "Boston",
-      description: "Finance company",
-      companyId: "company1",
-    };
-
-    // Mock getDoc to return company data for company lookups and booth data for booth lookups
-    (getDoc as Mock).mockImplementation((docRef: { _collection: string; _id?: string }) => {
-      if (docRef._collection === "companies") {
-        return Promise.resolve({
-          exists: () => true,
-          id: "company1",
-          data: () => mockCompany,
-        });
-      } else if (docRef._collection === "booths") {
-        return Promise.resolve({
-          exists: () => true,
-          id: "booth1",
-          data: () => mockBooth,
-        });
-      }
-      return Promise.resolve({ exists: () => false });
-    });
-
-    (getDocs as Mock).mockResolvedValue({
-      docs: [],
-      forEach: (_cb: (doc: any) => void) => {},
-    });
-
     renderBooths();
 
     await waitFor(() => {
-      expect(screen.getByText("Rep Company")).toBeInTheDocument();
+      expect(mockNavigate).toHaveBeenCalledWith("/dashboard", { replace: true });
     });
+    expect(getDoc).not.toHaveBeenCalled();
   });
 
   it("shows appropriate message when booth has no companyId", async () => {

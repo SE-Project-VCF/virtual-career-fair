@@ -106,6 +106,9 @@ function stubFairAdminDashboardFetch(opts: {
     if (u.includes(`/api/fairs/${fairId}/enrollments`) && method === "GET") {
       return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
     }
+    if (u.includes(`/api/fairs/${fairId}/enrollment-requests`) && method === "GET") {
+      return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+    }
     if (u.includes(`/api/fairs/${fairId}/announcements`) && method === "GET") {
       return mockFetchResponse({ ok: true, json: async () => ({ announcements: [] }) })
     }
@@ -114,7 +117,7 @@ function stubFairAdminDashboardFetch(opts: {
       method === "PUT" &&
       u.includes(`/api/fairs/${fairId}`) &&
       !u.includes("/enrollments") &&
-      !u.includes("/announcements") &&
+      !u.includes("/enrollment-requests") &&
       !u.includes("/toggle") &&
       !u.includes("/refresh") &&
       !u.includes("/enroll")
@@ -130,6 +133,7 @@ function stubFairAdminDashboardFetch(opts: {
       method === "GET" &&
       u.includes(`/api/fairs/${fairId}`) &&
       !u.includes("/enrollments") &&
+      !u.includes("/enrollment-requests") &&
       !u.includes("/announcements")
 
     if (isFairGet && opts.getFairAfterPut) {
