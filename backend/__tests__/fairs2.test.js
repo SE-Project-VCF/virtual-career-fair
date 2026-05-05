@@ -690,6 +690,124 @@ describe("GET /api/fairs/my-enrollments", () => {
     });
   });
 
+  it("returns 500 when fairs snapshot cannot be loaded", async () => {
+    const companyId = "company-id";
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ uid: "admin-uid", companyId, role: "representative" }, true, "admin-uid"),
+            ),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        return {
+          get: jest.fn().mockRejectedValue(new Error("firestore error")),
+          doc: jest.fn(),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+        };
+      }
+      return {};
+    });
+    const res = await request(app)
+      .get("/api/fairs/my-enrollments")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/Failed to fetch enrollments/i);
+  });
+
+  it("serializes pending enrollment request optional fields including rejectedAt", async () => {
+    const companyId = "company-id";
+
+    const batchMock = {
+      set: jest.fn().mockReturnThis(),
+      delete: jest.fn().mockReturnThis(),
+      commit: jest.fn().mockResolvedValue(undefined),
+    };
+    db.batch.mockReturnValue(batchMock);
+
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ uid: "admin-uid", companyId }, true, "admin-uid"),
+            ),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        const fairDocRef = {
+          get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_DATA, true, "fair-id")),
+          id: "fair-id",
+          collection: jest.fn((sub) => {
+            if (sub === "enrollments") {
+              return {
+                doc: jest.fn(() => ({
+                  get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                })),
+              };
+            }
+            if (sub === "enrollmentRequests") {
+              return {
+                doc: jest.fn(() => ({
+                  get: jest.fn().mockResolvedValue(
+                    mockDocSnap(
+                      {
+                        status: "rejected",
+                        companyName: "Was Co",
+                        boothIds: "not-an-array",
+                        createdAt: { toMillis: () => 10 },
+                        updatedAt: { toMillis: () => 20 },
+                        rejectReason: "No",
+                        rejectedAt: { toMillis: () => 30 },
+                      },
+                      true,
+                      companyId,
+                    ),
+                  ),
+                })),
+              };
+            }
+            return { doc: jest.fn() };
+          }),
+        };
+
+        return {
+          doc: jest.fn(() => fairDocRef),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([{ id: "fair-id", data: () => FAIR_DATA }])),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+    });
+
+    const res = await request(app)
+      .get("/api/fairs/my-enrollments")
+      .set("Authorization", authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.enrollments).toEqual([]);
+    expect(res.body.pendingEnrollmentRequests).toHaveLength(1);
+    expect(res.body.pendingEnrollmentRequests[0]).toMatchObject({
+      fairId: "fair-id",
+      companyId,
+      status: "rejected",
+      rejectReason: "No",
+      rejectedAt: 30,
+    });
+    expect(res.body.pendingEnrollmentRequests[0].boothIds).toBeUndefined();
+  });
+
   it("for companyOwner with no profile companyId, aggregates enrollments from owned companies query", async () => {
     const batchMock = {
       set: jest.fn().mockReturnThis(),
