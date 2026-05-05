@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Link as RouterLink } from "react-router-dom"
+import MuiLink from "@mui/material/Link"
 import {
   Container,
   Box,
@@ -78,6 +79,25 @@ export default function FairAdminDashboard() {
   const [toggling, setToggling] = useState(false)
   const [enrollments, setEnrollments] = useState<any[]>([])
   const [loadingEnrollments, setLoadingEnrollments] = useState(true)
+  const [enrollmentRequests, setEnrollmentRequests] = useState<
+    Array<{
+      companyId: string
+      companyName: string | null
+      requestedBy: string | null
+      requestedByName?: string
+      boothIds?: string[]
+      booths?: Array<{ id: string; boothName: string }>
+      message: string | null
+      createdAt: number | null
+    }>
+  >([])
+  const [requestActionId, setRequestActionId] = useState<string | null>(null)
+  const [rejectDialog, setRejectDialog] = useState<{
+    companyId: string
+    companyName: string | null
+  } | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
+  const [rejectSubmitting, setRejectSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
@@ -172,19 +192,82 @@ export default function FairAdminDashboard() {
   const getToken = () => auth.currentUser?.getIdToken()
 
   const loadEnrollments = async () => {
+    if (!fairId) return
     try {
       setLoadingEnrollments(true)
       const token = await getToken()
-      const res = await fetch(`${API_URL}/api/fairs/${fairId}/enrollments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const [res, reqRes] = await Promise.all([
+        fetch(`${API_URL}/api/fairs/${fairId}/enrollments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/api/fairs/${fairId}/enrollment-requests`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ])
       if (!res.ok) throw new Error("Failed to load enrollments")
       const data = await res.json()
       setEnrollments(data.enrollments || [])
+      if (reqRes.ok) {
+        const reqData = await reqRes.json()
+        setEnrollmentRequests(reqData.requests || [])
+      } else {
+        setEnrollmentRequests([])
+      }
     } catch (err) {
       console.error(err)
     } finally {
       setLoadingEnrollments(false)
+    }
+  }
+
+  const handleApproveEnrollmentRequest = async (companyId: string) => {
+    if (!fairId) return
+    setRequestActionId(companyId)
+    setError("")
+    try {
+      const token = await getToken()
+      const res = await fetch(
+        `${API_URL}/api/fairs/${fairId}/enrollment-requests/${encodeURIComponent(companyId)}/approve`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+      )
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to approve request")
+      setSuccess("Enrollment approved")
+      await loadEnrollments()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to approve")
+    } finally {
+      setRequestActionId(null)
+    }
+  }
+
+  const submitRejectEnrollmentRequest = async () => {
+    if (!fairId || !rejectDialog) return
+    setRejectSubmitting(true)
+    setError("")
+    try {
+      const token = await getToken()
+      const res = await fetch(
+        `${API_URL}/api/fairs/${fairId}/enrollment-requests/${encodeURIComponent(rejectDialog.companyId)}/reject`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ reason: rejectReason.trim() || undefined }),
+        },
+      )
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to reject request")
+      setSuccess("Request rejected")
+      setRejectDialog(null)
+      setRejectReason("")
+      await loadEnrollments()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to reject")
+    } finally {
+      setRejectSubmitting(false)
     }
   }
 
@@ -718,6 +801,112 @@ export default function FairAdminDashboard() {
             </Card>
           </Grid>
 
+          {/* Pending enrollment requests */}
+          <Grid size={{ xs: 12 }}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Pending enrollment requests ({enrollmentRequests.length})
+                </Typography>
+                {loadingEnrollments && <CircularProgress size={24} />}
+                {!loadingEnrollments && enrollmentRequests.length === 0 && (
+                  <Typography color="text.secondary">No pending requests.</Typography>
+                )}
+                {!loadingEnrollments && enrollmentRequests.length > 0 && (
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Company</TableCell>
+                          <TableCell>Requested by</TableCell>
+                          <TableCell>Requested</TableCell>
+                          <TableCell>Booths</TableCell>
+                          <TableCell>Message</TableCell>
+                          <TableCell align="right">Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {enrollmentRequests.map((row) => (
+                          <TableRow key={row.companyId}>
+                            <TableCell>{row.companyName || row.companyId}</TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight={600}>
+                                {row.requestedByName || row.requestedBy || "—"}
+                              </Typography>
+                              {row.requestedBy && row.requestedByName && row.requestedByName !== row.requestedBy ? (
+                                <Typography variant="caption" color="text.secondary" display="block" sx={{ fontFamily: "monospace" }}>
+                                  {row.requestedBy}
+                                </Typography>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              {row.createdAt
+                                ? new Date(row.createdAt).toLocaleString()
+                                : "—"}
+                            </TableCell>
+                            <TableCell>
+                              {row.booths?.length ? (
+                                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, alignItems: "flex-start" }}>
+                                  {row.booths.map((b) => (
+                                    <MuiLink
+                                      key={b.id}
+                                      component={RouterLink}
+                                      to={`/fair/${fairId}/booth/${b.id}`}
+                                      underline="hover"
+                                      variant="body2"
+                                    >
+                                      {b.boothName}
+                                    </MuiLink>
+                                  ))}
+                                </Box>
+                              ) : row.boothIds?.length ? (
+                                <Typography variant="body2" color="text.secondary">
+                                  {row.boothIds.join(", ")}
+                                </Typography>
+                              ) : (
+                                "—"
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ maxWidth: 220 }}>
+                              <Typography variant="body2" noWrap title={row.message || undefined}>
+                                {row.message || "—"}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Box sx={{ display: "flex", gap: 0.5, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="success"
+                                  disabled={requestActionId === row.companyId}
+                                  onClick={() => void handleApproveEnrollmentRequest(row.companyId)}
+                                >
+                                  {requestActionId === row.companyId ? "…" : "Approve"}
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  disabled={requestActionId === row.companyId}
+                                  onClick={() => {
+                                    setRejectDialog({ companyId: row.companyId, companyName: row.companyName })
+                                    setRejectReason("")
+                                  }}
+                                >
+                                  Reject
+                                </Button>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
           {/* Enrolled Companies */}
           <Grid size={{ xs: 12 }}>
             <Card>
@@ -757,7 +946,15 @@ export default function FairAdminDashboard() {
                             </TableCell>
                             <TableCell>
                               <Chip
-                                label={enrollment.enrollmentMethod || "admin"}
+                                label={
+                                  enrollment.enrollmentMethod === "adminDirect"
+                                    ? "Admin"
+                                    : enrollment.enrollmentMethod === "adminApproval"
+                                      ? "Approved request"
+                                      : enrollment.enrollmentMethod === "inviteCode"
+                                        ? "Invite code"
+                                        : enrollment.enrollmentMethod || "—"
+                                }
                                 size="small"
                                 variant="outlined"
                               />
@@ -994,6 +1191,41 @@ export default function FairAdminDashboard() {
             )}
           </DialogActions>
         </form>
+      </Dialog>
+
+      <Dialog
+        open={rejectDialog !== null}
+        onClose={() => !rejectSubmitting && setRejectDialog(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          Reject request{rejectDialog?.companyName ? ` — ${rejectDialog.companyName}` : ""}
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Reason (optional)"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            fullWidth
+            multiline
+            minRows={2}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectDialog(null)} disabled={rejectSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => void submitRejectEnrollmentRequest()}
+            disabled={rejectSubmitting}
+          >
+            {rejectSubmitting ? "Rejecting…" : "Reject request"}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Add Company Dialog */}

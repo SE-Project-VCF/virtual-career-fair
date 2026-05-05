@@ -8,6 +8,7 @@ import { BrowserRouter } from "react-router-dom"
 import FairLanding from "../FairLanding"
 import * as authUtils from "../../utils/auth"
 import { useFair } from "../../contexts/FairContext"
+import { fetchOwnedCompaniesForUser } from "../../utils/ownedCompanies"
 
 const mockNavigate = vi.fn()
 
@@ -483,6 +484,10 @@ describe("FairLanding", () => {
   it("handleJoinFair: shows error when API returns an error", async () => {
     const user = userEvent.setup()
 
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
+
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
       email: "owner@company.com",
@@ -534,6 +539,10 @@ describe("FairLanding", () => {
   it("handleJoinFair: navigates to company dashboard on success when companyId is present", async () => {
     const user = userEvent.setup()
 
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
+
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
       email: "owner@company.com",
@@ -583,6 +592,10 @@ describe("FairLanding", () => {
 
   it("handleJoinFair: navigates to company dashboard when companyId is present even without boothId", async () => {
     const user = userEvent.setup()
+
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
 
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
@@ -1065,6 +1078,10 @@ describe("FairLanding", () => {
   it("handleJoinFair: navigates to company dashboard when response has boothId but no fairId", async () => {
     const user = userEvent.setup()
 
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
+
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
       uid: "owner-1",
       email: "owner@company.com",
@@ -1199,6 +1216,9 @@ describe("FairLanding", () => {
       isLive: false,
       fairId: "f1",
     })
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
   }
 
   it("renders the company's booths as checkboxes when the join dialog opens", async () => {
@@ -1401,6 +1421,113 @@ describe("FairLanding", () => {
       expect(enrollCall).toBeDefined()
       const body = JSON.parse(enrollCall![1].body)
       expect(body.boothIds).toBeUndefined()
+    })
+  })
+
+  it("shows pending enrollment alert when my-enrollments includes a pending request for this fair", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue(companyOwnerWithId)
+    mockFairContextActive()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        enrollments: [],
+        pendingEnrollmentRequests: [{ fairId: "f1", status: "pending" }],
+      }),
+    })
+
+    renderFairLanding()
+
+    await waitFor(() => {
+      expect(screen.getByText(/Your enrollment request is pending admin approval/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole("button", { name: /request pending/i })).toBeDisabled()
+  })
+
+  it("shows rejected enrollment alert with reason from my-enrollments", async () => {
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue(companyOwnerWithId)
+    mockFairContextActive()
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        enrollments: [],
+        pendingEnrollmentRequests: [
+          { fairId: "f1", status: "rejected", rejectReason: "At capacity" },
+        ],
+      }),
+    })
+
+    renderFairLanding()
+
+    await waitFor(() => {
+      expect(screen.getByText(/was not approved/i)).toBeInTheDocument()
+      expect(screen.getByText(/At capacity/i)).toBeInTheDocument()
+    })
+  })
+
+  it("submits Request to join via POST /enrollment-requests", async () => {
+    const user = userEvent.setup()
+    const soon = Date.now() + 86_400_000
+    const later = Date.now() + 86_400_000 * 3
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue(companyOwnerWithId)
+    vi.mocked(fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "company-1", companyName: "Test Company" },
+    ])
+    vi.mocked(useFair).mockReturnValue({
+      setFair: vi.fn(),
+      loading: false,
+      fair: {
+        id: "f1",
+        name: "Spring Fair",
+        description: null,
+        startTime: soon,
+        endTime: later,
+        isLive: false,
+      },
+      isLive: false,
+      fairId: "f1",
+    })
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ booths: [{ id: "b1", boothName: "Alpha" }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ success: true }),
+      })
+
+    globalThis.fetch = fetchMock
+
+    renderFairLanding()
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /join this fair/i })).toBeInTheDocument()
+    )
+    await user.click(screen.getByRole("button", { name: /join this fair/i }))
+
+    await user.click(await screen.findByRole("radio", { name: /request to join/i }))
+    await user.type(screen.getByLabelText(/message to organizers/i), "Please add us")
+    await user.click(screen.getByRole("button", { name: /submit request/i }))
+
+    await waitFor(() => {
+      const reqCall = fetchMock.mock.calls.find(
+        (c) =>
+          typeof c[0] === "string" &&
+          String(c[0]).includes("/api/fairs/f1/enrollment-requests") &&
+          (c[1] as RequestInit)?.method === "POST",
+      )
+      expect(reqCall).toBeDefined()
+      const body = JSON.parse((reqCall![1] as RequestInit).body as string)
+      expect(body).toMatchObject({
+        companyId: "company-1",
+        message: "Please add us",
+        boothIds: ["b1"],
+      })
     })
   })
 })

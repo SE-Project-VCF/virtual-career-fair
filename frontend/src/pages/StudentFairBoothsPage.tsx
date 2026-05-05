@@ -50,8 +50,12 @@ export default function StudentFairBoothsPage() {
   const [statusMessage, setStatusMessage] = useState("")
 
   useEffect(() => {
+    if (user?.role === "representative") {
+      navigate("/dashboard", { replace: true })
+      return
+    }
     loadFairBooths()
-  }, [fairId])
+  }, [fairId, user?.role, navigate])
 
   const fetchJobCounts = async (companyIds: string[]) => {
     try {

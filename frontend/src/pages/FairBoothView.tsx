@@ -720,6 +720,7 @@ export default function FairBoothView() {
             companyId: selectedJobForApply.companyId ?? booth.companyId,
           }}
           boothId={boothId}
+          fairId={fairId ?? undefined}
           studentId={user?.uid ?? null}
         />
       )}

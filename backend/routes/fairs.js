@@ -97,6 +97,15 @@ const enrollmentLimiter = rateLimit({
   skip: (req) => process.env.NODE_ENV === "test",
 });
 
+const enrollmentRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Too many enrollment request attempts, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV === "test",
+});
+
 
 async function getRequestingRoleFromAuthHeader(authHeader) {
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -416,6 +425,72 @@ async function snapshotCompanyJobsToFair(fairId, companyId) {
   await jobBatch.commit();
 }
 
+/** Fair must not have ended; requests only before start when startTime is set. */
+function assertFairAcceptsEnrollmentRequests(fairData) {
+  const now = admin.firestore.Timestamp.now().toMillis();
+  if (fairData.endTime && now >= fairData.endTime.toMillis()) {
+    return { error: "This fair has ended.", status: 400 };
+  }
+  if (fairData.startTime && now >= fairData.startTime.toMillis()) {
+    return {
+      error: "Enrollment requests are only accepted before the fair starts.",
+      status: 400,
+    };
+  }
+  return null;
+}
+
+/**
+ * Create fair enrollment + fair-scoped booths + job snapshot.
+ * @param {object} opts
+ * @param {string} opts.fairId
+ * @param {string} opts.companyId
+ * @param {string[]|undefined} opts.boothIds - multi-booth; omit or empty for legacy single booth
+ * @param {string} opts.enrolledBy - Firebase uid
+ * @param {"inviteCode"|"adminDirect"|"adminApproval"} opts.enrollmentMethod
+ */
+async function performCompanyEnrollment({ fairId, companyId, boothIds, enrolledBy, enrollmentMethod }) {
+  const enrollmentDoc = await db
+    .collection("fairs")
+    .doc(fairId)
+    .collection("enrollments")
+    .doc(companyId)
+    .get();
+  if (enrollmentDoc.exists) throw buildHttpError(400, "Company is already enrolled in this fair");
+
+  const companyDoc = await db.collection("companies").doc(companyId).get();
+  if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
+  const company = companyDoc.data();
+
+  const boothSnapshots = [];
+  if (boothIds && boothIds.length > 0) {
+    for (const bid of boothIds) {
+      const boothDoc = await db.collection("booths").doc(bid).get();
+      if (!boothDoc.exists) throw buildHttpError(400, `Booth ${bid} not found`);
+      if (boothDoc.data().companyId !== companyId) {
+        throw buildHttpError(403, `Booth ${bid} does not belong to this company`);
+      }
+      const { boothSnapshot } = await getCompanyAndBoothSnapshot(companyId, bid);
+      boothSnapshots.push(boothSnapshot);
+    }
+  } else {
+    const { boothSnapshot } = await getCompanyAndBoothSnapshot(companyId);
+    boothSnapshots.push(boothSnapshot);
+  }
+
+  const fairBoothIds = await createEnrollmentWithBooths({
+    fairId,
+    companyId,
+    companyName: company.companyName || "",
+    boothSnapshots,
+    enrolledBy,
+    enrollmentMethod,
+  });
+
+  await snapshotCompanyJobsToFair(fairId, companyId);
+  return fairBoothIds;
+}
+
 /* -------------------------------------------------------
    HELPER: Check if authenticated user is authorized
    to edit a booth in a fair (owner or rep of that company)
@@ -557,10 +632,11 @@ router.get("/fairs/my-enrollments", verifyFirebaseToken, async (req, res) => {
       companyIds.add(profileCompanyId);
     }
 
-    if (companyIds.size === 0) return res.json({ enrollments: [] });
+    if (companyIds.size === 0) return res.json({ enrollments: [], pendingEnrollmentRequests: [] });
 
     const fairsSnap = await db.collection("fairs").get();
     const enrollments = [];
+    const pendingEnrollmentRequests = [];
 
     for (const fairDoc of fairsSnap.docs) {
       for (const cid of companyIds) {
@@ -577,11 +653,33 @@ router.get("/fairs/my-enrollments", verifyFirebaseToken, async (req, res) => {
             boothId: enrollDoc.data().boothId || null,
             enrolledAt: enrollDoc.data().enrolledAt ? enrollDoc.data().enrolledAt.toMillis() : null,
           });
+        } else {
+          const reqDoc = await db
+            .collection("fairs")
+            .doc(fairDoc.id)
+            .collection("enrollmentRequests")
+            .doc(cid)
+            .get();
+          if (reqDoc.exists) {
+            const rd = reqDoc.data();
+            pendingEnrollmentRequests.push({
+              fairId: fairDoc.id,
+              companyId: cid,
+              status: rd.status || "pending",
+              companyName: rd.companyName || null,
+              message: rd.message || null,
+              boothIds: Array.isArray(rd.boothIds) ? rd.boothIds : undefined,
+              createdAt: rd.createdAt ? rd.createdAt.toMillis() : null,
+              updatedAt: rd.updatedAt ? rd.updatedAt.toMillis() : null,
+              rejectReason: rd.rejectReason || null,
+              rejectedAt: rd.rejectedAt ? rd.rejectedAt.toMillis() : null,
+            });
+          }
         }
       }
     }
 
-    return res.json({ enrollments });
+    return res.json({ enrollments, pendingEnrollmentRequests });
   } catch (err) {
     console.error("GET /api/fairs/my-enrollments error:", err);
     return res.status(500).json({ error: "Failed to fetch enrollments" });
@@ -651,6 +749,31 @@ router.get("/fairs/my-announcements", verifyFirebaseToken, async (req, res) => {
   } catch (err) {
     console.error("GET /api/fairs/my-announcements error:", err);
     return res.status(500).json({ error: "Failed to fetch announcements" });
+  }
+});
+
+/* GET /api/fairs/pending-enrollment-request-counts — admin: pending requests per fair (for dashboard badges) */
+router.get("/fairs/pending-enrollment-request-counts", verifyFirebaseToken, async (req, res) => {
+  const adminError = await verifyAdmin(req.user.uid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    // Per-fair subcollection queries avoid Firestore COLLECTION_GROUP index requirements.
+    const fairsSnap = await db.collection("fairs").get();
+    const counts = {};
+    await Promise.all(
+      fairsSnap.docs.map(async (fairDoc) => {
+        const pendingSnap = await fairDoc.ref
+          .collection("enrollmentRequests")
+          .where("status", "==", "pending")
+          .get();
+        if (pendingSnap.size > 0) counts[fairDoc.id] = pendingSnap.size;
+      }),
+    );
+    return res.json({ counts });
+  } catch (err) {
+    console.error("GET /api/fairs/pending-enrollment-request-counts error:", err);
+    return res.status(500).json({ error: "Failed to load pending enrollment request counts" });
   }
 });
 
@@ -1076,50 +1199,25 @@ router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, asy
     const accessError = await ensureAdminOrCompanyAccess(requestingUid, resolvedCompanyId);
     if (accessError) return res.status(accessError.status).json({ error: accessError.error });
 
-    const enrollmentDoc = await db
-      .collection("fairs")
-      .doc(resolvedFairId)
-      .collection("enrollments")
-      .doc(resolvedCompanyId)
-      .get();
-    if (enrollmentDoc.exists) return res.status(400).json({ error: "Company is already enrolled in this fair" });
-
-    const companyDoc = await db.collection("companies").doc(resolvedCompanyId).get();
-    if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
-    const company = companyDoc.data();
-
-    const enrollmentMethod = inviteCode ? "inviteCode" : "admin";
-    let boothSnapshots = [];
-
-    if (boothIds && boothIds.length > 0) {
-      // Multi-booth: validate and snapshot each selected booth
-      for (const bid of boothIds) {
-        const boothDoc = await db.collection("booths").doc(bid).get();
-        if (!boothDoc.exists) {
-          return res.status(400).json({ error: `Booth ${bid} not found` });
-        }
-        if (boothDoc.data().companyId !== resolvedCompanyId) {
-          return res.status(403).json({ error: `Booth ${bid} does not belong to this company` });
-        }
-        const { boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId, bid);
-        boothSnapshots.push(boothSnapshot);
-      }
-    } else {
-      // Legacy single-booth: use company.boothId fallback
-      const { boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId);
-      boothSnapshots.push(boothSnapshot);
+    const adminGate = await verifyAdmin(requestingUid);
+    const isAdmin = !adminGate;
+    if (!isAdmin && !inviteCode) {
+      return res.status(403).json({
+        error:
+          "An invite code is required to join this fair, or submit an enrollment request for admin approval.",
+        code: "INVITE_OR_REQUEST_REQUIRED",
+      });
     }
 
-    const fairBoothIds = await createEnrollmentWithBooths({
+    const enrollmentMethod = inviteCode ? "inviteCode" : "adminDirect";
+
+    const fairBoothIds = await performCompanyEnrollment({
       fairId: resolvedFairId,
       companyId: resolvedCompanyId,
-      companyName: company.companyName || "",
-      boothSnapshots,
+      boothIds,
       enrolledBy: requestingUid,
       enrollmentMethod,
     });
-
-    await snapshotCompanyJobsToFair(resolvedFairId, resolvedCompanyId);
 
     return res.status(201).json({ boothIds: fairBoothIds, fairId: resolvedFairId });
   } catch (err) {
@@ -1133,6 +1231,257 @@ router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, asy
     return res.status(500).json({ error: "Failed to enroll company" });
   }
 });
+
+/* POST /api/fairs/:fairId/enrollment-requests — owner/rep: request to join before fair starts */
+router.post(
+  "/fairs/:fairId/enrollment-requests",
+  enrollmentRequestLimiter,
+  verifyFirebaseToken,
+  async (req, res) => {
+    const { fairId } = req.params;
+    const { companyId, boothIds, message } = req.body || {};
+    const requestingUid = req.user.uid;
+
+    if (boothIds !== undefined) {
+      if (!Array.isArray(boothIds) || boothIds.length === 0) {
+        return res.status(400).json({ error: "boothIds must be a non-empty array when provided" });
+      }
+    }
+
+    try {
+      const fairDoc = await db.collection("fairs").doc(fairId).get();
+      if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+      const fairData = fairDoc.data();
+      const schedErr = assertFairAcceptsEnrollmentRequests(fairData);
+      if (schedErr) return res.status(schedErr.status).json({ error: schedErr.error });
+
+      const resolvedCompanyId = await resolveCompanyIdForEnrollment(requestingUid, companyId);
+      const accessErr = await verifyCompanyAccess(requestingUid, resolvedCompanyId);
+      if (accessErr) return res.status(accessErr.status).json({ error: accessErr.error });
+
+      const enrollmentDoc = await db
+        .collection("fairs")
+        .doc(fairId)
+        .collection("enrollments")
+        .doc(resolvedCompanyId)
+        .get();
+      if (enrollmentDoc.exists) {
+        return res.status(400).json({ error: "Company is already enrolled in this fair" });
+      }
+
+      const companyDoc = await db.collection("companies").doc(resolvedCompanyId).get();
+      if (!companyDoc.exists) return res.status(404).json({ error: "Company not found" });
+      const company = companyDoc.data();
+
+      if (boothIds && boothIds.length > 0) {
+        for (const bid of boothIds) {
+          const boothDoc = await db.collection("booths").doc(bid).get();
+          if (!boothDoc.exists) return res.status(400).json({ error: `Booth ${bid} not found` });
+          if (boothDoc.data().companyId !== resolvedCompanyId) {
+            return res.status(403).json({ error: `Booth ${bid} does not belong to this company` });
+          }
+        }
+      }
+
+      const reqRef = db.collection("fairs").doc(fairId).collection("enrollmentRequests").doc(resolvedCompanyId);
+      const existing = await reqRef.get();
+      if (existing.exists) {
+        const prev = existing.data();
+        if (prev.status === "pending") {
+          return res.status(200).json({ success: true, fairId, companyId: resolvedCompanyId, alreadyPending: true });
+        }
+      }
+
+      let msg = message != null ? String(message).trim() : "";
+      if (msg.length > 2000) msg = msg.slice(0, 2000);
+
+      const now = admin.firestore.Timestamp.now();
+      await reqRef.set(
+        {
+          ...removeUndefined({
+            companyId: resolvedCompanyId,
+            companyName: company.companyName || "",
+            requestedBy: requestingUid,
+            boothIds: boothIds && boothIds.length > 0 ? boothIds : undefined,
+            message: msg || undefined,
+            status: "pending",
+            createdAt: now,
+            updatedAt: now,
+          }),
+          rejectReason: admin.firestore.FieldValue.delete(),
+          rejectedAt: admin.firestore.FieldValue.delete(),
+          rejectedBy: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true },
+      );
+
+      return res.status(201).json({ success: true, fairId, companyId: resolvedCompanyId });
+    } catch (err) {
+      if (err.status) {
+        return res.status(err.status).json({
+          error: err.message,
+          ...(err.code ? { code: err.code } : {}),
+        });
+      }
+      console.error("POST /api/fairs/:fairId/enrollment-requests error:", err);
+      return res.status(500).json({ error: "Failed to submit enrollment request" });
+    }
+  },
+);
+
+/* GET /api/fairs/:fairId/enrollment-requests — admin: list pending requests */
+router.get("/fairs/:fairId/enrollment-requests", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const adminUid = req.user.uid;
+  const adminError = await verifyAdmin(adminUid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    const snap = await db
+      .collection("fairs")
+      .doc(fairId)
+      .collection("enrollmentRequests")
+      .where("status", "==", "pending")
+      .get();
+    const baseRows = snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        companyId: doc.id,
+        companyName: data.companyName || null,
+        requestedBy: data.requestedBy || null,
+        boothIds: Array.isArray(data.boothIds) ? data.boothIds : undefined,
+        message: data.message || null,
+        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        updatedAt: data.updatedAt ? data.updatedAt.toMillis() : null,
+      };
+    });
+
+    const uids = [...new Set(baseRows.map((r) => r.requestedBy).filter(Boolean))];
+    const boothIds = [...new Set(baseRows.flatMap((r) => r.boothIds || []))];
+
+    const [userSnaps, boothSnaps] = await Promise.all([
+      Promise.all(uids.map((uid) => db.collection("users").doc(uid).get())),
+      Promise.all(boothIds.map((id) => db.collection("booths").doc(id).get())),
+    ]);
+
+    const userById = new Map();
+    userSnaps.forEach((d) => {
+      if (d.exists) userById.set(d.id, d.data());
+    });
+    const boothById = new Map();
+    boothSnaps.forEach((d) => {
+      if (d.exists) boothById.set(d.id, d.data());
+    });
+
+    const displayNameForUser = (uid) => {
+      if (!uid) return null;
+      const u = userById.get(uid);
+      if (!u) return null;
+      const combined = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+      if (combined) return combined;
+      if (u.email) return u.email;
+      return null;
+    };
+
+    const requests = baseRows.map((row) => ({
+      ...row,
+      requestedByName: displayNameForUser(row.requestedBy) || row.requestedBy || "Unknown",
+      booths: (row.boothIds || []).map((id) => {
+        const b = boothById.get(id);
+        const boothName = (b && (b.boothName || b.name)) || "Untitled booth";
+        return { id, boothName };
+      }),
+    }));
+    return res.json({ requests });
+  } catch (err) {
+    console.error("GET /api/fairs/:fairId/enrollment-requests error:", err);
+    return res.status(500).json({ error: "Failed to list enrollment requests" });
+  }
+});
+
+/* POST /api/fairs/:fairId/enrollment-requests/:companyId/approve — admin */
+router.post(
+  "/fairs/:fairId/enrollment-requests/:companyId/approve",
+  verifyFirebaseToken,
+  async (req, res) => {
+    const { fairId, companyId } = req.params;
+    const adminUid = req.user.uid;
+    const adminError = await verifyAdmin(adminUid);
+    if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+    try {
+      const reqRef = db.collection("fairs").doc(fairId).collection("enrollmentRequests").doc(companyId);
+      const reqSnap = await reqRef.get();
+      if (!reqSnap.exists) return res.status(404).json({ error: "Enrollment request not found" });
+      const reqData = reqSnap.data();
+      if (reqData.status !== "pending") {
+        return res.status(400).json({ error: "This enrollment request is not pending" });
+      }
+
+      const boothIds = Array.isArray(reqData.boothIds) && reqData.boothIds.length > 0 ? reqData.boothIds : undefined;
+
+      const fairBoothIds = await performCompanyEnrollment({
+        fairId,
+        companyId,
+        boothIds,
+        enrolledBy: adminUid,
+        enrollmentMethod: "adminApproval",
+      });
+
+      await reqRef.delete();
+
+      return res.status(201).json({ boothIds: fairBoothIds, fairId, companyId });
+    } catch (err) {
+      if (err.status) {
+        return res.status(err.status).json({
+          error: err.message,
+          ...(err.code ? { code: err.code } : {}),
+        });
+      }
+      console.error("POST approve enrollment-request error:", err);
+      return res.status(500).json({ error: "Failed to approve enrollment request" });
+    }
+  },
+);
+
+/* POST /api/fairs/:fairId/enrollment-requests/:companyId/reject — admin */
+router.post(
+  "/fairs/:fairId/enrollment-requests/:companyId/reject",
+  verifyFirebaseToken,
+  async (req, res) => {
+    const { fairId, companyId } = req.params;
+    const { reason } = req.body || {};
+    const adminUid = req.user.uid;
+    const adminError = await verifyAdmin(adminUid);
+    if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+    try {
+      const reqRef = db.collection("fairs").doc(fairId).collection("enrollmentRequests").doc(companyId);
+      const reqSnap = await reqRef.get();
+      if (!reqSnap.exists) return res.status(404).json({ error: "Enrollment request not found" });
+      const reqData = reqSnap.data();
+      if (reqData.status !== "pending") {
+        return res.status(400).json({ error: "This enrollment request is not pending" });
+      }
+
+      let rejectReason = reason != null ? String(reason).trim() : "";
+      if (rejectReason.length > 2000) rejectReason = rejectReason.slice(0, 2000);
+
+      await reqRef.update({
+        status: "rejected",
+        rejectedBy: adminUid,
+        rejectedAt: admin.firestore.Timestamp.now(),
+        rejectReason: rejectReason || null,
+        updatedAt: admin.firestore.Timestamp.now(),
+      });
+
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("POST reject enrollment-request error:", err);
+      return res.status(500).json({ error: "Failed to reject enrollment request" });
+    }
+  },
+);
 
 /* GET /api/fairs/:fairId/enrollments - admin: list enrolled companies */
 router.get("/fairs/:fairId/enrollments", verifyFirebaseToken, async (req, res) => {

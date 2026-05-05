@@ -50,16 +50,17 @@ vi.mock("../../firebase", () => ({
   storage: {},
 }));
 
-vi.mock("../ProfileMenu", () => ({
-  default: () => <div data-testid="profile-menu">Profile Menu</div>,
-}));
-
 vi.mock("../../components/BaseLayout", () => ({
-  default: ({ children, pageTitle }: any) => (
+  default: ({ children, pageTitle, onHeaderBack, headerBackAriaLabel }: any) => (
     <div data-testid="base-layout">
       <button aria-label="menu">Menu</button>
       <span>Job Goblin</span>
       <span>Virtual Career Fair</span>
+      {onHeaderBack ? (
+        <button type="button" aria-label={headerBackAriaLabel ?? "Back to Dashboard"} onClick={onHeaderBack}>
+          Back
+        </button>
+      ) : null}
       {pageTitle && <h6>{pageTitle}</h6>}
       <button data-testid="notification-bell" />
       <button data-testid="profile-menu">Profile Menu</button>

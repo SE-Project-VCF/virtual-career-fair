@@ -81,14 +81,12 @@ function getNavItems(user: User | null): NavItem[] {
         { label: "Manage Booth", path: `/company/${user.companyId}/booth`, icon: <BusinessIcon /> },
         { label: "Submissions", path: `/company/${user.companyId}/submissions`, icon: <AssignmentIcon /> },
         { label: "Fair announcements", path: "/dashboard/fair-announcements", icon: <CampaignIcon /> },
-        { label: "Browse Booths", path: "/booths", icon: <EventIcon /> },
         { label: "Candidate Shortlist", path: "/dashboard/shortlist", icon: <PeopleIcon /> },
         { label: "Q&A Sessions", path: "/dashboard/qa-sessions", icon: <PresentationIcon /> },
         { label: "My 1x1 Calls", path: "/dashboard/my-calls", icon: <VideoCallIcon /> },
       ]
     : [
         { label: "Fair announcements", path: "/dashboard/fair-announcements", icon: <CampaignIcon /> },
-        { label: "Browse Booths", path: "/booths", icon: <BusinessIcon /> },
       ]
 
   const adminItems: NavItem[] = [
@@ -111,6 +109,10 @@ export interface BaseLayoutProps {
   showJobmotherAssistant?: boolean
   /** Shown before the page title (after the divider), e.g. navigate back from chat. */
   onHeaderBack?: () => void
+  /** Accessible name for the header back control (defaults to “Back to Dashboard”). */
+  headerBackAriaLabel?: string
+  /** Tooltip for the header back control (defaults to “Back to Dashboard”). */
+  headerBackTooltip?: string
   /** Extra controls in the header action row (before the global Chat button). */
   headerActions?: React.ReactNode
 }
@@ -121,6 +123,8 @@ export default function BaseLayout({
   pageTitle,
   showJobmotherAssistant = true,
   onHeaderBack,
+  headerBackAriaLabel = "Back to Dashboard",
+  headerBackTooltip = "Back to Dashboard",
   headerActions,
 }: Readonly<BaseLayoutProps>) {
   const navigate = useNavigate()
@@ -205,10 +209,10 @@ export default function BaseLayout({
                 <>
                   <Box sx={{ width: "1px", height: 32, bgcolor: "rgba(255,255,255,0.3)", mx: 0.5 }} />
                   {onHeaderBack && (
-                    <Tooltip title="Back to Dashboard">
+                    <Tooltip title={headerBackTooltip}>
                       <IconButton
                         onClick={onHeaderBack}
-                        aria-label="Back to Dashboard"
+                        aria-label={headerBackAriaLabel}
                         sx={{
                           color: "white",
                           background: "rgba(255,255,255,0.15)",
