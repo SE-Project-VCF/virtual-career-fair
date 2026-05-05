@@ -361,8 +361,8 @@ export default function NetworkingLounge() {
     <BaseLayout pageTitle={`${fairName} Lounge`}>
       <Box sx={{ display: "flex", flexDirection: "column", height: "calc(100vh - 64px)" }}>
         <Box sx={{ p: 1, borderBottom: "1px solid #e0e0e0", display: "flex", alignItems: "center" }}>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/fair/${fairId}/booths`)} size="small">
-            Back to Booths
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/fair/${fairId}`)} size="small">
+            Back to Fair
           </Button>
         </Box>
 
