@@ -447,6 +447,133 @@ describe("GET /api/companies/:companyId/invite-code", () => {
   });
 });
 
+describe("GET /api/companies/search", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("returns 401 without auth header", async () => {
+    const res = await request(app).get("/api/companies/search?q=Acme");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 when caller is not an admin", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "student" }, true)),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/companies/search?q=Acme")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 400 when q param is missing", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/companies/search")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when q param is empty string", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/companies/search?q=   ")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(400);
+  });
+
+  it("returns matching companies as [{ id, companyName }] on success", async () => {
+    const matchingDocs = [
+      { id: "comp-1", data: () => ({ companyName: "Acme Corp" }) },
+      { id: "comp-2", data: () => ({ companyName: "Acme LLC" }) },
+    ];
+
+    let callCount = 0;
+    db.collection.mockImplementation((name) => {
+      callCount++;
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          where: jest.fn(() => ({
+            where: jest.fn(() => ({
+              limit: jest.fn(() => ({
+                get: jest.fn().mockResolvedValue({ docs: matchingDocs }),
+              })),
+            })),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/companies/search?q=Acme")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      { id: "comp-1", companyName: "Acme Corp" },
+      { id: "comp-2", companyName: "Acme LLC" },
+    ]);
+  });
+
+  it("returns 500 on Firestore error", async () => {
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          where: jest.fn(() => ({
+            where: jest.fn(() => ({
+              limit: jest.fn(() => ({
+                get: jest.fn().mockRejectedValue(new Error("Firestore exploded")),
+              })),
+            })),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/companies/search?q=Acme")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(500);
+  });
+});
+
 describe("PUT /api/companies/:companyId/locations", () => {
   const verifiedLoc = {
     id: "loc-1",
