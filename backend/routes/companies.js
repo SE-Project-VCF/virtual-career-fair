@@ -105,19 +105,14 @@ router.get("/companies/search", verifyFirebaseToken, async (req, res) => {
       return res.status(400).json({ error: "Query parameter 'q' is required" });
     }
 
-    const prefix = q.trim();
-    const lastCode = prefix.codePointAt(prefix.length - 1);
-    const end = lastCode === 0xFFFF
-      ? prefix + "￿"  // can't increment last char; append max char as upper bound
-      : prefix.slice(0, -1) + String.fromCodePoint(lastCode + 1);
+    const needle = q.trim().toLowerCase();
 
-    const snap = await db.collection("companies")
-      .where("companyName", ">=", prefix)
-      .where("companyName", "<", end)
-      .limit(MAX_COMPANY_SEARCH_RESULTS)
-      .get();
+    const snap = await db.collection("companies").get();
+    const results = snap.docs
+      .filter((doc) => doc.data().companyName?.toLowerCase().includes(needle))
+      .slice(0, MAX_COMPANY_SEARCH_RESULTS)
+      .map((doc) => ({ id: doc.id, companyName: doc.data().companyName }));
 
-    const results = snap.docs.map((doc) => ({ id: doc.id, companyName: doc.data().companyName }));
     return res.json(results);
   } catch (err) {
     console.error("GET /api/companies/search error:", err);
