@@ -570,10 +570,8 @@ function OfficeLocationsOwnerCard({
   )
 }
 
-function BoothManagementCard({ companyId, legacyBoothId, navigate }: Readonly<{
+function BoothManagementCard({ companyId, navigate }: Readonly<{
   companyId: string
-  /** Fallback when /api/booths returns no rows but company still has legacy boothId */
-  legacyBoothId?: string | null
   navigate: ReturnType<typeof useNavigate>
 }>) {
   const [booths, setBooths] = useState<{ id: string; boothName?: string; industry?: string }[]>([])
@@ -1726,7 +1724,6 @@ export default function Company() {
           {/* Booth Management Card */}
           <BoothManagementCard
             companyId={company.id}
-            legacyBoothId={company.boothId}
             navigate={navigate}
           />
 
