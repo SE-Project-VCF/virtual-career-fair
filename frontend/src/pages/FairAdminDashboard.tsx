@@ -131,25 +131,31 @@ export default function FairAdminDashboard() {
       setCompanySearchResults([])
       return
     }
+    const controller = new AbortController()
     const timer = setTimeout(async () => {
       setCompanySearchLoading(true)
       try {
         const token = await getToken()
         const res = await fetch(
           `${API_URL}/api/companies/search?q=${encodeURIComponent(companySearchInput.trim())}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
         )
         if (res.ok) {
           const data = await res.json()
           setCompanySearchResults(data)
         }
-      } catch {
-        // silently ignore search errors
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          // silently ignore non-abort errors
+        }
       } finally {
         setCompanySearchLoading(false)
       }
     }, 300)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
   }, [companySearchInput, addDialogOpen])
 
   useEffect(() => {
@@ -431,9 +437,9 @@ export default function FairAdminDashboard() {
     if (!selectedCompany) return
     setAdding(true)
     setAddError("")
-    const token = await getToken()
-    const isEnrolled = enrollments.some((e) => e.id === selectedCompany.id)
     try {
+      const token = await getToken()
+      const isEnrolled = enrollments.some((e) => e.id === selectedCompany.id)
       if (isEnrolled) {
         const delRes = await fetch(`${API_URL}/api/fairs/${fairId}/enrollments/${selectedCompany.id}`, {
           method: "DELETE",
@@ -458,6 +464,7 @@ export default function FairAdminDashboard() {
       loadEnrollments()
     } catch (err: any) {
       setAddError(err.message)
+      loadEnrollments()
     } finally {
       setAdding(false)
     }
