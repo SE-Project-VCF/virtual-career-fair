@@ -774,8 +774,8 @@ export default function FairAdminDashboard() {
                   <Typography variant="h6">
                     Enrolled Companies ({enrollments.length})
                   </Typography>
-                  <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddDialogOpen(true)}>
-                    Add Company
+                  <Button variant="contained" onClick={() => setAddDialogOpen(true)}>
+                    + Add Company
                   </Button>
                 </Box>
 
@@ -1045,27 +1045,60 @@ export default function FairAdminDashboard() {
       </Dialog>
 
       {/* Add Company Dialog */}
-      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={addDialogOpen} onClose={() => {
+        setAddDialogOpen(false)
+        setSelectedCompany(null)
+        setCompanySearchInput("")
+        setAddError("")
+      }} maxWidth="sm" fullWidth transitionDuration={0}>
         <DialogTitle>Add Company to Fair</DialogTitle>
         <DialogContent>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Enter the Firestore company ID to enroll them in this fair.
+            Search by company name. Already-enrolled companies can be re-enrolled to fix broken enrollments.
           </Typography>
-          <TextField
-            label="Company ID"
-            value={""}
-            onChange={() => {}}
-            fullWidth
-            placeholder="e.g. abc123def456"
-            disabled={companySearchLoading}
-            inputProps={{ "data-results": companySearchResults.length }}
+          <Autocomplete
+            options={companySearchResults}
+            getOptionLabel={(o) => o.companyName}
+            inputValue={companySearchInput}
+            onInputChange={(_e, val) => setCompanySearchInput(val)}
+            value={selectedCompany}
+            onChange={(_e, val) => setSelectedCompany(val)}
+            loading={companySearchLoading}
+            filterOptions={(x) => x}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            disablePortal
+            renderOption={(props, option) => {
+              const isEnrolled = enrollments.some((e) => e.id === option.id)
+              return (
+                <li {...props} key={option.id}>
+                  <span style={{ pointerEvents: "none" }}>{option.companyName}</span>
+                  {isEnrolled && <Chip label="Enrolled" size="small" variant="outlined" sx={{ ml: 1, pointerEvents: "none" }} />}
+                </li>
+              )
+            }}
+            renderInput={(params) => (
+              <TextField {...params} label="Search companies" placeholder="Start typing a company name..." />
+            )}
           />
           {addError && <Alert severity="error" sx={{ mt: 2 }}>{addError}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setAddDialogOpen(false); setSelectedCompany(null); setCompanySearchInput(""); setAddError("") }}>Cancel</Button>
-          <Button variant="contained" onClick={handleAddCompany} disabled={adding || !selectedCompany}>
-            {adding ? "Adding..." : "Add Company"}
+          <Button onClick={() => {
+            setAddDialogOpen(false)
+            setSelectedCompany(null)
+            setCompanySearchInput("")
+            setAddError("")
+          }}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAddCompany}
+            disabled={adding || !selectedCompany}
+          >
+            {adding
+              ? "..."
+              : selectedCompany && enrollments.some((e) => e.id === selectedCompany.id)
+                ? "Re-enroll"
+                : "Add Company"}
           </Button>
         </DialogActions>
       </Dialog>
