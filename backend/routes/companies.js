@@ -101,17 +101,19 @@ router.get("/companies/search", verifyFirebaseToken, async (req, res) => {
     }
 
     const q = req.query.q;
-    if (!q || !q.trim()) {
+    if (!q?.trim()) {
       return res.status(400).json({ error: "Query parameter 'q' is required" });
     }
 
-    const needle = q.trim().toLowerCase();
+    const prefix = q.trim();
+    const endPrefix = prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
 
-    const snap = await db.collection("companies").get();
-    const results = snap.docs
-      .filter((doc) => doc.data().companyName?.toLowerCase().includes(needle))
-      .slice(0, MAX_COMPANY_SEARCH_RESULTS)
-      .map((doc) => ({ id: doc.id, companyName: doc.data().companyName }));
+    const snap = await db.collection("companies")
+      .where("companyName", ">=", prefix)
+      .where("companyName", "<", endPrefix)
+      .limit(MAX_COMPANY_SEARCH_RESULTS)
+      .get();
+    const results = snap.docs.map((doc) => ({ id: doc.id, companyName: doc.data().companyName }));
 
     return res.json(results);
   } catch (err) {
