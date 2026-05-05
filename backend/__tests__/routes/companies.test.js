@@ -512,9 +512,8 @@ describe("GET /api/companies/search", () => {
       { id: "comp-2", data: () => ({ companyName: "Acme LLC" }) },
     ];
 
-    let callCount = 0;
+    const whereSpy = jest.fn();
     db.collection.mockImplementation((name) => {
-      callCount++;
       if (name === "users") {
         return {
           doc: jest.fn(() => ({
@@ -524,8 +523,8 @@ describe("GET /api/companies/search", () => {
       }
       if (name === "companies") {
         return {
-          where: jest.fn(() => ({
-            where: jest.fn(() => ({
+          where: whereSpy.mockImplementation(() => ({
+            where: whereSpy.mockImplementation(() => ({
               limit: jest.fn(() => ({
                 get: jest.fn().mockResolvedValue({ docs: matchingDocs }),
               })),
@@ -543,6 +542,43 @@ describe("GET /api/companies/search", () => {
       { id: "comp-1", companyName: "Acme Corp" },
       { id: "comp-2", companyName: "Acme LLC" },
     ]);
+    expect(whereSpy).toHaveBeenCalledWith("companyName", ">=", "Acme");
+    expect(whereSpy).toHaveBeenCalledWith("companyName", "<", "Acmf");
+  });
+
+  it("uses trimmed prefix for Firestore query when q has surrounding whitespace", async () => {
+    const matchingDocs = [
+      { id: "comp-1", data: () => ({ companyName: "Acme Corp" }) },
+    ];
+
+    const whereSpy = jest.fn();
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "administrator" }, true)),
+          })),
+        };
+      }
+      if (name === "companies") {
+        return {
+          where: whereSpy.mockImplementation(() => ({
+            where: whereSpy.mockImplementation(() => ({
+              limit: jest.fn(() => ({
+                get: jest.fn().mockResolvedValue({ docs: matchingDocs }),
+              })),
+            })),
+          })),
+        };
+      }
+    });
+
+    const res = await request(app)
+      .get("/api/companies/search?q=  Acme  ")
+      .set("Authorization", authHeader());
+    expect(res.status).toBe(200);
+    expect(whereSpy).toHaveBeenCalledWith("companyName", ">=", "Acme");
+    expect(whereSpy).toHaveBeenCalledWith("companyName", "<", "Acmf");
   });
 
   it("returns 500 on Firestore error", async () => {

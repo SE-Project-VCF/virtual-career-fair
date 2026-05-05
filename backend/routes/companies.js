@@ -6,6 +6,7 @@ const { verifyFirebaseToken, generateInviteCode, removeUndefined } = require("..
 const { verifyOfficeLocationInput } = require("../services/verifiedOfficeLocation");
 
 const MAX_OFFICE_LOCATIONS = 40;
+const MAX_COMPANY_SEARCH_RESULTS = 20;
 
 /* ----------------------------------------------------
    CREATE COMPANY (Auth required — company owners)
@@ -86,6 +87,7 @@ router.post("/link-company", verifyFirebaseToken, async (req, res) => {
   }
 });
 
+// NOTE: must be defined before /companies/:companyId routes to avoid wildcard capture
 /* ----------------------------------------------------
    SEARCH COMPANIES BY NAME PREFIX (admin only)
 ---------------------------------------------------- */
@@ -104,12 +106,15 @@ router.get("/companies/search", verifyFirebaseToken, async (req, res) => {
     }
 
     const prefix = q.trim();
-    const end = prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+    const lastCode = prefix.codePointAt(prefix.length - 1);
+    const end = lastCode === 0xFFFF
+      ? prefix + "￿"  // can't increment last char; append max char as upper bound
+      : prefix.slice(0, -1) + String.fromCodePoint(lastCode + 1);
 
     const snap = await db.collection("companies")
       .where("companyName", ">=", prefix)
       .where("companyName", "<", end)
-      .limit(20)
+      .limit(MAX_COMPANY_SEARCH_RESULTS)
       .get();
 
     const results = snap.docs.map((doc) => ({ id: doc.id, companyName: doc.data().companyName }));
