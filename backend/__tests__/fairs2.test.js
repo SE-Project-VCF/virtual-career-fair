@@ -599,6 +599,97 @@ describe("GET /api/fairs/my-enrollments", () => {
     expect(res.body.pendingEnrollmentRequests).toEqual([]);
   });
 
+  it("returns pendingEnrollmentRequests when enrollment is missing but enrollmentRequests doc exists", async () => {
+    const companyId = "company-id";
+
+    const batchMock = {
+      set: jest.fn().mockReturnThis(),
+      delete: jest.fn().mockReturnThis(),
+      commit: jest.fn().mockResolvedValue(undefined),
+    };
+    db.batch.mockReturnValue(batchMock);
+
+    db.collection.mockImplementation((name) => {
+      if (name === "users") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ uid: "admin-uid", companyId }, true, "admin-uid"),
+            ),
+          })),
+        };
+      }
+      if (name === "fairs") {
+        const fairDocRef = {
+          get: jest.fn().mockResolvedValue(mockDocSnap(FAIR_DATA, true, "fair-id")),
+          id: "fair-id",
+          collection: jest.fn((sub) => {
+            if (sub === "enrollments") {
+              return {
+                doc: jest.fn(() => ({
+                  get: jest.fn().mockResolvedValue(mockDocSnap(null, false)),
+                })),
+              };
+            }
+            if (sub === "enrollmentRequests") {
+              return {
+                doc: jest.fn(() => ({
+                  get: jest.fn().mockResolvedValue(
+                    mockDocSnap(
+                      {
+                        status: "pending",
+                        companyName: "Acme Co",
+                        message: "Please",
+                        boothIds: ["b1"],
+                        createdAt: { toMillis: () => 100 },
+                        updatedAt: { toMillis: () => 200 },
+                        rejectReason: null,
+                      },
+                      true,
+                      companyId,
+                    ),
+                  ),
+                })),
+              };
+            }
+            return { doc: jest.fn() };
+          }),
+        };
+
+        return {
+          doc: jest.fn(() => fairDocRef),
+          get: jest.fn().mockResolvedValue(mockQuerySnap([{ id: "fair-id", data: () => FAIR_DATA }])),
+          where: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+        };
+      }
+      return {
+        doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) })),
+        get: jest.fn().mockResolvedValue(mockQuerySnap([])),
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+      };
+    });
+
+    const res = await request(app)
+      .get("/api/fairs/my-enrollments")
+      .set("Authorization", authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.enrollments).toEqual([]);
+    expect(res.body.pendingEnrollmentRequests).toHaveLength(1);
+    expect(res.body.pendingEnrollmentRequests[0]).toMatchObject({
+      fairId: "fair-id",
+      companyId,
+      status: "pending",
+      companyName: "Acme Co",
+      message: "Please",
+      boothIds: ["b1"],
+      createdAt: 100,
+      updatedAt: 200,
+    });
+  });
+
   it("for companyOwner with no profile companyId, aggregates enrollments from owned companies query", async () => {
     const batchMock = {
       set: jest.fn().mockReturnThis(),
