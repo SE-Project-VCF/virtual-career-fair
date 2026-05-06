@@ -536,34 +536,28 @@ describe("FairAdminDashboard — toggle live", () => {
 })
 
 describe("FairAdminDashboard — add company dialog", () => {
+  const baseUseFair = {
+    fair: { id: "f1", name: "Test Fair", isLive: false, inviteCode: "ABC" },
+    setFair: vi.fn(),
+    isLive: false,
+    loading: false,
+    fairId: "f1",
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
-    mockNavigate.mockClear()
-
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
-      uid: "admin-1",
-      email: "admin@example.com",
+      uid: "admin1",
       role: "administrator",
-    })
+      email: "admin@test.com",
+    } as any)
+    vi.mocked(useFair).mockReturnValue(baseUseFair as any)
+  })
 
-    vi.mocked(useFair).mockReturnValue({
-      setFair: vi.fn(),
-      loading: false,
-      fair: {
-        id: "f1",
-        name: "Spring Fair",
-        description: null,
-        isLive: false,
-        startTime: null,
-        endTime: null,
-        inviteCode: "ABC123",
-      },
-      isLive: false,
-      fairId: "f1",
-    })
-
+  function setupFetch(searchResults: { id: string; companyName: string }[] = []) {
     globalThis.fetch = vi.fn().mockImplementation((url: string) => {
       const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => searchResults })
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
       }
@@ -575,107 +569,126 @@ describe("FairAdminDashboard — add company dialog", () => {
         json: async () => ({ enrollments: [] }),
       })
     })
+  }
+
+  it("opens dialog when Add Company button clicked", async () => {
+    setupFetch()
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    expect(screen.getByText("Add Company to Fair")).toBeInTheDocument()
   })
 
-  it("shows error in add company dialog on API failure", async () => {
+  it("searches companies by name and shows results", async () => {
+    setupFetch([{ id: "c1", companyName: "Acme Corp" }])
     const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument())
+  })
 
-    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+  it("shows (Enrolled) chip for already-enrolled companies in results", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
       const u = String(url)
-      if (u.includes("/f1/enrollment-requests")) {
-        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
-      }
-      if (u.includes("/f1/announcements")) {
-        return Promise.resolve(mockFetchAnnouncementsOk())
-      }
-      if (u.includes("/f1/enroll") && !u.includes("enrollments") && init?.method === "POST") {
-        return Promise.resolve({ ok: false, json: async () => ({ error: "Company not found" }) })
-      }
-      if (u.includes("/enrollments")) {
-        return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) })
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "c1", companyName: "Acme Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [{ id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null }] }) })
     })
-
+    const user = userEvent.setup()
     renderFairAdminDashboard()
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /add company/i })).toBeInTheDocument()
-    )
-
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    await user.type(screen.getByLabelText(/company id/i), "bad-id")
-    await user.click(screen.getByRole("button", { name: /^add company$/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText("Company not found")).toBeInTheDocument()
-    })
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument())
+    expect(screen.getByText("Enrolled")).toBeInTheDocument()
   })
 
-  it("closes add company dialog and reloads enrollments on success", async () => {
-    const user = userEvent.setup()
-    let enrolled = false
-
-    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+  it("shows Re-enroll button when an enrolled company is selected", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
       const u = String(url)
-      if (u.includes("/f1/enrollment-requests")) {
-        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
-      }
-      if (u.includes("/f1/announcements")) {
-        return Promise.resolve(mockFetchAnnouncementsOk())
-      }
-      if (u.includes("/f1/enroll") && !u.includes("enrollments") && init?.method === "POST") {
-        enrolled = true
-        return Promise.resolve({ ok: true, json: async () => ({ success: true }) })
-      }
-      if (u.includes("/enrollments")) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            enrollments: enrolled
-              ? [{ id: "c1", companyName: "Acme", enrollmentMethod: "admin", enrolledAt: null }]
-              : [],
-          }),
-        })
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) })
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "c1", companyName: "Acme Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [{ id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null }] }) })
     })
-
+    const user = userEvent.setup()
     renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole("option")[0])
+    await waitFor(() => expect(screen.getByRole("button", { name: /re-enroll/i })).toBeInTheDocument())
+  })
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /add company/i })).toBeInTheDocument()
-    )
-
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    await user.type(screen.getByLabelText(/company id/i), "c1")
-    await user.click(screen.getByRole("button", { name: /^add company$/i }))
-
+  it("calls DELETE then POST on re-enroll", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
+      const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "c1", companyName: "Acme Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      if (u.includes("/enrollments/c1") && opts?.method === "DELETE") return Promise.resolve({ ok: true, json: async () => ({}) })
+      if (u.includes("/enroll") && opts?.method === "POST") return Promise.resolve({ ok: true, json: async () => ({ boothIds: ["b1"] }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [{ id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null }] }) })
+    })
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole("option")[0])
+    await waitFor(() => expect(screen.getByRole("button", { name: /re-enroll/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /re-enroll/i }))
     await waitFor(() => {
-      expect(screen.getByText("Company enrolled successfully")).toBeInTheDocument()
+      const calls = (globalThis.fetch as any).mock.calls.map(([url, opts]: any) => `${opts?.method ?? "GET"} ${url}`)
+      expect(calls).toEqual(expect.arrayContaining([
+        expect.stringContaining("DELETE"),
+        expect.stringContaining("/enroll"),
+      ]))
     })
   })
 
-  it("canceling add dialog clears the company ID field", async () => {
+  it("shows error in dialog on API failure", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
+      const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "bad-id", companyName: "Bad Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      if (u.includes("/enroll") && opts?.method === "POST") return Promise.resolve({ ok: false, json: async () => ({ error: "Company not found" }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
+    })
     const user = userEvent.setup()
-
     renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Bad")
+    await waitFor(() => expect(screen.getByText("Bad Corp")).toBeInTheDocument())
+    await user.click(screen.getByRole("option", { name: /Bad Corp/i }))
+    await waitFor(() => expect(screen.getByRole("button", { name: /^add company$/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /^add company$/i }))
+    await waitFor(() => expect(screen.getByText("Company not found")).toBeInTheDocument())
+  })
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /add company/i })).toBeInTheDocument()
-    )
-
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    await user.type(screen.getByLabelText(/company id/i), "some-id")
-
+  it("canceling dialog clears selected company", async () => {
+    setupFetch([{ id: "c1", companyName: "Acme Corp" }])
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument())
+    await user.click(screen.getByRole("option", { name: /Acme Corp/i }))
     await user.click(screen.getByRole("button", { name: /cancel/i }))
-
-    // Wait for dialog to fully close before re-opening
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
-
-    // Re-open and the field should be empty
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    expect(screen.getByLabelText(/company id/i)).toHaveValue("")
+    // reopen — input should be clear
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    expect(screen.getByRole("combobox")).toHaveValue("")
   })
 })
 

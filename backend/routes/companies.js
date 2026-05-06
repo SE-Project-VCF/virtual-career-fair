@@ -6,6 +6,7 @@ const { verifyFirebaseToken, generateInviteCode, removeUndefined } = require("..
 const { verifyOfficeLocationInput } = require("../services/verifiedOfficeLocation");
 
 const MAX_OFFICE_LOCATIONS = 40;
+const MAX_COMPANY_SEARCH_RESULTS = 20;
 
 /* ----------------------------------------------------
    CREATE COMPANY (Auth required — company owners)
@@ -83,6 +84,41 @@ router.post("/link-company", verifyFirebaseToken, async (req, res) => {
   } catch (err) {
     console.error("POST /api/link-company error:", err);
     return res.status(500).json({ error: "Failed to link company" });
+  }
+});
+
+// NOTE: must be defined before /companies/:companyId routes to avoid wildcard capture
+/* ----------------------------------------------------
+   SEARCH COMPANIES BY NAME PREFIX (admin only)
+---------------------------------------------------- */
+router.get("/companies/search", verifyFirebaseToken, async (req, res) => {
+  try {
+    const requestingUid = req.user.uid;
+
+    const userDoc = await db.collection("users").doc(requestingUid).get();
+    if (!userDoc.exists || userDoc.data().role !== "administrator") {
+      return res.status(403).json({ error: "Only administrators can search companies" });
+    }
+
+    const q = req.query.q;
+    if (!q?.trim()) {
+      return res.status(400).json({ error: "Query parameter 'q' is required" });
+    }
+
+    const prefix = q.trim();
+    const endPrefix = prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+
+    const snap = await db.collection("companies")
+      .where("companyName", ">=", prefix)
+      .where("companyName", "<", endPrefix)
+      .limit(MAX_COMPANY_SEARCH_RESULTS)
+      .get();
+    const results = snap.docs.map((doc) => ({ id: doc.id, companyName: doc.data().companyName }));
+
+    return res.json(results);
+  } catch (err) {
+    console.error("GET /api/companies/search error:", err);
+    return res.status(500).json({ error: "Failed to search companies" });
   }
 });
 
