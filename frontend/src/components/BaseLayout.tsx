@@ -16,6 +16,7 @@ import {
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
 import CloseIcon from "@mui/icons-material/Close"
+import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ChatIcon from "@mui/icons-material/Chat"
 import DashboardIcon from "@mui/icons-material/Dashboard"
 import EventIcon from "@mui/icons-material/Event"
@@ -80,14 +81,12 @@ function getNavItems(user: User | null): NavItem[] {
         { label: "Manage Booth", path: `/company/${user.companyId}/booth`, icon: <BusinessIcon /> },
         { label: "Submissions", path: `/company/${user.companyId}/submissions`, icon: <AssignmentIcon /> },
         { label: "Fair announcements", path: "/dashboard/fair-announcements", icon: <CampaignIcon /> },
-        { label: "Browse Booths", path: "/booths", icon: <EventIcon /> },
         { label: "Candidate Shortlist", path: "/dashboard/shortlist", icon: <PeopleIcon /> },
         { label: "Q&A Sessions", path: "/dashboard/qa-sessions", icon: <PresentationIcon /> },
         { label: "My 1x1 Calls", path: "/dashboard/my-calls", icon: <VideoCallIcon /> },
       ]
     : [
         { label: "Fair announcements", path: "/dashboard/fair-announcements", icon: <CampaignIcon /> },
-        { label: "Browse Booths", path: "/booths", icon: <BusinessIcon /> },
       ]
 
   const adminItems: NavItem[] = [
@@ -108,6 +107,14 @@ export interface BaseLayoutProps {
   pageTitle?: string
   /** When false, hides the floating Fairy Jobmother help widget. Default true. */
   showJobmotherAssistant?: boolean
+  /** Shown before the page title (after the divider), e.g. navigate back from chat. */
+  onHeaderBack?: () => void
+  /** Accessible name for the header back control (defaults to “Back to Dashboard”). */
+  headerBackAriaLabel?: string
+  /** Tooltip for the header back control (defaults to “Back to Dashboard”). */
+  headerBackTooltip?: string
+  /** Extra controls in the header action row (before the global Chat button). */
+  headerActions?: React.ReactNode
 }
 
 export default function BaseLayout({
@@ -115,6 +122,10 @@ export default function BaseLayout({
   showChat = true,
   pageTitle,
   showJobmotherAssistant = true,
+  onHeaderBack,
+  headerBackAriaLabel = "Back to Dashboard",
+  headerBackTooltip = "Back to Dashboard",
+  headerActions,
 }: Readonly<BaseLayoutProps>) {
   const navigate = useNavigate()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -197,6 +208,22 @@ export default function BaseLayout({
               {pageTitle && (
                 <>
                   <Box sx={{ width: "1px", height: 32, bgcolor: "rgba(255,255,255,0.3)", mx: 0.5 }} />
+                  {onHeaderBack && (
+                    <Tooltip title={headerBackTooltip}>
+                      <IconButton
+                        onClick={onHeaderBack}
+                        aria-label={headerBackAriaLabel}
+                        sx={{
+                          color: "white",
+                          background: "rgba(255,255,255,0.15)",
+                          border: "1px solid rgba(255,255,255,0.3)",
+                          "&:hover": { background: "rgba(255,255,255,0.25)" },
+                        }}
+                      >
+                        <ArrowBackIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Typography
                     variant="h6"
                     sx={{ fontWeight: 600, color: "white", letterSpacing: "-0.3px" }}
@@ -209,6 +236,7 @@ export default function BaseLayout({
 
             {/* Right: actions */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              {headerActions}
               {showChat && (
                 <Tooltip title="Open Chat">
                   <Button

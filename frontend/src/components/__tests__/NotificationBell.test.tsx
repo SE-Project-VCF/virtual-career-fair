@@ -12,7 +12,10 @@ vi.mock("react-router-dom", async () => {
 })
 
 vi.mock("../../utils/auth", () => ({
-  authUtils: { getCurrentUser: vi.fn() },
+  authUtils: {
+    getCurrentUser: vi.fn(),
+    getIdToken: vi.fn(),
+  },
 }))
 
 vi.mock("../../config", () => ({
@@ -96,6 +99,7 @@ describe("NotificationBell", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue(studentUser)
+    vi.mocked(authUtils.authUtils.getIdToken).mockResolvedValue("mock-id-token")
     vi.mocked(studentUser.getIdToken).mockResolvedValue("mock-id-token")
     globalThis.fetch = vi.fn().mockImplementation(defaultFetchImpl)
   })
@@ -131,7 +135,12 @@ describe("NotificationBell", () => {
       await waitFor(() => {
         expect(globalThis.fetch).toHaveBeenCalledWith(
           expect.stringContaining("/api/job-invitations/received"),
-          expect.objectContaining({ method: "GET" })
+          expect.objectContaining({
+            method: "GET",
+            headers: expect.objectContaining({
+              Authorization: "Bearer mock-id-token",
+            }),
+          })
         )
       })
     })
@@ -188,8 +197,26 @@ describe("NotificationBell", () => {
       consoleError.mockRestore()
     })
 
-    it("skips video fetch when getIdToken returns falsy (lines 88-89)", async () => {
+    it("does not fetch job invitations when authUtils.getIdToken returns null", async () => {
+      vi.mocked(authUtils.authUtils.getIdToken).mockResolvedValue(null)
+      const fetchSpy = vi.fn().mockImplementation(defaultFetchImpl)
+      globalThis.fetch = fetchSpy
+      renderBell()
+      await waitFor(() => {
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining("/api/call-invitations/incoming"),
+          expect.any(Object)
+        )
+      })
+      const jobCalls = fetchSpy.mock.calls.filter((c) =>
+        String(c[0]).includes("/api/job-invitations/received")
+      )
+      expect(jobCalls).toHaveLength(0)
+    })
+
+    it("skips video fetch when currentUser.getIdToken returns falsy", async () => {
       vi.mocked(studentUser.getIdToken).mockResolvedValue(undefined as unknown as string)
+      vi.mocked(authUtils.authUtils.getIdToken).mockResolvedValue("mock-id-token")
       const fetchSpy = vi.fn().mockImplementation(defaultFetchImpl)
       globalThis.fetch = fetchSpy
       renderBell()

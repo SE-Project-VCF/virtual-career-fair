@@ -1,15 +1,20 @@
 import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { BrowserRouter } from "react-router-dom"
 import StudentFairBoothsPage from "../StudentFairBoothsPage"
 
 const mockNavigate = vi.fn()
 
+const studentFairUseParams = vi.hoisted(() =>
+  vi.fn(() => ({ fairId: "fair-1" as string | undefined })),
+)
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom")
   return {
     ...actual,
-    useParams: () => ({ fairId: "fair-1" }),
+    useParams: () => studentFairUseParams(),
     useNavigate: () => mockNavigate,
   }
 })
@@ -104,6 +109,7 @@ describe("StudentFairBoothsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
+    studentFairUseParams.mockReturnValue({ fairId: "fair-1" })
     ;(authUtils.getCurrentUser as Mock).mockReturnValue(null)
   })
 
@@ -255,6 +261,178 @@ describe("StudentFairBoothsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Annual spring recruiting event")).toBeInTheDocument()
+    })
+  })
+
+  it("redirects representative to dashboard", () => {
+    ;(authUtils.getCurrentUser as Mock).mockReturnValue({
+      uid: "rep-1",
+      role: "representative",
+      email: "r@test.com",
+    })
+    ;(getDoc as Mock).mockImplementation(() => new Promise(() => {}))
+
+    renderPage()
+
+    expect(mockNavigate).toHaveBeenCalledWith("/dashboard", { replace: true })
+  })
+
+  it("shows error when fair schedule load throws", async () => {
+    ;(getDoc as Mock).mockRejectedValue(new Error("network"))
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to load fair booths/i)).toBeInTheDocument()
+    })
+  })
+
+  it("shows Fair not found when fairId param is missing", async () => {
+    studentFairUseParams.mockReturnValue({ fairId: undefined })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText(/fair not found/i)).toBeInTheDocument()
+    })
+  })
+
+  it("accepts numeric start/end times on fair schedule doc", async () => {
+    ;(getDoc as Mock).mockImplementation((ref: { _collection: string; _id: string }) => {
+      if (ref._collection === "fairSchedules") {
+        return Promise.resolve(
+          mockDocSnap(
+            true,
+            {
+              name: "Numeric Fair",
+              description: "",
+              startTime: now - 60_000,
+              endTime: now + 3_600_000,
+              registeredBoothIds: ["booth-1"],
+            },
+            "fair-1",
+          ),
+        )
+      }
+      if (ref._collection === "booths" && ref._id === "booth-1") return Promise.resolve(boothDoc1)
+      return Promise.resolve(mockDocSnap(false))
+    })
+
+    const companiesSnap = {
+      forEach: (cb: (doc: { id: string; data: () => Record<string, unknown> }) => void) => {
+        cb({ id: "company-1", data: () => ({ boothId: "booth-1" }) })
+      },
+      docs: [],
+    }
+    const jobsSnap = {
+      forEach: () => {},
+      docs: [],
+    }
+    let n = 0
+    ;(getDocs as Mock).mockImplementation(() => {
+      n += 1
+      return Promise.resolve(n % 2 === 1 ? companiesSnap : jobsSnap)
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText("Numeric Fair")).toBeInTheDocument()
+      expect(screen.getByText("Tech Corp")).toBeInTheDocument()
+    })
+  })
+
+  it("omits missing booth docs from the list", async () => {
+    ;(getDoc as Mock).mockImplementation((ref: { _collection: string; _id: string }) => {
+      if (ref._collection === "fairSchedules") return Promise.resolve(liveFairDoc({ registeredBoothIds: ["booth-1", "gone"] }))
+      if (ref._collection === "booths" && ref._id === "booth-1") return Promise.resolve(boothDoc1)
+      if (ref._collection === "booths" && ref._id === "gone") return Promise.resolve(mockDocSnap(false))
+      return Promise.resolve(mockDocSnap(false))
+    })
+
+    const companiesSnap = {
+      forEach: (cb: (doc: { id: string; data: () => Record<string, unknown> }) => void) => {
+        cb({ id: "company-1", data: () => ({ boothId: "booth-1" }) })
+      },
+      docs: [],
+    }
+    const jobsSnap = {
+      forEach: () => {},
+      docs: [],
+    }
+    let n = 0
+    ;(getDocs as Mock).mockImplementation(() => {
+      n += 1
+      return Promise.resolve(n % 2 === 1 ? companiesSnap : jobsSnap)
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText("Tech Corp")).toBeInTheDocument()
+    })
+    expect(screen.queryByText("Finance Inc")).not.toBeInTheDocument()
+  })
+
+  it("navigates to dashboard from header button", async () => {
+    const user = userEvent.setup()
+    ;(getDoc as Mock).mockImplementation((ref: { _collection: string; _id: string }) => {
+      if (ref._collection === "fairSchedules") return Promise.resolve(liveFairDoc())
+      if (ref._collection === "booths" && ref._id === "booth-1") return Promise.resolve(boothDoc1)
+      if (ref._collection === "booths" && ref._id === "booth-2") return Promise.resolve(boothDoc2)
+      return Promise.resolve(mockDocSnap(false))
+    })
+    const companiesSnap = {
+      forEach: () => {},
+      docs: [],
+    }
+    const jobsSnap = {
+      forEach: () => {},
+      docs: [],
+    }
+    let n = 0
+    ;(getDocs as Mock).mockImplementation(() => {
+      n += 1
+      return Promise.resolve(n % 2 === 1 ? companiesSnap : jobsSnap)
+    })
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText("Spring Career Fair")).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /dashboard/i }))
+    expect(mockNavigate).toHaveBeenCalledWith("/dashboard")
+  })
+
+  it("shows aggregated open positions from jobs collection", async () => {
+    ;(getDoc as Mock).mockImplementation((ref: { _collection: string; _id: string }) => {
+      if (ref._collection === "fairSchedules") return Promise.resolve(liveFairDoc({ registeredBoothIds: ["booth-1"] }))
+      if (ref._collection === "booths" && ref._id === "booth-1") return Promise.resolve(boothDoc1)
+      return Promise.resolve(mockDocSnap(false))
+    })
+
+    const companiesSnap = {
+      forEach: (cb: (doc: { id: string; data: () => Record<string, unknown> }) => void) => {
+        cb({ id: "company-1", data: () => ({ boothId: "booth-1" }) })
+      },
+      docs: [],
+    }
+    const jobsSnap = {
+      forEach: (cb: (d: { data: () => { companyId: string } }) => void) => {
+        cb({ data: () => ({ companyId: "company-1" }) })
+        cb({ data: () => ({ companyId: "company-1" }) })
+      },
+      docs: [],
+    }
+    let getDocsCall = 0
+    ;(getDocs as Mock).mockImplementation(() => {
+      getDocsCall += 1
+      return Promise.resolve(getDocsCall % 2 === 1 ? companiesSnap : jobsSnap)
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText(/2 open positions/i)).toBeInTheDocument()
     })
   })
 })

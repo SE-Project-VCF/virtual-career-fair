@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { BrowserRouter } from "react-router-dom"
 import FairList from "../FairList"
 import * as authUtils from "../../utils/auth"
+import * as ownedCompanies from "../../utils/ownedCompanies"
 
 const mockNavigate = vi.fn()
 
@@ -296,7 +297,7 @@ describe("FairList", () => {
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
 
-    expect(screen.getByLabelText(/invite code/i)).toBeInTheDocument()
+    expect(screen.getByRole("textbox", { name: /^invite code$/i })).toBeInTheDocument()
   })
 })
 
@@ -839,7 +840,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    await user.type(screen.getByLabelText(/invite code/i), "BADCODE")
+    await user.type(screen.getByRole("textbox", { name: /^invite code$/i }), "BADCODE")
     await user.click(screen.getByRole("button", { name: /^join fair$/i }))
 
     await waitFor(() => {
@@ -869,7 +870,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    await user.type(screen.getByLabelText(/invite code/i), "GOODCODE")
+    await user.type(screen.getByRole("textbox", { name: /^invite code$/i }), "GOODCODE")
     await user.click(screen.getByRole("button", { name: /^join fair$/i }))
 
     // After success: join dialog closes and company is marked enrolled → Edit Booth button appears
@@ -988,7 +989,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    const inviteInput = screen.getByLabelText(/invite code/i)
+    const inviteInput = screen.getByRole("textbox", { name: /^invite code$/i })
     await user.type(inviteInput, "ENTERCODE{Enter}")
 
     await waitFor(() => {
@@ -996,6 +997,42 @@ describe("FairList — join fair flow", () => {
         expect.stringContaining("/enroll"),
         expect.objectContaining({ method: "POST" })
       )
+    })
+  })
+
+  it("uses first returned fair booth id after join when API returns boothIds array", async () => {
+    const user = userEvent.setup()
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ fairs: [openFair] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ boothIds: ["fb-first", "fb-second"], fairId: "f1" }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+    await user.type(screen.getByRole("textbox", { name: /^invite code$/i }), "GOOD")
+    await user.click(screen.getByRole("button", { name: /^join fair$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /edit booth/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole("button", { name: /edit booth/i }))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining("bid=fb-first"))
     })
   })
 
@@ -1085,7 +1122,7 @@ describe("FairList — join fair flow", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
 
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    await user.type(screen.getByLabelText(/invite code/i), "ABCDEF")
+    await user.type(screen.getByRole("textbox", { name: /^invite code$/i }), "ABCDEF")
 
     await user.click(screen.getByRole("button", { name: /cancel/i }))
 
@@ -1094,7 +1131,7 @@ describe("FairList — join fair flow", () => {
 
     // Re-open: invite code field should be empty
     await user.click(screen.getByRole("button", { name: /join fair/i }))
-    expect(screen.getByLabelText(/invite code/i)).toHaveValue("")
+    expect(screen.getByRole("textbox", { name: /^invite code$/i })).toHaveValue("")
   })
 })
 
@@ -1381,6 +1418,457 @@ describe("FairList — distance and location search", () => {
     await waitFor(() => {
       const geoUrl = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])).find((u) => u.includes("radiusMiles=100"))
       expect(geoUrl).toBeDefined()
+    })
+  })
+})
+
+describe("FairList — enrollment request to join", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    vi.mocked(ownedCompanies.fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "co1", companyName: "Acme Labs" },
+    ])
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@test.com",
+      role: "companyOwner",
+    })
+  })
+
+  it("submits enrollment request for upcoming fair with booths and message", async () => {
+    const user = userEvent.setup()
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          booths: [{ id: "b1", boothName: "Main booth" }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+
+    await waitFor(() => expect(screen.getByRole("radio", { name: /request to join/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("radio", { name: /request to join/i }))
+
+    await user.type(screen.getByLabelText(/message to organizers/i), "We would love to participate.")
+
+    await user.click(screen.getByRole("button", { name: /submit request/i }))
+
+    await waitFor(() => {
+      const post = vi.mocked(globalThis.fetch).mock.calls.find(
+        (c) =>
+          String(c[0]).includes("/api/fairs/f1/enrollment-requests") &&
+          (c[1] as RequestInit | undefined)?.method === "POST",
+      )
+      expect(post).toBeDefined()
+      const body = JSON.parse((post![1] as RequestInit).body as string)
+      expect(body).toMatchObject({
+        companyId: "co1",
+        message: "We would love to participate.",
+        boothIds: ["b1"],
+      })
+    })
+  })
+
+  it("shows enrollment request pending banner from my-enrollments", async () => {
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          enrollments: [],
+          pendingEnrollmentRequests: [{ fairId: "f1", status: "pending" }],
+        }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => {
+      expect(screen.getByText(/Enrollment request pending approval/i)).toBeInTheDocument()
+    })
+  })
+
+  it("hides request-to-join option when fair has already started", async () => {
+    const user = userEvent.setup()
+    const pastStart = Date.now() - 86_400_000
+    const futureEnd = Date.now() + 5 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Started Fair",
+              description: null,
+              isLive: false,
+              startTime: pastStart,
+              endTime: futureEnd,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ booths: [] }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+
+    // No "request" radio when fair already started — only invite flow
+    expect(screen.queryByRole("radio", { name: /request to join/i })).not.toBeInTheDocument()
+  })
+
+  it("disables submit request until company owner picks company when owning several", async () => {
+    const user = userEvent.setup()
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    vi.mocked(ownedCompanies.fetchOwnedCompaniesForUser).mockResolvedValue([
+      { id: "co-a", companyName: "Alpha" },
+      { id: "co-b", companyName: "Beta" },
+    ])
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          booths: [{ id: "b1", boothName: "Only booth" }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+    await user.click(await screen.findByRole("radio", { name: /request to join/i }))
+
+    expect(screen.getByRole("button", { name: /submit request/i })).toBeDisabled()
+
+    await user.click(screen.getByRole("radio", { name: /beta/i }))
+    expect(screen.getByRole("button", { name: /submit request/i })).not.toBeDisabled()
+
+    await user.click(screen.getByRole("button", { name: /submit request/i }))
+
+    await waitFor(() => {
+      const post = vi.mocked(globalThis.fetch).mock.calls.find(
+        (c) =>
+          String(c[0]).includes("/api/fairs/f1/enrollment-requests") &&
+          (c[1] as RequestInit | undefined)?.method === "POST",
+      )
+      expect(post).toBeDefined()
+      const body = JSON.parse((post![1] as RequestInit).body as string)
+      expect(body.companyId).toBe("co-b")
+    })
+  })
+
+  it("submits enrollment request with only booths still selected after toggling one off", async () => {
+    const user = userEvent.setup()
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          booths: [
+            { id: "b-keep", boothName: "Keep me" },
+            { id: "b-drop", boothName: "Drop me" },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+    await user.click(screen.getByRole("radio", { name: /request to join/i }))
+
+    const dropBox = screen.getByRole("checkbox", { name: /drop me/i })
+    await user.click(dropBox)
+    expect(dropBox).not.toBeChecked()
+
+    await user.click(screen.getByRole("button", { name: /submit request/i }))
+
+    await waitFor(() => {
+      const post = vi.mocked(globalThis.fetch).mock.calls.find(
+        (c) =>
+          String(c[0]).includes("/api/fairs/f1/enrollment-requests") &&
+          (c[1] as RequestInit | undefined)?.method === "POST",
+      )
+      expect(post).toBeDefined()
+      const body = JSON.parse((post![1] as RequestInit).body as string)
+      expect(body.boothIds).toEqual(["b-keep"])
+    })
+  })
+
+  it("shows stale-route hint when enrollment request POST is 404 with non-JSON body", async () => {
+    const user = userEvent.setup()
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ booths: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => "<!doctype html><p>not json</p>",
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+    await user.click(screen.getByRole("radio", { name: /request to join/i }))
+    await user.click(screen.getByRole("button", { name: /submit request/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/restart the API server/i)).toBeInTheDocument()
+    })
+  })
+
+  it("shows enrolled banner with profile company name when set", async () => {
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
+      uid: "owner-1",
+      email: "owner@test.com",
+      role: "companyOwner",
+      companyId: "co1",
+      companyName: "Globex Corp",
+    } as any)
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          enrollments: [{ fairId: "f1", boothId: "b1", companyId: "co1" }],
+          pendingEnrollmentRequests: [],
+        }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => {
+      expect(screen.getByText(/Globex Corp is enrolled/i)).toBeInTheDocument()
+    })
+  })
+
+  it("shows helper when company has no booths in join dialog", async () => {
+    const user = userEvent.setup()
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ enrollments: [], pendingEnrollmentRequests: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ booths: [] }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /join fair/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/no booths on file for this company/i),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it("shows Join Fair when pending request is rejected rather than pending", async () => {
+    const soon = Date.now() + 3 * 86_400_000
+    const later = Date.now() + 10 * 86_400_000
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fairs: [
+            {
+              id: "f1",
+              name: "Future Fair",
+              description: null,
+              isLive: false,
+              startTime: soon,
+              endTime: later,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          enrollments: [],
+          pendingEnrollmentRequests: [{ fairId: "f1", status: "rejected", rejectReason: "Full" }],
+        }),
+      })
+
+    renderFairList()
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Enrollment request pending approval/i)).not.toBeInTheDocument()
+      expect(screen.getByRole("button", { name: /join fair/i })).toBeInTheDocument()
     })
   })
 })

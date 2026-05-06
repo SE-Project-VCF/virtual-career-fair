@@ -343,7 +343,7 @@ describe("FairBoothView", () => {
     })
   })
 
-  it("back button navigates to booths", async () => {
+  it("back button navigates to fair landing", async () => {
     const user = userEvent.setup()
     ;(globalThis.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
@@ -370,10 +370,10 @@ describe("FairBoothView", () => {
 
     await waitFor(() => expect(screen.getAllByText("Tech Corp").length).toBeGreaterThan(0))
 
-    const backButton = screen.getByRole("button", { name: /back to spring fair booths/i })
+    const backButton = screen.getByRole("button", { name: /back to fair/i })
     await user.click(backButton)
 
-    expect(mockNavigate).toHaveBeenCalledWith("/fair/fair-1/booths")
+    expect(mockNavigate).toHaveBeenCalledWith("/fair/fair-1")
   })
 
   it("calls track-leave on unmount when student viewed booth (lines 94, 106)", async () => {

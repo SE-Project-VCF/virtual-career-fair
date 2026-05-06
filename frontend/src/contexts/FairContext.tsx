@@ -3,12 +3,12 @@ import type { Dispatch, ReactNode, SetStateAction } from "react"
 import { API_URL } from "../config"
 import { auth } from "../firebase"
 
-interface FairVenueGeo {
+export interface FairVenueGeo {
   latitude: number
   longitude: number
 }
 
-interface FairData {
+export interface FairData {
   id: string
   name: string
   description: string | null
@@ -23,7 +23,7 @@ interface FairData {
   venueGeo?: FairVenueGeo | null
 }
 
-interface FairContextType {
+export interface FairContextType {
   fairId: string | null
   fair: FairData | null
   setFair: Dispatch<SetStateAction<FairData | null>>

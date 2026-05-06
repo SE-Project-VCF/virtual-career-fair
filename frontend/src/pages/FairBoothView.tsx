@@ -15,7 +15,9 @@ import {
   Link,
   TextField,
   Rating,
+  Stack,
 } from "@mui/material"
+import { alpha } from "@mui/material/styles"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -44,6 +46,8 @@ import {
   getQaSessionJoinUiState,
 } from "../utils/qaSessionUi"
 import { formatCompanyOfficeLocationsForDisplay } from "../utils/companyOfficeLocationDisplay"
+
+const ACCENT_GREEN = "#388560"
 
 interface Booth {
   id: string
@@ -282,7 +286,7 @@ export default function FairBoothView() {
       setRatingError,
       setMyRating,
       setRatingSuccess,
-    })
+    }, fairId ?? null)
 
   const handleStartChat = async () => {
     if (!booth || startingChat || !isMountedRef.current) return
@@ -315,21 +319,38 @@ export default function FairBoothView() {
   return (
     <BaseLayout pageTitle={booth?.companyName ?? "Booth"}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate(`/fair/${fairId}/booths`)}
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          spacing={1}
           sx={{ mb: 3 }}
         >
-          Back to {`${fair?.name ?? "Fair"} Booths`}
-        </Button>
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/fair/${fairId}`)}>
+            Back to Fair
+          </Button>
+          {fair?.name && (
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: { xs: "left", sm: "right" }, maxWidth: { sm: "60%" } }}>
+              {fair.name}
+            </Typography>
+          )}
+        </Stack>
 
         {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
         {!error && booth && (
           <Grid container spacing={4}>
             <Grid size={{ xs: 12, md: 8 }}>
-              <Card>
-                <CardContent>
+              <Card
+                variant="outlined"
+                sx={{
+                  borderRadius: 2,
+                  borderTop: "4px solid",
+                  borderTopColor: ACCENT_GREEN,
+                  overflow: "hidden",
+                }}
+              >
+                <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
                   <Box sx={{ display: "flex", alignItems: "flex-start", gap: 3, mb: 3 }}>
                     {booth.logoUrl && (
                       <img
@@ -414,11 +435,21 @@ export default function FairBoothView() {
                   {booth.qaSession && (
                     <>
                       <Divider sx={{ my: 2 }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
-                        <VideocamIcon sx={{ color: "#388560" }} />
-                        📹 Q&A Session
-                      </Typography>
-                      <Card sx={{ bgcolor: "rgba(56, 133, 96, 0.05)", border: "2px solid rgba(56, 133, 96, 0.2)", p: 2 }}>
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                        <VideocamIcon sx={{ color: ACCENT_GREEN }} aria-hidden />
+                        <Typography variant="h6" component="span" sx={{ fontWeight: 600 }}>
+                          Q&amp;A Session
+                        </Typography>
+                      </Stack>
+                      <Card
+                        variant="outlined"
+                        sx={{
+                          bgcolor: alpha(ACCENT_GREEN, 0.05),
+                          borderColor: alpha(ACCENT_GREEN, 0.28),
+                          borderRadius: 2,
+                          p: 2,
+                        }}
+                      >
                         <CardContent sx={{ p: 0 }}>
                           <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
                             {booth.qaSession.title}
@@ -451,9 +482,12 @@ export default function FairBoothView() {
                                   </Typography>
                                 )}
                                 {isActive && (
-                                  <Typography variant="body2" sx={{ mb: 2, color: "#d32f2f", fontWeight: 600 }}>
-                                    🔴 Call in Progress - Ends in {Math.max(0, minutesUntilEnd)}m
-                                  </Typography>
+                                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }} flexWrap="wrap">
+                                    <Chip label="Live" color="error" size="small" />
+                                    <Typography variant="body2" sx={{ color: "#d32f2f", fontWeight: 600 }}>
+                                      Call in progress — ends in {Math.max(0, minutesUntilEnd)}m
+                                    </Typography>
+                                  </Stack>
                                 )}
                                 {isPast && (
                                   <Typography variant="body2" sx={{ mb: 2, color: "#9e9e9e" }}>
@@ -467,8 +501,8 @@ export default function FairBoothView() {
                                   disabled={!canJoin}
                                   sx={{
                                     background: isActive
-                                      ? "linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)" 
-                                      : "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                                      ? "linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)"
+                                      : `linear-gradient(135deg, ${ACCENT_GREEN} 0%, #2d6b4d 100%)`,
                                     fontWeight: 600,
                                   }}
                                 >
@@ -489,7 +523,7 @@ export default function FairBoothView() {
                         Open Positions ({jobs.length})
                       </Typography>
                       {jobs.map((job) => (
-                        <Card key={job.id} variant="outlined" sx={{ mb: 2 }}>
+                        <Card key={job.id} variant="outlined" sx={{ mb: 2, borderRadius: 2 }}>
                           <CardContent>
                             <Typography fontWeight="bold">{job.name}</Typography>
                             {job.majorsAssociated && (
@@ -541,8 +575,16 @@ export default function FairBoothView() {
             </Grid>
 
             <Grid size={{ xs: 12, md: 4 }}>
-              <Card>
-                <CardContent>
+              <Stack
+                spacing={3}
+                sx={{
+                  position: { md: "sticky" },
+                  top: { md: "calc(var(--base-layout-header-height, 72px) + 16px)" },
+                  alignSelf: "flex-start",
+                }}
+              >
+                <Card variant="outlined" sx={{ borderRadius: 2, width: "100%" }}>
+                  <CardContent>
                   <Typography variant="h6" gutterBottom>Contact</Typography>
 
                   {booth.contactName && (
@@ -590,12 +632,11 @@ export default function FairBoothView() {
                       {startingChat ? "Opening Chat..." : "Message Representative"}
                     </Button>
                   )}
-                </CardContent>
-              </Card>
-
+                  </CardContent>
+                </Card>
               {/* Rating Card — students only */}
               {user?.role === "student" && myRating !== undefined && (
-                <Card sx={{ mt: 3 }}>
+                <Card variant="outlined" sx={{ borderRadius: 2, width: "100%" }}>
                   <CardContent>
                     <Typography variant="h6" gutterBottom>Rate This Booth</Typography>
 
@@ -651,6 +692,7 @@ export default function FairBoothView() {
                   </CardContent>
                 </Card>
               )}
+              </Stack>
             </Grid>
           </Grid>
         )}
@@ -678,6 +720,7 @@ export default function FairBoothView() {
             companyId: selectedJobForApply.companyId ?? booth.companyId,
           }}
           boothId={boothId}
+          fairId={fairId ?? undefined}
           studentId={user?.uid ?? null}
         />
       )}

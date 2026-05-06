@@ -152,6 +152,50 @@ describe("AdminDashboard", () => {
     });
   });
 
+  describe("Fairs management — pending enrollment requests", () => {
+    it("shows warning banner and loads pending-request counts", async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            fairs: [{ id: "fair-a", name: "Spring", isLive: false, startTime: null, endTime: null }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ counts: { "fair-a": 2 } }),
+        });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/2 pending enrollment requests across fairs/i)).toBeInTheDocument();
+      });
+      const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes("/api/fairs/pending-enrollment-request-counts"))).toBe(true);
+    });
+
+    it("uses singular copy for a single pending request", async () => {
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            fairs: [{ id: "f-x", name: "Solo Fair", isLive: true, startTime: null, endTime: null }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ counts: { "f-x": 1 } }),
+        });
+
+      renderAdminDashboard();
+
+      await waitFor(() => {
+        expect(screen.getByText(/1 pending enrollment request across fairs/i)).toBeInTheDocument();
+      });
+    });
+  });
+
   // Fairs Management Tests
   describe("Fairs Management", () => {
     it("displays Manage Career Fairs section", async () => {
@@ -443,6 +487,10 @@ describe("AdminDashboard", () => {
         })
         .mockResolvedValueOnce({
           ok: true,
+          json: async () => ({ counts: {} }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
           json: async () => ({ isLive: true }),
         });
 
@@ -475,6 +523,10 @@ describe("AdminDashboard", () => {
           }),
         })
         .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ counts: {} }),
+        })
+        .mockResolvedValueOnce({
           ok: false,
           json: async () => ({ error: "Toggle failed" }),
         });
@@ -504,8 +556,10 @@ describe("AdminDashboard", () => {
             fairs: [{ id: "fair-1", name: "Doomed Fair", isLive: false, startTime: null, endTime: null }],
           }),
         })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // DELETE
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }); // reload
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }) // reload
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) });
 
       renderAdminDashboard();
 
@@ -538,8 +592,8 @@ describe("AdminDashboard", () => {
 
       await user.click(screen.getByTestId("DeleteIcon").closest("button")!);
 
-      // Only initial loadFairs call, no DELETE
-      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+      // Initial loadFairs: fairs list + pending enrollment counts; no DELETE
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -554,8 +608,10 @@ describe("AdminDashboard", () => {
       const user = userEvent.setup();
       globalThis.fetch = vi.fn()
         .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }) // initial load
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "new-fair" }) }) // POST
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }); // reload
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) }) // reload
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) });
 
       renderAdminDashboard();
       await openDialog(user);
@@ -583,8 +639,10 @@ describe("AdminDashboard", () => {
       const user = userEvent.setup();
       globalThis.fetch = vi.fn()
         .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
         .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "new-fair" }) })
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) });
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) });
 
       renderAdminDashboard();
       await openDialog(user);
@@ -596,7 +654,7 @@ describe("AdminDashboard", () => {
 
       await waitFor(() => {
         const body = JSON.parse(
-          (globalThis.fetch as any).mock.calls[1][1].body
+          (globalThis.fetch as any).mock.calls[2][1].body
         );
         expect(body.startTime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         expect(body.endTime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -607,6 +665,7 @@ describe("AdminDashboard", () => {
       const user = userEvent.setup();
       globalThis.fetch = vi.fn()
         .mockResolvedValueOnce({ ok: true, json: async () => ({ fairs: [] }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ counts: {} }) })
         .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Name already taken" }) });
 
       renderAdminDashboard();

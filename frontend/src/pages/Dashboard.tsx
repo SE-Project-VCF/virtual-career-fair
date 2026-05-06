@@ -14,6 +14,7 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"
 import MailIcon from "@mui/icons-material/Mail"
 import VideoCallIcon from "@mui/icons-material/VideoCall"
 import GroupsIcon from "@mui/icons-material/Groups"
+import HistoryIcon from "@mui/icons-material/History"
 import EventList from "../components/EventList"
 import BaseLayout from "../components/BaseLayout"
 import FairAnnouncementsBanner from "../components/FairAnnouncementsBanner"
@@ -236,33 +237,6 @@ function DashboardCard({
   );
 }
 
-// Reusable Browse Booths Card
-function BrowseBoothsCard({ navigate, isLive, showHistory }: Readonly<{
-  navigate: ReturnType<typeof useNavigate>
-  isLive: boolean
-  showHistory?: boolean
-}>) {
-  return (
-    <Grid size={{ xs: 12, md: showHistory ? undefined : 6, sm: showHistory ? 6 : undefined }}>
-      <DashboardCard
-        icon={<BusinessIcon sx={{ fontSize: showHistory ? 28 : 32, color: "#388560" }} />}
-        title={showHistory ? "Browse Booths" : "Browse All Booths"}
-        description={isLive
-          ? "Explore other companies' booths at the virtual career fair."
-          : "The career fair is not currently live. You can only view your own company's booth."}
-        buttonLabel={showHistory ? "View Booths" : "View All Booths"}
-        buttonOnClick={() => navigate("/booths")}
-        buttonDisabled={!isLive}
-        secondaryButton={showHistory ? {
-          label: "Booth History",
-          onClick: () => { navigate("/dashboard/booth-history"); },
-          disabled: !isLive
-        } : undefined}
-      />
-    </Grid>
-  );
-}
-
 // Component for Employer Video Chat section (Shortlist, Q&A Sessions)
 function EmployerVideoChatSection({ navigate }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
@@ -270,7 +244,7 @@ function EmployerVideoChatSection({ navigate }: Readonly<{
   return (
     <Box sx={{ mb: 6 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        📹 Recruitment & Video Chat
+        Recruitment & Video Chat
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -298,17 +272,16 @@ function EmployerVideoChatSection({ navigate }: Readonly<{
 }
 
 // Component for Representative section
-function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen }: Readonly<{
+function RepresentativeSection({ navigate, user, setInviteCodeDialogOpen }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
   user: any
-  isLive: boolean
   setInviteCodeDialogOpen: (open: boolean) => void
 }>) {
   return (
     <>
       <Box sx={{ mb: 6 }}>
         <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-          💼 Company Management
+          Company Management
         </Typography>
       <Grid container spacing={3}>
         {!user.companyId && (
@@ -380,7 +353,6 @@ function RepresentativeSection({ navigate, user, isLive, setInviteCodeDialogOpen
             />
           </Grid>
         )}
-        <BrowseBoothsCard navigate={navigate} isLive={isLive} />
       </Grid>
     </Box>
     <EmployerVideoChatSection navigate={navigate} />
@@ -394,7 +366,7 @@ function AdminSection({ navigate }: Readonly<{
   return (
     <Box sx={{ mb: 6 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        ⚙️ Administrator Controls
+        Administrator Controls
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
@@ -426,25 +398,25 @@ function StudentSection({
   return (
     <Box sx={{ mb: 6 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        🎯 Career Opportunities
+        Career Opportunities
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 6 }}>
           <DashboardCard
             icon={<EventIcon sx={{ fontSize: 32, color: "#388560" }} />}
             title="Browse Career Fairs"
-            description="View all available virtual career fairs and browse company booths within each one."
+            description="View all virtual career fairs. Open a fair to browse exhibitor booths, jobs, and employer profiles in one place."
             buttonLabel="View All Fairs"
             buttonOnClick={() => navigate("/fairs")}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <DashboardCard
-            icon={<BusinessIcon sx={{ fontSize: 32, color: "#b03a6c" }} />}
-            title="Browse Company Booths"
-            description="Browse live career fairs and explore opportunities from top companies at virtual career fairs."
-            buttonLabel="Browse All Fairs"
-            buttonOnClick={() => navigate("/fairs")}
+            icon={<HistoryIcon sx={{ fontSize: 32, color: "#b03a6c" }} />}
+            title="Booth History"
+            description="See fairs and booths you have already visited and review your visit history."
+            buttonLabel="View Booth History"
+            buttonOnClick={() => navigate("/dashboard/booth-history")}
             colorTheme="pink"
           />
         </Grid>
@@ -504,7 +476,7 @@ function StatsSection({
   return (
     <Box sx={{ mt: 6, mb: 2 }}>
       <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-        📊 Quick Stats
+        Quick Stats
       </Typography>
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -539,9 +511,8 @@ function StatsSection({
 }
 
 // Component for Company Owner section
-function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledFairCount }: Readonly<{
+function CompanyOwnerSection({ navigate, totalRepresentatives, enrolledFairCount }: Readonly<{
   navigate: ReturnType<typeof useNavigate>
-  isLive: boolean
   totalRepresentatives: number
   enrolledFairCount: number
 }>) {
@@ -549,10 +520,10 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledF
     <>
       <Box sx={{ mb: 6 }}>
         <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: "#1a1a1a" }}>
-          💼 Company Management
+          Company Management
         </Typography>
       <Grid container spacing={3}>
-        <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <DashboardCard
             icon={<ShareIcon sx={{ fontSize: 28, color: "#388560" }} />}
             title="Manage Companies"
@@ -562,7 +533,7 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledF
             fullButton
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <DashboardCard
             icon={<CalendarMonthIcon sx={{ fontSize: 28, color: "#388560" }} />}
             title="Career Fairs"
@@ -573,7 +544,7 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledF
             fullButton
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 6 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <DashboardCard
             icon={<PeopleIcon sx={{ fontSize: 28, color: "#b03a6c" }} />}
             title="Team Members"
@@ -582,7 +553,6 @@ function CompanyOwnerSection({ navigate, isLive, totalRepresentatives, enrolledF
             colorTheme="pink"
           />
         </Grid>
-        <BrowseBoothsCard navigate={navigate} isLive={isLive} showHistory />
       </Grid>
     </Box>
     <EmployerVideoChatSection navigate={navigate} />
@@ -609,7 +579,6 @@ function renderRoleSection(
       return (
         <CompanyOwnerSection
           navigate={navigate}
-          isLive={props.isLive}
           totalRepresentatives={props.totalRepresentatives}
           enrolledFairCount={props.enrolledFairCount}
         />
@@ -619,7 +588,6 @@ function renderRoleSection(
         <RepresentativeSection 
           navigate={navigate}
           user={props.user}
-          isLive={props.isLive}
           setInviteCodeDialogOpen={props.setInviteCodeDialogOpen}
         />
       )
@@ -731,11 +699,17 @@ export default function Dashboard() {
 
     try {
       setLoadingInvitations(true);
+      const token = await authUtils.getIdToken();
+      if (!token) return;
+
       const response = await fetch(
         `${API_URL}/api/job-invitations/received?userId=${currentUser.uid}`,
         {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 

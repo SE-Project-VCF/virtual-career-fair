@@ -40,7 +40,7 @@ export default defineConfig({
         'node_modules/',
         'src/test/',
         '**/*.css',
-      ]
+      ],
     }
   },
 })

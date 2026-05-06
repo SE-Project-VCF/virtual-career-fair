@@ -70,6 +70,9 @@ describe("FairAdminDashboard", () => {
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
       }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
       return Promise.resolve({
         ok: true,
         json: async () => ({ enrollments: [] }),
@@ -279,6 +282,9 @@ describe("FairAdminDashboard — invite code", () => {
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
       }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
       return Promise.resolve({
         ok: true,
         json: async () => ({ enrollments: [] }),
@@ -305,17 +311,22 @@ describe("FairAdminDashboard — invite code", () => {
   it("calls refresh invite code endpoint and clears Copied state", async () => {
     const user = userEvent.setup()
 
-    // enrollments, announcements, refresh-invite-code
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ inviteCode: "XYZ789" }),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/refresh-invite-code") && init?.method === "POST") {
+        return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "XYZ789" }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     renderFairAdminDashboard()
 
@@ -335,19 +346,28 @@ describe("FairAdminDashboard — invite code", () => {
   it("shows error alert when refresh invite code fails with JSON error", async () => {
     const user = userEvent.setup()
 
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: "Internal Server Error",
-        headers: { get: () => "application/json" },
-        json: async () => ({ error: "Something went wrong" }),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/refresh-invite-code") && init?.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          statusText: "Internal Server Error",
+          headers: { get: () => "application/json" },
+          json: async () => ({ error: "Something went wrong" }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     renderFairAdminDashboard()
 
@@ -364,19 +384,30 @@ describe("FairAdminDashboard — invite code", () => {
   it("shows API error when refresh invite code fails without JSON body", async () => {
     const user = userEvent.setup()
 
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 503,
-        statusText: "Service Unavailable",
-        headers: { get: () => "text/html" },
-        json: async () => { throw new Error("not json") },
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/refresh-invite-code") && init?.method === "POST") {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          statusText: "Service Unavailable",
+          headers: { get: () => "text/html" },
+          json: async () => {
+            throw new Error("not json")
+          },
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     renderFairAdminDashboard()
 
@@ -423,6 +454,9 @@ describe("FairAdminDashboard — toggle live", () => {
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
       }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
       return Promise.resolve({
         ok: true,
         json: async () => ({ enrollments: [] }),
@@ -438,16 +472,22 @@ describe("FairAdminDashboard — toggle live", () => {
       writable: true,
     })
 
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/toggle-status") && init?.method === "POST") {
+        return Promise.resolve({ ok: true, json: async () => ({}) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     renderFairAdminDashboard()
 
@@ -465,16 +505,22 @@ describe("FairAdminDashboard — toggle live", () => {
   })
 
   it("shows error when toggle-status fails", async () => {
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({}),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/toggle-status") && init?.method === "POST") {
+        return Promise.resolve({ ok: false, json: async () => ({}) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     renderFairAdminDashboard()
 
@@ -490,126 +536,159 @@ describe("FairAdminDashboard — toggle live", () => {
 })
 
 describe("FairAdminDashboard — add company dialog", () => {
+  const baseUseFair = {
+    fair: { id: "f1", name: "Test Fair", isLive: false, inviteCode: "ABC" },
+    setFair: vi.fn(),
+    isLive: false,
+    loading: false,
+    fairId: "f1",
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
-    mockNavigate.mockClear()
-
     vi.mocked(authUtils.authUtils.getCurrentUser).mockReturnValue({
-      uid: "admin-1",
-      email: "admin@example.com",
+      uid: "admin1",
       role: "administrator",
-    })
+      email: "admin@test.com",
+    } as any)
+    vi.mocked(useFair).mockReturnValue(baseUseFair as any)
+  })
 
-    vi.mocked(useFair).mockReturnValue({
-      setFair: vi.fn(),
-      loading: false,
-      fair: {
-        id: "f1",
-        name: "Spring Fair",
-        description: null,
-        isLive: false,
-        startTime: null,
-        endTime: null,
-        inviteCode: "ABC123",
-      },
-      isLive: false,
-      fairId: "f1",
-    })
-
+  function setupFetch(searchResults: { id: string; companyName: string }[] = []) {
     globalThis.fetch = vi.fn().mockImplementation((url: string) => {
       const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => searchResults })
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
       }
       return Promise.resolve({
         ok: true,
         json: async () => ({ enrollments: [] }),
       })
     })
+  }
+
+  it("opens dialog when Add Company button clicked", async () => {
+    setupFetch()
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    expect(screen.getByText("Add Company to Fair")).toBeInTheDocument()
   })
 
-  it("shows error in add company dialog on API failure", async () => {
+  it("searches companies by name and shows results", async () => {
+    setupFetch([{ id: "c1", companyName: "Acme Corp" }])
     const user = userEvent.setup()
-
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: "Company not found" }),
-      })
-
     renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument())
+  })
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /add company/i })).toBeInTheDocument()
-    )
+  it("shows (Enrolled) chip for already-enrolled companies in results", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "c1", companyName: "Acme Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [{ id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null }] }) })
+    })
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument())
+    expect(screen.getByText("Enrolled")).toBeInTheDocument()
+  })
 
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    await user.type(screen.getByLabelText(/company id/i), "bad-id")
-    await user.click(screen.getByRole("button", { name: /^add company$/i }))
+  it("shows Re-enroll button when an enrolled company is selected", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "c1", companyName: "Acme Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [{ id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null }] }) })
+    })
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole("option")[0])
+    await waitFor(() => expect(screen.getByRole("button", { name: /re-enroll/i })).toBeInTheDocument())
+  })
 
+  it("calls DELETE then POST on re-enroll", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
+      const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "c1", companyName: "Acme Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      if (u.includes("/enrollments/c1") && opts?.method === "DELETE") return Promise.resolve({ ok: true, json: async () => ({}) })
+      if (u.includes("/enroll") && opts?.method === "POST") return Promise.resolve({ ok: true, json: async () => ({ boothIds: ["b1"] }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [{ id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null }] }) })
+    })
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByRole("option")[0])
+    await waitFor(() => expect(screen.getByRole("button", { name: /re-enroll/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /re-enroll/i }))
     await waitFor(() => {
-      expect(screen.getByText("Company not found")).toBeInTheDocument()
+      const calls = (globalThis.fetch as any).mock.calls.map(([url, opts]: any) => `${opts?.method ?? "GET"} ${url}`)
+      expect(calls).toEqual(expect.arrayContaining([
+        expect.stringContaining("DELETE"),
+        expect.stringContaining("/enroll"),
+      ]))
     })
   })
 
-  it("closes add company dialog and reloads enrollments on success", async () => {
-    const user = userEvent.setup()
-
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [{ id: "c1", companyName: "Acme", enrollmentMethod: "admin", enrolledAt: null }] }),
-      })
-
-    renderFairAdminDashboard()
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /add company/i })).toBeInTheDocument()
-    )
-
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    await user.type(screen.getByLabelText(/company id/i), "c1")
-    await user.click(screen.getByRole("button", { name: /^add company$/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText("Company enrolled successfully")).toBeInTheDocument()
+  it("shows error in dialog on API failure", async () => {
+    globalThis.fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
+      const u = String(url)
+      if (u.includes("/companies/search")) return Promise.resolve({ ok: true, json: async () => [{ id: "bad-id", companyName: "Bad Corp" }] })
+      if (u.includes("/f1/announcements")) return Promise.resolve({ ok: true, json: async () => ({ announcements: [] }) })
+      if (u.includes("/enroll") && opts?.method === "POST") return Promise.resolve({ ok: false, json: async () => ({ error: "Company not found" }) })
+      return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
     })
+    const user = userEvent.setup()
+    renderFairAdminDashboard()
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Bad")
+    await waitFor(() => expect(screen.getByText("Bad Corp")).toBeInTheDocument())
+    await user.click(screen.getByRole("option", { name: /Bad Corp/i }))
+    await waitFor(() => expect(screen.getByRole("button", { name: /^add company$/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /^add company$/i }))
+    await waitFor(() => expect(screen.getByText("Company not found")).toBeInTheDocument())
   })
 
-  it("canceling add dialog clears the company ID field", async () => {
+  it("canceling dialog clears selected company", async () => {
+    setupFetch([{ id: "c1", companyName: "Acme Corp" }])
     const user = userEvent.setup()
-
     renderFairAdminDashboard()
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /add company/i })).toBeInTheDocument()
-    )
-
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    await user.type(screen.getByLabelText(/company id/i), "some-id")
-
+    await waitFor(() => expect(screen.getByRole("button", { name: /\+ add company/i })).toBeInTheDocument())
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    const input = screen.getByRole("combobox")
+    await user.type(input, "Acme")
+    await waitFor(() => expect(screen.getByText("Acme Corp")).toBeInTheDocument())
+    await user.click(screen.getByRole("option", { name: /Acme Corp/i }))
     await user.click(screen.getByRole("button", { name: /cancel/i }))
-
-    // Wait for dialog to fully close before re-opening
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
-
-    // Re-open and the field should be empty
-    await user.click(screen.getByRole("button", { name: /add company/i }))
-    expect(screen.getByLabelText(/company id/i)).toHaveValue("")
+    // reopen — input should be clear
+    await user.click(screen.getByRole("button", { name: /\+ add company/i }))
+    expect(screen.getByRole("combobox")).toHaveValue("")
   })
 })
 
@@ -647,6 +726,9 @@ describe("FairAdminDashboard — enrolled companies table", () => {
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
       }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -671,6 +753,9 @@ describe("FairAdminDashboard — enrolled companies table", () => {
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
       }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -692,25 +777,32 @@ describe("FairAdminDashboard — enrolled companies table", () => {
 
   it("removes company when delete is confirmed", async () => {
     globalThis.confirm = vi.fn().mockReturnValue(true)
+    let removed = false
 
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          enrollments: [
-            { id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null },
-          ],
-        }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({}),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments/c1") && init?.method === "DELETE") {
+        removed = true
+        return Promise.resolve({ ok: true, json: async () => ({}) })
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            enrollments: removed
+              ? []
+              : [{ id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null }],
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     const user = userEvent.setup()
     renderFairAdminDashboard()
@@ -734,6 +826,9 @@ describe("FairAdminDashboard — enrolled companies table", () => {
       const u = String(url)
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
       }
       return Promise.resolve({
         ok: true,
@@ -760,20 +855,29 @@ describe("FairAdminDashboard — enrolled companies table", () => {
   it("shows error alert when remove company API fails", async () => {
     globalThis.confirm = vi.fn().mockReturnValue(true)
 
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          enrollments: [
-            { id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null },
-          ],
-        }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({}),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments/c1") && init?.method === "DELETE") {
+        return Promise.resolve({ ok: false, json: async () => ({}) })
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            enrollments: [
+              { id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null },
+            ],
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     const user = userEvent.setup()
     renderFairAdminDashboard()
@@ -820,6 +924,9 @@ describe("FairAdminDashboard — edit fair dialog", () => {
       if (u.includes("/f1/announcements")) {
         return Promise.resolve(mockFetchAnnouncementsOk())
       }
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
       return Promise.resolve({
         ok: true,
         json: async () => ({ enrollments: [] }),
@@ -847,16 +954,22 @@ describe("FairAdminDashboard — edit fair dialog", () => {
       writable: true,
     })
 
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ enrollments: [] }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: "Name is required" }),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/api/fairs/f1") && !u.includes("enrollments") && !u.includes("enrollment-requests") && init?.method === "PUT") {
+        return Promise.resolve({ ok: false, json: async () => ({ error: "Name is required" }) })
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     renderFairAdminDashboard()
 
@@ -894,20 +1007,29 @@ describe("FairAdminDashboard — edit fair dialog", () => {
   it("dismisses error alert when close is clicked", async () => {
     globalThis.confirm = vi.fn().mockReturnValue(true)
 
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          enrollments: [
-            { id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null },
-          ],
-        }),
-      })
-      .mockResolvedValueOnce(mockFetchAnnouncementsOk())
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({}),
-      })
+    globalThis.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url)
+      if (u.includes("/f1/enrollment-requests")) {
+        return Promise.resolve({ ok: true, json: async () => ({ requests: [] }) })
+      }
+      if (u.includes("/f1/announcements")) {
+        return Promise.resolve(mockFetchAnnouncementsOk())
+      }
+      if (u.includes("/enrollments/c1") && init?.method === "DELETE") {
+        return Promise.resolve({ ok: false, json: async () => ({}) })
+      }
+      if (u.includes("/enrollments")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            enrollments: [
+              { id: "c1", companyName: "Acme Corp", enrollmentMethod: "admin", enrolledAt: null },
+            ],
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
 
     const user = userEvent.setup()
     renderFairAdminDashboard()

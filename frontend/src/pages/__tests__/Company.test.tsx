@@ -33,6 +33,7 @@ vi.mock("../../utils/auth", () => ({
     isAuthenticated: vi.fn(() => true),
     deleteCompany: vi.fn(),
     updateInviteCode: vi.fn(),
+    getIdToken: vi.fn(() => Promise.resolve("mock-token")),
   },
 }));
 
@@ -285,6 +286,9 @@ describe("Company", () => {
   it("BoothReviewsSection displays reviews and average rating when data is available", async () => {
     globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
       const u = typeof url === "string" ? url : String(url);
+      if (u.includes("/api/booths?companyId=")) {
+        return Promise.resolve({ ok: true, json: async () => ({ booths: [{ id: "booth-1", boothName: "Alpha Booth" }] }) });
+      }
       if (u.includes("/api/booths/") && u.includes("/ratings")) {
         return Promise.resolve({
           ok: true,
@@ -1120,6 +1124,7 @@ describe("Company", () => {
 
   describe("Job Invitation Stats", () => {
     beforeEach(() => {
+      (authUtils.getIdToken as any).mockResolvedValue("mock-token");
       globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
         const u = typeof url === "string" ? url : String(url);
         if (u.includes("/ratings")) {
@@ -1129,6 +1134,31 @@ describe("Company", () => {
           });
         }
         return defaultFetchImpl(url, init);
+      });
+    });
+
+    it("does not request job-invitations stats when getIdToken returns null", async () => {
+      (authUtils.getIdToken as any).mockResolvedValue(null);
+
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls).toHaveLength(0);
       });
     });
 
@@ -1165,6 +1195,60 @@ describe("Company", () => {
           expect.any(Object)
         );
       }, { timeout: 5000 });
+    });
+
+    it("ignores job invitation stats payload when response is not ok", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.resolve({ ok: false, json: async () => ({ error: "forbidden" }) });
+        }
+        return defaultFetchImpl(url, init);
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls.length).toBeGreaterThan(0);
+      });
+    });
+
+    it("still renders company when job invitation stats fetch throws", async () => {
+      const fetchSpy = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+        const u = typeof url === "string" ? url : String(url);
+        if (u.includes("/ratings")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ ratings: [], totalRatings: 0, averageRating: null }),
+          });
+        }
+        if (u.includes("/api/job-invitations/stats/")) {
+          return Promise.reject(new Error("network down"));
+        }
+        return defaultFetchImpl(url, init);
+      });
+      globalThis.fetch = fetchSpy;
+
+      renderComp();
+      await screen.findByRole("heading", { name: /Tech Corp/i });
+
+      await waitFor(() => {
+        const statsCalls = fetchSpy.mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        );
+        expect(statsCalls.length).toBeGreaterThan(0);
+      });
     });
 
     it("displays View Details button when invitations exist", async () => {
@@ -1764,46 +1848,192 @@ describe("Company", () => {
     });
   });
 
-  describe("Booth Navigation Buttons", () => {
-    it("navigates to public booth view when View Public Booth button is clicked", async () => {
-      const user = userEvent.setup();
-      renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i });
+  describe("BoothManagementCard", () => {
+    /** Booth name appears in the management row and again under Booth Reviews; row is always first in document order */
+    function firstBoothNameNode(name: string) {
+      const nodes = screen.getAllByText(name);
+      expect(nodes.length).toBeGreaterThanOrEqual(1);
+      return nodes[0];
+    }
 
-      const viewBoothButton = screen.getByRole("button", { name: /View Public Booth/i });
-      await user.click(viewBoothButton);
-
-      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1");
-    });
-
-    it("navigates to booth visitors analytics when View Visitors Analytics button is clicked", async () => {
-      const user = userEvent.setup();
-      renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i });
-
-      const visitorsButton = screen.getByRole("button", { name: /View Visitors Analytics/i });
-      await user.click(visitorsButton);
-
-      expect(mockNavigate).toHaveBeenCalledWith("/booth/booth-1/visitors");
-    });
-
-    it("hides booth view buttons when boothId is not set", async () => {
-      (getDoc as any).mockResolvedValue({
-        exists: () => true,
-        data: () => ({
-          companyName: "Tech Corp",
-          inviteCode: "INVITE123",
-          representativeIDs: ["rep-1"],
-          // boothId is undefined
-          ownerId: "owner-1",
-        }),
+    function setBoothListFetch(booths: any[], ok = true) {
+      globalThis.fetch = vi.fn().mockImplementation((url: string, init?: any) => {
+        if (url.includes("/api/companies/") && url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
+        if (url.includes("/api/booths?companyId=")) {
+          return Promise.resolve({ ok, json: async () => ({ booths }) });
+        }
+        if (init?.method === "DELETE" && url.includes("/api/booths/")) {
+          return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({ error: "Not found" }) });
       });
+    }
 
+    it("shows 'No booths created yet' when the list is empty", async () => {
+      setBoothListFetch([]);
       renderComp();
-      await screen.findByRole('heading', { name: /Tech Corp/i });
 
-      expect(screen.queryByRole("button", { name: /View Public Booth/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /View Visitors Analytics/i })).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(/no booths created yet/i)).toBeInTheDocument();
+      });
+    });
+
+    it("renders a list of booths with name and industry", async () => {
+      setBoothListFetch([
+        { id: "b1", boothName: "Alpha", industry: "Tech" },
+        { id: "b2", boothName: "Beta" },
+      ]);
+      renderComp();
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText("Beta").length).toBeGreaterThanOrEqual(1);
+      });
+      expect(screen.getByText("Tech")).toBeInTheDocument();
+    });
+
+    it("falls back to 'Untitled Booth' when booth has no name", async () => {
+      setBoothListFetch([{ id: "b1" }]);
+      renderComp();
+
+      await waitFor(() => {
+        expect(screen.getByText("Untitled Booth")).toBeInTheDocument();
+      });
+    });
+
+    it("navigates to the booth editor when Edit is clicked", async () => {
+      const user = userEvent.setup();
+      setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
+      renderComp();
+
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
+      await user.click(screen.getByRole("button", { name: /^edit$/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth/b1");
+    });
+
+    it("navigates to booth visitor analytics when Visitor analytics is clicked", async () => {
+      const user = userEvent.setup();
+      setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
+      renderComp();
+
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
+      const alphaRow = firstBoothNameNode("Alpha").closest("div")!.parentElement!;
+      await user.click(within(alphaRow).getByRole("button", { name: /visitor analytics/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/booth/b1/visitors");
+    });
+
+    it("navigates to create booth when 'Create New Booth' is clicked", async () => {
+      const user = userEvent.setup();
+      setBoothListFetch([]);
+      renderComp();
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /create new booth/i })).toBeInTheDocument()
+      );
+      await user.click(screen.getByRole("button", { name: /create new booth/i }));
+
+      expect(mockNavigate).toHaveBeenCalledWith("/company/company-1/booth");
+    });
+
+    function getBoothDeleteButton() {
+      // The booth Delete button lives inside the row containing the booth name "Alpha".
+      // Scope by row to avoid clashing with Delete Job / Delete Company buttons.
+      const alphaRow = firstBoothNameNode("Alpha").closest("div")!.parentElement!;
+      return within(alphaRow).getByRole("button", { name: /^delete$/i });
+    }
+
+    it("deletes a booth after confirmation", async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+      setBoothListFetch([{ id: "b1", boothName: "Alpha" }]);
+      renderComp();
+
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
+      await user.click(getBoothDeleteButton());
+
+      await waitFor(() => {
+        expect(screen.queryAllByText("Alpha")).toHaveLength(0);
+      });
+      confirmSpy.mockRestore();
+    });
+
+    it("does not call DELETE when user cancels confirm", async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(false);
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/companies/") && url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
+        if (url.includes("/api/booths?companyId=")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ booths: [{ id: "b1", boothName: "Alpha" }] }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({ error: "nope" }) });
+      });
+      globalThis.fetch = fetchSpy;
+      renderComp();
+
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
+      const deleteCallsBefore = fetchSpy.mock.calls.filter((c) =>
+        (c[1] as any)?.method === "DELETE"
+      ).length;
+      await user.click(getBoothDeleteButton());
+
+      const deleteCallsAfter = fetchSpy.mock.calls.filter((c) =>
+        (c[1] as any)?.method === "DELETE"
+      ).length;
+      expect(deleteCallsAfter).toBe(deleteCallsBefore);
+      expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
+      confirmSpy.mockRestore();
+    });
+
+    it("shows alert and keeps booth when DELETE returns an error", async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+      const alertSpy = vi.spyOn(globalThis, "alert").mockImplementation(() => {});
+      globalThis.fetch = vi.fn().mockImplementation((url: string, init?: any) => {
+        if (url.includes("/api/companies/") && url.includes("/invite-code")) {
+          return Promise.resolve({ ok: true, json: async () => ({ inviteCode: "INVITE123" }) });
+        }
+        if (url.includes("/api/booths?companyId=")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ booths: [{ id: "b1", boothName: "Alpha" }] }),
+          });
+        }
+        if (init?.method === "DELETE" && url.includes("/api/booths/")) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ error: "Cannot delete" }),
+          });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({ error: "nope" }) });
+      });
+      renderComp();
+
+      await waitFor(() =>
+        expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1)
+      );
+      await user.click(getBoothDeleteButton());
+
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Cannot delete"));
+      expect(screen.getAllByText("Alpha").length).toBeGreaterThanOrEqual(1);
+      confirmSpy.mockRestore();
+      alertSpy.mockRestore();
     });
   });
 
@@ -2046,8 +2276,7 @@ describe("Company", () => {
       return card as HTMLElement
     }
 
-    it("logs when fetchJobStats rejects (per-job stats fetch)", async () => {
-      const logSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    it("handles rejected job invitation stats fetch without breaking the Company page", async () => {
       globalThis.fetch = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
         const u = typeof url === "string" ? url : String(url)
         if (u.includes("/api/job-invitations/stats/")) {
@@ -2060,9 +2289,11 @@ describe("Company", () => {
       await screen.findByRole("heading", { name: /Tech Corp/i })
 
       await waitFor(() => {
-        expect(logSpy).toHaveBeenCalled()
+        const statsCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((c) =>
+          String(c[0]).includes("/api/job-invitations/stats/")
+        )
+        expect(statsCalls.length).toBeGreaterThan(0)
       })
-      logSpy.mockRestore()
     })
 
     it("opens invite dialog when Send is clicked and titles the mock dialog", async () => {
@@ -2514,3 +2745,4 @@ describe("Company", () => {
     })
   })
 })
+

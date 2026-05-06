@@ -11,6 +11,10 @@ vi.mock("../../utils/auth", () => ({
   },
 }));
 
+vi.mock("../../config", () => ({
+  API_URL: "http://localhost:5000",
+}));
+
 globalThis.fetch = vi.fn();
 
 const mockStudents = [
@@ -39,6 +43,7 @@ describe("JobInviteDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (authUtils.getCurrentUser as any).mockReturnValue(mockUser);
+    (authUtils.getIdToken as any).mockResolvedValue("mock-id-token");
     (globalThis.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ students: mockStudents }),
@@ -95,12 +100,17 @@ describe("JobInviteDialog", () => {
   // Fetch behaviour
   // -----------------------------------------------------------------------
 
-  it("fetches students with userId param", async () => {
+  it("fetches students with userId param and Bearer token", async () => {
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("userId=user-1"),
-        expect.any(Object)
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: "Bearer mock-id-token",
+          }),
+        })
       )
     );
   });
@@ -110,7 +120,11 @@ describe("JobInviteDialog", () => {
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
         expect.stringContaining("boothId=booth-42"),
-        expect.any(Object)
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "Bearer mock-id-token",
+          }),
+        })
       )
     );
   });
@@ -134,6 +148,15 @@ describe("JobInviteDialog", () => {
     render(<JobInviteDialog {...defaultProps} />);
     // Give time for any async effects to settle
     await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument());
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows session error when getIdToken returns null while loading students", async () => {
+    (authUtils.getIdToken as any).mockResolvedValue(null);
+    render(<JobInviteDialog {...defaultProps} />);
+    await waitFor(() =>
+      expect(screen.getByText(/Could not verify your session/i)).toBeInTheDocument()
+    );
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -358,12 +381,59 @@ describe("JobInviteDialog", () => {
     );
   });
 
-  it("shows error when send request fails", async () => {
+  it("shows You must be logged in when getCurrentUser is null on send", async () => {
     const user = userEvent.setup();
 
     (globalThis.fetch as any)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
-      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "Invite failed" }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) });
+
+    render(<JobInviteDialog {...defaultProps} />);
+    await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
+
+    await clickStudent(user, "Alice Smith");
+    (authUtils.getCurrentUser as any).mockReturnValue(null);
+    await user.click(screen.getByRole("button", { name: /Send \(1\)/i }));
+
+    await waitFor(() => expect(screen.getByText("You must be logged in")).toBeInTheDocument());
+  });
+
+  it("shows session error when getIdToken returns null on send", async () => {
+    const user = userEvent.setup();
+
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (String(url).includes("/api/students")) {
+        return Promise.resolve({ ok: true, json: async () => ({ students: mockStudents }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    (authUtils.getIdToken as any)
+      .mockResolvedValueOnce("mock-id-token")
+      .mockResolvedValue(null);
+
+    render(<JobInviteDialog {...defaultProps} />);
+    await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
+
+    await clickStudent(user, "Alice Smith");
+    await user.click(screen.getByRole("button", { name: /Send \(1\)/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Could not verify your session/i)).toBeInTheDocument()
+    );
+  });
+
+  it("shows error when send request fails", async () => {
+    const user = userEvent.setup();
+
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (String(url).includes("/api/students")) {
+        return Promise.resolve({ ok: true, json: async () => ({ students: mockStudents }) });
+      }
+      if (String(url).includes("job-invitations/send")) {
+        return Promise.resolve({ ok: false, json: async () => ({ error: "Invite failed" }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
 
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
@@ -377,9 +447,15 @@ describe("JobInviteDialog", () => {
   it("includes optional message in send payload when provided", async () => {
     const user = userEvent.setup();
 
-    (globalThis.fetch as any)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ sent: 1 }) });
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (String(url).includes("/api/students")) {
+        return Promise.resolve({ ok: true, json: async () => ({ students: mockStudents }) });
+      }
+      if (String(url).includes("job-invitations/send")) {
+        return Promise.resolve({ ok: true, json: async () => ({ sent: 1 }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
 
     render(<JobInviteDialog {...defaultProps} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
@@ -390,7 +466,7 @@ describe("JobInviteDialog", () => {
 
     await waitFor(() =>
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.any(String),
+        expect.stringContaining("job-invitations/send"),
         expect.objectContaining({
           body: expect.stringContaining('"message":"Hello there!"'),
         })
@@ -439,9 +515,15 @@ describe("JobInviteDialog", () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
 
-    (globalThis.fetch as any)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ students: mockStudents }) })
-      .mockReturnValueOnce(new Promise(() => {})); // send call never resolves
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (String(url).includes("/api/students")) {
+        return Promise.resolve({ ok: true, json: async () => ({ students: mockStudents }) });
+      }
+      if (String(url).includes("job-invitations/send")) {
+        return new Promise(() => {});
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
 
     render(<JobInviteDialog {...defaultProps} onClose={onClose} />);
     await waitFor(() => expect(screen.getByText("Alice Smith")).toBeInTheDocument());
@@ -459,9 +541,14 @@ describe("JobInviteDialog", () => {
   // -----------------------------------------------------------------------
 
   it("dismisses error alert when close icon is clicked", async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ error: "Load failed" }),
+    (globalThis.fetch as any).mockImplementation((url: string) => {
+      if (String(url).includes("/api/students")) {
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({ error: "Load failed" }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
     });
 
     const user = userEvent.setup();

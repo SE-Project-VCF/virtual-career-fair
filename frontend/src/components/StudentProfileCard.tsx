@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react"
-import { Box, Typography, CircularProgress, Alert, Chip, Paper, Button } from "@mui/material"
+import { useNavigate } from "react-router-dom"
+import { Box, Typography, CircularProgress, Alert, Chip, Paper, Button, Divider } from "@mui/material"
 import LinkedInIcon from "@mui/icons-material/LinkedIn"
+import ChatIcon from "@mui/icons-material/Chat"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "../firebase"
 import { authUtils } from "../utils/auth"
@@ -29,9 +31,23 @@ interface StudentProfile {
 
 interface Props {
   readonly studentId: string
+  /** When true, show employer action to open Stream DM with this student (from shortlist, visitor analytics, etc.). */
+  readonly enableEmployerMessaging?: boolean
+  /** Called before navigating to chat (e.g. close parent dialog). */
+  readonly onBeforeNavigateToChat?: () => void
 }
 
-export default function StudentProfileCard({ studentId }: Props) {
+export default function StudentProfileCard({
+  studentId,
+  enableEmployerMessaging = false,
+  onBeforeNavigateToChat,
+}: Props) {
+  const navigate = useNavigate()
+  const viewer = authUtils.getCurrentUser()
+  const canShowMessaging = Boolean(
+    enableEmployerMessaging && viewer?.uid && studentId !== viewer.uid
+  )
+
   const [profile, setProfile] = useState<StudentProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -286,6 +302,36 @@ export default function StudentProfileCard({ studentId }: Props) {
             </Typography>
           )}
         </Box>
+      )}
+
+      {canShowMessaging && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
+              Messages
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Opens your Messages view with this student. If you do not already have a private channel, one is created
+              automatically.
+            </Typography>
+            <Button
+              type="button"
+              variant="contained"
+              startIcon={<ChatIcon />}
+              onClick={() => {
+                onBeforeNavigateToChat?.()
+                navigate("/dashboard/chat", { state: { dmStudentId: studentId } })
+              }}
+              sx={{
+                background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
+                fontWeight: 600,
+              }}
+            >
+              Open messages
+            </Button>
+          </Box>
+        </>
       )}
     </Box>
   )

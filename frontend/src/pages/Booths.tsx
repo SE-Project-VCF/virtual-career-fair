@@ -47,8 +47,12 @@ export default function Booths() {
   const [totalJobs, setTotalJobs] = useState(0)
 
   useEffect(() => {
+    if (user?.role === "representative") {
+      navigate("/dashboard", { replace: true })
+      return
+    }
     fetchBooths()
-  }, [])
+  }, [user?.role, navigate])
 
   const fetchJobCounts = async (companyIds: string[]) => {
     try {

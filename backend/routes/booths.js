@@ -76,6 +76,73 @@ router.post("/booths", verifyFirebaseToken, async (req, res) => {
 });
 
 /* ----------------------------------------------------
+   LIST BOOTHS FOR A COMPANY
+---------------------------------------------------- */
+router.get("/booths", verifyFirebaseToken, async (req, res) => {
+  const { companyId } = req.query;
+
+  if (!companyId) {
+    return res.status(400).json({ error: "companyId query parameter is required" });
+  }
+
+  try {
+    const authResult = await checkCompanyAuthorization(companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403)
+        .json({ error: authResult.error });
+    }
+
+    const boothsSnap = await db.collection("booths").where("companyId", "==", companyId).get();
+    const booths = boothsSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    // Legacy support: if company.boothId points to a booth not already in the list, include it
+    const companyDoc = await db.collection("companies").doc(companyId).get();
+    const legacyBoothId = companyDoc.exists ? companyDoc.data().boothId : null;
+    if (legacyBoothId && !booths.some((b) => b.id === legacyBoothId)) {
+      const legacyBoothDoc = await db.collection("booths").doc(legacyBoothId).get();
+      if (legacyBoothDoc.exists) {
+        booths.unshift({ id: legacyBoothDoc.id, ...legacyBoothDoc.data() });
+      }
+    }
+
+    return res.json({ booths });
+  } catch (err) {
+    console.error("GET /api/booths error:", err);
+    return res.status(500).json({ error: "Failed to fetch booths" });
+  }
+});
+
+/* ----------------------------------------------------
+   DELETE A BOOTH
+---------------------------------------------------- */
+router.delete("/booths/:boothId", verifyFirebaseToken, async (req, res) => {
+  const { boothId } = req.params;
+
+  try {
+    const boothDoc = await db.collection("booths").doc(boothId).get();
+    if (!boothDoc.exists) {
+      return res.status(404).json({ error: "Booth not found" });
+    }
+
+    const boothData = boothDoc.data();
+    if (!boothData.companyId) {
+      return res.status(400).json({ error: "Booth has no associated company" });
+    }
+
+    const authResult = await checkCompanyAuthorization(boothData.companyId, req.user.uid);
+    if (!authResult.authorized) {
+      return res.status(authResult.error === "Invalid company ID" ? 404 : 403).json({ error: authResult.error });
+    }
+
+    await db.collection("booths").doc(boothId).delete();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE /api/booths/:boothId error:", err);
+    return res.status(500).json({ error: err.message || "Failed to delete booth" });
+  }
+});
+
+/* ----------------------------------------------------
    UPLOAD BOOTH LOGO TO FIREBASE STORAGE (via backend)
    Uses Firebase Admin SDK to bypass client-side CORS issues
 ---------------------------------------------------- */
@@ -376,18 +443,15 @@ router.get("/booth-visitors/:boothId", verifyFirebaseToken, async (req, res) => 
     const boothData = boothResult.data;
     const boothCompanyId = boothData.companyId;
 
-    // Get user data to verify authorization
-    const userDoc = await db.collection("users").doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ success: false, error: "User not found" });
+    if (!boothCompanyId) {
+      return res.status(400).json({ success: false, error: "Booth has no associated company" });
     }
 
-    const userData = userDoc.data();
-    const userCompanyId = userData.companyId;
-
-    // Check authorization: user's company must match booth's company
-    if (userCompanyId !== boothCompanyId) {
-      console.log(`[GET-VISITORS] Auth failed: company mismatch`);
+    // Owner or representative for this booth's company (not user.profile companyId alone —
+    // users linked to multiple companies often keep a single primary companyId on the user doc)
+    const authResult = await checkCompanyAuthorization(boothCompanyId, userId);
+    if (!authResult.authorized) {
+      console.log(`[GET-VISITORS] Auth failed: ${authResult.error}`);
       return res.status(403).json({ success: false, error: "Not authorized to view booth visitors" });
     }
 
@@ -479,7 +543,7 @@ router.post("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =>
     if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
     if (userDoc.data().role !== "student") return res.status(403).json({ error: "Only students can submit ratings" });
 
-    const { rating, comment } = req.body;
+    const { rating, comment, fairId } = req.body;
     if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "rating must be a number between 1 and 5" });
     }
@@ -487,12 +551,24 @@ router.post("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) =>
     const boothDoc = await db.collection("booths").doc(boothId).get();
     if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
 
-    await db.collection("booths").doc(boothId).collection("ratings").doc(studentId).set({
+    let fairName = null;
+    if (fairId && typeof fairId === "string") {
+      const fairDoc = await db.collection("fairs").doc(fairId).get();
+      if (fairDoc.exists) fairName = fairDoc.data().name || null;
+    }
+
+    const ratingData = {
       studentId,
       rating,
       comment: comment?.trim() || null,
       createdAt: admin.firestore.Timestamp.now(),
-    });
+    };
+    if (fairId && typeof fairId === "string") {
+      ratingData.fairId = fairId;
+      ratingData.fairName = fairName;
+    }
+
+    await db.collection("booths").doc(boothId).collection("ratings").doc(studentId).set(ratingData);
 
     return res.json({ success: true });
   } catch (err) {
@@ -542,13 +618,12 @@ router.get("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => 
 
     const adminErr = await verifyAdmin(userId);
     if (adminErr) {
-      // Not admin — must be owner/rep of the company that owns this booth
-      const userDoc = await db.collection("users").doc(userId).get();
-      if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
-      const companyId = userDoc.data().companyId;
-      if (!companyId) return res.status(403).json({ error: "Unauthorized" });
-      const companyDoc = await db.collection("companies").doc(companyId).get();
-      if (!companyDoc.exists || companyDoc.data().boothId !== boothId) {
+      const boothCompanyId = boothDoc.data().companyId;
+      if (!boothCompanyId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      const authResult = await checkCompanyAuthorization(boothCompanyId, userId);
+      if (!authResult.authorized) {
         return res.status(403).json({ error: "Unauthorized" });
       }
     }
@@ -560,6 +635,8 @@ router.get("/booths/:boothId/ratings", verifyFirebaseToken, async (req, res) => 
         rating: data.rating,
         comment: data.comment || null,
         createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        fairId: data.fairId || null,
+        fairName: data.fairName || null,
       };
     });
 

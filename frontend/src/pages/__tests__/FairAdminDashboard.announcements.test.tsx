@@ -124,6 +124,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
       }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+      }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [] }) })
       }
@@ -164,6 +167,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
       }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+      }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements }) })
       }
@@ -202,6 +208,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       const method = init?.method ?? "GET"
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
       }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [] }) })
@@ -251,6 +260,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       const method = init?.method ?? "GET"
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
       }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [] }) })
@@ -306,6 +318,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       const method = init?.method ?? "GET"
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
       }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [draft] }) })
@@ -364,6 +379,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
       }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+      }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [draft] }) })
       }
@@ -413,6 +431,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
       }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+      }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [row] }) })
       }
@@ -460,6 +481,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
       }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+      }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [row] }) })
       }
@@ -493,6 +517,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
       }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+      }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [draft] }) })
       }
@@ -523,6 +550,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       const method = init?.method ?? "GET"
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
       }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [] }) })
@@ -561,6 +591,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       const method = init?.method ?? "GET"
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
       }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [draft] }) })
@@ -638,6 +671,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
       }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
+      }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [draft] }) })
       }
@@ -681,6 +717,9 @@ describe("FairAdminDashboard — fair announcements (admin)", () => {
       const method = init?.method ?? "GET"
       if (u.includes("/api/fairs/f1/enrollments") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ enrollments: [] }) })
+      }
+      if (u.includes("/api/fairs/f1/enrollment-requests") && method === "GET") {
+        return mockFetchResponse({ ok: true, json: async () => ({ requests: [] }) })
       }
       if (u.includes("/api/fairs/f1/announcements") && method === "GET") {
         return mockFetchResponse({ ok: true, json: async () => ({ announcements: [row] }) })

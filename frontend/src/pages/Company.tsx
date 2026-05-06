@@ -20,8 +20,12 @@ import {
   Autocomplete,
   FormControlLabel,
   Checkbox,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
+import { fetchJobInvitationStats } from "../utils/jobInvitationStatsFetch"
 import { API_URL } from "../config"
 import { doc, getDoc, arrayRemove, updateDoc } from "firebase/firestore"
 import { db, auth } from "../firebase"
@@ -39,11 +43,11 @@ import AddIcon from "@mui/icons-material/Add"
 import LaunchIcon from "@mui/icons-material/Launch"
 import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
-import VisibilityIcon from "@mui/icons-material/Visibility"
 import BaseLayout from "../components/BaseLayout"
 import { useGeocodeSuggest, type LocationSuggestOption } from "../hooks/useGeocodeSuggest"
 import JobInviteDialog from "../components/JobInviteDialog"
@@ -566,11 +570,61 @@ function OfficeLocationsOwnerCard({
   )
 }
 
-function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
+function BoothManagementCard({ companyId, navigate }: Readonly<{
   companyId: string
-  boothId?: string
   navigate: ReturnType<typeof useNavigate>
 }>) {
+  const [booths, setBooths] = useState<{ id: string; boothName?: string; industry?: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  const handleDeleteBooth = async (boothId: string) => {
+    if (!globalThis.confirm("Are you sure you want to delete this booth?")) return
+    setDeleting(boothId)
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) {
+        alert("Session expired. Please log in again.")
+        return
+      }
+      const res = await fetch(`${API_URL}/api/booths/${boothId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        setBooths((prev) => prev.filter((b) => b.id !== boothId))
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || "Failed to delete booth")
+      }
+    } catch (err) {
+      console.error("Error deleting booth:", err)
+      alert("Failed to delete booth. Please try again.")
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  useEffect(() => {
+    const fetchBooths = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken()
+        const res = await fetch(`${API_URL}/api/booths?companyId=${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setBooths(data.booths || [])
+        }
+      } catch (err) {
+        console.error("Error fetching booths:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchBooths()
+  }, [companyId])
+
   return (
     <Grid size={{ xs: 12, md: 6 }}>
       <Card sx={{ height: "100%", border: "1px solid rgba(56, 133, 96, 0.3)" }}>
@@ -580,57 +634,83 @@ function BoothManagementCard({ companyId, boothId, navigate }: Readonly<{
             Booth Management
           </Typography>
 
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Manage your company booth - a student-facing landing page where students can learn about your company and interact with representatives.
-          </Typography>
+          {loading && <CircularProgress size={24} />}
+
+          {!loading && booths.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              No booths created yet. Create your first booth to get started.
+            </Typography>
+          )}
+
+          <Box sx={{ maxHeight: 210, overflowY: "auto" }}>
+          {!loading && booths.map((booth) => (
+            <Box
+              key={booth.id}
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                p: 1.5,
+                mb: 1,
+                border: "1px solid #e0e0e0",
+                borderRadius: 1,
+              }}
+            >
+              <Box>
+                <Typography variant="body1" fontWeight={600}>
+                  {booth.boothName || "Untitled Booth"}
+                </Typography>
+                {booth.industry && (
+                  <Typography variant="body2" color="text.secondary">
+                    {booth.industry}
+                  </Typography>
+                )}
+              </Box>
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <Button
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => navigate(`/company/${companyId}/booth/${booth.id}`)}
+                  sx={{ color: "#388560" }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<BarChartIcon />}
+                  onClick={() => navigate(`/booth/${booth.id}/visitors`)}
+                  sx={{ color: "#388560" }}
+                >
+                  Visitor analytics
+                </Button>
+                <Button
+                  size="small"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => handleDeleteBooth(booth.id)}
+                  disabled={deleting === booth.id}
+                  sx={{ color: "#d32f2f" }}
+                >
+                  {deleting === booth.id ? "..." : "Delete"}
+                </Button>
+              </Box>
+            </Box>
+          ))}
+          </Box>
 
           <Button
             variant="contained"
-            startIcon={<EditIcon />}
             onClick={() => navigate(`/company/${companyId}/booth`)}
             sx={{
+              mt: 2,
               background: "linear-gradient(135deg, #388560 0%, #2d6b4d 100%)",
               "&:hover": {
                 background: "linear-gradient(135deg, #2d6b4d 0%, #388560 100%)",
               },
             }}
           >
-            {boothId ? "Edit Booth" : "Create Booth"}
+            Create New Booth
           </Button>
 
-          {boothId && (
-            <Box sx={{ mt: 2, display: "flex", gap: 2, flexDirection: "column" }}>
-              <Button
-                variant="outlined"
-                onClick={() => navigate(`/booth/${boothId}`)}
-                sx={{
-                  borderColor: "#388560",
-                  color: "#388560",
-                  "&:hover": {
-                    borderColor: "#2d6b4d",
-                    bgcolor: "rgba(56, 133, 96, 0.05)",
-                  },
-                }}
-              >
-                View Public Booth
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<VisibilityIcon />}
-                onClick={() => navigate(`/booth/${boothId}/visitors`)}
-                sx={{
-                  borderColor: "#b03a6c",
-                  color: "#b03a6c",
-                  "&:hover": {
-                    borderColor: "#8b2854",
-                    bgcolor: "rgba(176, 58, 108, 0.05)",
-                  },
-                }}
-              >
-                View Visitors Analytics
-              </Button>
-            </Box>
-          )}
         </CardContent>
       </Card>
     </Grid>
@@ -680,35 +760,71 @@ const JOB_FIELDS = [
   { id: "job-application-link", name: "jobApplicationLink", label: "Application URL (Optional)", key: "applicationLink" as const, placeholder: "https://company.com/apply", helperText: "External link where students can apply directly" },
 ]
 
-function BoothReviewsSection({ boothId }: Readonly<{ boothId: string }>) {
-  const [reviews, setReviews] = useState<{ rating: number; comment: string | null; createdAt: number | null }[]>([])
-  const [totalRatings, setTotalRatings] = useState(0)
-  const [averageRating, setAverageRating] = useState<number | null>(null)
+type BoothRating = {
+  rating: number
+  comment: string | null
+  createdAt: number | null
+  fairId?: string
+  fairName?: string
+  fairStartTime?: number | null
+}
+
+type AnnotatedRating = BoothRating & { boothId: string; boothName: string }
+
+function BoothReviewsSection({ companyId }: Readonly<{ companyId: string }>) {
+  const [allRatings, setAllRatings] = useState<AnnotatedRating[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedFair, setExpandedFair] = useState<string | false>(false)
 
   useEffect(() => {
     const load = async () => {
       try {
         const token = await auth.currentUser?.getIdToken()
-        const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
+        const boothsRes = await fetch(`${API_URL}/api/booths?companyId=${companyId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-        if (res.ok) {
-          const data = await res.json()
-          setReviews(data.ratings || [])
-          setTotalRatings(data.totalRatings || 0)
-          setAverageRating(data.averageRating ?? null)
-        }
+        if (!boothsRes.ok) return
+        const { booths } = (await boothsRes.json()) as { booths: { id: string; boothName?: string }[] }
+
+        const ratingsResults = await Promise.all(
+          booths.map(async (booth) => {
+            const res = await fetch(`${API_URL}/api/booths/${booth.id}/ratings`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!res.ok) return []
+            const data = (await res.json()) as { ratings: BoothRating[] }
+            return (data.ratings ?? []).map((r) => ({
+              ...r,
+              boothId: booth.id,
+              boothName: booth.boothName || "Untitled Booth",
+            }))
+          }),
+        )
+        setAllRatings(ratingsResults.flat())
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [boothId])
+  }, [companyId])
+
+  const fairGroups = useMemo(() => {
+    const map = new Map<string, { fairName: string; fairStartTime: number | null; ratings: AnnotatedRating[] }>()
+    for (const r of allRatings) {
+      const key = r.fairId ?? "other"
+      if (!map.has(key)) map.set(key, { fairName: r.fairName ?? "Other", fairStartTime: r.fairStartTime ?? null, ratings: [] })
+      map.get(key)!.ratings.push(r)
+    }
+    return Array.from(map.entries()).sort(([aKey, aVal], [bKey, bVal]) => {
+      if (aKey === "other") return 1
+      if (bKey === "other") return -1
+      return (bVal.fairStartTime ?? 0) - (aVal.fairStartTime ?? 0)
+    })
+  }, [allRatings])
 
   return (
     <Grid size={{ xs: 12 }}>
-      <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)" }}>
+      <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)", mt: 2 }}>
         <CardContent sx={{ p: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
             <BarChartIcon sx={{ color: "#388560" }} />
@@ -717,39 +833,104 @@ function BoothReviewsSection({ boothId }: Readonly<{ boothId: string }>) {
 
           {loading && <CircularProgress size={24} />}
 
-          {!loading && totalRatings === 0 && (
+          {!loading && allRatings.length === 0 && (
             <Typography color="text.secondary">No reviews yet.</Typography>
           )}
 
-          {!loading && totalRatings > 0 && (
-            <>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-                <Rating value={averageRating} readOnly precision={0.1} />
-                <Typography variant="h5" sx={{ fontWeight: 700, color: "#388560" }}>
-                  {averageRating?.toFixed(1)}
-                </Typography>
-                <Typography color="text.secondary">
-                  ({totalRatings} review{totalRatings === 1 ? "" : "s"})
-                </Typography>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                {reviews.map((review) => (
-                  <Box key={review.createdAt ?? `${review.rating}-${review.comment}`} sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 2 }}>
-                    <Rating value={review.rating} readOnly size="small" />
-                    {review.comment && (
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>{review.comment}</Typography>
-                    )}
-                    {review.createdAt && (
+          {!loading && fairGroups.map(([fairKey, { fairName, fairStartTime, ratings }]) => {
+            const fairAvg = ratings.reduce((s, r) => s + r.rating, 0) / ratings.length
+            const boothMap = new Map<string, { boothName: string; ratings: AnnotatedRating[] }>()
+            for (const r of ratings) {
+              if (!boothMap.has(r.boothId)) boothMap.set(r.boothId, { boothName: r.boothName, ratings: [] })
+              boothMap.get(r.boothId)!.ratings.push(r)
+            }
+            const boothEntries = Array.from(boothMap.entries())
+
+            return (
+              <Accordion
+                key={fairKey}
+                data-testid="review-fair-group-header"
+                expanded={expandedFair === fairKey}
+                onChange={(_, isExpanded) => setExpandedFair(isExpanded ? fairKey : false)}
+                sx={{
+                  mb: 1,
+                  border: "1px solid rgba(56, 133, 96, 0.25)",
+                  borderRadius: "8px !important",
+                  "&:before": { display: "none" },
+                  boxShadow: "0 1px 4px rgba(56,133,96,0.06)",
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon sx={{ color: "#388560" }} />}
+                  sx={{
+                    borderRadius: 2,
+                    background: "linear-gradient(135deg, rgba(56,133,96,0.07) 0%, rgba(45,107,77,0.04) 100%)",
+                    "& .MuiAccordionSummary-content": { alignItems: "center", gap: 1.5 },
+                  }}
+                >
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#1a3d2b" }}>
+                      {fairName}
+                    </Typography>
+                    {fairStartTime && (
                       <Typography variant="caption" color="text.secondary">
-                        {new Date(review.createdAt).toLocaleDateString()}
+                        {new Date(fairStartTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </Typography>
                     )}
                   </Box>
-                ))}
-              </Box>
-            </>
-          )}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mr: 1 }}>
+                    <Rating value={fairAvg} readOnly precision={0.1} size="small" />
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
+                      {fairAvg.toFixed(1)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      ({ratings.length} review{ratings.length === 1 ? "" : "s"})
+                    </Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 1.5, pb: 2, px: 2 }}>
+                  {boothEntries.map(([boothId, { boothName, ratings: boothRatings }], boothIdx) => {
+                    const boothAvg = boothRatings.reduce((s, r) => s + r.rating, 0) / boothRatings.length
+                    return (
+                      <Box key={boothId}>
+                        {boothIdx > 0 && <Divider sx={{ mb: 2 }} />}
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: "#1a3d2b" }}>
+                            {boothName}
+                          </Typography>
+                          <Rating value={boothAvg} readOnly precision={0.1} size="small" />
+                          <Typography variant="caption" sx={{ color: "#388560", fontWeight: 600 }}>
+                            {boothAvg.toFixed(1)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ({boothRatings.length})
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, pl: 1, mb: 1.5 }}>
+                          {boothRatings.map((review) => (
+                            <Box
+                              key={review.createdAt ?? `${review.rating}-${review.comment}`}
+                              sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.06)", borderRadius: 2, background: "rgba(56,133,96,0.02)" }}
+                            >
+                              <Rating value={review.rating} readOnly size="small" />
+                              {review.comment && (
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>{review.comment}</Typography>
+                              )}
+                              {review.createdAt && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(review.createdAt).toLocaleDateString()}
+                                </Typography>
+                              )}
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )
+                  })}
+                </AccordionDetails>
+              </Accordion>
+            )
+          })}
         </CardContent>
       </Card>
     </Grid>
@@ -884,7 +1065,9 @@ export default function Company() {
 
       fetchRepresentatives(companyInfo.representativeIDs ?? [])
       fetchJobs(companyInfo.id)
-      fetchInviteCode(companyInfo.id)
+      if (userRole === "companyOwner" && companyInfo.ownerId === userId) {
+        fetchInviteCode(companyInfo.id)
+      }
     } catch (error: unknown) {
       logClientError("Error fetching company", error)
       setError("Failed to load company")
@@ -1028,26 +1211,15 @@ export default function Company() {
   }
 
   const fetchJobStats = async (jobId: string) => {
-    if (!userId) return
-
     try {
-      const token = await auth.currentUser?.getIdToken()
-      if (!token) return
-
-      const response = await fetch(
-        `${API_URL}/api/job-invitations/stats/${jobId}?userId=${userId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const result = await fetchJobInvitationStats<JobInvitationStats>(
+        API_URL,
+        jobId,
+        userId || "",
+        () => authUtils.getIdToken()
       )
-
-      if (response.ok) {
-        const stats = await response.json()
-        setJobStats((prev) => ({ ...prev, [jobId]: stats }))
+      if (result.ok) {
+        setJobStats((prev) => ({ ...prev, [jobId]: result.stats }))
       }
     } catch (error: unknown) {
       logClientError("Error fetching job invitation stats", error)
@@ -1552,9 +1724,11 @@ export default function Company() {
           {/* Booth Management Card */}
           <BoothManagementCard
             companyId={company.id}
-            boothId={company.boothId}
             navigate={navigate}
           />
+
+          {/* Booth Reviews Section */}
+          <BoothReviewsSection companyId={company.id} />
 
           {isOwner ? (
             <Grid size={{ xs: 12 }}>
@@ -1855,11 +2029,6 @@ export default function Company() {
               </CardContent>
             </Card>
           </Grid>
-
-          {/* Booth Reviews */}
-          {company.boothId && (
-            <BoothReviewsSection boothId={company.boothId} />
-          )}
 
           {/* Delete Company Card (Owner only) */}
           <DeleteCompanyCard

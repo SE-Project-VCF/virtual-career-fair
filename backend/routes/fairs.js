@@ -27,6 +27,65 @@ async function companyDataMapForBoothCompanyIds(boothRows) {
   return m;
 }
 
+function normFairBoothField(v) {
+  if (v == null) return "";
+  return String(v).trim().toLowerCase();
+}
+
+/**
+ * Fair booth docs normally store originalBoothId (root /booths doc) for ratings and tracking.
+ * Legacy rows may omit it; resolve from company booths (+ boothName / hiringFor / industry when multiple).
+ */
+async function resolveOriginalBoothIdForFairSnapshot(raw) {
+  if (!raw || raw.originalBoothId) return raw?.originalBoothId ?? null;
+  if (!raw.companyId) return null;
+  try {
+    const snap = await db.collection("booths").where("companyId", "==", raw.companyId).get();
+    const docs = snap.docs;
+
+    if (docs.length === 0) {
+      const cDoc = await db.collection("companies").doc(raw.companyId).get();
+      if (!cDoc.exists) return null;
+      const legacyBid = cDoc.data().boothId;
+      if (!legacyBid) return null;
+      const bDoc = await db.collection("booths").doc(legacyBid).get();
+      return bDoc.exists ? bDoc.id : null;
+    }
+
+    if (docs.length === 1) return docs[0].id;
+
+    const wantedBoothName = normFairBoothField(raw.boothName);
+    const wantedCompanyName = normFairBoothField(raw.companyName);
+    const fairLabel = wantedBoothName || wantedCompanyName;
+    if (fairLabel) {
+      const match = docs.find((d) => {
+        const data = d.data();
+        const bn = normFairBoothField(data.boothName);
+        const cn = normFairBoothField(data.companyName);
+        return bn === fairLabel || cn === fairLabel || bn === wantedCompanyName;
+      });
+      if (match) return match.id;
+    }
+
+    const wantedHiring = normFairBoothField(raw.hiringFor);
+    if (wantedHiring) {
+      const hfMatches = docs.filter((d) => normFairBoothField(d.data().hiringFor) === wantedHiring);
+      if (hfMatches.length === 1) return hfMatches[0].id;
+    }
+
+    const wantedIndustry = normFairBoothField(raw.industry);
+    if (wantedIndustry) {
+      const indMatches = docs.filter((d) => normFairBoothField(d.data().industry) === wantedIndustry);
+      if (indMatches.length === 1) return indMatches[0].id;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn("resolveOriginalBoothIdForFairSnapshot:", err.message);
+  }
+  return null;
+}
+
 // Rate limiter for enrollment endpoint (prevent brute force on invite codes)
 const enrollmentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -35,6 +94,15 @@ const enrollmentLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   // Skip rate limiting in test environment
+  skip: (req) => process.env.NODE_ENV === "test",
+});
+
+const enrollmentRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Too many enrollment request attempts, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
   skip: (req) => process.env.NODE_ENV === "test",
 });
 
@@ -76,13 +144,101 @@ function virtualFairGeocodeQuery(city, state, zip) {
   return z ? `${head} ${z}` : head;
 }
 
+/** Pick a venue part: use the incoming value if provided, otherwise fall back to previous. */
+function pickVenuePart(incoming, fallback) {
+  return incoming === undefined ? trimVenuePart(fallback) : trimVenuePart(incoming);
+}
+
+/**
+ * Resolve all venue update fields for PUT /api/fairs/:fairId.
+ * Returns { fields } on success, or { error, status } on validation failure.
+ */
+async function resolveVenueUpdates(prev, { venueCity, venueState, venueZip, venueGeocodeQuery }) {
+  const FieldValue = admin.firestore.FieldValue;
+  const sentGeo = venueGeocodeQuery === undefined ? null : trimVenuePart(venueGeocodeQuery);
+  const useGeoQuery = Boolean(sentGeo && sentGeo.length > 0);
+
+  if (useGeoQuery) {
+    const result = await resolveVenueFromGeoQuery(sentGeo, true, null, null, null);
+    if (result.error) return result;
+    return { fields: { ...result.venueFields, venueAddress: FieldValue.delete() } };
+  }
+
+  const city = pickVenuePart(venueCity, prev.venueCity);
+  const state = pickVenuePart(venueState, prev.venueState);
+  const zip = pickVenuePart(venueZip, prev.venueZip);
+
+  if (!city && !state && !zip) {
+    return {
+      fields: {
+        venueAddress: FieldValue.delete(),
+        venueCity: FieldValue.delete(),
+        venueState: FieldValue.delete(),
+        venueZip: FieldValue.delete(),
+        venueCountry: FieldValue.delete(),
+        venueGeo: FieldValue.delete(),
+        venueMapboxId: FieldValue.delete(),
+      },
+    };
+  }
+
+  if (zip.length > 20) {
+    return { error: "ZIP or postal code must be 20 characters or less.", status: 400 };
+  }
+  const geoQuery = virtualFairGeocodeQuery(city, state, zip);
+  if (!trimVenuePart(geoQuery)) {
+    return { error: "Enter a location, ZIP, or place to verify with search.", status: 400 };
+  }
+  const result = await resolveVenueFromGeoQuery(geoQuery, false, city, state, zip);
+  if (result.error) return result;
+  return { fields: { ...result.venueFields, venueAddress: FieldValue.delete() } };
+}
+
+/**
+ * Resolve venue fields from geocoding input.
+ * Used by both POST and PUT /api/fairs to avoid duplicated geocoding logic.
+ * Returns { venueFields } on success, or { error, status } on validation failure.
+ */
+async function resolveVenueFromGeoQuery(geoQuery, fromSingleQuery, city, state, zip) {
+  if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
+    return { error: "Location search text is too long.", status: 400 };
+  }
+  if (!process.env.MAPBOX_ACCESS_TOKEN) {
+    return { error: "Geocoding is not configured", status: 503 };
+  }
+  const g = await forwardGeocode(geoQuery);
+  if (!g) {
+    return { error: "Could not verify this location. Try search suggestions or a fuller address.", status: 400 };
+  }
+  const finalCity = fromSingleQuery ? g.city || null : g.city || city || null;
+  const finalState = fromSingleQuery ? g.state || null : g.state || state || null;
+  const finalZip = fromSingleQuery ? g.postcode || null : zip || g.postcode || null;
+  if (!finalCity || !finalState) {
+    return { error: "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.", status: 400 };
+  }
+  const zipOut = finalZip || null;
+  if (zipOut && zipOut.length > 20) {
+    return { error: "ZIP or postal code must be 20 characters or less.", status: 400 };
+  }
+  return {
+    venueFields: removeUndefined({
+      venueCity: finalCity,
+      venueState: finalState,
+      venueZip: zipOut,
+      venueCountry: g.country,
+      venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
+      venueMapboxId: g.mapboxId,
+    }),
+  };
+}
+
 async function resolveFairIdFromInviteCode(fairId, inviteCode) {
-  if (!inviteCode) return fairId;
-
-  const fairSnap = await db.collection("fairs").where("inviteCode", "==", inviteCode.toUpperCase()).get();
-  if (fairSnap.empty) throw buildHttpError(400, "Invalid invite code");
-
-  return fairSnap.docs[0].id;
+  if (inviteCode) {
+    const fairSnap = await db.collection("fairs").where("inviteCode", "==", inviteCode.toUpperCase()).get();
+    if (fairSnap.empty) throw buildHttpError(400, "Invalid invite code");
+    return fairSnap.docs[0].id;
+  }
+  return fairId;
 }
 
 async function ensureFairExists(fairId) {
@@ -161,7 +317,7 @@ async function ensureAdminOrCompanyAccess(requestingUid, companyId) {
   return { error: "Unauthorized: must be admin or company owner/rep", status: 403 };
 }
 
-async function getCompanyAndBoothSnapshot(companyId) {
+async function getCompanyAndBoothSnapshot(companyId, boothId) {
   const companyDoc = await db.collection("companies").doc(companyId).get();
   if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
 
@@ -185,13 +341,16 @@ async function getCompanyAndBoothSnapshot(companyId) {
     hiringFor: null,
   };
 
-  if (company.boothId) {
-    const boothDoc = await db.collection("booths").doc(company.boothId).get();
+  // Use explicit boothId if provided, otherwise fall back to company.boothId
+  const resolvedBoothId = boothId || company.boothId;
+  if (resolvedBoothId) {
+    const boothDoc = await db.collection("booths").doc(resolvedBoothId).get();
     if (boothDoc.exists) {
       const bData = boothDoc.data();
       boothSnapshot = {
         companyId,
-        originalBoothId: company.boothId,
+        originalBoothId: resolvedBoothId,
+        boothName: bData.boothName || null,
         companyName: bData.companyName || company.companyName || "",
         industry: bData.industry || null,
         companySize: bData.companySize || null,
@@ -214,22 +373,26 @@ async function getCompanyAndBoothSnapshot(companyId) {
   return { company, boothSnapshot };
 }
 
-async function createEnrollmentWithBooth({
+async function createEnrollmentWithBooths({
   fairId,
   companyId,
   companyName,
-  boothSnapshot,
+  boothSnapshots,
   enrolledBy,
   enrollmentMethod,
 }) {
-  const fairBoothRef = db.collection("fairs").doc(fairId).collection("booths").doc();
   const batch = db.batch();
+  const fairBoothIds = [];
 
-  batch.set(fairBoothRef, {
-    ...removeUndefined(boothSnapshot),
-    enrolledAt: admin.firestore.Timestamp.now(),
-    enrolledBy,
-  });
+  for (const snapshot of boothSnapshots) {
+    const fairBoothRef = db.collection("fairs").doc(fairId).collection("booths").doc();
+    batch.set(fairBoothRef, {
+      ...removeUndefined(snapshot),
+      enrolledAt: admin.firestore.Timestamp.now(),
+      enrolledBy,
+    });
+    fairBoothIds.push(fairBoothRef.id);
+  }
 
   batch.set(db.collection("fairs").doc(fairId).collection("enrollments").doc(companyId), {
     companyId,
@@ -237,11 +400,11 @@ async function createEnrollmentWithBooth({
     enrolledAt: admin.firestore.Timestamp.now(),
     enrolledBy,
     enrollmentMethod,
-    boothId: fairBoothRef.id,
+    boothIds: fairBoothIds,
   });
 
   await batch.commit();
-  return fairBoothRef.id;
+  return fairBoothIds;
 }
 
 async function snapshotCompanyJobsToFair(fairId, companyId) {
@@ -260,6 +423,72 @@ async function snapshotCompanyJobsToFair(fairId, companyId) {
   });
 
   await jobBatch.commit();
+}
+
+/** Fair must not have ended; requests only before start when startTime is set. */
+function assertFairAcceptsEnrollmentRequests(fairData) {
+  const now = admin.firestore.Timestamp.now().toMillis();
+  if (fairData.endTime && now >= fairData.endTime.toMillis()) {
+    return { error: "This fair has ended.", status: 400 };
+  }
+  if (fairData.startTime && now >= fairData.startTime.toMillis()) {
+    return {
+      error: "Enrollment requests are only accepted before the fair starts.",
+      status: 400,
+    };
+  }
+  return null;
+}
+
+/**
+ * Create fair enrollment + fair-scoped booths + job snapshot.
+ * @param {object} opts
+ * @param {string} opts.fairId
+ * @param {string} opts.companyId
+ * @param {string[]|undefined} opts.boothIds - multi-booth; omit or empty for legacy single booth
+ * @param {string} opts.enrolledBy - Firebase uid
+ * @param {"inviteCode"|"adminDirect"|"adminApproval"} opts.enrollmentMethod
+ */
+async function performCompanyEnrollment({ fairId, companyId, boothIds, enrolledBy, enrollmentMethod }) {
+  const enrollmentDoc = await db
+    .collection("fairs")
+    .doc(fairId)
+    .collection("enrollments")
+    .doc(companyId)
+    .get();
+  if (enrollmentDoc.exists) throw buildHttpError(400, "Company is already enrolled in this fair");
+
+  const companyDoc = await db.collection("companies").doc(companyId).get();
+  if (!companyDoc.exists) throw buildHttpError(404, "Company not found");
+  const company = companyDoc.data();
+
+  const boothSnapshots = [];
+  if (boothIds && boothIds.length > 0) {
+    for (const bid of boothIds) {
+      const boothDoc = await db.collection("booths").doc(bid).get();
+      if (!boothDoc.exists) throw buildHttpError(400, `Booth ${bid} not found`);
+      if (boothDoc.data().companyId !== companyId) {
+        throw buildHttpError(403, `Booth ${bid} does not belong to this company`);
+      }
+      const { boothSnapshot } = await getCompanyAndBoothSnapshot(companyId, bid);
+      boothSnapshots.push(boothSnapshot);
+    }
+  } else {
+    const { boothSnapshot } = await getCompanyAndBoothSnapshot(companyId);
+    boothSnapshots.push(boothSnapshot);
+  }
+
+  const fairBoothIds = await createEnrollmentWithBooths({
+    fairId,
+    companyId,
+    companyName: company.companyName || "",
+    boothSnapshots,
+    enrolledBy,
+    enrollmentMethod,
+  });
+
+  await snapshotCompanyJobsToFair(fairId, companyId);
+  return fairBoothIds;
 }
 
 /* -------------------------------------------------------
@@ -315,12 +544,12 @@ function buildFairListItem(doc, data, now, searchOrigin) {
 }
 
 async function resolveSearchOriginFromQuery(query) {
-  const radiusMiles = query.radiusMiles !== undefined && query.radiusMiles !== ""
-    ? Number.parseFloat(String(query.radiusMiles))
-    : NaN;
+  const radiusMiles = query.radiusMiles === undefined || query.radiusMiles === ""
+    ? Number.NaN
+    : Number.parseFloat(String(query.radiusMiles));
   if (Number.isNaN(radiusMiles) || radiusMiles <= 0) return null;
 
-  const address = query.address != null ? String(query.address).trim() : "";
+  const address = query.address == null ? "" : String(query.address).trim();
   if (address) {
     const g = await forwardGeocode(address);
     if (!g) {
@@ -348,7 +577,7 @@ async function resolveSearchOriginFromQuery(query) {
 /* GET /api/fairs - public: list fairs; optional geo filter: lat,lng,radiusMiles or address,radiusMiles */
 router.get("/fairs", async (req, res) => {
   try {
-    const hasRadius = req.query.radiusMiles !== undefined && String(req.query.radiusMiles).trim() !== "";
+    const hasRadius = req.query.radiusMiles != null && String(req.query.radiusMiles).trim().length > 0;
     let search = null;
     if (hasRadius) {
       try {
@@ -403,10 +632,11 @@ router.get("/fairs/my-enrollments", verifyFirebaseToken, async (req, res) => {
       companyIds.add(profileCompanyId);
     }
 
-    if (companyIds.size === 0) return res.json({ enrollments: [] });
+    if (companyIds.size === 0) return res.json({ enrollments: [], pendingEnrollmentRequests: [] });
 
     const fairsSnap = await db.collection("fairs").get();
     const enrollments = [];
+    const pendingEnrollmentRequests = [];
 
     for (const fairDoc of fairsSnap.docs) {
       for (const cid of companyIds) {
@@ -423,11 +653,33 @@ router.get("/fairs/my-enrollments", verifyFirebaseToken, async (req, res) => {
             boothId: enrollDoc.data().boothId || null,
             enrolledAt: enrollDoc.data().enrolledAt ? enrollDoc.data().enrolledAt.toMillis() : null,
           });
+        } else {
+          const reqDoc = await db
+            .collection("fairs")
+            .doc(fairDoc.id)
+            .collection("enrollmentRequests")
+            .doc(cid)
+            .get();
+          if (reqDoc.exists) {
+            const rd = reqDoc.data();
+            pendingEnrollmentRequests.push({
+              fairId: fairDoc.id,
+              companyId: cid,
+              status: rd.status || "pending",
+              companyName: rd.companyName || null,
+              message: rd.message || null,
+              boothIds: Array.isArray(rd.boothIds) ? rd.boothIds : undefined,
+              createdAt: rd.createdAt ? rd.createdAt.toMillis() : null,
+              updatedAt: rd.updatedAt ? rd.updatedAt.toMillis() : null,
+              rejectReason: rd.rejectReason || null,
+              rejectedAt: rd.rejectedAt ? rd.rejectedAt.toMillis() : null,
+            });
+          }
         }
       }
     }
 
-    return res.json({ enrollments });
+    return res.json({ enrollments, pendingEnrollmentRequests });
   } catch (err) {
     console.error("GET /api/fairs/my-enrollments error:", err);
     return res.status(500).json({ error: "Failed to fetch enrollments" });
@@ -497,6 +749,31 @@ router.get("/fairs/my-announcements", verifyFirebaseToken, async (req, res) => {
   } catch (err) {
     console.error("GET /api/fairs/my-announcements error:", err);
     return res.status(500).json({ error: "Failed to fetch announcements" });
+  }
+});
+
+/* GET /api/fairs/pending-enrollment-request-counts — admin: pending requests per fair (for dashboard badges) */
+router.get("/fairs/pending-enrollment-request-counts", verifyFirebaseToken, async (req, res) => {
+  const adminError = await verifyAdmin(req.user.uid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    // Per-fair subcollection queries avoid Firestore COLLECTION_GROUP index requirements.
+    const fairsSnap = await db.collection("fairs").get();
+    const counts = {};
+    await Promise.all(
+      fairsSnap.docs.map(async (fairDoc) => {
+        const pendingSnap = await fairDoc.ref
+          .collection("enrollmentRequests")
+          .where("status", "==", "pending")
+          .get();
+        if (pendingSnap.size > 0) counts[fairDoc.id] = pendingSnap.size;
+      }),
+    );
+    return res.json({ counts });
+  } catch (err) {
+    console.error("GET /api/fairs/pending-enrollment-request-counts error:", err);
+    return res.status(500).json({ error: "Failed to load pending enrollment request counts" });
   }
 });
 
@@ -717,9 +994,6 @@ router.post("/fairs", verifyFirebaseToken, async (req, res) => {
       let geoQuery;
       let fromSingleQuery = false;
       if (useGeoQuery) {
-        if (geoQField.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-          return res.status(400).json({ error: "Location search text is too long." });
-        }
         geoQuery = geoQField;
         fromSingleQuery = true;
       } else {
@@ -732,40 +1006,10 @@ router.post("/fairs", verifyFirebaseToken, async (req, res) => {
             error: "Enter a location, ZIP, or place to verify with search.",
           });
         }
-        if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-          return res.status(400).json({ error: "Location search text is too long." });
-        }
       }
-      if (!process.env.MAPBOX_ACCESS_TOKEN) {
-        return res.status(503).json({ error: "Geocoding is not configured" });
-      }
-      const g = await forwardGeocode(geoQuery);
-      if (!g) {
-        return res.status(400).json({
-          error: "Could not verify this location. Try search suggestions or a fuller address.",
-        });
-      }
-      const finalCity = fromSingleQuery ? g.city || null : g.city || city || null;
-      const finalState = fromSingleQuery ? g.state || null : g.state || state || null;
-      const finalZip = fromSingleQuery ? g.postcode || null : zip || g.postcode || null;
-      if (!finalCity || !finalState) {
-        return res.status(400).json({
-          error:
-            "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
-        });
-      }
-      const zipOut = finalZip || null;
-      if (zipOut && zipOut.length > 20) {
-        return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-      }
-      venueFields = removeUndefined({
-        venueCity: finalCity,
-        venueState: finalState,
-        venueZip: zipOut,
-        venueCountry: g.country,
-        venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
-        venueMapboxId: g.mapboxId,
-      });
+      const result = await resolveVenueFromGeoQuery(geoQuery, fromSingleQuery, city, state, zip);
+      if (result.error) return res.status(result.status).json({ error: result.error });
+      venueFields = result.venueFields;
     }
 
     const rawCode = generateInviteCode();
@@ -816,117 +1060,11 @@ router.put("/fairs/:fairId", verifyFirebaseToken, async (req, res) => {
     if (startTime !== undefined) updates.startTime = startTime ? parseUTCToTimestamp(startTime) : null;
     if (endTime !== undefined) updates.endTime = endTime ? parseUTCToTimestamp(endTime) : null;
 
-    const hubTouched =
-      venueCity !== undefined ||
-      venueState !== undefined ||
-      venueZip !== undefined ||
-      venueGeocodeQuery !== undefined;
+    const hubTouched = [venueCity, venueState, venueZip, venueGeocodeQuery].some((v) => v !== undefined);
     if (hubTouched) {
-      const prev = fairDoc.data() || {};
-      const sentGeo =
-        venueGeocodeQuery !== undefined ? trimVenuePart(venueGeocodeQuery) : null;
-      const useGeoQuery = sentGeo !== null && sentGeo.length > 0;
-
-      if (useGeoQuery) {
-        if (sentGeo.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-          return res.status(400).json({ error: "Location search text is too long." });
-        }
-        if (!process.env.MAPBOX_ACCESS_TOKEN) {
-          return res.status(503).json({ error: "Geocoding is not configured" });
-        }
-        const g = await forwardGeocode(sentGeo);
-        if (!g) {
-          return res.status(400).json({
-            error: "Could not verify this location. Try search suggestions or a fuller address.",
-          });
-        }
-        const finalCity = g.city || null;
-        const finalState = g.state || null;
-        const finalZip = g.postcode || null;
-        if (!finalCity || !finalState) {
-          return res.status(400).json({
-            error:
-              "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
-          });
-        }
-        if (finalZip && finalZip.length > 20) {
-          return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-        }
-        Object.assign(
-          updates,
-          removeUndefined({
-            venueCity: finalCity,
-            venueState: finalState,
-            venueZip: finalZip || null,
-            venueCountry: g.country,
-            venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
-            venueMapboxId: g.mapboxId,
-          }),
-        );
-        updates.venueAddress = FieldValue.delete();
-      } else {
-        const city = venueCity !== undefined ? trimVenuePart(venueCity) : trimVenuePart(prev.venueCity);
-        const state = venueState !== undefined ? trimVenuePart(venueState) : trimVenuePart(prev.venueState);
-        const zip = venueZip !== undefined ? trimVenuePart(venueZip) : trimVenuePart(prev.venueZip);
-        const hasAnyHubPart = Boolean(city || state || zip);
-
-        if (!hasAnyHubPart) {
-          updates.venueAddress = FieldValue.delete();
-          updates.venueCity = FieldValue.delete();
-          updates.venueState = FieldValue.delete();
-          updates.venueZip = FieldValue.delete();
-          updates.venueCountry = FieldValue.delete();
-          updates.venueGeo = FieldValue.delete();
-          updates.venueMapboxId = FieldValue.delete();
-        } else {
-          if (zip.length > 20) {
-            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-          }
-          const geoQuery = virtualFairGeocodeQuery(city, state, zip);
-          if (!trimVenuePart(geoQuery)) {
-            return res.status(400).json({
-              error: "Enter a location, ZIP, or place to verify with search.",
-            });
-          }
-          if (geoQuery.length > HUB_GEOCODE_QUERY_MAX_LEN) {
-            return res.status(400).json({ error: "Location search text is too long." });
-          }
-          if (!process.env.MAPBOX_ACCESS_TOKEN) {
-            return res.status(503).json({ error: "Geocoding is not configured" });
-          }
-          const g = await forwardGeocode(geoQuery);
-          if (!g) {
-            return res.status(400).json({
-              error: "Could not verify this location. Try search suggestions or a fuller address.",
-            });
-          }
-          const finalCity = g.city || city || null;
-          const finalState = g.state || state || null;
-          const finalZip = zip || g.postcode || null;
-          if (!finalCity || !finalState) {
-            return res.status(400).json({
-              error:
-                "Could not resolve city and state for this location. Pick a suggestion or try a fuller address.",
-            });
-          }
-          const zipOut = finalZip || null;
-          if (zipOut && zipOut.length > 20) {
-            return res.status(400).json({ error: "ZIP or postal code must be 20 characters or less." });
-          }
-          Object.assign(
-            updates,
-            removeUndefined({
-              venueCity: finalCity,
-              venueState: finalState,
-              venueZip: zipOut,
-              venueCountry: g.country,
-              venueGeo: new admin.firestore.GeoPoint(g.lat, g.lng),
-              venueMapboxId: g.mapboxId,
-            }),
-          );
-          updates.venueAddress = FieldValue.delete();
-        }
-      }
+      const venueResult = await resolveVenueUpdates(fairDoc.data() || {}, { venueCity, venueState, venueZip, venueGeocodeQuery });
+      if (venueResult.error) return res.status(venueResult.status).json({ error: venueResult.error });
+      Object.assign(updates, venueResult.fields);
     }
 
     if (updates.startTime && updates.endTime && updates.startTime.toMillis() >= updates.endTime.toMillis()) {
@@ -1038,11 +1176,18 @@ router.post("/fairs/:fairId/refresh-invite-code", verifyFirebaseToken, async (re
 /* POST /api/fairs/:fairId/enroll - enroll company in fair */
 router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, async (req, res) => {
   const { fairId } = req.params;
-  const { companyId, inviteCode } = req.body;
+  const { companyId, inviteCode, boothIds } = req.body;
   const requestingUid = req.user.uid;
 
   if (!companyId && !inviteCode) {
     return res.status(400).json({ error: "Either companyId or inviteCode is required" });
+  }
+
+  // Validate boothIds if provided
+  if (boothIds !== undefined) {
+    if (!Array.isArray(boothIds) || boothIds.length === 0) {
+      return res.status(400).json({ error: "boothIds must be a non-empty array" });
+    }
   }
 
   try {
@@ -1054,29 +1199,27 @@ router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, asy
     const accessError = await ensureAdminOrCompanyAccess(requestingUid, resolvedCompanyId);
     if (accessError) return res.status(accessError.status).json({ error: accessError.error });
 
-    const enrollmentDoc = await db
-      .collection("fairs")
-      .doc(resolvedFairId)
-      .collection("enrollments")
-      .doc(resolvedCompanyId)
-      .get();
-    if (enrollmentDoc.exists) return res.status(400).json({ error: "Company is already enrolled in this fair" });
+    const adminGate = await verifyAdmin(requestingUid);
+    const isAdmin = !adminGate;
+    if (!isAdmin && !inviteCode) {
+      return res.status(403).json({
+        error:
+          "An invite code is required to join this fair, or submit an enrollment request for admin approval.",
+        code: "INVITE_OR_REQUEST_REQUIRED",
+      });
+    }
 
-    const { company, boothSnapshot } = await getCompanyAndBoothSnapshot(resolvedCompanyId);
-    const enrollmentMethod = inviteCode ? "inviteCode" : "admin";
+    const enrollmentMethod = inviteCode ? "inviteCode" : "adminDirect";
 
-    const boothId = await createEnrollmentWithBooth({
+    const fairBoothIds = await performCompanyEnrollment({
       fairId: resolvedFairId,
       companyId: resolvedCompanyId,
-      companyName: company.companyName || "",
-      boothSnapshot,
+      boothIds,
       enrolledBy: requestingUid,
       enrollmentMethod,
     });
 
-    await snapshotCompanyJobsToFair(resolvedFairId, resolvedCompanyId);
-
-    return res.status(201).json({ boothId, fairId: resolvedFairId });
+    return res.status(201).json({ boothIds: fairBoothIds, fairId: resolvedFairId });
   } catch (err) {
     if (err.status) {
       return res.status(err.status).json({
@@ -1088,6 +1231,257 @@ router.post("/fairs/:fairId/enroll", enrollmentLimiter, verifyFirebaseToken, asy
     return res.status(500).json({ error: "Failed to enroll company" });
   }
 });
+
+/* POST /api/fairs/:fairId/enrollment-requests — owner/rep: request to join before fair starts */
+router.post(
+  "/fairs/:fairId/enrollment-requests",
+  enrollmentRequestLimiter,
+  verifyFirebaseToken,
+  async (req, res) => {
+    const { fairId } = req.params;
+    const { companyId, boothIds, message } = req.body || {};
+    const requestingUid = req.user.uid;
+
+    if (boothIds !== undefined) {
+      if (!Array.isArray(boothIds) || boothIds.length === 0) {
+        return res.status(400).json({ error: "boothIds must be a non-empty array when provided" });
+      }
+    }
+
+    try {
+      const fairDoc = await db.collection("fairs").doc(fairId).get();
+      if (!fairDoc.exists) return res.status(404).json({ error: "Fair not found" });
+      const fairData = fairDoc.data();
+      const schedErr = assertFairAcceptsEnrollmentRequests(fairData);
+      if (schedErr) return res.status(schedErr.status).json({ error: schedErr.error });
+
+      const resolvedCompanyId = await resolveCompanyIdForEnrollment(requestingUid, companyId);
+      const accessErr = await verifyCompanyAccess(requestingUid, resolvedCompanyId);
+      if (accessErr) return res.status(accessErr.status).json({ error: accessErr.error });
+
+      const enrollmentDoc = await db
+        .collection("fairs")
+        .doc(fairId)
+        .collection("enrollments")
+        .doc(resolvedCompanyId)
+        .get();
+      if (enrollmentDoc.exists) {
+        return res.status(400).json({ error: "Company is already enrolled in this fair" });
+      }
+
+      const companyDoc = await db.collection("companies").doc(resolvedCompanyId).get();
+      if (!companyDoc.exists) return res.status(404).json({ error: "Company not found" });
+      const company = companyDoc.data();
+
+      if (boothIds && boothIds.length > 0) {
+        for (const bid of boothIds) {
+          const boothDoc = await db.collection("booths").doc(bid).get();
+          if (!boothDoc.exists) return res.status(400).json({ error: `Booth ${bid} not found` });
+          if (boothDoc.data().companyId !== resolvedCompanyId) {
+            return res.status(403).json({ error: `Booth ${bid} does not belong to this company` });
+          }
+        }
+      }
+
+      const reqRef = db.collection("fairs").doc(fairId).collection("enrollmentRequests").doc(resolvedCompanyId);
+      const existing = await reqRef.get();
+      if (existing.exists) {
+        const prev = existing.data();
+        if (prev.status === "pending") {
+          return res.status(200).json({ success: true, fairId, companyId: resolvedCompanyId, alreadyPending: true });
+        }
+      }
+
+      let msg = message != null ? String(message).trim() : "";
+      if (msg.length > 2000) msg = msg.slice(0, 2000);
+
+      const now = admin.firestore.Timestamp.now();
+      await reqRef.set(
+        {
+          ...removeUndefined({
+            companyId: resolvedCompanyId,
+            companyName: company.companyName || "",
+            requestedBy: requestingUid,
+            boothIds: boothIds && boothIds.length > 0 ? boothIds : undefined,
+            message: msg || undefined,
+            status: "pending",
+            createdAt: now,
+            updatedAt: now,
+          }),
+          rejectReason: admin.firestore.FieldValue.delete(),
+          rejectedAt: admin.firestore.FieldValue.delete(),
+          rejectedBy: admin.firestore.FieldValue.delete(),
+        },
+        { merge: true },
+      );
+
+      return res.status(201).json({ success: true, fairId, companyId: resolvedCompanyId });
+    } catch (err) {
+      if (err.status) {
+        return res.status(err.status).json({
+          error: err.message,
+          ...(err.code ? { code: err.code } : {}),
+        });
+      }
+      console.error("POST /api/fairs/:fairId/enrollment-requests error:", err);
+      return res.status(500).json({ error: "Failed to submit enrollment request" });
+    }
+  },
+);
+
+/* GET /api/fairs/:fairId/enrollment-requests — admin: list pending requests */
+router.get("/fairs/:fairId/enrollment-requests", verifyFirebaseToken, async (req, res) => {
+  const { fairId } = req.params;
+  const adminUid = req.user.uid;
+  const adminError = await verifyAdmin(adminUid);
+  if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+  try {
+    const snap = await db
+      .collection("fairs")
+      .doc(fairId)
+      .collection("enrollmentRequests")
+      .where("status", "==", "pending")
+      .get();
+    const baseRows = snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        companyId: doc.id,
+        companyName: data.companyName || null,
+        requestedBy: data.requestedBy || null,
+        boothIds: Array.isArray(data.boothIds) ? data.boothIds : undefined,
+        message: data.message || null,
+        createdAt: data.createdAt ? data.createdAt.toMillis() : null,
+        updatedAt: data.updatedAt ? data.updatedAt.toMillis() : null,
+      };
+    });
+
+    const uids = [...new Set(baseRows.map((r) => r.requestedBy).filter(Boolean))];
+    const boothIds = [...new Set(baseRows.flatMap((r) => r.boothIds || []))];
+
+    const [userSnaps, boothSnaps] = await Promise.all([
+      Promise.all(uids.map((uid) => db.collection("users").doc(uid).get())),
+      Promise.all(boothIds.map((id) => db.collection("booths").doc(id).get())),
+    ]);
+
+    const userById = new Map();
+    userSnaps.forEach((d) => {
+      if (d.exists) userById.set(d.id, d.data());
+    });
+    const boothById = new Map();
+    boothSnaps.forEach((d) => {
+      if (d.exists) boothById.set(d.id, d.data());
+    });
+
+    const displayNameForUser = (uid) => {
+      if (!uid) return null;
+      const u = userById.get(uid);
+      if (!u) return null;
+      const combined = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+      if (combined) return combined;
+      if (u.email) return u.email;
+      return null;
+    };
+
+    const requests = baseRows.map((row) => ({
+      ...row,
+      requestedByName: displayNameForUser(row.requestedBy) || row.requestedBy || "Unknown",
+      booths: (row.boothIds || []).map((id) => {
+        const b = boothById.get(id);
+        const boothName = (b && (b.boothName || b.name)) || "Untitled booth";
+        return { id, boothName };
+      }),
+    }));
+    return res.json({ requests });
+  } catch (err) {
+    console.error("GET /api/fairs/:fairId/enrollment-requests error:", err);
+    return res.status(500).json({ error: "Failed to list enrollment requests" });
+  }
+});
+
+/* POST /api/fairs/:fairId/enrollment-requests/:companyId/approve — admin */
+router.post(
+  "/fairs/:fairId/enrollment-requests/:companyId/approve",
+  verifyFirebaseToken,
+  async (req, res) => {
+    const { fairId, companyId } = req.params;
+    const adminUid = req.user.uid;
+    const adminError = await verifyAdmin(adminUid);
+    if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+    try {
+      const reqRef = db.collection("fairs").doc(fairId).collection("enrollmentRequests").doc(companyId);
+      const reqSnap = await reqRef.get();
+      if (!reqSnap.exists) return res.status(404).json({ error: "Enrollment request not found" });
+      const reqData = reqSnap.data();
+      if (reqData.status !== "pending") {
+        return res.status(400).json({ error: "This enrollment request is not pending" });
+      }
+
+      const boothIds = Array.isArray(reqData.boothIds) && reqData.boothIds.length > 0 ? reqData.boothIds : undefined;
+
+      const fairBoothIds = await performCompanyEnrollment({
+        fairId,
+        companyId,
+        boothIds,
+        enrolledBy: adminUid,
+        enrollmentMethod: "adminApproval",
+      });
+
+      await reqRef.delete();
+
+      return res.status(201).json({ boothIds: fairBoothIds, fairId, companyId });
+    } catch (err) {
+      if (err.status) {
+        return res.status(err.status).json({
+          error: err.message,
+          ...(err.code ? { code: err.code } : {}),
+        });
+      }
+      console.error("POST approve enrollment-request error:", err);
+      return res.status(500).json({ error: "Failed to approve enrollment request" });
+    }
+  },
+);
+
+/* POST /api/fairs/:fairId/enrollment-requests/:companyId/reject — admin */
+router.post(
+  "/fairs/:fairId/enrollment-requests/:companyId/reject",
+  verifyFirebaseToken,
+  async (req, res) => {
+    const { fairId, companyId } = req.params;
+    const { reason } = req.body || {};
+    const adminUid = req.user.uid;
+    const adminError = await verifyAdmin(adminUid);
+    if (adminError) return res.status(adminError.status).json({ error: adminError.error });
+
+    try {
+      const reqRef = db.collection("fairs").doc(fairId).collection("enrollmentRequests").doc(companyId);
+      const reqSnap = await reqRef.get();
+      if (!reqSnap.exists) return res.status(404).json({ error: "Enrollment request not found" });
+      const reqData = reqSnap.data();
+      if (reqData.status !== "pending") {
+        return res.status(400).json({ error: "This enrollment request is not pending" });
+      }
+
+      let rejectReason = reason != null ? String(reason).trim() : "";
+      if (rejectReason.length > 2000) rejectReason = rejectReason.slice(0, 2000);
+
+      await reqRef.update({
+        status: "rejected",
+        rejectedBy: adminUid,
+        rejectedAt: admin.firestore.Timestamp.now(),
+        rejectReason: rejectReason || null,
+        updatedAt: admin.firestore.Timestamp.now(),
+      });
+
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("POST reject enrollment-request error:", err);
+      return res.status(500).json({ error: "Failed to reject enrollment request" });
+    }
+  },
+);
 
 /* GET /api/fairs/:fairId/enrollments - admin: list enrolled companies */
 router.get("/fairs/:fairId/enrollments", verifyFirebaseToken, async (req, res) => {
@@ -1280,12 +1674,17 @@ router.get("/fairs/:fairId/booths/:boothId", async (req, res) => {
     if (!boothDoc.exists) return res.status(404).json({ error: "Booth not found" });
 
     const raw = boothDoc.data();
+    const resolvedOriginalBoothId = await resolveOriginalBoothIdForFairSnapshot(raw);
+    const mergedRaw = {
+      ...raw,
+      ...(resolvedOriginalBoothId ? { originalBoothId: resolvedOriginalBoothId } : {}),
+    };
     let companyData = null;
     if (raw.companyId) {
       const cDoc = await db.collection("companies").doc(raw.companyId).get();
       if (cDoc.exists) companyData = cDoc.data();
     }
-    const payload = mergeFairBoothPayloadWithCompany({ id: boothDoc.id, ...raw }, companyData);
+    const payload = mergeFairBoothPayloadWithCompany({ id: boothDoc.id, ...mergedRaw }, companyData);
     return res.json(payload);
   } catch (err) {
     if (err.message === "Fair not found") return res.status(404).json({ error: "Fair not found" });

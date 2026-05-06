@@ -20,30 +20,19 @@ import ForumIcon from "@mui/icons-material/Forum"
 import BaseLayout from "../components/BaseLayout"
 import { useFair } from "../contexts/FairContext"
 import { authUtils } from "../utils/auth"
-import { auth } from "../firebase"
-import { API_URL } from "../config"
+import { INDUSTRY_LABELS } from "../utils/boothConstants"
+import { fetchFairBoothsForFair } from "../utils/fairBoothsApi"
 
 interface Booth {
   id: string
   companyName: string
+  boothName?: string | null
   industry: string | null
   companySize: string | null
   location: string | null
   description: string | null
   logoUrl?: string | null
   companyId: string
-}
-
-const INDUSTRY_LABELS: Record<string, string> = {
-  software: "Software Development",
-  data: "Data Science & Analytics",
-  healthcare: "Healthcare Technology",
-  finance: "Financial Services",
-  energy: "Renewable Energy",
-  education: "Education Technology",
-  retail: "Retail & E-commerce",
-  manufacturing: "Manufacturing",
-  other: "Other",
 }
 
 export default function FairBooths() {
@@ -55,32 +44,24 @@ export default function FairBooths() {
   const [error, setError] = useState("")
 
   useEffect(() => {
+    if (user?.role === "representative") {
+      navigate(fairId ? `/fair/${fairId}` : "/dashboard", { replace: true })
+      return
+    }
     if (fairLoading || !fairId) return
     fetchBooths()
-  }, [fairLoading, fairId])
+  }, [fairLoading, fairId, user?.role, navigate])
 
   const fetchBooths = async () => {
+    setLoading(true)
+    setError("")
     try {
-      setLoading(true)
-      setError("")
-
-      const headers: Record<string, string> = {}
-      const token = await auth.currentUser?.getIdToken()
-      if (token) headers.Authorization = `Bearer ${token}`
-
-      const res = await fetch(`${API_URL}/api/fairs/${fairId}/booths`, { headers })
-
-      if (res.status === 403) {
-        setError("The career fair is not currently live.")
+      const result = await fetchFairBoothsForFair<Booth>(fairId!)
+      if (!result.ok) {
+        setError(result.error)
         return
       }
-      if (!res.ok) throw new Error("Failed to load booths")
-
-      const data = await res.json()
-      setBooths(data.booths || [])
-    } catch (err) {
-      console.error(err)
-      setError("Failed to load booths")
+      setBooths(result.booths)
     } finally {
       setLoading(false)
     }
@@ -162,8 +143,14 @@ export default function FairBooths() {
                   )}
 
                   <Typography variant="h6" fontWeight="bold" gutterBottom>
-                    {booth.companyName}
+                    {booth.boothName || booth.companyName}
                   </Typography>
+
+                  {booth.boothName && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                      {booth.companyName}
+                    </Typography>
+                  )}
 
                   {booth.industry && (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "text.secondary", mb: 0.5 }}>

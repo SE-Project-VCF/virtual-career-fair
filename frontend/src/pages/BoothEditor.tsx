@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
-import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom"
 import {
   Container,
   Box,
@@ -11,7 +11,6 @@ import {
   TextField,
   Alert,
   CircularProgress,
-  IconButton,
   Select,
   MenuItem,
   FormControl,
@@ -35,16 +34,16 @@ import {
 import { db, auth } from "../firebase"
 import { useFair } from "../contexts/FairContext"
 import { API_URL } from "../config"
+import BaseLayout from "../components/BaseLayout"
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import BusinessIcon from "@mui/icons-material/Business"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import RestartAltIcon from "@mui/icons-material/RestartAlt"
-import ProfileMenu from "./ProfileMenu"
 
 interface BoothData {
+  boothName: string
   companyName: string
   industry: string
   companySize: string
@@ -88,9 +87,7 @@ const COMPANY_SIZES = [
 
 export default function BoothEditor() {
   const navigate = useNavigate()
-  const { companyId } = useParams<{ companyId: string }>()
-  const [searchParams] = useSearchParams()
-  const urlBoothId = searchParams.get("bid")
+  const { companyId, boothId: urlBoothId } = useParams<{ companyId: string; fairId?: string; boothId?: string }>()
   const user = authUtils.getCurrentUser()
   const { fairId } = useFair()
 
@@ -104,6 +101,7 @@ export default function BoothEditor() {
 
   // Booth form fields that are saved to Firestore
   const [formData, setFormData] = useState<BoothData>({
+    boothName: "",
     companyName: "",
     industry: "",
     companySize: "",
@@ -247,8 +245,8 @@ export default function BoothEditor() {
       // Load existing booth if it exists; otherwise prefill company name.
       if (fairId) {
         await loadFairBooth(companyInfo)
-      } else if (companyInfo.boothId) {
-        await loadBooth(companyInfo.boothId, companyInfo.companyName)
+      } else if (urlBoothId) {
+        await loadBooth(urlBoothId, companyInfo.companyName)
       } else {
         setFormData((prev) => ({ ...prev, companyName: companyInfo.companyName }))
       }
@@ -271,6 +269,7 @@ export default function BoothEditor() {
 
       const boothData = boothDoc.data()
       setFormData({
+        boothName: boothData.boothName || "",
         companyName: boothData.companyName || fallbackCompanyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
@@ -331,6 +330,7 @@ export default function BoothEditor() {
       const hasExistingData = !!(boothData.industry || boothData.description || boothData.contactName)
       setFairBoothHasData(hasExistingData)
       setFormData({
+        boothName: boothData.boothName || "",
         companyName: boothData.companyName || companyInfo.companyName || "",
         industry: boothData.industry || "",
         companySize: boothData.companySize || "",
@@ -438,14 +438,30 @@ export default function BoothEditor() {
     }
   }
 
-  /**
-   * Save booth data:
-   * - Validate the contact email belongs to a registered user
-   * - Ensure that contact user is owner or representative for the company
-   * - If a new logo was selected, upload it and save the URL
-   * - Create or update the booth doc
-   * - Ensure companies/{companyId}.boothId is set on first create
-   */
+  const validateBoothForm = async (companyInfo: typeof company): Promise<string | null> => {
+    if (!companyInfo) return "Company not found"
+
+    const normalizedEmail = formData.contactEmail.trim().toLowerCase()
+    const usersRef = collection(db, "users")
+    const q = query(usersRef, where("email", "==", normalizedEmail))
+    const snap = await getDocs(q)
+
+    if (snap.empty) {
+      return "Contact email does not match any registered user. Please use your own email or a registered team member's email."
+    }
+
+    const rep = snap.docs[0].data()
+    const repId = rep.uid
+    const isOwner = repId === companyInfo.ownerId
+    const isRep = companyInfo.representativeIDs?.includes(repId)
+
+    if (!isOwner && !isRep) {
+      return "This user is not an owner or representative of your company."
+    }
+
+    return null
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!company || !userId) return
@@ -457,28 +473,11 @@ export default function BoothEditor() {
       setError("")
       setSuccess("")
 
-      // Validate contact rep is a real Firestore user
-      const normalizedEmail = formData.contactEmail.trim().toLowerCase()
-      const usersRef = collection(db, "users")
-      const q = query(usersRef, where("email", "==", normalizedEmail))
-      const snap = await getDocs(q)
-
-      if (snap.empty) {
-        setError("Contact email does not match any registered user. Please use your own email or a registered team member's email.")
+      const validationError = await validateBoothForm(company)
+      if (validationError) {
+        setError(validationError)
         scrollToTop()
-        return
-      }
-
-      const rep = snap.docs[0].data()
-      const repId = rep.uid
-
-      // Check that this user belongs to the company
-      const isOwner = repId === company.ownerId
-      const isRep = company.representativeIDs?.includes(repId)
-
-      if (!isOwner && !isRep) {
-        setError("This user is not an owner or representative of your company.")
-        scrollToTop()
+        setSaving(false)
         return
       }
 
@@ -504,6 +503,7 @@ export default function BoothEditor() {
       // Booth document payload (office locations live on companies/{id})
       const boothData = {
         companyId: company.id,
+        boothName: formData.boothName,
         companyName: formData.companyName,
         industry: formData.industry,
         companySize: formData.companySize,
@@ -545,22 +545,18 @@ export default function BoothEditor() {
         return
       }
 
-      let boothId = company.boothId
+      const editBoothId = urlBoothId
 
-      if (boothId) {
+      if (editBoothId) {
         // Update existing booth
-        await updateDoc(doc(db, "booths", boothId), cleanedData)
+        await updateDoc(doc(db, "booths", editBoothId), cleanedData)
         setSuccess("Booth updated successfully!")
       } else {
-        // Create new booth
-        const boothRef = await addDoc(collection(db, "booths"), {
+        // Create new booth — do NOT link to company.boothId
+        await addDoc(collection(db, "booths"), {
           ...cleanedData,
           createdAt: new Date().toISOString(),
         })
-        boothId = boothRef.id
-
-        // Link company to booth
-        await updateDoc(doc(db, "companies", company.id), { boothId })
         setSuccess("Booth created successfully!")
       }
 
@@ -579,6 +575,7 @@ export default function BoothEditor() {
 
   const handleStartFresh = () => {
     setFormData({
+      boothName: "",
       companyName: company?.companyName ?? "",
       industry: "",
       companySize: "",
@@ -599,34 +596,38 @@ export default function BoothEditor() {
   // Loading state
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh" }}>
-        <CircularProgress />
-      </Box>
+      <BaseLayout pageTitle="Booth editor">
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh" }}>
+          <CircularProgress />
+        </Box>
+      </BaseLayout>
     )
   }
 
   // Fatal error state (company didn't load)
   if (error && !company) {
     return (
-      <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Card sx={{ p: 4, maxWidth: 500 }}>
-          <Alert 
-            severity="error" 
-            sx={{ mb: 2 }}
-            onClose={() => setError("")}
-            slotProps={{
-              closeButton: {
-                title: "Close"
-              }
-            }}
-          >
-            {error}
-          </Alert>
-          <Button onClick={() => navigate("/companies")} variant="contained">
-            Go Back
-          </Button>
-        </Card>
-      </Box>
+      <BaseLayout pageTitle="Booth editor">
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", py: 4, px: 2 }}>
+          <Card sx={{ p: 4, maxWidth: 500 }}>
+            <Alert
+              severity="error"
+              sx={{ mb: 2 }}
+              onClose={() => setError("")}
+              slotProps={{
+                closeButton: {
+                  title: "Close",
+                },
+              }}
+            >
+              {error}
+            </Alert>
+            <Button onClick={() => navigate("/companies")} variant="contained">
+              Go Back
+            </Button>
+          </Card>
+        </Box>
+      </BaseLayout>
     )
   }
 
@@ -689,48 +690,20 @@ export default function BoothEditor() {
 
   if (!company) return null
 
-  const resolvedBoothId = fairId ? fairBoothId : company.boothId
+  const resolvedBoothId = fairId ? fairBoothId : (urlBoothId || company.boothId)
   const boothPageTitle = resolvedBoothId ? "Edit Booth" : "Create Booth"
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      {/* Header */}
-      <Box
-        sx={{
-          background: "linear-gradient(135deg, #b03a6c 0%, #388560 100%)",
-          py: 3,
-          px: 4,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <Container maxWidth="lg">
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-              <IconButton
-                onClick={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
-                sx={{ color: "white" }}
-                aria-label={fairId ? "Back to fairs" : "Back to company profile"}
-              >
-                <ArrowBackIcon />
-              </IconButton>
-              <BusinessIcon sx={{ fontSize: 32, color: "white" }} />
-              <Box>
-                <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: "white" }}>
-                  {boothPageTitle}
-                </Typography>
-                <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.9)", mt: 0.5 }}>
-                  Set up your company presence at the virtual career fair
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <ProfileMenu />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-
+    <BaseLayout
+      pageTitle={boothPageTitle}
+      onHeaderBack={() => navigate(fairId ? `/fairs` : `/company/${company.id}`)}
+      headerBackAriaLabel={fairId ? "Back to fairs" : "Back to company profile"}
+      headerBackTooltip={fairId ? "Back to fairs" : "Back to company profile"}
+    >
       <Container maxWidth="md" sx={{ py: 4 }}>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          Set up your company presence at the virtual career fair
+        </Typography>
         {error && (
           <Alert 
             severity="error" 
@@ -793,6 +766,20 @@ export default function BoothEditor() {
               </Typography>
 
               <Grid container spacing={3}>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    id="booth-name"
+                    name="boothName"
+                    label="Booth Name"
+                    placeholder="e.g., Engineering, Marketing, Sales"
+                    value={formData.boothName}
+                    onChange={(e) => setFormData({ ...formData, boothName: e.target.value })}
+                    required
+                    helperText="A name to distinguish this booth from others"
+                  />
+                </Grid>
+
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
@@ -1072,7 +1059,7 @@ export default function BoothEditor() {
                 </Button>
 
                 {(() => {
-                  const activeBoothId = fairId ? fairBoothId : company.boothId;
+                  const activeBoothId = fairId ? fairBoothId : (urlBoothId || company.boothId);
                   const savingText = activeBoothId ? "Updating..." : "Creating...";
                   const defaultText = activeBoothId ? "Update Booth" : "Create Booth";
                   const buttonText = saving ? savingText : defaultText;
@@ -1116,6 +1103,6 @@ export default function BoothEditor() {
           </Typography>
         </Box>
       </Container>
-    </Box>
-  );
+    </BaseLayout>
+  )
 }

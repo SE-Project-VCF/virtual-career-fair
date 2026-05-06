@@ -56,6 +56,17 @@ const studentUserData = { role: "student" };
 const companyData = { companyName: "Acme Corp", boothId: "booth-1", ownerId: "rep-1", representativeIDs: ["rep-2"] };
 const jobData = { companyId: "company-1", name: "SWE", description: "Build stuff", majorsAssociated: "CS" };
 
+/** verifyRepOrOwner + checkCompanyAuthorization reads companies/{job's companyId} */
+function companiesCollectionDefault() {
+  return {
+    doc: jest.fn((cid) => ({
+      get: jest.fn().mockResolvedValue(
+        cid === "company-1" ? mockDocSnap(companyData, true, cid) : mockDocSnap(null, false, cid)
+      ),
+    })),
+  };
+}
+
 const invitationData = {
   jobId: "job-1",
   companyId: "company-1",
@@ -191,7 +202,7 @@ describe("POST /api/job-invitations/send", () => {
     expect(res.body.error).toMatch(/Only representatives and company owners/i);
   });
 
-  it("returns 403 when rep belongs to a different company", async () => {
+  it("returns 403 when user is not owner or representative for the job's company", async () => {
     db.collection.mockImplementation((name) => {
       if (name === "jobs") {
         return { doc: jest.fn(() => ({ get: jest.fn().mockResolvedValue(mockDocSnap(jobData)) })) };
@@ -199,16 +210,21 @@ describe("POST /api/job-invitations/send", () => {
       if (name === "users") {
         return {
           doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "representative", companyId: "other-company" })),
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ role: "representative", companyId: "other-company" }, true, "stranger-rep")
+            ),
           })),
         };
+      }
+      if (name === "companies") {
+        return companiesCollectionDefault();
       }
     });
 
     const res = await request(app)
       .post("/api/job-invitations/send")
       .set("Authorization", AUTH)
-      .send(validBody);
+      .send({ ...validBody, userId: "stranger-rep" });
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/You can only send invitations for your own company/i);
   });
@@ -230,6 +246,9 @@ describe("POST /api/job-invitations/send", () => {
             return { get: jest.fn().mockResolvedValue(mockDocSnap(null, false)) };
           }),
         };
+      }
+      if (name === "companies") {
+        return companiesCollectionDefault();
       }
     });
 
@@ -257,6 +276,9 @@ describe("POST /api/job-invitations/send", () => {
             return { get: jest.fn().mockResolvedValue(mockDocSnap({ role: "representative" })) };
           }),
         };
+      }
+      if (name === "companies") {
+        return companiesCollectionDefault();
       }
     });
 
@@ -291,6 +313,9 @@ describe("POST /api/job-invitations/send", () => {
         return {
           doc: jest.fn(() => ({ id: "new-inv-id", set: jest.fn() })),
         };
+      }
+      if (name === "companies") {
+        return companiesCollectionDefault();
       }
     });
     db.batch = jest.fn(() => batch);
@@ -523,18 +548,25 @@ describe("GET /api/job-invitations/sent", () => {
     expect(res.body.error).toMatch(/Only representatives and company owners/i);
   });
 
-  it("returns 403 when rep belongs to a different company than queried companyId", async () => {
+  it("returns 403 when user cannot access the requested companyId filter", async () => {
     db.collection.mockImplementation((name) => {
       if (name === "users") {
         return {
           doc: jest.fn(() => ({
-            get: jest.fn().mockResolvedValue(mockDocSnap({ role: "representative", companyId: "other-company" })),
+            get: jest.fn().mockResolvedValue(
+              mockDocSnap({ role: "representative", companyId: "other-company" }, true, "stranger-rep")
+            ),
           })),
         };
       }
+      if (name === "companies") {
+        return companiesCollectionDefault();
+      }
     });
 
-    const res = await request(app).get("/api/job-invitations/sent?userId=rep-1&companyId=company-1").set("Authorization", AUTH);
+    const res = await request(app)
+      .get("/api/job-invitations/sent?userId=stranger-rep&companyId=company-1")
+      .set("Authorization", AUTH);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/You can only send invitations for your own company/i);
   });
@@ -599,6 +631,9 @@ describe("GET /api/job-invitations/sent", () => {
             get: jest.fn().mockResolvedValue(mockDocSnap({ name: "SWE" }, true, "job-1")),
           })),
         };
+      }
+      if (name === "companies") {
+        return companiesCollectionDefault();
       }
     });
 
@@ -852,6 +887,9 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
           get: jest.fn().mockResolvedValue(querySnap),
         };
       }
+      if (name === "companies") {
+        return companiesCollectionDefault();
+      }
     });
 
     const res = await request(app).get("/api/job-invitations/stats/job-1?userId=rep-1").set("Authorization", AUTH);
@@ -882,6 +920,9 @@ describe("GET /api/job-invitations/stats/:jobId", () => {
           where: jest.fn().mockReturnThis(),
           get: jest.fn().mockResolvedValue(querySnap),
         };
+      }
+      if (name === "companies") {
+        return companiesCollectionDefault();
       }
     });
 
@@ -979,6 +1020,9 @@ describe("GET /api/job-invitations/details/:jobId", () => {
           where: jest.fn().mockReturnThis(),
           get: jest.fn().mockResolvedValue(querySnap),
         };
+      }
+      if (name === "companies") {
+        return companiesCollectionDefault();
       }
     });
 

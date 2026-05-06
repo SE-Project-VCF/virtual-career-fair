@@ -6,6 +6,7 @@ const { verifyFirebaseToken, generateInviteCode, removeUndefined } = require("..
 const { verifyOfficeLocationInput } = require("../services/verifiedOfficeLocation");
 
 const MAX_OFFICE_LOCATIONS = 40;
+const MAX_COMPANY_SEARCH_RESULTS = 20;
 
 /* ----------------------------------------------------
    CREATE COMPANY (Auth required — company owners)
@@ -86,8 +87,43 @@ router.post("/link-company", verifyFirebaseToken, async (req, res) => {
   }
 });
 
+// NOTE: must be defined before /companies/:companyId routes to avoid wildcard capture
 /* ----------------------------------------------------
-   GET COMPANY INVITE CODE (owner or admin only)
+   SEARCH COMPANIES BY NAME PREFIX (admin only)
+---------------------------------------------------- */
+router.get("/companies/search", verifyFirebaseToken, async (req, res) => {
+  try {
+    const requestingUid = req.user.uid;
+
+    const userDoc = await db.collection("users").doc(requestingUid).get();
+    if (!userDoc.exists || userDoc.data().role !== "administrator") {
+      return res.status(403).json({ error: "Only administrators can search companies" });
+    }
+
+    const q = req.query.q;
+    if (!q?.trim()) {
+      return res.status(400).json({ error: "Query parameter 'q' is required" });
+    }
+
+    const prefix = q.trim();
+    const endPrefix = prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+
+    const snap = await db.collection("companies")
+      .where("companyName", ">=", prefix)
+      .where("companyName", "<", endPrefix)
+      .limit(MAX_COMPANY_SEARCH_RESULTS)
+      .get();
+    const results = snap.docs.map((doc) => ({ id: doc.id, companyName: doc.data().companyName }));
+
+    return res.json(results);
+  } catch (err) {
+    console.error("GET /api/companies/search error:", err);
+    return res.status(500).json({ error: "Failed to search companies" });
+  }
+});
+
+/* ----------------------------------------------------
+   GET COMPANY INVITE CODE (owner, representative, or admin)
 ---------------------------------------------------- */
 router.get("/companies/:companyId/invite-code", verifyFirebaseToken, async (req, res) => {
   try {
@@ -97,14 +133,18 @@ router.get("/companies/:companyId/invite-code", verifyFirebaseToken, async (req,
     const companyDoc = await db.collection("companies").doc(companyId).get();
     if (!companyDoc.exists) return res.status(404).json({ error: "Company not found" });
 
-    const { ownerId, inviteCode } = companyDoc.data();
+    const { ownerId, inviteCode, representativeIDs = [] } = companyDoc.data();
 
     const userDoc = await db.collection("users").doc(requestingUid).get();
     const isAdmin = userDoc.exists && userDoc.data().role === "administrator";
     const isOwner = ownerId === requestingUid;
+    const isRepresentative =
+      Array.isArray(representativeIDs) && representativeIDs.includes(requestingUid);
 
-    if (!isAdmin && !isOwner) {
-      return res.status(403).json({ error: "Only the company owner or an admin can view the invite code" });
+    if (!isAdmin && !isOwner && !isRepresentative) {
+      return res.status(403).json({
+        error: "Only the company owner, a representative of this company, or an admin can view the invite code",
+      });
     }
 
     if (!inviteCode) {

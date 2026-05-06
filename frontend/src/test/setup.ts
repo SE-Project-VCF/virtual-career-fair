@@ -175,6 +175,22 @@ Object.defineProperty(globalThis, "matchMedia", {
   })),
 })
 
+// Provide a working localStorage — vitest's module interception replaces the
+// jsdom getter with one that returns a null-prototype {} with no Storage methods.
+let _localStorageData: Record<string, string> = {}
+Object.defineProperty(globalThis, "localStorage", {
+  value: {
+    getItem: (key: string) => _localStorageData[key] ?? null,
+    setItem: (key: string, value: string) => { _localStorageData[key] = String(value) },
+    removeItem: (key: string) => { delete _localStorageData[key] },
+    clear: () => { _localStorageData = {} },
+    get length() { return Object.keys(_localStorageData).length },
+    key: (index: number) => Object.keys(_localStorageData)[index] ?? null,
+  },
+  writable: true,
+  configurable: true,
+})
+
 // Suppress console.error/warn in tests
 vi.spyOn(console, "error").mockImplementation(() => {})
 vi.spyOn(console, "warn").mockImplementation(() => {})

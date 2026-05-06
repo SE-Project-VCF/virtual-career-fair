@@ -41,7 +41,7 @@ describe("getOrCreateDirectChannel", () => {
 
     const result = await getOrCreateDirectChannel("user1", "user2")
 
-    expect(mockChannel).toHaveBeenCalledWith("messaging", "dm_user1_user2", {
+    expect(mockChannel).toHaveBeenCalledWith("messaging", "dm-user1-user2", {
       members: ["user1", "user2"],
     })
     expect(mockCreate).toHaveBeenCalled()

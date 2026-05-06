@@ -36,12 +36,13 @@ interface ShortlistEntry {
 
 interface ShortlistManagerProps {
   onScheduleCall?: (studentId: string, studentName: string) => void;
+  onViewStudent?: (studentId: string) => void;
 }
 
 /**
  * ShortlistManager Component - Manage employer's candidate shortlist
  */
-export function ShortlistManager({ onScheduleCall }: Readonly<ShortlistManagerProps>) {
+export function ShortlistManager({ onScheduleCall, onViewStudent }: Readonly<ShortlistManagerProps>) {
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -205,9 +206,10 @@ export function ShortlistManager({ onScheduleCall }: Readonly<ShortlistManagerPr
                   edge="end"
                   size="small"
                   title="Schedule call"
-                  onClick={() =>
-                    onScheduleCall?.(entry.studentId, entry.studentName)
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onScheduleCall?.(entry.studentId, entry.studentName);
+                  }}
                 >
                   <EventAvailableIcon />
                 </IconButton>
@@ -215,14 +217,17 @@ export function ShortlistManager({ onScheduleCall }: Readonly<ShortlistManagerPr
                   edge="end"
                   size="small"
                   color="error"
-                  onClick={() => handleRemove(entry.studentId)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleRemove(entry.studentId);
+                  }}
                 >
                   <DeleteIcon />
                 </IconButton>
               </Stack>
             }
           >
-            <ListItemButton>
+            <ListItemButton onClick={() => onViewStudent?.(entry.studentId)}>
               <ListItemText
                 primary={
                   <Stack direction="row" spacing={1} alignItems="center">

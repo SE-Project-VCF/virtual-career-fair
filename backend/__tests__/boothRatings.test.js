@@ -100,6 +100,116 @@ describe("GET /api/fairs/:fairId/booths/:boothId (current route behavior)", () =
     expect(res.body.companyName).toBe("Acme");
   });
 
+  it("fills originalBoothId from global booths when fair snapshot omits it", async () => {
+    evaluateFairStatusForFair.mockResolvedValue({ isLive: true });
+
+    const globalBoothId = "root-booth-abc";
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return makeFairsCollectionWithBooth({
+          exists: true,
+          id: "fair-booth-copy",
+          data: () => ({
+            companyName: "Acme",
+            companyId: "co-1",
+            boothName: "Engineering",
+            industry: "Tech",
+          }),
+        });
+      }
+      if (name === "booths") {
+        return {
+          where: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue({
+              empty: false,
+              size: 1,
+              docs: [{ id: globalBoothId, data: () => ({ companyId: "co-1", boothName: "Engineering" }) }],
+            }),
+          })),
+          doc: jest.fn(),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          })),
+        };
+      }
+      return { doc: jest.fn() };
+    });
+
+    const res = await request(app).get("/api/fairs/fair1/booths/fair-booth-copy");
+
+    expect(res.status).toBe(200);
+    expect(res.body.originalBoothId).toBe(globalBoothId);
+  });
+
+  it("fills originalBoothId using hiringFor when booth names are ambiguous", async () => {
+    evaluateFairStatusForFair.mockResolvedValue({ isLive: true });
+
+    const targetGlobalId = "global-booth-gamers";
+    db.collection.mockImplementation((name) => {
+      if (name === "fairs") {
+        return makeFairsCollectionWithBooth({
+          exists: true,
+          id: "fair-booth-copy",
+          data: () => ({
+            companyName: "Test Company Inc.",
+            companyId: "co-1",
+            boothName: "",
+            industry: "software",
+            hiringFor: "Gamers",
+          }),
+        });
+      }
+      if (name === "booths") {
+        return {
+          where: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue({
+              empty: false,
+              size: 2,
+              docs: [
+                {
+                  id: "other-booth",
+                  data: () => ({
+                    companyId: "co-1",
+                    boothName: "Engineering",
+                    hiringFor: "Engineers",
+                    industry: "software",
+                  }),
+                },
+                {
+                  id: targetGlobalId,
+                  data: () => ({
+                    companyId: "co-1",
+                    boothName: "Retail",
+                    hiringFor: "Gamers",
+                    industry: "software",
+                  }),
+                },
+              ],
+            }),
+          })),
+          doc: jest.fn(),
+        };
+      }
+      if (name === "companies") {
+        return {
+          doc: jest.fn(() => ({
+            get: jest.fn().mockResolvedValue({ exists: false }),
+          })),
+        };
+      }
+      return { doc: jest.fn() };
+    });
+
+    const res = await request(app).get("/api/fairs/fair1/booths/fair-booth-copy");
+
+    expect(res.status).toBe(200);
+    expect(res.body.originalBoothId).toBe(targetGlobalId);
+  });
+
   it("allows admin when fair is not live", async () => {
     evaluateFairStatusForFair.mockResolvedValue({ isLive: false });
     auth.verifyIdToken.mockResolvedValue({ uid: "admin-uid" });
@@ -350,7 +460,8 @@ describe("GET /api/booths/:boothId/ratings", () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
       userData: { role: "student", companyId: null },
-      boothData: { companyName: "Acme" },
+      boothData: { companyName: "Acme", companyId: "company-1" },
+      companyData: { ownerId: "owner-uid", representativeIDs: [] },
     });
     const res = await request(app)
       .get("/api/booths/booth-1/ratings")
@@ -362,8 +473,8 @@ describe("GET /api/booths/:boothId/ratings", () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
       userData: { role: "companyOwner", companyId: "company-1" },
-      boothData: { companyName: "Acme" },
-      companyData: { boothId: "different-booth" },
+      boothData: { companyName: "Acme", companyId: "company-2" },
+      companyData: { ownerId: "someone-else", representativeIDs: [] },
     });
     const res = await request(app)
       .get("/api/booths/booth-1/ratings")
@@ -375,8 +486,8 @@ describe("GET /api/booths/:boothId/ratings", () => {
     verifyAdmin.mockResolvedValue({ error: "Not admin", status: 403 });
     setupBoothsMock({
       userData: { role: "companyOwner", companyId: "company-1" },
-      boothData: { companyName: "Acme" },
-      companyData: { boothId: "booth-1" },
+      boothData: { companyName: "Acme", companyId: "company-1" },
+      companyData: { ownerId: "owner-uid", representativeIDs: [] },
       ratingsSnap: [
         { id: "s1", data: () => ({ rating: 5, comment: "Excellent", createdAt: { toMillis: () => 2000 } }) },
       ],
