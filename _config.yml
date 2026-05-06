@@ -1,0 +1,3 @@
+exclude:
+  - trivy-report.html
+  - trivity-report.html
