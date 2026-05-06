@@ -27,7 +27,8 @@ export async function submitBoothRating(
   value: number | null,
   comment: string,
   onSuccess: () => void,
-  setters: RatingSetters
+  setters: RatingSetters,
+  fairId?: string | null
 ): Promise<void> {
   if (!ratingBoothId || !value) return
   const { setSubmittingRating, setRatingError, setMyRating, setRatingSuccess } = setters
@@ -35,10 +36,12 @@ export async function submitBoothRating(
   setRatingError("")
   try {
     const token = await authUtils.getIdToken()
+    const body: Record<string, unknown> = { rating: value, comment: comment.trim() || undefined }
+    if (fairId) body.fairId = fairId
     const res = await fetch(`${API_URL}/api/booths/${ratingBoothId}/ratings`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ rating: value, comment: comment.trim() || undefined }),
+      body: JSON.stringify(body),
     })
     if (!res.ok) {
       const data = await res.json()

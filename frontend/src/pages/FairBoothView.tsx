@@ -286,7 +286,7 @@ export default function FairBoothView() {
       setRatingError,
       setMyRating,
       setRatingSuccess,
-    })
+    }, fairId ?? null)
 
   const handleStartChat = async () => {
     if (!booth || startingChat || !isMountedRef.current) return

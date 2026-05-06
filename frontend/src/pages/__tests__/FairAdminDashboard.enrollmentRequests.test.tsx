@@ -279,8 +279,8 @@ describe("FairAdminDashboard — pending enrollment requests", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Pending enrollment requests \(0\)/i)).toBeInTheDocument()
+      expect(screen.getByText(/No pending requests/i)).toBeInTheDocument()
     })
-    expect(screen.getByText(/No pending requests/i)).toBeInTheDocument()
   })
 
   it("shows error when approve request fails", async () => {

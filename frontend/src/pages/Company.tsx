@@ -20,6 +20,9 @@ import {
   Autocomplete,
   FormControlLabel,
   Checkbox,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material"
 import { authUtils } from "../utils/auth"
 import { fetchJobInvitationStats } from "../utils/jobInvitationStatsFetch"
@@ -40,6 +43,7 @@ import AddIcon from "@mui/icons-material/Add"
 import LaunchIcon from "@mui/icons-material/Launch"
 import SendIcon from "@mui/icons-material/Send"
 import BarChartIcon from "@mui/icons-material/BarChart"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import DescriptionIcon from "@mui/icons-material/Description"
 import AssignmentIcon from "@mui/icons-material/Assignment"
 import LocationOnIcon from "@mui/icons-material/LocationOn"
@@ -566,10 +570,8 @@ function OfficeLocationsOwnerCard({
   )
 }
 
-function BoothManagementCard({ companyId, legacyBoothId, navigate }: Readonly<{
+function BoothManagementCard({ companyId, navigate }: Readonly<{
   companyId: string
-  /** Fallback when /api/booths returns no rows but company still has legacy boothId */
-  legacyBoothId?: string | null
   navigate: ReturnType<typeof useNavigate>
 }>) {
   const [booths, setBooths] = useState<{ id: string; boothName?: string; industry?: string }[]>([])
@@ -709,17 +711,6 @@ function BoothManagementCard({ companyId, legacyBoothId, navigate }: Readonly<{
             Create New Booth
           </Button>
 
-          {!loading && booths.map((booth) => (
-            <BoothReviewsSection
-              key={`reviews-${booth.id}`}
-              boothId={booth.id}
-              boothTitle={booth.boothName?.trim() || "Untitled booth"}
-            />
-          ))}
-
-          {!loading && booths.length === 0 && legacyBoothId && (
-            <BoothReviewsSection boothId={legacyBoothId} />
-          )}
         </CardContent>
       </Card>
     </Grid>
@@ -769,82 +760,177 @@ const JOB_FIELDS = [
   { id: "job-application-link", name: "jobApplicationLink", label: "Application URL (Optional)", key: "applicationLink" as const, placeholder: "https://company.com/apply", helperText: "External link where students can apply directly" },
 ]
 
-function BoothReviewsSection({ boothId, boothTitle }: Readonly<{ boothId: string; boothTitle?: string }>) {
-  const [reviews, setReviews] = useState<{ rating: number; comment: string | null; createdAt: number | null }[]>([])
-  const [totalRatings, setTotalRatings] = useState(0)
-  const [averageRating, setAverageRating] = useState<number | null>(null)
+type BoothRating = {
+  rating: number
+  comment: string | null
+  createdAt: number | null
+  fairId?: string
+  fairName?: string
+  fairStartTime?: number | null
+}
+
+type AnnotatedRating = BoothRating & { boothId: string; boothName: string }
+
+function BoothReviewsSection({ companyId }: Readonly<{ companyId: string }>) {
+  const [allRatings, setAllRatings] = useState<AnnotatedRating[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedFair, setExpandedFair] = useState<string | false>(false)
 
   useEffect(() => {
-    setLoading(true)
     const load = async () => {
       try {
         const token = await auth.currentUser?.getIdToken()
-        const res = await fetch(`${API_URL}/api/booths/${boothId}/ratings`, {
+        const boothsRes = await fetch(`${API_URL}/api/booths?companyId=${companyId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-        if (res.ok) {
-          const data = await res.json()
-          setReviews(data.ratings || [])
-          setTotalRatings(data.totalRatings || 0)
-          setAverageRating(data.averageRating ?? null)
-        }
+        if (!boothsRes.ok) return
+        const { booths } = (await boothsRes.json()) as { booths: { id: string; boothName?: string }[] }
+
+        const ratingsResults = await Promise.all(
+          booths.map(async (booth) => {
+            const res = await fetch(`${API_URL}/api/booths/${booth.id}/ratings`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!res.ok) return []
+            const data = (await res.json()) as { ratings: BoothRating[] }
+            return (data.ratings ?? []).map((r) => ({
+              ...r,
+              boothId: booth.id,
+              boothName: booth.boothName || "Untitled Booth",
+            }))
+          }),
+        )
+        setAllRatings(ratingsResults.flat())
       } finally {
         setLoading(false)
       }
     }
     load()
-  }, [boothId])
+  }, [companyId])
+
+  const fairGroups = useMemo(() => {
+    const map = new Map<string, { fairName: string; fairStartTime: number | null; ratings: AnnotatedRating[] }>()
+    for (const r of allRatings) {
+      const key = r.fairId ?? "other"
+      if (!map.has(key)) map.set(key, { fairName: r.fairName ?? "Other", fairStartTime: r.fairStartTime ?? null, ratings: [] })
+      map.get(key)!.ratings.push(r)
+    }
+    return Array.from(map.entries()).sort(([aKey, aVal], [bKey, bVal]) => {
+      if (aKey === "other") return 1
+      if (bKey === "other") return -1
+      return (bVal.fairStartTime ?? 0) - (aVal.fairStartTime ?? 0)
+    })
+  }, [allRatings])
 
   return (
     <Grid size={{ xs: 12 }}>
       <Card sx={{ border: "1px solid rgba(56, 133, 96, 0.3)", mt: 2 }}>
         <CardContent sx={{ p: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: boothTitle ? 0.5 : 3, display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: "flex", alignItems: "center", gap: 1 }}>
             <BarChartIcon sx={{ color: "#388560" }} />
             Booth Reviews
           </Typography>
-          {boothTitle && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {boothTitle}
-            </Typography>
-          )}
 
           {loading && <CircularProgress size={24} />}
 
-          {!loading && totalRatings === 0 && (
+          {!loading && allRatings.length === 0 && (
             <Typography color="text.secondary">No reviews yet.</Typography>
           )}
 
-          {!loading && totalRatings > 0 && (
-            <>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-                <Rating value={averageRating} readOnly precision={0.1} />
-                <Typography variant="h5" sx={{ fontWeight: 700, color: "#388560" }}>
-                  {averageRating?.toFixed(1)}
-                </Typography>
-                <Typography color="text.secondary">
-                  ({totalRatings} review{totalRatings === 1 ? "" : "s"})
-                </Typography>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                {reviews.map((review) => (
-                  <Box key={review.createdAt ?? `${review.rating}-${review.comment}`} sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 2 }}>
-                    <Rating value={review.rating} readOnly size="small" />
-                    {review.comment && (
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>{review.comment}</Typography>
-                    )}
-                    {review.createdAt && (
+          {!loading && fairGroups.map(([fairKey, { fairName, fairStartTime, ratings }]) => {
+            const fairAvg = ratings.reduce((s, r) => s + r.rating, 0) / ratings.length
+            const boothMap = new Map<string, { boothName: string; ratings: AnnotatedRating[] }>()
+            for (const r of ratings) {
+              if (!boothMap.has(r.boothId)) boothMap.set(r.boothId, { boothName: r.boothName, ratings: [] })
+              boothMap.get(r.boothId)!.ratings.push(r)
+            }
+            const boothEntries = Array.from(boothMap.entries())
+
+            return (
+              <Accordion
+                key={fairKey}
+                data-testid="review-fair-group-header"
+                expanded={expandedFair === fairKey}
+                onChange={(_, isExpanded) => setExpandedFair(isExpanded ? fairKey : false)}
+                sx={{
+                  mb: 1,
+                  border: "1px solid rgba(56, 133, 96, 0.25)",
+                  borderRadius: "8px !important",
+                  "&:before": { display: "none" },
+                  boxShadow: "0 1px 4px rgba(56,133,96,0.06)",
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon sx={{ color: "#388560" }} />}
+                  sx={{
+                    borderRadius: 2,
+                    background: "linear-gradient(135deg, rgba(56,133,96,0.07) 0%, rgba(45,107,77,0.04) 100%)",
+                    "& .MuiAccordionSummary-content": { alignItems: "center", gap: 1.5 },
+                  }}
+                >
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "#1a3d2b" }}>
+                      {fairName}
+                    </Typography>
+                    {fairStartTime && (
                       <Typography variant="caption" color="text.secondary">
-                        {new Date(review.createdAt).toLocaleDateString()}
+                        {new Date(fairStartTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </Typography>
                     )}
                   </Box>
-                ))}
-              </Box>
-            </>
-          )}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mr: 1 }}>
+                    <Rating value={fairAvg} readOnly precision={0.1} size="small" />
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: "#388560" }}>
+                      {fairAvg.toFixed(1)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      ({ratings.length} review{ratings.length === 1 ? "" : "s"})
+                    </Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 1.5, pb: 2, px: 2 }}>
+                  {boothEntries.map(([boothId, { boothName, ratings: boothRatings }], boothIdx) => {
+                    const boothAvg = boothRatings.reduce((s, r) => s + r.rating, 0) / boothRatings.length
+                    return (
+                      <Box key={boothId}>
+                        {boothIdx > 0 && <Divider sx={{ mb: 2 }} />}
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: "#1a3d2b" }}>
+                            {boothName}
+                          </Typography>
+                          <Rating value={boothAvg} readOnly precision={0.1} size="small" />
+                          <Typography variant="caption" sx={{ color: "#388560", fontWeight: 600 }}>
+                            {boothAvg.toFixed(1)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ({boothRatings.length})
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, pl: 1, mb: 1.5 }}>
+                          {boothRatings.map((review) => (
+                            <Box
+                              key={review.createdAt ?? `${review.rating}-${review.comment}`}
+                              sx={{ p: 1.5, border: "1px solid rgba(0,0,0,0.06)", borderRadius: 2, background: "rgba(56,133,96,0.02)" }}
+                            >
+                              <Rating value={review.rating} readOnly size="small" />
+                              {review.comment && (
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>{review.comment}</Typography>
+                              )}
+                              {review.createdAt && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(review.createdAt).toLocaleDateString()}
+                                </Typography>
+                              )}
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )
+                  })}
+                </AccordionDetails>
+              </Accordion>
+            )
+          })}
         </CardContent>
       </Card>
     </Grid>
@@ -1638,9 +1724,11 @@ export default function Company() {
           {/* Booth Management Card */}
           <BoothManagementCard
             companyId={company.id}
-            legacyBoothId={company.boothId}
             navigate={navigate}
           />
+
+          {/* Booth Reviews Section */}
+          <BoothReviewsSection companyId={company.id} />
 
           {isOwner ? (
             <Grid size={{ xs: 12 }}>
