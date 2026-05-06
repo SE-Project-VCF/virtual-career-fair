@@ -360,6 +360,7 @@ const handleToggleGhostMode = async (e: React.ChangeEvent<HTMLInputElement>) => 
 
 In the Attendees tab panel (inside `{activeTab === 1 && ...}` around line 373), add the toggle just inside the `<Container>` and before the loading/empty checks:
 
+{% raw %}
 ```tsx
 <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
   <FormControlLabel
@@ -374,6 +375,7 @@ In the Attendees tab panel (inside `{activeTab === 1 && ...}` around line 373), 
   />
 </Box>
 ```
+{% endraw %}
 
 - [ ] **Step 7: Run tests to verify they pass**
 

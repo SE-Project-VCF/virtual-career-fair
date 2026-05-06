@@ -450,6 +450,7 @@ Expected: multiple FAIL — "combobox" not found, "Re-enroll" not found, etc.
 
 Find the `{/* Add Company Dialog */}` block (around line 999–1021) and replace it entirely:
 
+{% raw %}
 ```tsx
       {/* Add Company Dialog */}
       <Dialog open={addDialogOpen} onClose={() => {
@@ -511,6 +512,7 @@ Find the `{/* Add Company Dialog */}` block (around line 999–1021) and replace
         </DialogActions>
       </Dialog>
 ```
+{% endraw %}
 
 - [ ] **Step 4: Run tests to verify they pass**
 

@@ -766,6 +766,7 @@ In `frontend/src/App.tsx`, add a new route after the existing `/company/:company
 
 In `frontend/src/pages/Company.tsx`, replace the `BoothManagementCard` component (lines 309-378) with:
 
+{% raw %}
 ```tsx
 function BoothManagementCard({ companyId, navigate }: Readonly<{
   companyId: string
@@ -864,6 +865,7 @@ function BoothManagementCard({ companyId, navigate }: Readonly<{
   )
 }
 ```
+{% endraw %}
 
 - [ ] **Step 3: Update the `BoothManagementCard` call site**
 
@@ -1063,6 +1065,7 @@ useEffect(() => {
 
 In the join dialog JSX (look for the `Dialog` that contains the invite code input), add a booth selection section after the invite code field but before the submit button. Use MUI `FormGroup` with `Checkbox` items:
 
+{% raw %}
 ```tsx
 {companyBooths.length > 0 && (
   <Box sx={{ mt: 2 }}>
@@ -1097,6 +1100,7 @@ In the join dialog JSX (look for the `Dialog` that contains the invite code inpu
   </Typography>
 )}
 ```
+{% endraw %}
 
 Add the necessary MUI imports: `FormGroup`, `Checkbox`, `FormControlLabel` (if not already imported).
 
